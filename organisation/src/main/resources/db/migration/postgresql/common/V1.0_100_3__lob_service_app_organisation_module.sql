@@ -355,3 +355,42 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account_sub_type_aud (
    FOREIGN KEY (rev) REFERENCES revinfo (rev) MATCH SIMPLE
    ON UPDATE NO ACTION ON DELETE NO ACTION
 );
+
+
+ CREATE TABLE IF NOT EXISTS organisation_event_code (
+    organisation_id CHAR(64) NOT NULL,
+    debit_reference_code VARCHAR(255) NOT NULL,
+    credit_reference_code VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+   CONSTRAINT pk_organisation_event_code PRIMARY KEY (organisation_id, debit_reference_code, credit_reference_code)
+
+ );
+
+CREATE TABLE IF NOT EXISTS organisation_event_code_aud (
+       organisation_id CHAR(64) NOT NULL,
+       debit_reference_code VARCHAR(255) NOT NULL,
+       credit_reference_code VARCHAR(255) NOT NULL,
+       name VARCHAR(255),
+       
+   created_by VARCHAR(255),
+   updated_by VARCHAR(255),
+   created_at TIMESTAMP WITHOUT TIME ZONE,
+   updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+   -- Special columns for audit tables
+   rev INTEGER NOT NULL,
+   revtype SMALLINT,
+
+   -- Primary Key for the audit table
+   CONSTRAINT pk_organisation_event_code_aud PRIMARY KEY (organisation_id, debit_reference_code, credit_reference_code, rev, revtype),
+
+   -- Foreign Key to the revision information table
+   FOREIGN KEY (rev) REFERENCES revinfo (rev) MATCH SIMPLE
+   ON UPDATE NO ACTION ON DELETE NO ACTION
+);
