@@ -1,6 +1,13 @@
 package org.cardanofoundation.lob.app.organisation.domain.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.EmbeddedId;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.Table;
 
 import lombok.*;
 
@@ -16,31 +23,20 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Entity
-@Table(name = "organisation_chart_of_account")
-@Audited
+@Table(name = "organisation_ref_codes")
 @Builder
+@Audited
 @EntityListeners({ AuditingEntityListener.class })
-public class OrganisationChartOfAccount extends CommonEntity implements Persistable<OrganisationChartOfAccount.Id> {
+public class ReferenceCode extends CommonEntity implements Persistable<ReferenceCode.Id> {
 
     @EmbeddedId
     @AttributeOverrides({
             @AttributeOverride(name = "organisationId", column = @Column(name = "organisation_id")),
-            @AttributeOverride(name = "customerCode", column = @Column(name = "customer_code"))
+            @AttributeOverride(name = "referenceCode", column = @Column(name = "reference_code"))
     })
     private Id id;
 
-    @Column(name = "ref_code", nullable = false)
-    private String refCode;
-
-    @Column(name = "event_ref_code", nullable = false)
-    private String eventRefCode;
-
-    @Column(name = "name", nullable = false)
     private String name;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "subType", referencedColumnName = "id")
-    private OrganisationChartOfAccountSubType subType;
 
     @Embeddable
     @AllArgsConstructor
@@ -50,8 +46,7 @@ public class OrganisationChartOfAccount extends CommonEntity implements Persista
     public static class Id {
 
         private String organisationId;
-        private String customerCode;
+        private String referenceCode;
 
     }
-
 }
