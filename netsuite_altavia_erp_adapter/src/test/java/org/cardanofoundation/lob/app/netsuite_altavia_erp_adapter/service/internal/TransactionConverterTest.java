@@ -129,7 +129,7 @@ class TransactionConverterTest {
         Assertions.assertEquals("orgID", next.getOrganisation().getId());
         Assertions.assertEquals(TransactionType.Transfer, next.getTransactionType());
         Assertions.assertEquals(LocalDate.now(), next.getEntryDate());
-        Assertions.assertEquals(0, next.getItems().size());
+        Assertions.assertEquals(1, next.getItems().size());
     }
 
     @Test

@@ -79,11 +79,12 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
 
         if (!body.getBatchStatistics().isEmpty()) {
             Join<TransactionBatchEntity, TransactionEntity> transactionEntityJoin = rootEntry.join("transactions", JoinType.INNER);
-
             List<Predicate> orPredicates = new ArrayList<>();
 
             if (body.getBatchStatistics().stream().anyMatch(s -> s.equals(LedgerDispatchStatusView.INVALID))) {
-                orPredicates.add(transactionEntityJoin.get("items").get("rejection").get("rejectionReason").in(getSourceBasedRejectionReasons(Source.ERP).stream().toList()));
+                Join<TransactionEntity, TransactionItemEntity> transactionItemJoin = transactionEntityJoin.join("items", JoinType.INNER);
+
+                orPredicates.add(transactionItemJoin.get("rejection").get("rejectionReason").in(getSourceBasedRejectionReasons(Source.ERP).stream().toList()));
                 Subquery<String> subqueryErp = builder.createQuery().subquery(String.class);
                 Root<TransactionEntity> transactionEntityRoot = subqueryErp.from(TransactionEntity.class);
                 subqueryErp.select(transactionEntityRoot.get("id"));
