@@ -1,4 +1,5 @@
 package org.cardanofoundation.lob.app.organisation.service;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -84,10 +85,10 @@ class ReferenceCodeServiceTest {
     void testUpsertReferenceCode_InsertNew() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, REF_CODE)).thenReturn(Optional.empty());
 
-        Optional<ReferenceCodeView> result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
+        ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
 
-        assertTrue(result.isPresent());
-        assertEquals("Updated Reference", result.get().getDescription());
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Updated Reference", result.getDescription());
         verify(referenceCodeRepository).save(any(ReferenceCode.class));
     }
 
@@ -95,10 +96,10 @@ class ReferenceCodeServiceTest {
     void testUpsertReferenceCode_UpdateExisting() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, REF_CODE)).thenReturn(Optional.of(referenceCode));
 
-        Optional<ReferenceCodeView> result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
+        ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
 
-        assertTrue(result.isPresent());
-        assertEquals("Updated Reference", result.get().getDescription());
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Updated Reference", result.getDescription());
         verify(referenceCodeRepository).save(referenceCode);
     }
 }

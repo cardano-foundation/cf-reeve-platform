@@ -106,10 +106,10 @@ class AccountEventServiceTest {
         when(accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE))
                 .thenReturn(Optional.of(mockAccountEvent));
 
-        Optional<AccountEventView> result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
 
-        assertTrue(result.isPresent());
-        assertEquals("Updated Name", result.get().getDescription());
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Updated Name", result.getDescription());
         verify(accountEventRepository).save(any(AccountEvent.class));
     }
 
@@ -117,9 +117,9 @@ class AccountEventServiceTest {
     void testUpsertReferenceCode_FailsWhenDebitReferenceMissing() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
 
-        Optional<AccountEventView> result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
 
-        assertTrue(result.isEmpty());
+        assertTrue(result.getError().isEmpty());
         verify(accountEventRepository, never()).save(any());
     }
 
@@ -128,9 +128,9 @@ class AccountEventServiceTest {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.of(mockDebitReference));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.empty());
 
-        Optional<AccountEventView> result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
 
-        assertTrue(result.isEmpty());
+        assertTrue(result.getError().isEmpty());
         verify(accountEventRepository, never()).save(any());
     }
 }
