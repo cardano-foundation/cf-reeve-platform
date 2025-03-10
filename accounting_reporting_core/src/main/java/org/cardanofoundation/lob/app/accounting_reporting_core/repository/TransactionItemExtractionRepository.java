@@ -60,7 +60,7 @@ public class TransactionItemExtractionRepository {
 
         if (null != costCenter && 0 < costCenter.stream().count()) {
             where += STR."""
-            AND ti.costCenter.externalCustomerCode in (\{costCenter.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))})
+            AND ti.costCenter.customerCode in (\{costCenter.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))})
             """;
         }
 
