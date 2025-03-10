@@ -56,7 +56,7 @@ class AccountEventCodesConversionTaskItemTest {
         when(organisationPublicApiIF.getChartOfAccounts(eq(organisationId), eq(accountCodeDebit)))
                 .thenReturn(Optional.of(new OrganisationChartOfAccount(new OrganisationChartOfAccount.Id(organisationId, accountCodeDebit), accountCodeDebit, accountDebitRefCode, "name2", chartOfAccountSubType)));
 
-        when(organisationPublicApiIF.findEventCode(eq(organisationId), eq("DR_REFCR_REF"))).thenReturn(Optional.of(AccountEvent.builder()
+        when(organisationPublicApiIF.findEventCode(eq(organisationId), eq("DR_REF"),eq("CR_REF"))).thenReturn(Optional.of(AccountEvent.builder()
                 .name("name")
                 .build()));
 

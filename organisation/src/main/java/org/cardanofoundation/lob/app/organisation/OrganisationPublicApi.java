@@ -53,7 +53,7 @@ public class OrganisationPublicApi implements OrganisationPublicApiIF {
         return chartOfAccountsService.getChartAccount(organisationId, customerCode);
     }
 
-    public Optional<AccountEvent> findEventCode(String organisationId, String customerCode) {
-        return accountEventService.findById(organisationId, customerCode);
+    public Optional<AccountEvent> findEventCode(String organisationId, String debitcustomerCode, String creditCustomerCode) {
+        return accountEventService.findById(organisationId, debitcustomerCode, creditCustomerCode);
     }
 }

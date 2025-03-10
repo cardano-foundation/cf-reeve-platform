@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.YearMonth;
 import java.util.Optional;
 import java.util.Set;
 
@@ -73,10 +74,18 @@ class TransactionConverterTest {
 
     @Test
     void testConvertToDbDetached_SetOfTransactions() {
+        when(transaction.getId()).thenReturn("tx001");
+        when(transaction.getBatchId()).thenReturn("batch123");
+        when(transaction.getTransactionType()).thenReturn(TransactionType.BillCredit);
+        when(transaction.getAccountingPeriod()).thenReturn(YearMonth.parse("2025-03"));
         Set<Transaction> transactions = Set.of(transaction);
         Set<TransactionEntity> result = transactionConverter.convertToDbDetached(transactions);
         Assertions.assertNotNull(result);
         Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("tx001", result.stream().findFirst().get().getId());
+        Assertions.assertEquals("batch123", result.stream().findFirst().get().getBatchId());
+        Assertions.assertEquals(TransactionType.BillCredit, result.stream().findFirst().get().getTransactionType());
+        Assertions.assertEquals(YearMonth.parse("2025-03"), result.stream().findFirst().get().getAccountingPeriod());
     }
 
     @Test
