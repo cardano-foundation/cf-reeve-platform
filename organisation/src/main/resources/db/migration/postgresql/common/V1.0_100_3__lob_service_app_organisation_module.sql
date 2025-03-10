@@ -249,42 +249,6 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account_aud (
    ON UPDATE NO ACTION ON DELETE NO ACTION
 );
 
-CREATE TABLE IF NOT EXISTS organisation_account_event (
-   organisation_id CHAR(64) NOT NULL,
-   customer_code VARCHAR(255) NOT NULL,
-   name VARCHAR(255) NOT NULL,
-
-   created_by VARCHAR(255),
-   updated_by VARCHAR(255),
-   created_at TIMESTAMP WITHOUT TIME ZONE,
-   updated_at TIMESTAMP WITHOUT TIME ZONE,
-
-   CONSTRAINT pk_organisation_account_event PRIMARY KEY (organisation_id, customer_code)
-);
-
-CREATE TABLE IF NOT EXISTS organisation_account_event_aud (
-   organisation_id CHAR(64) NOT NULL,
-   customer_code VARCHAR(255) NOT NULL,
-   name VARCHAR(255) NOT NULL,
-
-   created_by VARCHAR(255),
-   updated_by VARCHAR(255),
-   created_at TIMESTAMP WITHOUT TIME ZONE,
-   updated_at TIMESTAMP WITHOUT TIME ZONE,
-
-   -- Special columns for audit tables
-   rev INTEGER NOT NULL,
-   revtype SMALLINT,
-
-   -- Primary Key for the audit table
-   CONSTRAINT pk_organisation_account_event_aud PRIMARY KEY (organisation_id, customer_code, rev, revtype),
-
-   -- Foreign Key to the revision information table
-   FOREIGN KEY (rev) REFERENCES revinfo (rev) MATCH SIMPLE
-   ON UPDATE NO ACTION ON DELETE NO ACTION
-);
-
-
  CREATE TABLE IF NOT EXISTS organisation_chart_of_account_type (
     id BIGSERIAL PRIMARY KEY,
     organisation_id CHAR(64) NOT NULL,
@@ -350,6 +314,91 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account_sub_type_aud (
 
    -- Primary Key for the audit table
    CONSTRAINT pk_organisation_chart_of_account_sub_type_aud PRIMARY KEY (id, rev, revtype),
+
+   -- Foreign Key to the revision information table
+   FOREIGN KEY (rev) REFERENCES revinfo (rev) MATCH SIMPLE
+   ON UPDATE NO ACTION ON DELETE NO ACTION
+);
+
+
+ CREATE TABLE IF NOT EXISTS organisation_ref_codes (
+    organisation_id CHAR(64) NOT NULL,
+    reference_code VARCHAR(255) NOT NULL,
+    name VARCHAR(255),
+
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+   CONSTRAINT pk_organisation_ref_codes PRIMARY KEY (organisation_id, reference_code)
+
+ );
+
+CREATE TABLE IF NOT EXISTS organisation_ref_codes_aud (
+       organisation_id CHAR(64) NOT NULL,
+       reference_code VARCHAR(255) NOT NULL,
+       name VARCHAR(255),
+
+   created_by VARCHAR(255),
+   updated_by VARCHAR(255),
+   created_at TIMESTAMP WITHOUT TIME ZONE,
+   updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+   -- Special columns for audit tables
+   rev INTEGER NOT NULL,
+   revtype SMALLINT,
+
+   -- Primary Key for the audit table
+   CONSTRAINT pk_organisation_ref_codes_aud PRIMARY KEY (organisation_id, reference_code, rev, revtype),
+
+   -- Foreign Key to the revision information table
+   FOREIGN KEY (rev) REFERENCES revinfo (rev) MATCH SIMPLE
+   ON UPDATE NO ACTION ON DELETE NO ACTION
+);
+
+
+CREATE TABLE IF NOT EXISTS organisation_account_event (
+   organisation_id CHAR(64) NOT NULL,
+   debit_reference_code VARCHAR(255) NOT NULL,
+   credit_reference_code VARCHAR(255) NOT NULL,
+   customer_code VARCHAR(255) NOT NULL,
+   name VARCHAR(255) NOT NULL,
+   hierarchy VARCHAR(255),
+   active BOOLEAN,
+
+   created_by VARCHAR(255),
+   updated_by VARCHAR(255),
+   created_at TIMESTAMP WITHOUT TIME ZONE,
+   updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+   CONSTRAINT pk_organisation_account_event PRIMARY KEY (organisation_id, debit_reference_code,credit_reference_code),
+   FOREIGN KEY (organisation_id, debit_reference_code)
+              REFERENCES organisation_ref_codes(organisation_id, reference_code),
+          FOREIGN KEY (organisation_id, credit_reference_code)
+              REFERENCES organisation_ref_codes(organisation_id, reference_code)
+);
+
+CREATE TABLE IF NOT EXISTS organisation_account_event_aud (
+   organisation_id CHAR(64) NOT NULL,
+   debit_reference_code VARCHAR(255) NOT NULL,
+   credit_reference_code VARCHAR(255) NOT NULL,
+   customer_code VARCHAR(255) NOT NULL,
+   name VARCHAR(255) NOT NULL,
+   hierarchy VARCHAR(255),
+   active BOOLEAN,
+
+   created_by VARCHAR(255),
+   updated_by VARCHAR(255),
+   created_at TIMESTAMP WITHOUT TIME ZONE,
+   updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+   -- Special columns for audit tables
+   rev INTEGER NOT NULL,
+   revtype SMALLINT,
+
+   -- Primary Key for the audit table
+   CONSTRAINT pk_organisation_account_event_aud PRIMARY KEY (organisation_id, debit_reference_code, credit_reference_code, rev, revtype),
 
    -- Foreign Key to the revision information table
    FOREIGN KEY (rev) REFERENCES revinfo (rev) MATCH SIMPLE
