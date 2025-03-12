@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -48,7 +49,7 @@ class AccountingCorePresentationViewServiceTest {
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
 
     @Test
-    void testAllReconiciliationTransaction_successfullUnprocessed() {
+    void testAllReconiciliationTransaction_successfulUnprocessed() {
         when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(transactionRepositoryGateway.findReconciliation(any(ReconciliationFilterStatusRequest.class), anyInt(), anyInt())).thenReturn(List.of());
@@ -74,6 +75,7 @@ class AccountingCorePresentationViewServiceTest {
 
 
         verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
+        verify(transactionRepositoryGateway).findReconciliationCount(any(),any(),any());
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verify(transactionRepositoryGateway).findReconciliation(any(ReconciliationFilterStatusRequest.class), anyInt(), anyInt());
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository, transactionRepositoryGateway);
@@ -81,10 +83,11 @@ class AccountingCorePresentationViewServiceTest {
     }
 
     @Test
-    void testAllReconiciliationTransaction_successfullUnReconciled() {
+    void testAllReconiciliationTransaction_successfulUnReconciled() {
         when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(accountingCoreTransactionRepository.findAllReconciliationSpecial(eq(Set.of()), eq(Optional.empty()), anyInt(), anyInt())).thenReturn(List.of());
+        when(accountingCoreTransactionRepository.findAllReconciliationSpecialCount(any(),any(),any(),any())).thenReturn(Collections.singletonList(new Object[]{0L}));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
