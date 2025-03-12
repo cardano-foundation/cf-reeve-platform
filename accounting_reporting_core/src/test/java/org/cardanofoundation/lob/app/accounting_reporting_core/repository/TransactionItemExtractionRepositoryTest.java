@@ -41,7 +41,7 @@ class TransactionItemExtractionRepositoryTest {
                 ti.accountDebit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id  in (select id from OrganisationChartOfAccountSubType where type.id in (accountType))) or
                 ti.accountCredit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id in (select id from OrganisationChartOfAccountSubType where type.id in (accountType)))
                 )
-                AND ti.costCenter.externalCustomerCode in ('CostCenterCode')
+                AND ti.costCenter.customerCode in ('CostCenterCode')
                 AND ti.project.customerCode in ('ProjectCode')
                 AND te.ledgerDispatchStatus = 'FINALIZED'
                 """;
