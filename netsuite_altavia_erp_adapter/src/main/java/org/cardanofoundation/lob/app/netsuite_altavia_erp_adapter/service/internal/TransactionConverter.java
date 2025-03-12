@@ -138,8 +138,10 @@ public class TransactionConverter {
                 amountFcy = MoreBigDecimal.zeroForNull(txLine.amountCreditForeignCurrency());
             } else {
                 log.info("Skipping transaction line with zero amounts for transaction: {}", txId);
-                // skipping when both amounts are zero
-                continue;
+                // Create a zero amount item.
+                operationType = OperationType.DEBIT;
+                amountLcy = BigDecimal.ZERO;
+                amountFcy = BigDecimal.ZERO;
             }
 
             Optional<String> costCenterM = costCenterCode(organisationId, txLine);
