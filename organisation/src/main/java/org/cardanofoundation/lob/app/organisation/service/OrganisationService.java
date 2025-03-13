@@ -127,7 +127,6 @@ public class OrganisationService {
         return new OrganisationView(
                 organisation.getId(),
                 organisation.getName(),
-                "", // Description is deprecated and should be removed
                 organisation.getTaxIdNumber(),
                 organisation.getCurrencyId(),
                 organisation.getReportCurrencyId(),
