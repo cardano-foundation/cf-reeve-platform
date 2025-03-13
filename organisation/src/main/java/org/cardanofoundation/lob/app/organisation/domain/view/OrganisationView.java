@@ -21,10 +21,6 @@ public class OrganisationView {
     @Schema(example = "Cardano Foundation")
     String name;
 
-    @Deprecated
-    @Schema(example = "CHE-184477354")
-    String description;
-
     @Schema(example = "CHE-184477354")
     String taxIdNumber;
 

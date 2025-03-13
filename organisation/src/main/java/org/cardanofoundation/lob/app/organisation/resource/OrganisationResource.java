@@ -61,7 +61,6 @@ public class OrganisationResource {
                             organisation.getId(),
                             organisation.getName(),
                             organisation.getTaxIdNumber(),
-                            organisation.getTaxIdNumber(),
                             organisation.getCurrencyId(),
                             organisation.getReportCurrencyId(),
                             monthsAgo,

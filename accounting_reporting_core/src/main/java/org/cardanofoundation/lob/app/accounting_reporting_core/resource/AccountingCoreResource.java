@@ -262,28 +262,6 @@ public class AccountingCoreResource {
                 .body(transactionProcessViewsResult);
     }
 
-    @Deprecated
-    @Tag(name = "Batches", description = "Batches API")
-    @PostMapping(value = "/batchs", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @Operation(description = "Batch list",
-            responses = {
-                    @ApiResponse(content = {
-                            @Content(mediaType = APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = BatchsDetailView.class)))
-                    })
-            }
-    )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole())")
-    public ResponseEntity<BatchsDetailView> listAllBatch(@Valid @RequestBody BatchSearchRequest body,
-                                                         @RequestParam(name = "page", defaultValue = "0") int page,
-                                                         @RequestParam(name = "limit", defaultValue = "10") int limit) {
-        body.setLimit(limit);
-        body.setPage(page);
-
-        BatchsDetailView batchs = accountingCorePresentationService.listAllBatch(body);
-
-        return ResponseEntity.ok().body(batchs);
-    }
-
     @Tag(name = "Batches", description = "Batches API")
     @GetMapping(value = "/batches/{batchId}", produces = APPLICATION_JSON_VALUE)
     @Operation(description = "Batch detail",
@@ -313,36 +291,6 @@ public class AccountingCoreResource {
         return ResponseEntity
                 .ok()
                 .body(txBatchM.orElseThrow());
-    }
-
-    @Deprecated(forRemoval = true)
-    @Tag(name = "Batches", description = "Batches API")
-    @GetMapping(value = "/batchs/{batchId}", produces = APPLICATION_JSON_VALUE)
-    @Operation(description = "Batch detail",
-            responses = {
-                    @ApiResponse(content = {
-                            @Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = BatchView.class))
-                    }),
-                    @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(example = "{\"title\": \"BATCH_NOT_FOUND\",\"status\": 404,\"detail\": \"Batch with id: {batchId} could not be found\"" +
-                            "}"))})
-            }
-    )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole())")
-    public ResponseEntity<?> batchDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId) {
-        return batchesDetail(batchId);
-    }
-
-    @Deprecated
-    @Tag(name = "Transactions", description = "Transactions API")
-    @Operation(description = "Rejection types", responses = {
-            @ApiResponse(content =
-                    {@Content(mediaType = APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = RejectionReason.class)))}
-            )
-    })
-    @GetMapping(value = "/rejection-types", produces = APPLICATION_JSON_VALUE, name = "Rejection types")
-    public ResponseEntity<RejectionReason[]> rejectionTypes() {
-
-        return ResponseEntity.ok().body(RejectionReason.values());
     }
 
 }
