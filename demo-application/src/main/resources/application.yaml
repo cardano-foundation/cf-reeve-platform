@@ -1,0 +1,201 @@
+server:
+  port: ${SERVER_PORT:9000}
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev--yaci-dev-kit}
+  task:
+    execution:
+      thread-name-prefix: lob-service-task-executor-
+      pool:
+        core-size: 2
+        max-size: 50
+        queue-capacity: 10000
+  kafka:
+    enabled: false
+
+  threads:
+    virtual:
+      enabled: true
+
+  jpa:
+    properties:
+      org:
+        hibernate:
+          envers:
+            embeddable_set_ordinal_field_name: "ord"
+            audit_table_suffix: _aud
+            store_data_at_delete: true
+    open-in-view: false
+  #    show-sql: true
+
+  sql:
+    init:
+      mode: never
+      #schema-locations: classpath:db/schema.sql
+
+  datasource:
+    name: ${DB_NAME:lob_service}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=lob_service}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: ${DB_DRIVER_CLASS_NAME:org.postgresql.Driver}
+
+    hikari:
+      minimum-idle: ${DB_MIN_IDLE:2}
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
+      idle-timeout: ${DB_IDLE_TIMEOUT:30000}
+      schema: ${DB_SCHEMA:lob_service}
+      #auto-commit: ${DB_AUTO_COMMIT:false}
+
+    jpa:
+      database-platform: ${DB_DIALECT:org.hibernate.dialect.PostgreSQLDialect}
+      hibernate:
+        ddl-auto: none
+        show_sql: ${JPA_SHOW_SQL:false}
+  flyway:
+    out-of-order: false
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    user: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    schemas: ${DB_SCHEMA:lob_service}
+    # baselineOnMigrate this will create a baseline version if none exists (https://flywaydb.org/documentation/configuration/parameters/baselineOnMigrate)
+    baselineOnMigrate: true
+    enabled: true
+    validateMigrationNaming: true
+  web:
+    resources:
+      add-mappings: false
+    # disable static content handling
+    spring.web.resources.add-mappings: false
+    spring.mvc.throw-exception-if-no-handler-found: true
+    # force charset in request and responses
+    servlet:
+      encoding:
+        force: true
+
+    exposure:
+      include: ${WEB_EXPOSURE_INCLUDE:health,info,prometheus,metrics,flyway,applicationmodules}
+
+  artemis:
+    embedded:
+      topics=target: target
+
+  main:
+    allow-bean-definition-overriding: true
+
+  health:
+    enabled: ${HEALTH_ENABLED:true}
+
+  endpoint:
+    health:
+      show-details: ${MANAGEMENT_ENDPOINT_SHOW_DETAILS:always}
+
+lob:
+  # Default path is for Docker
+  mock-result-path: ${LOB_MOCK_RESULT_PATH:/app/cf-application/src/main/resources/json/NetSuiteIngestionMock.json}
+  blockchain_reader:
+    enabled: ${LOB_BLOCKCHAIN_READER_ENABLED:true}
+  accounting_reporting_core:
+    enabled: ${LOB_ACCOUNTING_REPORTING_CORE_ENABLED:true}
+    topics:
+      tx-ledger-updated-event: accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent
+      reports-ledger-updated-event: accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent
+      transaction-batch-failed-event: accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent
+      transaction-batch-started-event: accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent
+      transaction-batch-chunk-event: accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent
+      reconcilation-failed-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent
+      reconcilation-started-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent
+      reconcilation-chunk-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent
+      reconcilation-finalisation-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent
+  organisation:
+    enabled: ${LOB_ORGANISATION_ENABLED:true}
+  blockchain_publisher:
+    enabled: ${LOB_BLOCKCHAIN_PUBLISHER_ENABLED:true}
+    topics:
+      report-ledger-update-command: accounting_reporting_core.domain.event.ledger.ReportLedgerUpdateCommand
+      transaction-ledger-update-commander: accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand
+  cors:
+    allowed:
+      origins: ${LOB_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  dispatching:
+    strategy:
+      type: ${LOB_DISPATCHING_STRATEGY:DELAYED}
+
+  netsuite:
+    enabled: ${LOB_NETSUITE_ENABLED:true}
+    financial:
+      period:
+        source: EXPLICIT
+    topics:
+      scheduled-ingestion-event: accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent
+      transaction-batch-created-event: accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent
+      scheduled-reconcilation-event: accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent
+      reconcilation-created-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent
+    client:
+      token-url: ${LOB_NETSUITE_CLIENT_TOKEN_URL:<enter value>}
+      private-key-file-path: ${LOB_NETSUITE_CLIENT_PRIVATE_KEY_FILE_PATH:<enter value>}
+      url: ${LOB_NETSUITE_CLIENT_URL:<enter value>}
+      client-id: ${LOB_NETSUITE_CLIENT_CLIENT_ID:<enter value>}
+      certificate-id: ${LOB_NETSUITE_CLIENT_CERTIFICATE_ID:<enter value>}
+
+  l1:
+    transaction:
+      metadata:
+        validation:
+          enable: ${LOB_L1_TRANSACTION_METADATA_VALIDATION_ENABLED:true}
+      metadata_label: ${LOB_L1_TRANSACTION_METADATA_LABEL:1447}
+
+  blockfrost:
+    url: "http://localhost:8080/api/v1/"
+    # locally YaciDevKit runs on port 8080
+    api_key: ""
+
+# yaci store
+store:
+  cardano:
+    host: ${STORE_CARDANO_HOST:preprod-node.world.dev.cardano.org}
+    port: ${STORE_CARDANO_PORT:30000}
+    # protocol magic 1 = Cardano PreProd network
+    protocol-magic: ${STORE_CARDANO_PROTOCOL_MAGIC:1}
+
+    sync-start-blockhash: ${STORE_CARDANO_SYNC_START_BLOCKHASH:274218b4101de63d02dd38fa0ff9be75a1c146667f4aa67fe8a04e462c8c55b1}
+    sync-start-slot: ${STORE_CARDANO_SYNC_START_SLOT:67868386}
+
+  blocks.epoch-calculation-interval: 86400
+  blocks.epoch-calculation-enabled: false
+
+apiPrefix: ${API_PREFIX:/yaci-api}
+
+endpoints:
+  health:
+    enabled: ${HEALTH_ENABLED:true}
+  management:
+  endpoints:
+    web:
+      exposure:
+        include: ${WEB_EXPOSURE_INCLUDE:health,info,prometheus,metrics,scheduledtasks,flyway}
+    health:
+      show-details: ${MANAGEMENT_ENDPOINT_SHOW_DETAILS:always}
+
+keycloak:
+  enabled: true
+  base-url: ${KC_BASE_URL:http://localhost:8080}
+  realm: cf-master
+  public-client: true
+  resource: webclient
+  bearer-only: true
+  principal-attribute: preferred_username
+  token-url: ${keycloak.base-url}/realms/${keycloak.realm}/protocol/openid-connect/token
+  cert-url: ${keycloak.base-url}/realms/${keycloak.realm}/protocol/openid-connect/certs
+  authorization-url: ${keycloak.base-url}/realms/${keycloak.realm}/protocol/openid-connect/auth
+  roles:
+    auditor: cf_auditor
+    manager: cf_manager
+springdoc:
+  api-docs.enabled: true
+  swagger-ui:
+    oauth:
+      client-id: webclient
+      realm: cf-master
+    oauth2-redirect-url: ${OAUTH2_REDIRECT_URL:http://localhost:9000/swagger-ui/oauth2-redirect.html}

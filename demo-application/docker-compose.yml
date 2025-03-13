@@ -1,0 +1,129 @@
+services:
+
+  postgres:
+    image: postgres:16.3
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - lob
+
+  api:
+    build:
+      context: .
+    environment:
+      KEYCLOAK_ENABLED: true
+      # Only used for dev and mocking netsuit
+      LOB_CORS_ALLOWED_ORIGINS: ${LOB_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      LOB_MOCK_RESULT_PATH: /app/cf-application/src/main/resources/json/NetSuiteIngestionMock.json
+      SPRING_PROFILES_ACTIVE: dev--yaci-dev-kit
+      DB_URL: ${DB_USER:-jdbc:postgresql://postgres:5432/postgres}
+      KC_BASE_URL: ${KC_BASE_URL:-http://keycloak:8080}
+      lob_owner_account_mnemonic: ${LOB_OWNER_ACCOUNT_MNEMONIC:-test test test test test test test test test test test test test test test test test test test test test test test sauce}
+      LOB_ACCOUNTING_REPORTING_CORE_ENABLED: true
+      LOB_ORGANISATION_ENABLED: true
+      LOB_BLOCKCHAIN_READER_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_ENABLED: true
+      LOB_NETSUITE_ENABLED: true
+      SPRING_KAFKA_ENABLED: false
+      SERVER_PORT: 9000
+      LOB_BLOCKFROST_URL: http://yaci-cli:8080/api/v1/
+      LOB_BLOCKCHAIN_READER_LOB_FOLLOWER_BASE_URL: http://follower-app:9090/api
+      LOB_NETSUITE_CLIENT_URL: ${LOB_NETSUITE_CLIENT_URL:-http://api:9000/api/mockresult}
+      LOB_NETSUITE_CLIENT_CERTIFICATE_ID: ${LOB_NETSUITE_CLIENT_CERTIFICATE_ID:-<enter value>}
+      LOB_NETSUITE_CLIENT_CLIENT_ID: ${LOB_NETSUITE_CLIENT_CLIENT_ID:-<enter value>}
+      LOB_NETSUITE_CLIENT_PRIVATE_KEY_FILE_PATH: ${LOB_NETSUITE_CLIENT_PRIVATE_KEY_FILE_PATH:-/tmp/dummy.pem}
+      LOB_NETSUITE_CLIENT_TOKEN_URL: ${LOB_NETSUITE_CLIENT_TOKEN_URL:-<enter value>}
+    working_dir: /app
+    entrypoint: ${ENTRYPOINT:-java --enable-preview -jar /app.jar}
+    networks:
+      - lob
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./:/app/
+      - ${LOCAL_PRIVATE_KEY_PATH:-./erp-cert/dummy.pem}:${LOB_NETSUITE_CLIENT_PRIVATE_KEY_FILE_PATH:-/tmp/dummy.pem}
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    depends_on:
+      - postgres
+    networks:
+      - lob
+    environment:
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_METRICS_ENABLED: ${KC_METRICS_ENABLED:-true}
+      KC_HEALTH_ENABLED: ${KC_HEALTH_ENABLED:-true}
+      KC_HOSTNAME: ${KC_HOSTNAME-localhost}
+      KC_IMPORT: ${KC_IMPORT:-/opt/keycloak/data/import/realm-export.json}
+      KC_HTTP_ENABLED: true
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_PORT: ${KC_HTTP_PORT:-8080}
+      KC_HTTPS_PORT: ${KC_HTTP_PORT:-8443}
+      KC_DB: ${KC_DB:-postgres}
+      KC_DB_URL_HOST: ${KC_DB_URL_HOST:-postgres}
+      KC_DB_URL_PORT: ${KC_DB_URL_PORT:-5432}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-postgres}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-postgres}
+    ports:
+      - ${EXPOSED_KC_HTTP_PORT:-8080}:${KC_HTTP_PORT:-8080}
+      - ${EXPOSED_KC_HTTPS_PORT:-8443}:${KC_HTTPS_PORT:-8443}
+      - ${EXPOSED_KC_HEALTH_PORT:-8082}:9000
+    volumes:
+      - ./keycloak-config:/opt/keycloak/data/import
+      - keycloak-providers:/opt/keycloak/providers
+
+  follower-app:
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-reeve-follower-app:main
+    networks:
+      - lob
+    ports:
+      - "9090:9090"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev--yaci-dev-kit
+      DB_URL: ${DB_USER:-jdbc:postgresql://postgres:5432/postgres?currentSchema=lob_follower_service}
+      LOB_BLOCKFROST_URL: http://yaci-cli:8080/api/v1/
+      STORE_CARDANO_HOST: ${STORE_CARDANO_HOST:-yaci-cli}
+      STORE_CARDANO_PORT: ${STORE_CARDANO_PORT:-3001}
+      STORE_CARDANO_PROTOCOL_MAGIC: ${STORE_CARDANO_PROTOCOL_MAGIC:-42}
+
+  yaci-cli:
+    image: bloxbean/yaci-cli:0.10.2
+    networks:
+      - lob
+    env_file:
+      - ./yaci-config/env
+      - ./yaci-config/node.properties
+    volumes:
+      - ./yaci-config/node.properties:/app/config/node.properties
+      - yaci-data:/clusters
+    ports:
+      - "3001:3001"
+      - "8081:8080"
+    entrypoint: [ "/app/yaci-cli", "create-node", "-o", "--start" ]
+
+  yaci-viewer:
+    image: bloxbean/yaci-viewer:0.10.2
+    ports:
+      - "5173:5173"
+    env_file:
+      - ./yaci-config/env
+    networks:
+      - lob
+
+volumes:
+  postgres-data:
+  keycloak-providers:
+  yaci-data:
+
+networks:
+  lob:
+    name: lob
