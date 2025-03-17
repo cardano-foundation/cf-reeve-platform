@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.chrono.ChronoLocalDate;
+import java.time.chrono.ChronoLocalDateTime;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Map;
@@ -187,8 +188,9 @@ public class NetSuiteClient {
     private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to) throws IOException {
         log.info("Retrieving data from NetSuite...");
 
-        refreshToken();
-
+        if(LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
+            refreshToken();
+        }
         String uriString = UriComponentsBuilder.fromHttpUrl(baseUrl)
                 .queryParam("trandate:within", isoFormatDates(from, to)).toUriString();
         log.info("Call to url: {}", uriString);
