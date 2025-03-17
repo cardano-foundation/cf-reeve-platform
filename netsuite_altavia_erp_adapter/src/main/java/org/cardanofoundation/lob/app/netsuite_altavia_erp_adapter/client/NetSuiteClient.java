@@ -16,7 +16,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.chrono.ChronoLocalDate;
+import java.time.chrono.ChronoLocalDateTime;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Map;
@@ -187,7 +187,7 @@ public class NetSuiteClient {
     private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to) throws IOException {
         log.info("Retrieving data from NetSuite...");
 
-        if(LocalDate.now().isAfter(ChronoLocalDate.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
+        if(LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
             refreshToken();
         }
         String uriString = UriComponentsBuilder.fromHttpUrl(baseUrl)
