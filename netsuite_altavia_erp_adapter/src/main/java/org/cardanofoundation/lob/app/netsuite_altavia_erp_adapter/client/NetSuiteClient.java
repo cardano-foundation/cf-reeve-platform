@@ -187,9 +187,8 @@ public class NetSuiteClient {
     private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to) throws IOException {
         log.info("Retrieving data from NetSuite...");
 
-        if(LocalDate.now().isAfter(ChronoLocalDate.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
-            refreshToken();
-        }
+        refreshToken();
+
         String uriString = UriComponentsBuilder.fromHttpUrl(baseUrl)
                 .queryParam("trandate:within", isoFormatDates(from, to)).toUriString();
         log.info("Call to url: {}", uriString);
