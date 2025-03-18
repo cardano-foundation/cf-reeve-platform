@@ -42,3 +42,10 @@ jobs:
             --PUSH=${DOCKER_PUSH} \
             --DOCKER_REGISTRIES="${{ secrets.DOCKER_REGISTRIES }}" \
             --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}"
+      - name: Generate SBOM
+        run: ./gradlew cyclonedxBom
+      - name: Upload SBOM to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: build/reports/bom.xml

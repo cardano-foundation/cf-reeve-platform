@@ -45,7 +45,6 @@ jobs:
           -Dsonar.organization=cardano-foundation \
           -Dsonar.projectKey=cardano-foundation_cf-lob-platform \
           -Dsonar.branch.name=${{ github.head_ref }}
-
 #  mutation-test:
 #    needs: test
 #    runs-on: ubuntu-latest
