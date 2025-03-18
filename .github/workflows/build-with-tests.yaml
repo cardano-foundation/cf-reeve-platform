@@ -45,7 +45,13 @@ jobs:
           -Dsonar.organization=cardano-foundation \
           -Dsonar.projectKey=cardano-foundation_cf-lob-platform \
           -Dsonar.branch.name=${{ github.head_ref }}
-
+      - name: Generate SBOM
+        run: ./gradlew cyclonedxBom
+      - name: Upload SBOM to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: build/reports/bom.xml
 #  mutation-test:
 #    needs: test
 #    runs-on: ubuntu-latest
