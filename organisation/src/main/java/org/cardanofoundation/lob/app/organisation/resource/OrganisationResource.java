@@ -192,7 +192,7 @@ public class OrganisationResource {
         return ResponseEntity.ok().body(
                 organisationService.getOrganisationEventCode(orgId).stream().map(accountEvent -> {
                     return new OrganisationEventView(
-                            accountEvent.getId().getCustomerCode(),
+                            accountEvent.getCustomerCode(),
                             accountEvent.getId().getOrganisationId(),
                             accountEvent.getName()
                     );

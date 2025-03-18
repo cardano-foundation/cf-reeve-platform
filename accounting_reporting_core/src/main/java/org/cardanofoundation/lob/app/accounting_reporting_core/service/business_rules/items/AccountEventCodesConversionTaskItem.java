@@ -124,7 +124,7 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
         if (accountDebitRefCode.isPresent() && accountCreditRefCode.isPresent()) {
             val eventCode = STR."\{accountDebitRefCode.orElseThrow()}\{accountCreditRefCode.orElseThrow()}";
 
-            organisationPublicApi.findEventCode(organisationId, eventCode)
+            organisationPublicApi.findEventCode(organisationId, accountDebitRefCode.get(), accountCreditRefCode.get())
                     .ifPresentOrElse(
                             event -> item.setAccountEvent(Optional.of(AccountEvent.builder()
                                     .code(eventCode)
