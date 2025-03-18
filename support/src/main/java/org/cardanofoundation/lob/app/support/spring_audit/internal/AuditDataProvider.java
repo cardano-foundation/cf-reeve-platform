@@ -20,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 public class AuditDataProvider implements AuditorAware<String>, DateTimeProvider {
 
     private final Clock clock;
+    private final String SYSTEM_USER = "system";
 
     @PostConstruct
     public void init() {
@@ -32,7 +33,7 @@ public class AuditDataProvider implements AuditorAware<String>, DateTimeProvider
         if (authentication != null && authentication.isAuthenticated()) {
             return Optional.of(authentication.getName());
         }
-        return Optional.empty();
+        return Optional.of(SYSTEM_USER);
     }
 
     @Override
