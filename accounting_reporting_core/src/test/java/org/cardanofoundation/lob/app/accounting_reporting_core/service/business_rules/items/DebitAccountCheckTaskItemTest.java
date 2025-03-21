@@ -23,7 +23,7 @@ public class DebitAccountCheckTaskItemTest {
 
     @BeforeEach
     public void setup() {
-        this.taskItem = new DebitAccountCheckTaskItem();
+        this.taskItem = new DiscardSameAccountCodeTaskItem();
     }
 
     @Test
