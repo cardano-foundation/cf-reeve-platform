@@ -160,7 +160,20 @@ Currently supported are the following subtypes:
       "amortization_on_intangible_assets": "string", // Optional, only if present
       "rent_expenses": "string" // Optional, only if present
     },
-    "profit_for_the_year": "string" // Optional, only if present
+    "profit_for_the_year": "string", // Optional, only if present
+    "extraordinary_income": {
+        "extraordinary_expenses": "string" // Optional, only if present
+    },
+    "financial_income": {
+      "financial_expenses": "string", // Optional, only if present
+      "financial_revenues": "string", // Optional, only if present
+      "staking_rewards_income": "string", // Optional, only if present
+      "net_income_options_sale": "string", // Optional, only if present
+      "realised_gain_on_sale_of_cryptocurrencies": "string" // Optional, only if present
+    },
+    "tax_expenses": {
+      "income_tax_expenses": "string" // Optional, only if present
+    }
   }
 }
 ```

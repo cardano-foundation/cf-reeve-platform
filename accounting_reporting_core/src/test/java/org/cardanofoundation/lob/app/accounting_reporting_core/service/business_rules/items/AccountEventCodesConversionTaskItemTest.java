@@ -25,6 +25,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OpeningBalance;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
 
@@ -51,12 +52,12 @@ class AccountEventCodesConversionTaskItemTest {
 
         OrganisationChartOfAccountSubType chartOfAccountSubType = mock(OrganisationChartOfAccountSubType.class);
         when(organisationPublicApiIF.getChartOfAccounts(eq(organisationId), eq(accountCodeCredit)))
-                .thenReturn(Optional.of(new OrganisationChartOfAccount(new OrganisationChartOfAccount.Id(organisationId, accountCodeCredit), accountCodeCredit, accountCreditRefCode, "name1", chartOfAccountSubType)));
+                .thenReturn(Optional.of(new OrganisationChartOfAccount(new OrganisationChartOfAccount.Id(organisationId, accountCodeCredit), accountCodeCredit, accountCreditRefCode, "name1", "USD", "couterParty",null, true, chartOfAccountSubType, new OpeningBalance())));
 
         when(organisationPublicApiIF.getChartOfAccounts(eq(organisationId), eq(accountCodeDebit)))
-                .thenReturn(Optional.of(new OrganisationChartOfAccount(new OrganisationChartOfAccount.Id(organisationId, accountCodeDebit), accountCodeDebit, accountDebitRefCode, "name2", chartOfAccountSubType)));
+                .thenReturn(Optional.of(new OrganisationChartOfAccount(new OrganisationChartOfAccount.Id(organisationId, accountCodeDebit), accountCodeDebit, accountDebitRefCode, "name2", "USD", "couterParty", null,true, chartOfAccountSubType, new OpeningBalance())));
 
-        when(organisationPublicApiIF.findEventCode(eq(organisationId), eq("DR_REF"),eq("CR_REF"))).thenReturn(Optional.of(AccountEvent.builder()
+        when(organisationPublicApiIF.findEventCode(eq(organisationId), eq("DR_REF"), eq("CR_REF"))).thenReturn(Optional.of(AccountEvent.builder()
                 .name("name")
                 .build()));
 
