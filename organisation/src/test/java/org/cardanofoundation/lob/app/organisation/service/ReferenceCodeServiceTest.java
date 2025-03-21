@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
@@ -25,6 +26,9 @@ class ReferenceCodeServiceTest {
     @Mock
     private ReferenceCodeRepository referenceCodeRepository;
 
+    @Mock
+    private OrganisationService organisationService;
+
     @InjectMocks
     private ReferenceCodeService referenceCodeService;
 
@@ -34,6 +38,7 @@ class ReferenceCodeServiceTest {
     private ReferenceCode referenceCode;
     private ReferenceCodeView referenceCodeView;
     private ReferenceCodeUpdate referenceCodeUpdate;
+    private Organisation mockOrganisation;
 
     @BeforeEach
     void setUp() {
@@ -43,6 +48,7 @@ class ReferenceCodeServiceTest {
                 .build();
 
         referenceCodeView = ReferenceCodeView.fromEntity(referenceCode);
+        mockOrganisation = new Organisation(ORG_ID,"testOrg","testCity","testPostCode","testProvince","testAddress","testPhone","testTaxId","IE","00000000",false,false,7305,"ISO_4217:CHF","ISO_4217:CHF","http://testWeb","email@test.com",null);
 
         referenceCodeUpdate = new ReferenceCodeUpdate(REF_CODE, "Updated Reference");
     }
@@ -82,9 +88,18 @@ class ReferenceCodeServiceTest {
     }
 
     @Test
+    void testUpsertReferenceCode_UpsertNoOrg() {
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.empty());
+        ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
+
+        assertTrue(result.getError().isPresent());
+
+    }
+
+    @Test
     void testUpsertReferenceCode_InsertNew() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, REF_CODE)).thenReturn(Optional.empty());
-
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
         ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
 
         assertTrue(result.getError().isEmpty());
@@ -95,6 +110,7 @@ class ReferenceCodeServiceTest {
     @Test
     void testUpsertReferenceCode_UpdateExisting() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, REF_CODE)).thenReturn(Optional.of(referenceCode));
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
         ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
 
