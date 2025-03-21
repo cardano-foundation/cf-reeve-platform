@@ -28,8 +28,6 @@ public class OrganisationService {
     private final OrganisationRepository organisationRepository;
     private final CostCenterService costCenterService;
     private final ProjectMappingRepository projectMappingRepository;
-    private final OrganisationChartOfAccountTypeRepository organisationChartOfAccountTypeRepository;
-    private final ChartOfAccountRepository organisationChartOfAccountRepository;
     private final AccountEventRepository accountEventRepository;
     private final OrganisationCurrencyService organisationCurrencyService;
 
@@ -49,14 +47,7 @@ public class OrganisationService {
         return projectMappingRepository.findAllByOrganisationId(organisationId);
     }
 
-    @Transactional
-    public Set<OrganisationChartOfAccountType> getAllChartType(String organisationId) {
-        return organisationChartOfAccountTypeRepository.findAllByOrganisationId(organisationId);
-    }
 
-    public Set<OrganisationChartOfAccount> getBySubTypeId(Long subType) {
-        return organisationChartOfAccountRepository.findAllByOrganisationIdSubTypeId(subType);
-    }
 
     public Set<AccountEvent> getOrganisationEventCode(String orgId) {
         return accountEventRepository.findAllByOrganisationId(orgId);
