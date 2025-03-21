@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.repository;
 
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,4 +14,9 @@ public interface OrganisationChartOfAccountSubTypeRepository extends JpaReposito
     @Query("SELECT st FROM OrganisationChartOfAccountSubType st " +
             "WHERE st.type = :type")
     Set<OrganisationChartOfAccountSubType> findAllByType(@Param("type") OrganisationChartOfAccountType type);
+
+    @Query("SELECT st FROM OrganisationChartOfAccountSubType st " +
+            "WHERE st.organisationId = :organisationId AND st.id = :subTypeId ")
+    Optional<OrganisationChartOfAccountSubType> findAllByOrganisationIdAndSubTypeId(@Param("organisationId") String organisationId, @Param("subTypeId") String subTypeId);
+
 }

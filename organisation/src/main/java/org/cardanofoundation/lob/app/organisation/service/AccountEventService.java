@@ -9,7 +9,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+
 import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
@@ -24,9 +28,10 @@ public class AccountEventService {
 
     private final AccountEventRepository accountEventRepository;
     private final ReferenceCodeRepository referenceCodeRepository;
+    private final OrganisationService organisationService;
 
     public Optional<AccountEvent> findById(String organisationId, String debitReferenceCode, String creditReferenceCode) {
-        return accountEventRepository.findById(new AccountEvent.Id(organisationId, debitReferenceCode,creditReferenceCode));
+        return accountEventRepository.findById(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode));
     }
 
     public List<AccountEventView> getAllAccountEvent(String orgId) {
@@ -37,16 +42,34 @@ public class AccountEventService {
     }
 
     @Transactional
-    public Optional<AccountEventView> upsertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
+    public AccountEventView upsertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
+
+        Optional<Organisation> organisationChe = organisationService.findById(orgId);
+        if (organisationChe.isEmpty()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+
+        }
 
         Optional<ReferenceCode> debitReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode());
         if (debitReference.isEmpty()) {
-            return Optional.empty();
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
         }
 
         Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
         if (creditReference.isEmpty()) {
-            return Optional.empty();
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
         }
 
         ReferenceCode debitReferenceG = debitReference.get();
@@ -54,7 +77,7 @@ public class AccountEventService {
         AccountEvent accountEvent = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()).orElse(
                 AccountEvent.builder()
                         .id(new AccountEvent.Id(orgId, debitReferenceG.getId().getReferenceCode(), creditReferenceG.getId().getReferenceCode()))
-                        .customerCode(debitReferenceG.getId().getReferenceCode()+creditReferenceG.getId().getReferenceCode())
+                        .customerCode(debitReferenceG.getId().getReferenceCode() + creditReferenceG.getId().getReferenceCode())
                         .build()
         );
 
@@ -63,6 +86,6 @@ public class AccountEventService {
         accountEvent.setActive(eventCodeUpdate.getActive());
         accountEventRepository.save(accountEvent);
 
-        return Optional.ofNullable(AccountEventView.convertFromEntity(accountEvent));
+        return AccountEventView.convertFromEntity(accountEvent);
     }
 }
