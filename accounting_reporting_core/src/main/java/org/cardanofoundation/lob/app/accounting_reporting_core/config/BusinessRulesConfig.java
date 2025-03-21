@@ -69,6 +69,7 @@ public class BusinessRulesConfig {
     private PipelineTask preCleansingPipelineTask() {
         return new DefaultPipelineTask(List.of(
                 new DiscardZeroBalanceTxItemsTaskItem(),
+                new DiscardSameAccountTxItemsTaskItem(),
                 new JournalAccountCreditEnrichmentTaskItem(organisationPublicApi)
         ));
     }
