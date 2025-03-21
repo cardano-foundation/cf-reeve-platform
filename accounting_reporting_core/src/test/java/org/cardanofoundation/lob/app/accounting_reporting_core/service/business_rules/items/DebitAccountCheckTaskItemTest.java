@@ -156,7 +156,7 @@ public class DebitAccountCheckTaskItemTest {
 
         taskItem.run(tx);
 
-        assertThat(tx.getItems()).hasSize(2);
+        assertThat(tx.getItems()).hasSize(1);
         assertThat(tx.getAutomatedValidationStatus()).isEqualTo(FAILED);
     }
 
