@@ -60,28 +60,11 @@ public class AccountEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
     public ResponseEntity<?> upsertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
-        Optional<Organisation> organisationChe = organisationService.findById(orgId);
-        if (organisationChe.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+        AccountEventView eventCode = eventCodeService.upsertAccountEvent(orgId, eventCodeUpdate);
+        if (eventCode.getError().isPresent()) {
+            return ResponseEntity.status(eventCode.getError().get().getStatus().getStatusCode()).body(eventCode);
         }
-        Optional<AccountEventView> eventCode = eventCodeService.upsertAccountEvent(orgId, eventCodeUpdate);
-
-        if (eventCode.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
-
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
-        }
-
         return ResponseEntity.ok(eventCode);
     }
 

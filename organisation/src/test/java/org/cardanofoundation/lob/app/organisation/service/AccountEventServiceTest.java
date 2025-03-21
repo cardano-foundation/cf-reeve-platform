@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
@@ -30,6 +31,8 @@ class AccountEventServiceTest {
     @Mock
     private ReferenceCodeRepository referenceCodeRepository;
 
+    @Mock
+    private OrganisationService organisationService;
     @InjectMocks
     private AccountEventService accountEventService;
 
@@ -42,6 +45,7 @@ class AccountEventServiceTest {
     private ReferenceCode mockDebitReference;
     private ReferenceCode mockCreditReference;
     private EventCodeUpdate mockEventCodeUpdate;
+    private Organisation mockOrganisation;
 
     @BeforeEach
     void setUp() {
@@ -65,6 +69,7 @@ class AccountEventServiceTest {
                 .name("Credit Reference")
                 .build();
 
+        mockOrganisation = new Organisation(ORG_ID,"testOrg","testCity","testPostCode","testProvince","testAddress","testPhone","testTaxId","IE","00000000",false,false,7305,"ISO_4217:CHF","ISO_4217:CHF","http://testWeb","email@test.com",null);
         mockEventCodeUpdate = new EventCodeUpdate(DEBIT_REF_CODE, CREDIT_REF_CODE, "Updated Name", "2", true);
     }
 
@@ -105,21 +110,23 @@ class AccountEventServiceTest {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.of(mockCreditReference));
         when(accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE))
                 .thenReturn(Optional.of(mockAccountEvent));
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        Optional<AccountEventView> result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
 
-        assertTrue(result.isPresent());
-        assertEquals("Updated Name", result.get().getDescription());
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Updated Name", result.getDescription());
         verify(accountEventRepository).save(any(AccountEvent.class));
     }
 
     @Test
     void testUpsertReferenceCode_FailsWhenDebitReferenceMissing() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        Optional<AccountEventView> result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
 
-        assertTrue(result.isEmpty());
+        assertTrue(result.getError().isPresent());
         verify(accountEventRepository, never()).save(any());
     }
 
@@ -127,10 +134,21 @@ class AccountEventServiceTest {
     void testUpsertReferenceCode_FailsWhenCreditReferenceMissing() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.of(mockDebitReference));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.empty());
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        Optional<AccountEventView> result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
 
-        assertTrue(result.isEmpty());
+        assertTrue(result.getError().isPresent());
+        verify(accountEventRepository, never()).save(any());
+    }
+
+    @Test
+    void testUpsertReferenceCode_FailsWhenOrganisationMissing() {
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.empty());
+
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+
+        assertTrue(result.getError().isPresent());
         verify(accountEventRepository, never()).save(any());
     }
 }

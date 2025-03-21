@@ -1,8 +1,12 @@
 package org.cardanofoundation.lob.app.organisation.domain.view;
 
+import java.util.Optional;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+
+import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
 
@@ -20,6 +24,9 @@ public class AccountEventView {
     private String hierarchy;
     private Boolean active;
 
+    private Optional<Problem> error;
+
+
     public static AccountEventView convertFromEntity(AccountEvent eventCode){
         return AccountEventView.builder()
                 .debitReferenceCode(eventCode.getId().getDebitReferenceCode())
@@ -29,6 +36,16 @@ public class AccountEventView {
                 .description(eventCode.getName())
                 .hierarchy(eventCode.getHierarchy())
                 .active(eventCode.getActive())
+                .error(Optional.empty())
+                .build();
+    }
+
+    public static AccountEventView createFail(Problem error) {
+        return AccountEventView.builder()
+                //.name(error.getTitle())
+                //.subType(chartOfAccount.getSubType().getId())
+                //.type(chartOfAccount.getSubType().getType().getId())
+                .error(Optional.of(error))
                 .build();
     }
 }
