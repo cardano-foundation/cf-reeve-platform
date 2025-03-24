@@ -9,12 +9,13 @@ import java.math.BigDecimal;
 
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 
@@ -49,10 +50,38 @@ class CreateReportViewTest {
         when(reportRequest.getResultsCarriedForward()).thenReturn("200");
 
         CreateReportView view = CreateReportView.fromReportRequest(reportRequest);
+        assertEquals("org-123", view.getOrganisationId());
+        assertTrue(view.getBalanceSheetData().isPresent());
 
-        Assertions.assertEquals("org-123", view.getOrganisationId());
-        Assertions.assertTrue(view.getBalanceSheetData().isPresent());
-        assertEquals(new BigDecimal("1000"), view.getBalanceSheetData().get().getCapital().get().getCapital().get());
+        BalanceSheetData data = view.getBalanceSheetData().get();
+
+        // Validate Assets
+        assertTrue(data.getAssets().isPresent());
+        BalanceSheetData.Assets assets = data.getAssets().get();
+
+        assertEquals(new BigDecimal("1000"), assets.getNonCurrentAssets().get().getPropertyPlantEquipment().get());
+        assertEquals(new BigDecimal("500"), assets.getNonCurrentAssets().get().getIntangibleAssets().get());
+        assertEquals(new BigDecimal("200"), assets.getNonCurrentAssets().get().getInvestments().get());
+        assertEquals(new BigDecimal("300"), assets.getNonCurrentAssets().get().getFinancialAssets().get());
+        assertEquals(new BigDecimal("150"), assets.getCurrentAssets().get().getPrepaymentsAndOtherShortTermAssets().get());
+        assertEquals(new BigDecimal("250"), assets.getCurrentAssets().get().getOtherReceivables().get());
+        assertEquals(new BigDecimal("350"), assets.getCurrentAssets().get().getCryptoAssets().get());
+        assertEquals(new BigDecimal("450"), assets.getCurrentAssets().get().getCashAndCashEquivalents().get());
+
+        // Validate Liabilities
+        assertTrue(data.getLiabilities().isPresent());
+        BalanceSheetData.Liabilities liabilities = data.getLiabilities().get();
+
+        assertEquals(new BigDecimal("50"), liabilities.getNonCurrentLiabilities().get().getProvisions().get());
+        assertEquals(new BigDecimal("60"), liabilities.getCurrentLiabilities().get().getTradeAccountsPayables().get());
+        assertEquals(new BigDecimal("70"), liabilities.getCurrentLiabilities().get().getOtherCurrentLiabilities().get());
+        assertEquals(new BigDecimal("80"), liabilities.getCurrentLiabilities().get().getAccrualsAndShortTermProvisions().get());
+
+        // Validate Equity
+        BalanceSheetData.Capital capital = data.getCapital().get();
+        assertEquals(new BigDecimal("1000"), capital.getCapital().get());
+        assertEquals(new BigDecimal("500"), capital.getProfitForTheYear().get());
+        assertEquals(new BigDecimal("200"), capital.getResultsCarriedForward().get());
     }
 
     @Test
@@ -71,13 +100,52 @@ class CreateReportViewTest {
         when(reportRequest.getGeneralAndAdministrativeExpenses()).thenReturn("80");
         when(reportRequest.getDepreciationAndImpairmentLossesOnTangibleAssets()).thenReturn("90");
         when(reportRequest.getAmortizationOnIntangibleAssets()).thenReturn("100");
+        when(reportRequest.getFinancialExpenses()).thenReturn("206");
         when(reportRequest.getRentExpenses()).thenReturn("110");
 
         CreateReportView view = CreateReportView.fromReportRequest(reportRequest);
 
         assertEquals("org-123", view.getOrganisationId());
         assertTrue(view.getIncomeStatementData().isPresent());
-        assertEquals(new BigDecimal("1000"), view.getIncomeStatementData().get().getRevenues().get().getOtherIncome().get());
+
+        IncomeStatementData data = view.getIncomeStatementData().get();
+
+        // Validate Revenues
+        assertTrue(data.getRevenues().isPresent());
+        assertEquals(new BigDecimal("1000"), data.getRevenues().get().getOtherIncome().get());
+
+        // Validate Financial Income
+        assertTrue(data.getFinancialIncome().isPresent());
+        IncomeStatementData.FinancialIncome financialIncome = data.getFinancialIncome().get();
+        assertEquals(new BigDecimal("300"), financialIncome.getFinancialRevenues().get());
+        assertEquals(new BigDecimal("150"), financialIncome.getNetIncomeOptionsSale().get());
+        assertEquals(new BigDecimal("250"), financialIncome.getRealisedGainsOnSaleOfCryptocurrencies().get());
+        assertEquals(new BigDecimal("350"), financialIncome.getStakingRewardsIncome().get());
+        assertEquals(new BigDecimal("206"), financialIncome.getFinancialExpenses().get());
+
+        // Validate Extraordinary Income
+        assertTrue(data.getExtraordinaryIncome().isPresent());
+        assertEquals(new BigDecimal("50"), data.getExtraordinaryIncome().get().getExtraordinaryExpenses().get());
+
+        // Validate Tax Expenses
+        assertTrue(data.getTaxExpenses().isPresent());
+        assertEquals(new BigDecimal("60"), data.getTaxExpenses().get().getIncomeTaxExpense().get());
+
+        // Validate Operating Expenses
+        assertTrue(data.getOperatingExpenses().isPresent());
+        IncomeStatementData.OperatingExpenses operatingExpenses = data.getOperatingExpenses().get();
+        assertEquals(new BigDecimal("70"), operatingExpenses.getPersonnelExpenses().get());
+        assertEquals(new BigDecimal("80"), operatingExpenses.getGeneralAndAdministrativeExpenses().get());
+        assertEquals(new BigDecimal("90"), operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets().get());
+        assertEquals(new BigDecimal("100"), operatingExpenses.getAmortizationOnIntangibleAssets().get());
+        assertEquals(new BigDecimal("110"), operatingExpenses.getRentExpenses().get());
+
+        // Validate Additional Fields
+        assertTrue(data.getRevenues().isPresent());
+        assertEquals(new BigDecimal("500"), data.getRevenues().get().getBuildOfLongTermProvision().get());
+
+        assertTrue(data.getCostOfGoodsAndServices().isPresent());
+        assertEquals(new BigDecimal("200"), data.getCostOfGoodsAndServices().get().getCostOfProvidingServices().get());
     }
 
     @Test
