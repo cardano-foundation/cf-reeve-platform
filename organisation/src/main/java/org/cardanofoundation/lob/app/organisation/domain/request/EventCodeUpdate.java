@@ -24,8 +24,5 @@ public class EventCodeUpdate {
     @Schema(example = "Example reference code")
     private String name;
 
-    @Schema(example = "Hierarchy")
-    private String hierarchy;
-
     private Boolean active = TRUE;
 }

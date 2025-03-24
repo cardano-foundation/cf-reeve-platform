@@ -50,6 +50,17 @@ public class ReferenceCodeService {
                     .build());
         }
 
+        if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
+            Optional<ReferenceCode> parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
+            if (parentReferenceCode.isEmpty()) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
+                        .withDetail(STR."Unable to find parent reference Id: \{referenceCodeUpdate.getParentReferenceCode()}")
+                        .withStatus(Status.NOT_FOUND)
+                        .build());
+            }
+        }
+
         ReferenceCode referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode()).orElse(
                 ReferenceCode.builder()
                         .id(new ReferenceCode.Id(orgId, referenceCodeUpdate.getReferenceCode()))
@@ -57,8 +68,8 @@ public class ReferenceCodeService {
         );
 
         referenceCode.setName(referenceCodeUpdate.getName());
-        ReferenceCode referenceCodeS = referenceCodeRepository.save(referenceCode);
+        referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode());
 
-        return ReferenceCodeView.fromEntity(referenceCode);
+        return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
     }
 }

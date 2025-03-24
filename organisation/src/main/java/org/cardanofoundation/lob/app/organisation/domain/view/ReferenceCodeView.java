@@ -18,6 +18,7 @@ public class ReferenceCodeView {
 
     String referenceCode;
     String description;
+    String parentReferenceCode;
 
     private Optional<Problem> error;
 
@@ -25,6 +26,7 @@ public class ReferenceCodeView {
         return ReferenceCodeView.builder()
                 .referenceCode(Objects.requireNonNull(referenceCode.getId()).getReferenceCode())
                 .description(referenceCode.getName())
+                .parentReferenceCode(referenceCode.getParentReferenceCode())
                 .error(Optional.empty())
                 .build();
     }

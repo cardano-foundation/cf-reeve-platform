@@ -82,10 +82,8 @@ public class AccountEventService {
         );
 
         accountEvent.setName(eventCodeUpdate.getName());
-        accountEvent.setHierarchy(eventCodeUpdate.getHierarchy());
         accountEvent.setActive(eventCodeUpdate.getActive());
-        accountEventRepository.save(accountEvent);
 
-        return AccountEventView.convertFromEntity(accountEvent);
+        return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
     }
 }

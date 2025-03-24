@@ -36,6 +36,8 @@ public class ReferenceCode extends CommonEntity implements Persistable<Reference
     })
     private Id id;
 
+    private String parentReferenceCode;
+
     private String name;
 
     @Embeddable
