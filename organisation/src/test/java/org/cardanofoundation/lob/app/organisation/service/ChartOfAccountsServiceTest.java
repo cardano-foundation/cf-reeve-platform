@@ -69,7 +69,7 @@ class ChartOfAccountsServiceTest {
                 .eventRefCode("EVT123")
                 .build();
 
-        referenceCode = new ReferenceCode(new ReferenceCode.Id(orgId, "EVT123"), "RefCode");
+        referenceCode = new ReferenceCode(new ReferenceCode.Id(orgId, "EVT123"), "RefCode",null);
         subType = new OrganisationChartOfAccountSubType();
         type = new OrganisationChartOfAccountType();
         subType.setType(type);
