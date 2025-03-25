@@ -13,6 +13,8 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.validation.Valid;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -27,14 +29,21 @@ import org.zalando.problem.Status;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.PublicReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 
 @Service
 @Slf4j
@@ -46,6 +55,8 @@ public class ReportService {
     private final PublicReportRepository publicReportRepository;
     private final OrganisationPublicApi organisationPublicApi;
     private final Clock clock;
+    private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
+    private final ChartOfAccountRepository chartOfAccountRepository;
 
     @Transactional
     public Either<Problem, ReportEntity> approveReportForLedgerDispatch(String reportId) {
@@ -545,5 +556,97 @@ public class ReportService {
         ReportEntity report = new ReportEntity();
         report.setVer(clock.millis());
         return report;
+    }
+
+    public Either<Problem, ReportEntity> reportGenerate(@Valid ReportGenerateRequest reportGenerateRequest) {
+        LocalDate startDate = getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear());
+        LocalDate endDate = getEndDate(reportGenerateRequest.getIntervalType(), getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear()));
+        Set<TransactionEntity> dispatchedTransactionInDateRange = accountingCoreTransactionRepository.findDispatchedTransactionInDateRange(reportGenerateRequest.getOrganisationID(), startDate, endDate);
+
+        ReportEntity reportEntity = new ReportEntity();
+        reportEntity.setYear(reportGenerateRequest.getYear());
+        reportEntity.setPeriod(Optional.of(reportGenerateRequest.getPeriod()));
+        reportEntity.setIntervalType(reportGenerateRequest.getIntervalType());
+        reportEntity.setMode(USER);
+        reportEntity.setDate(LocalDate.now(clock));
+        reportEntity.setOrganisation(Organisation.builder().id(reportGenerateRequest.getOrganisationID()).build());
+        reportEntity.setType(reportGenerateRequest.getReportType());
+
+        BalanceSheetData balanceSheetData = new BalanceSheetData();
+        IncomeStatementData incomeStatementData = new IncomeStatementData();
+
+        for(TransactionEntity transactionEntity : dispatchedTransactionInDateRange) {
+            for(TransactionItemEntity transactionItemEntity : transactionEntity.getItems()) {
+                Account account;
+                switch(transactionItemEntity.getOperationType()) {
+                    case DEBIT ->
+                        account = transactionItemEntity.getAccountDebit().get();
+                    case CREDIT ->
+                        account = transactionItemEntity.getAccountCredit().get();
+                    default -> {
+                        return Either.left(Problem.builder()
+                                .withTitle("INVALID_OPERATION_TYPE")
+                                .withDetail(STR."Operation type is not valid. Expected DEBIT or CREDIT but got \{transactionItemEntity.getOperationType()}.")
+                                .withStatus(Status.BAD_REQUEST)
+                                .with("operationType", transactionItemEntity.getOperationType())
+                                .build());
+                    }
+                }
+
+                Optional<OrganisationChartOfAccount> chartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(reportGenerateRequest.getOrganisationID(), account.getCode());
+
+                OrganisationChartOfAccount organisationChartOfAccount = chartOfAccount.get();
+
+                // calculating OpenBalance
+
+                BigDecimal amountLcy = transactionItemEntity.getAmountLcy();
+
+
+            }
+        }
+        switch (reportEntity.getType()) {
+            case BALANCE_SHEET:
+                reportEntity.setBalanceSheetReportData(Optional.of(balanceSheetData));
+                break;
+            case INCOME_STATEMENT:
+                reportEntity.setIncomeStatementReportData(Optional.of(incomeStatementData));
+                break;
+            default:
+                return Either.left(Problem.builder()
+                        .withTitle("INVALID_REPORT_TYPE")
+                        .withDetail(STR."Report type is not valid. Expected BALANCE_SHEET or INCOME_STATEMENT but got \{reportEntity.getType()}.")
+                        .withStatus(Status.BAD_REQUEST)
+                        .with("reportType", reportEntity.getType())
+                        .build());
+        }
+
+        return Either.right(reportEntity);
+    }
+
+    private LocalDate getStartDate(IntervalType intervalType, int period, short year) {
+        switch (intervalType) {
+            case MONTH:
+                return LocalDate.of(year, period, 1);
+            case QUARTER:
+                int month = (period - 1) * 3 + 1; // Convert quarter to starting month
+                return LocalDate.of(year, month, 1);
+            case YEAR:
+                return LocalDate.of(year, 1, 1);
+            default:
+                throw new IllegalArgumentException("Unsupported IntervalType: " + intervalType);
+        }
+    }
+
+    private LocalDate getEndDate(IntervalType intervalType, LocalDate startDate) {
+        switch (intervalType) {
+            case MONTH:
+                return startDate.plusMonths(1).minusDays(1);
+            case QUARTER:
+                return startDate.plusMonths(3).minusDays(1);
+            case YEAR:
+                return startDate.plusYears(1).minusDays(1);
+            default:
+                throw new IllegalArgumentException("Unsupported IntervalType: " + intervalType);
+        }
     }
 }

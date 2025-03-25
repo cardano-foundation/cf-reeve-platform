@@ -37,6 +37,19 @@ public class ReportController {
     private final OrganisationCurrencyService organisationCurrencyService;
     private final ReportService reportService;
 
+    @Tag(name = "Reporting", description = "Generate Report based on on-chain data")
+    @PostMapping(value = "/report-generate", produces = "application/json")
+    public ResponseEntity<ReportResponseView> reportGenerate(@Valid @RequestBody ReportGenerateRequest reportGenerateRequest) {
+        return reportService.reportGenerate(reportGenerateRequest).fold(
+                problem -> {
+                    return ResponseEntity.status(problem.getStatus().getStatusCode()).body(ReportResponseView.createFail(problem));
+                }, success -> {
+                    return ResponseEntity.ok().body(
+                            ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                    );
+                }
+        );
+    }
 
     @Tag(name = "Reporting", description = "Report Parameters")
     @GetMapping(value = "/report-parameters/{orgId}", produces = "application/json")
@@ -54,7 +67,6 @@ public class ReportController {
                 )
         );
     }
-
 
     @Tag(name = "Reporting", description = "Create Balance Sheet")
     @PostMapping(value = "/report-create", produces = "application/json")
