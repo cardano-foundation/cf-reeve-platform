@@ -68,7 +68,7 @@ public class CreateReportView {
                                 .netIncomeOptionsSale(new BigDecimal(reportRequest.getNetIncomeOptionsSale()))
                                 .realisedGainsOnSaleOfCryptocurrencies(new BigDecimal(reportRequest.getRealisedGainsOnSaleOfCryptocurrencies()))
                                 .stakingRewardsIncome(new BigDecimal(reportRequest.getStakingRewardsIncome()))
-                                .financialExpenses(new BigDecimal(reportRequest.getFinancialRevenues()))
+                                .financialExpenses(new BigDecimal(reportRequest.getFinancialExpenses()))
                                 .build())
                         .extraordinaryIncome(IncomeStatementData.ExtraordinaryIncome.builder()
                                 .extraordinaryExpenses(new BigDecimal(reportRequest.getExtraordinaryExpenses()))
