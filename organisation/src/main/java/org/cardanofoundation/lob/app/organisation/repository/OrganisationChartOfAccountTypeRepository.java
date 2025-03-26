@@ -11,7 +11,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChar
 public interface OrganisationChartOfAccountTypeRepository extends JpaRepository<OrganisationChartOfAccountType, String> {
 
     @Query("SELECT t FROM OrganisationChartOfAccountType t " +
-            "LEFT JOIN FETCH t.subType tst " +
+            "LEFT JOIN FETCH t.subTypes tst " +
             "WHERE t.organisationId = :organisationId")
     Set<OrganisationChartOfAccountType> findAllByOrganisationId(@Param("organisationId") String organisationId);
 }

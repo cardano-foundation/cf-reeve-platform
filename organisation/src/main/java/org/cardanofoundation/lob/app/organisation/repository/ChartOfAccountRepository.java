@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -23,4 +24,7 @@ public interface ChartOfAccountRepository extends JpaRepository<OrganisationChar
             "WHERE t.Id.organisationId = :orgId AND t.Id.customerCode = :customerCode")
     Optional<OrganisationChartOfAccount> findAllByOrganisationIdAndReferenceCode(@Param("orgId") String orgId, @Param("customerCode") String customerCode);
 
+    @Query("SELECT t FROM OrganisationChartOfAccount t " +
+            "WHERE t.subType.id IN :subTypeIds")
+    Set<OrganisationChartOfAccount> findAllByOrganisationIdSubTypeIds(@Param("subTypeIds") List<Long> mappingType);
 }
