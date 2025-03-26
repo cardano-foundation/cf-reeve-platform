@@ -573,7 +573,6 @@ public class ReportService {
     public Either<Problem, ReportEntity> reportGenerate(@Valid ReportGenerateRequest reportGenerateRequest) {
         LocalDate startDate = getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear());
         LocalDate endDate = getEndDate(reportGenerateRequest.getIntervalType(), getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear()));
-        Set<TransactionEntity> dispatchedTransactionInDateRange = accountingCoreTransactionRepository.findDispatchedTransactionInDateRange(reportGenerateRequest.getOrganisationID(), startDate, endDate);
 
         ReportEntity reportEntity = new ReportEntity();
         reportEntity.setYear(reportGenerateRequest.getYear());
@@ -636,12 +635,28 @@ public class ReportService {
             }
             // Set value
             Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingType().stream().map(OrganisationChartOfAccountSubType::getId).toList());
-            List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(), startDate, endDate);
-            // Set value
-            BigDecimal totalAmount = transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity ->
-                    transactionItemEntity.getOperationType().equals(OperationType.DEBIT) ? transactionItemEntity.getAmountLcy() : transactionItemEntity.getAmountLcy().negate())
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            LocalDate startSearchDate = startDate;
+            BigDecimal totalAmount = BigDecimal.ZERO;
 
+            if(field.isAccumulatedYearly()) {
+                startSearchDate = LocalDate.of(startDate.getYear(), 1, 1);
+            } else if(field.isAccumulated()) {
+                // TODO this calculation can be optimized by using already published reports
+                startSearchDate = LocalDate.of(2000,1,1); // TODO Dummy value
+                totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
+                        BigDecimal.ZERO :
+                organisationChartOfAccount.getOpeningBalance().getBalance()).reduce(BigDecimal.ZERO, BigDecimal::add));
+            } else {
+                startSearchDate = startDate;
+            }
+
+            List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(), startSearchDate, endDate);
+            // Set value
+            totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity ->
+                    transactionItemEntity.getOperationType().equals(OperationType.DEBIT) ?
+                            transactionItemEntity.getAmountLcy() :
+                            transactionItemEntity.getAmountLcy().negate() // negating the amount since it's a credit operation
+                    ).reduce(BigDecimal.ZERO, BigDecimal::add));
             // Set value dynamically in reportData
             setFieldValue(reportData, field.getName(), totalAmount);
         } else {
