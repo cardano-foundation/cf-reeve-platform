@@ -21,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
@@ -242,12 +241,6 @@ public class NetSuiteReconcilationService {
 
                 applicationEventPublisher.publishEvent(reconcilationChunkEventBuilder.build());
             });
-
-            applicationEventPublisher.publishEvent(ReconcilationFinalisationEvent.builder()
-                    .metadata(EventMetadata.create(ReconcilationFinalisationEvent.VERSION))
-                    .reconciliationId(reconcilationId)
-                    .organisationId(organisationId)
-                    .build());
 
             log.info("NetSuite reconcilation fully completed.");
         } catch (Exception e) {

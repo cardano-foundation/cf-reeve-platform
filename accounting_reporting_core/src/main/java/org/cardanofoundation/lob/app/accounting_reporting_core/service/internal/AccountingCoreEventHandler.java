@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reco
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
+import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @Service
 @Slf4j
@@ -39,6 +41,8 @@ public class AccountingCoreEventHandler {
     private final LedgerService ledgerService;
     private final TransactionBatchService transactionBatchService;
     private final TransactionReconcilationService transactionReconcilationService;
+    private final ApplicationEventPublisher applicationEventPublisher;
+
 
     @EventListener
     public void handleLedgerUpdatedEvent(TxsLedgerUpdatedEvent event) {
@@ -157,6 +161,14 @@ public class AccountingCoreEventHandler {
         );
 
         log.info("Finished processing handleReconcilationChunkEvent, event: {}", event);
+
+        applicationEventPublisher.publishEvent(ReconcilationFinalisationEvent.builder()
+                .metadata(EventMetadata.create(ReconcilationFinalisationEvent.VERSION))
+                .totalPrediction(event.getTotalTransactionsCount())
+                .reconciliationId(reconcilationId)
+                .organisationId(organisationId)
+                .build());
+
     }
 
     @EventListener
