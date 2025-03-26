@@ -48,7 +48,7 @@ public class TransactionConverter {
         LinkedHashSet<Transaction> transactions = new LinkedHashSet<>();
 
         for (TxLine txLine : txLines) {
-            Either<FatalError, String> localOrgIdE = organisationId(txLine);
+            Either<FatalError, String> localOrgIdE = getOrganisationIdFromTxLine(txLine);
 
             if (localOrgIdE.isEmpty()) {
                 return Either.left(localOrgIdE.getLeft());
@@ -124,15 +124,16 @@ public class TransactionConverter {
             OperationType operationType;
             BigDecimal amountLcy;
             BigDecimal amountFcy;
-            if(txLine.amountDebit() != null && txLine.amountCredit() != null) {
+            if(txLine.amountDebit() != null && txLine.amountCredit() != null ||
+                    txLine.amountDebitForeignCurrency() != null && txLine.amountCreditForeignCurrency() != null) {
                 // Error when both amounts are non-zero
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", txId);
                 return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", Map.of()));
-            } else if(txLine.amountDebit() != null) {
+            } else if(txLine.amountDebit() != null || txLine.amountDebitForeignCurrency() != null) {
                 operationType = OperationType.DEBIT;
                 amountLcy = MoreBigDecimal.zeroForNull(txLine.amountDebit());
                 amountFcy = MoreBigDecimal.zeroForNull(txLine.amountDebitForeignCurrency());
-            } else if(txLine.amountCredit() != null) {
+            } else if(txLine.amountCredit() != null || txLine.amountCreditForeignCurrency() != null) {
                 operationType = OperationType.CREDIT;
                 amountLcy = MoreBigDecimal.zeroForNull(txLine.amountCredit());
                 amountFcy = MoreBigDecimal.zeroForNull(txLine.amountCreditForeignCurrency());
@@ -329,7 +330,7 @@ public class TransactionConverter {
         return Optional.empty();
     }
 
-    private Either<FatalError, String> organisationId(TxLine txLine) {
+    private Either<FatalError, String> getOrganisationIdFromTxLine(TxLine txLine) {
         Optional<String> organisationIdM = codesMappingService.getCodeMapping(netsuiteInstanceId, txLine.subsidiary(), ORGANISATION);
 
         if (organisationIdM.isEmpty()) {

@@ -3,12 +3,12 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.business
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.FxRevaluation;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.Journal;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -18,14 +18,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @ExtendWith(MockitoExtension.class)
-public class JournalAccountCreditEnrichmentTaskItemTest {
+class JournalAccountCreditEnrichmentTaskItemTest {
 
     private static final String DUMMY_ACCOUNT = "0000000000";
 
@@ -83,7 +86,7 @@ public class JournalAccountCreditEnrichmentTaskItemTest {
 
         transaction.setItems(items);
 
-        when(organisationPublicApiIF.findByOrganisationId(eq(organisationId))).thenReturn(Optional.of(organisation));
+        when(organisationPublicApiIF.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
         when(organisation.getDummyAccount()).thenReturn(Optional.empty());
 
         taskItem.run(transaction);
@@ -119,7 +122,7 @@ public class JournalAccountCreditEnrichmentTaskItemTest {
 
         transaction.setItems(items);
 
-        when(organisationPublicApiIF.findByOrganisationId(eq(organisationId))).thenReturn(Optional.of(organisation));
+        when(organisationPublicApiIF.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
         when(organisation.getDummyAccount()).thenReturn(Optional.empty());
 
         taskItem.run(transaction);
@@ -260,7 +263,7 @@ public class JournalAccountCreditEnrichmentTaskItemTest {
 
         transaction.setItems(items);
 
-        when(organisationPublicApiIF.findByOrganisationId(eq("org1"))).thenReturn(Optional.of(organisation));
+        when(organisationPublicApiIF.findByOrganisationId("org1")).thenReturn(Optional.of(organisation));
         when(organisation.getDummyAccount()).thenReturn(Optional.of(DUMMY_ACCOUNT));
 
         taskItem.run(transaction);
@@ -286,6 +289,38 @@ public class JournalAccountCreditEnrichmentTaskItemTest {
         assertThat(item8.getAccountCredit().map(Account::getCode).orElseThrow()).isEqualTo("1203210100");
         assertThat(item9.getAccountCredit().map(Account::getCode).orElseThrow()).isEqualTo("0000000000");
         assertThat(item10.getAccountCredit().map(Account::getCode).orElseThrow()).isEqualTo("0000000000");
+    }
+
+    @Test
+    void shouldAddERPViolation() {
+        LinkedHashSet<TransactionItemEntity> items = new LinkedHashSet<>();
+        transaction = new TransactionEntity();
+        transaction.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id("org1")
+                .build()
+        );
+        transaction.setTransactionType(Journal);
+
+        TransactionItemEntity item1 = new TransactionItemEntity();
+        item1.setOperationType(OperationType.CREDIT);
+        item1.setId("1");
+        item1.clearAccountCodeCredit();
+        item1.clearAccountCodeDebit();
+
+        items.add(item1);
+        transaction.setItems(items);
+
+        when(organisationPublicApiIF.findByOrganisationId("org1")).thenReturn(Optional.of(organisation));
+        when(organisation.getDummyAccount()).thenReturn(Optional.of(DUMMY_ACCOUNT));
+
+        taskItem.run(transaction);
+
+        assertThat(transaction.getViolations()).isNotEmpty();
+        Set<TransactionViolation> violations = transaction.getViolations();
+        assertThat(violations).hasSize(1);
+        TransactionViolation violation = violations.iterator().next();
+        assertThat(violation.getCode()).isEqualTo(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY);
+        assertThat(violation.getSource()).isEqualTo(Source.ERP);
     }
 
 }
