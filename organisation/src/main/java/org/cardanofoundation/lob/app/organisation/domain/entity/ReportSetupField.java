@@ -10,7 +10,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinColumns;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
@@ -34,7 +33,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Entity
-@Table(name = "organisation_report_setup")
+@Table(name = "organisation_report_setup_field")
 @Audited
 @Builder
 @EntityListeners({AuditingEntityListener.class})
@@ -50,6 +49,10 @@ public class ReportSetupField extends CommonEntity {
     @JoinColumn(name = "parent_id")
     private List<ReportSetupField> childFields = new ArrayList<>();
 
+    @ManyToOne
+    @JoinColumn(name = "parent_id", insertable = false, updatable = false) // Reference to the parent
+    private ReportSetupField parent;
+
     @ManyToMany
     @JoinTable(
             name = "organisation_report_setup_field_subtype_mapping",
@@ -62,10 +65,7 @@ public class ReportSetupField extends CommonEntity {
     private boolean accumulatedYearly; // Is it accumulated Yearly and only taking care of the current year
 
     @ManyToOne
-    @JoinColumns({
-            @JoinColumn(name = "report_id_organisation_id", referencedColumnName = "organisation_id", nullable = false),
-            @JoinColumn(name = "report_id_name", referencedColumnName = "name", nullable = false)
-    })
-    private ReportSetupEntity parent;
+    @JoinColumn(name = "report_id", nullable = false)
+    private ReportSetupEntity report;
 
 }

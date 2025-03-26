@@ -423,21 +423,30 @@ CREATE TABLE IF NOT EXISTS organisation_account_event_aud (
 );
 
 CREATE TABLE organisation_report_setup (
+    id BIGINT PRIMARY KEY,
     organisation_id VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
-    PRIMARY KEY (organisation_id, name)
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE
 );
 
 CREATE TABLE organisation_report_setup_aud (
+    id BIGINT,
     organisation_id VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
 
     -- Special columns for audit tables
     rev INTEGER NOT NULL,
     revtype SMALLINT,
 
     -- Primary Key for the audit table
-    CONSTRAINT pk_organisation_report_setup_aud PRIMARY KEY (organisation_id, name, rev, revtype)
+    CONSTRAINT pk_organisation_report_setup_aud PRIMARY KEY (id, rev, revtype)
 );
 
 CREATE TABLE organisation_report_setup_field (
@@ -445,11 +454,14 @@ CREATE TABLE organisation_report_setup_field (
     name VARCHAR(255) NOT NULL,
     accumulated BOOLEAN NOT NULL,
     accumulated_yearly BOOLEAN NOT NULL,
-    report_id_organisation_id VARCHAR(255),
-    report_id_name VARCHAR(255),
+    report_id BIGINT,
     parent_id BIGINT,
-    FOREIGN KEY (report_id_organisation_id, report_id_name)
-     REFERENCES organisation_report_setup(organisation_id, name)
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    FOREIGN KEY (report_id)
+        REFERENCES organisation_report_setup(id)
      ON DELETE CASCADE
 );
 
@@ -458,11 +470,14 @@ CREATE TABLE organisation_report_setup_field_aud (
     name VARCHAR(255) NOT NULL,
     accumulated BOOLEAN NOT NULL,
     accumulated_yearly BOOLEAN NOT NULL,
-    report_id_organisation_id VARCHAR(255),
-    report_id_name VARCHAR(255),
+    report_id BIGINT,
     parent_id BIGINT,
-    FOREIGN KEY (report_id_organisation_id, report_id_name)
-     REFERENCES organisation_report_setup(organisation_id, name)
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    FOREIGN KEY (report_id)
+     REFERENCES organisation_report_setup(id)
      ON DELETE CASCADE,
     -- Special columns for audit tables
     rev INTEGER NOT NULL,
