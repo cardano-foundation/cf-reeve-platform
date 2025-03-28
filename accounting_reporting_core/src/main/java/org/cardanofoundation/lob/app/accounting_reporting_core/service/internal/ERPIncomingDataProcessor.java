@@ -116,7 +116,7 @@ public class ERPIncomingDataProcessor {
         String reconcilationId = event.getReconciliationId();
         String organisationId = event.getOrganisationId();
 
-        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId);
+        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId, event.getTotalPrediction());
 
         log.info("Finished processing ReconcilationChunkEvent, event: {}", event);
     }
