@@ -9,7 +9,7 @@ plugins {
     id("com.diffplug.spotless") version "6.19.0"
     id("maven-publish")
     id("jacoco")
-    id("org.sonarqube") version "4.3.0.3225"
+    id("org.sonarqube") version "6.1.0.5360"
     id("org.cyclonedx.bom") version "2.2.0"
 }
 
