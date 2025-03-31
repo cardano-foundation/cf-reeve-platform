@@ -588,7 +588,7 @@ public class ReportService {
         if(optionalReportSetupEntity.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("REPORT_SETUP_NOT_FOUND")
-                    .withDetail(STR."Report setup for \{reportGenerateRequest.getReportType().name()} not found.")
+                    .withDetail(String.format("Report setup for %s not found.", reportGenerateRequest.getReportType().name()))
                     .withStatus(Status.BAD_REQUEST)
                     .with("reportType", reportGenerateRequest.getReportType().name())
                     .build());
