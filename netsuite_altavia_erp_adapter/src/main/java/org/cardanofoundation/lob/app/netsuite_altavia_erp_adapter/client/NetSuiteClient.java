@@ -107,25 +107,29 @@ public class NetSuiteClient {
         // Encode parameters
         String requestBody = STR."grant_type=\{URLEncoder.encode("client_credentials", StandardCharsets.UTF_8)}&client_assertion_type=\{URLEncoder.encode("urn:ietf:params:oauth:client-assertion-type:jwt-bearer", StandardCharsets.UTF_8)}&client_assertion=\{URLEncoder.encode(jwtToken, StandardCharsets.UTF_8)}";
         // Create the request
-        ResponseEntity<String> entity = restClient.post()
-                .uri(tokenUrl)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(requestBody)
-                .retrieve()
-                .toEntity(String.class);
-        if(entity.getStatusCode().is2xxSuccessful()) {
-            TokenReponse tokenResponse = null;
-            try {
-                tokenResponse = objectMapper.readValue(entity.getBody(), TokenReponse.class);
-            } catch (JsonProcessingException e) {
-                log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
+        try {
+            ResponseEntity<String> entity = restClient.post()
+                    .uri(tokenUrl)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(requestBody)
+                    .retrieve()
+                    .toEntity(String.class);
+            if (entity.getStatusCode().is2xxSuccessful()) {
+                TokenReponse tokenResponse = null;
+                try {
+                    tokenResponse = objectMapper.readValue(entity.getBody(), TokenReponse.class);
+                } catch (JsonProcessingException e) {
+                    log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
+                }
+                accessTokenExpiration = Optional.of(LocalDateTime.now().plusSeconds(tokenResponse.getExpiresIn()));
+                accessToken = Optional.of(tokenResponse.getAccessToken());
+                log.info("NetSuite access token refreshed successfully...");
+            } else {
+                log.error("Error refreshing NetSuite access token: {}", entity.getBody());
             }
-            accessTokenExpiration = Optional.of(LocalDateTime.now().plusSeconds(tokenResponse.getExpiresIn()));
-            accessToken = Optional.of(tokenResponse.getAccessToken());
-            log.info("NetSuite access token refreshed successfully...");
-        } else {
-            log.error("Error refreshing NetSuite access token: {}", entity.getBody());
+        } catch (Exception e) {
+            log.error("Error refreshing NetSuite access token: {}", e.getMessage());
         }
     }
 

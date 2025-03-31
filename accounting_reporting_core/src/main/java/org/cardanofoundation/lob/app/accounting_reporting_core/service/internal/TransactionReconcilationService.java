@@ -291,7 +291,8 @@ public class TransactionReconcilationService {
 
     @Transactional
     public void wrapUpReconcilation(String reconcilationId,
-                                    String organisationId) {
+                                    String organisationId,
+                                    long total) {
         log.info("Wrapping up reconcilation, reconcilationId: {}", reconcilationId);
 
         val reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
@@ -309,6 +310,10 @@ public class TransactionReconcilationService {
             return;
         }
         val reconcilationEntity = reconcilationEntityM.get();
+        if (total != reconcilationEntity.getProcessedTxCount()) {
+            log.info("\n\nReconciliation not ready to proceed, reconcilationId: {}\n\n", reconcilationEntity.getId());
+            return;
+        }
 
         if (reconcilationEntity.getStatus() == ReconcilationStatus.COMPLETED) {
             log.warn("Reconcilation already completed, reconcilationId: {}", reconcilationEntity.getId());

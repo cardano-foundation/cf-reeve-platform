@@ -169,11 +169,12 @@ class TransactionReconcilationServiceTest {
         reconcilationEntity.setStatus(ReconcilationStatus.STARTED);
         reconcilationEntity.setFrom(Optional.of(LocalDate.now().minusDays(5)));
         reconcilationEntity.setTo(Optional.of(LocalDate.now()));
+        reconcilationEntity.setProcessedTxCount(10L);
 
         when(transactionReconcilationRepository.findById(reconcilationId))
                 .thenReturn(Optional.of(reconcilationEntity));
 
-        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId);
+        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId,10L);
 
         assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.COMPLETED);
         verify(transactionRepositoryGateway).storeAll(any());
