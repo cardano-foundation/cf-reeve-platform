@@ -645,11 +645,11 @@ public class ReportService {
                 totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
                         BigDecimal.ZERO :
                 organisationChartOfAccount.getOpeningBalance().getBalance()).reduce(BigDecimal.ZERO, BigDecimal::add));
-            } else {
-                startSearchDate = startDate;
             }
 
-            List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(), startSearchDate, endDate);
+            List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                    allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
+                    startSearchDate, endDate);
             // Set value
             totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity ->
                     transactionItemEntity.getOperationType().equals(OperationType.DEBIT) ?
