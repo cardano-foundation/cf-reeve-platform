@@ -17,31 +17,31 @@ import java.util.Set;
 import lombok.val;
 
 import io.vavr.control.Either;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupEntity;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupField;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
-import org.cardanofoundation.lob.app.organisation.repository.ReportSetupRepository;
 import org.mockito.*;
 import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupField;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ReportSetupRepository;
 
 class ReportServiceTest {
 
