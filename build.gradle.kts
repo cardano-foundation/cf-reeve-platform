@@ -185,7 +185,7 @@ subprojects {
 
     sonar {
         properties {
-
+            property("sonar.coverage.jacoco.xmlReportPaths", "${project.buildDir}/reports/jacoco/test/jacocoTestReport.xml")
             property("sonar.java.enablePreview", "false")
             property("sonar.sources", "src/main/java")
             // Excluding test dir scan, if they don't exist

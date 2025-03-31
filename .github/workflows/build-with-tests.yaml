@@ -32,7 +32,7 @@ jobs:
 
       - name: Test
         run: |
-         ./gradlew test
+          ./gradlew clean test jacocoTestReport
       - name: Spotless
         run : |
           ./gradlew spotlessCheck
@@ -40,7 +40,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
         run: |
-          ./gradlew clean jacocoTestReport sonar  \
+          ./gradlew sonar \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.organization=cardano-foundation \
           -Dsonar.projectKey=cardano-foundation_cf-lob-platform \
