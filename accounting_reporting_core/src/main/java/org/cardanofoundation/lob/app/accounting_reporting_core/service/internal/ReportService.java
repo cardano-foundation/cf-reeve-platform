@@ -608,7 +608,7 @@ public class ReportService {
             default -> {
                 return Either.left(Problem.builder()
                         .withTitle("INVALID_REPORT_TYPE")
-                        .withDetail(STR."Report type is not valid. Expected BALANCE_SHEET or INCOME_STATEMENT but got \{reportGenerateRequest.getReportType()}.")
+                        .withDetail(String.format("Report type is not valid. Expected BALANCE_SHEET or INCOME_STATEMENT but got %s.", reportGenerateRequest.getReportType()))
                         .withStatus(Status.BAD_REQUEST)
                         .with("reportType", reportGenerateRequest.getReportType())
                         .build());
