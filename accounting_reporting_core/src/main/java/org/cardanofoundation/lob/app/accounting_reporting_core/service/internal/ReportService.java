@@ -634,14 +634,14 @@ public class ReportService {
             }
             // Set value
             Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingType().stream().map(OrganisationChartOfAccountSubType::getId).toList());
-            LocalDate startSearchDate = startDate;
+            Optional<LocalDate> startSearchDate = Optional.of(startDate);
             BigDecimal totalAmount = BigDecimal.ZERO;
 
             if(field.isAccumulatedYearly()) {
-                startSearchDate = LocalDate.of(startDate.getYear(), 1, 1);
+                startSearchDate = Optional.of(LocalDate.of(startDate.getYear(), 1, 1));
             } else if(field.isAccumulated()) {
                 // TODO this calculation can be optimized by using already published reports
-                startSearchDate = LocalDate.of(2000,1,1); // TODO Dummy value
+                startSearchDate = Optional.empty();
                 totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
                         BigDecimal.ZERO :
                 organisationChartOfAccount.getOpeningBalance().getBalance()).reduce(BigDecimal.ZERO, BigDecimal::add));
@@ -649,7 +649,7 @@ public class ReportService {
 
             List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                     allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
-                    startSearchDate, endDate);
+                    startSearchDate.orElse(null), endDate);
             // Set value
             totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity ->
                     transactionItemEntity.getOperationType().equals(OperationType.DEBIT) ?
