@@ -38,10 +38,10 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupEntity;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupField;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
-import org.cardanofoundation.lob.app.organisation.repository.ReportSetupRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 
 class ReportServiceTest {
 
@@ -50,7 +50,7 @@ class ReportServiceTest {
     @Mock
     private OrganisationPublicApi organisationPublicApi;
     @Mock
-    private ReportSetupRepository reportSetupRepository;
+    private ReportTypeRepository reportTypeRepository;
     @Mock
     private ChartOfAccountRepository chartOfAccountRepository;
     @Mock
@@ -247,7 +247,6 @@ class ReportServiceTest {
 
         assertThat(resultE.isLeft()).isTrue();
         assertThat(resultE.getLeft().getTitle()).isEqualTo("EMPTY_REPORT_DATA");
-        //verify(reportRepository).save(any(ReportEntity.class));
     }
 
     @Test
@@ -1219,22 +1218,22 @@ class ReportServiceTest {
         String organisationId = "org-123";
         ReportGenerateRequest request = new ReportGenerateRequest(organisationId, BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
 
-        when(reportSetupRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.empty());
+        when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.empty());
 
         Either<Problem, ReportEntity> result = reportService.reportGenerate(request);
 
         assertTrue(result.isLeft());
         assertThat(result.getLeft().getTitle()).isEqualTo("REPORT_SETUP_NOT_FOUND");
-        verify(reportSetupRepository).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        verify(reportTypeRepository).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
     }
 
     @Test
     void reportGenerate_generateBalanceSheet() {
         String organisationId = "org-123";
-        ReportSetupEntity reportSetupEntity = mock(ReportSetupEntity.class);
+        ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
         ReportGenerateRequest request = new ReportGenerateRequest(organisationId, BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
-        ReportSetupField reportSetupFieldCapital = mock(ReportSetupField.class);
-        ReportSetupField reportSetupFieldProfit = mock(ReportSetupField.class);
+        ReportTypeFieldEntity reportTypeFieldEntityCapital = mock(ReportTypeFieldEntity.class);
+        ReportTypeFieldEntity reportTypeFieldEntityProfit = mock(ReportTypeFieldEntity.class);
         OrganisationChartOfAccountSubType organisationChartOfAccountSubType = mock(OrganisationChartOfAccountSubType.class);
         OrganisationChartOfAccount organisationChartOfAccount = mock(OrganisationChartOfAccount.class);
         OrganisationChartOfAccount.Id organisationChartOfAccountId = mock(OrganisationChartOfAccount.Id.class);
@@ -1242,17 +1241,17 @@ class ReportServiceTest {
         LocalDate startDate = LocalDate.of(2025, 1, 1);
         LocalDate endDate = LocalDate.of(2025, 12, 31);
 
-        when(reportSetupRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.of(reportSetupEntity));
-        when(reportSetupEntity.getFields()).thenReturn(List.of(reportSetupFieldCapital));
-        when(reportSetupFieldCapital.getParent()).thenReturn(null);
-        when(reportSetupFieldCapital.getName()).thenReturn("CAPITAL");
-        when(reportSetupFieldProfit.getName()).thenReturn("PROFIT_FOR_THE_YEAR");
-        when(reportSetupFieldCapital.getChildFields()).thenReturn(List.of(reportSetupFieldProfit));
-        when(reportSetupFieldProfit.getMappingType()).thenReturn(List.of(organisationChartOfAccountSubType));
+        when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.of(reportTypeEntity));
+        when(reportTypeEntity.getFields()).thenReturn(List.of(reportTypeFieldEntityCapital));
+        when(reportTypeFieldEntityCapital.getParent()).thenReturn(null);
+        when(reportTypeFieldEntityCapital.getName()).thenReturn("CAPITAL");
+        when(reportTypeFieldEntityProfit.getName()).thenReturn("PROFIT_FOR_THE_YEAR");
+        when(reportTypeFieldEntityCapital.getChildFields()).thenReturn(List.of(reportTypeFieldEntityProfit));
+        when(reportTypeFieldEntityProfit.getMappingTypes()).thenReturn(List.of(organisationChartOfAccountSubType));
         when(organisationChartOfAccountSubType.getId()).thenReturn(1L);
         when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(List.of(1L))).thenReturn(Set.of(organisationChartOfAccount));
-        when(reportSetupFieldProfit.isAccumulated()).thenReturn(false);
-        when(reportSetupFieldProfit.isAccumulatedYearly()).thenReturn(false);
+        when(reportTypeFieldEntityProfit.isAccumulated()).thenReturn(false);
+        when(reportTypeFieldEntityProfit.isAccumulatedYearly()).thenReturn(false);
         when(organisationChartOfAccount.getId()).thenReturn(organisationChartOfAccountId);
         when(organisationChartOfAccountId.getCustomerCode()).thenReturn("CustomerCode");
         when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(List.of("CustomerCode"), startDate, endDate)).thenReturn(List.of(transactionItemEntity));
@@ -1262,7 +1261,7 @@ class ReportServiceTest {
         Either<Problem, ReportEntity> result = reportService.reportGenerate(request);
 
         assertTrue(result.isRight());
-        verify(reportSetupRepository).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        verify(reportTypeRepository).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
         ReportEntity reportEntity = result.get();
         Optional<BalanceSheetData> balanceSheetReportData = reportEntity.getBalanceSheetReportData();
         assertTrue(balanceSheetReportData.isPresent());

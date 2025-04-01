@@ -49,10 +49,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Cr
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupEntity;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportSetupField;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
-import org.cardanofoundation.lob.app.organisation.repository.ReportSetupRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 
 @Service
 @Slf4j
@@ -66,7 +66,7 @@ public class ReportService {
     private final Clock clock;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
     private final ChartOfAccountRepository chartOfAccountRepository;
-    private final ReportSetupRepository reportSetupRepository;
+    private final ReportTypeRepository reportTypeRepository;
     private final TransactionItemRepository transactionItemRepository;
 
     @Transactional
@@ -583,7 +583,7 @@ public class ReportService {
         reportEntity.setType(reportGenerateRequest.getReportType());
 
 
-        Optional<ReportSetupEntity> optionalReportSetupEntity = reportSetupRepository.findByOrganisationAndReportName(reportGenerateRequest.getOrganisationID(), reportGenerateRequest.getReportType().name());
+        Optional<ReportTypeEntity> optionalReportSetupEntity = reportTypeRepository.findByOrganisationAndReportName(reportGenerateRequest.getOrganisationID(), reportGenerateRequest.getReportType().name());
 
         if(optionalReportSetupEntity.isEmpty()) {
             return Either.left(Problem.builder()
@@ -593,16 +593,16 @@ public class ReportService {
                     .with("reportType", reportGenerateRequest.getReportType().name())
                     .build());
         }
-        ReportSetupEntity reportSetupEntity = optionalReportSetupEntity.get();
+        ReportTypeEntity reportTypeEntity = optionalReportSetupEntity.get();
         switch (reportGenerateRequest.getReportType()) {
             case BALANCE_SHEET -> {
                 BalanceSheetData balanceSheetData = new BalanceSheetData();
-                fillReportData(balanceSheetData, reportSetupEntity, startDate, endDate);
+                fillReportData(balanceSheetData, reportTypeEntity, startDate, endDate);
                 reportEntity.setBalanceSheetReportData(Optional.of(balanceSheetData));
             }
             case INCOME_STATEMENT -> {
                 IncomeStatementData incomeStatementData = new IncomeStatementData();
-                fillReportData(incomeStatementData, reportSetupEntity, startDate, endDate);
+                fillReportData(incomeStatementData, reportTypeEntity, startDate, endDate);
                 reportEntity.setIncomeStatementReportData(Optional.of(incomeStatementData));
             }
             default -> {
@@ -618,22 +618,22 @@ public class ReportService {
         return Either.right(reportEntity);
     }
 
-    private void fillReportData(Object reportData, ReportSetupEntity reportSetupEntity, LocalDate startDate, LocalDate endDate) {
+    private void fillReportData(Object reportData, ReportTypeEntity reportTypeEntity, LocalDate startDate, LocalDate endDate) {
         // if we can solve it differently it would be better
-        Set<ReportSetupField> topLevelFields = reportSetupEntity.getFields().stream().filter(field -> field.getParent() == null).collect(Collectors.toSet());
-        topLevelFields.forEach(reportSetupField -> {
-            fillObjectRecursively(reportData, reportSetupField, startDate, endDate);
+        Set<ReportTypeFieldEntity> topLevelFields = reportTypeEntity.getFields().stream().filter(field -> field.getParent() == null).collect(Collectors.toSet());
+        topLevelFields.forEach(reportTypeFieldEntity -> {
+            fillObjectRecursively(reportData, reportTypeFieldEntity, startDate, endDate);
         });
     }
 
-    private void fillObjectRecursively(Object reportData, ReportSetupField field, LocalDate startDate, LocalDate endDate) {
+    private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate) {
         if (field.getChildFields().isEmpty()) {
-            if(field.getMappingType().isEmpty()) {
+            if(field.getMappingTypes().isEmpty()) {
                 log.debug(STR."Field \{field.getName()} has no mapping type, skipping...");
                 return;
             }
             // Set value
-            Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingType().stream().map(OrganisationChartOfAccountSubType::getId).toList());
+            Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(OrganisationChartOfAccountSubType::getId).toList());
             Optional<LocalDate> startSearchDate = Optional.of(startDate);
             BigDecimal totalAmount = BigDecimal.ZERO;
 

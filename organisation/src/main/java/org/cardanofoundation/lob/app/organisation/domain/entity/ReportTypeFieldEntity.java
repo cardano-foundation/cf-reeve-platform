@@ -37,7 +37,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Audited
 @Builder
 @EntityListeners({AuditingEntityListener.class})
-public class ReportSetupField extends CommonEntity {
+public class ReportTypeFieldEntity extends CommonEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -47,11 +47,11 @@ public class ReportSetupField extends CommonEntity {
 
     @OneToMany
     @JoinColumn(name = "parent_id")
-    private List<ReportSetupField> childFields = new ArrayList<>();
+    private List<ReportTypeFieldEntity> childFields = new ArrayList<>();
 
     @ManyToOne
     @JoinColumn(name = "parent_id", insertable = false, updatable = false) // Reference to the parent
-    private ReportSetupField parent;
+    private ReportTypeFieldEntity parent;
 
     @ManyToMany
     @JoinTable(
@@ -59,13 +59,13 @@ public class ReportSetupField extends CommonEntity {
             joinColumns = @JoinColumn(name = "field_id"),
             inverseJoinColumns = @JoinColumn(name = "sub_type_id")
     )
-    private List<OrganisationChartOfAccountSubType> mappingType = new ArrayList<>();
+    private List<OrganisationChartOfAccountSubType> mappingTypes = new ArrayList<>();
 
     private boolean accumulated; // Accumulated at all or is it checked period by period
     private boolean accumulatedYearly; // Is it accumulated Yearly and only taking care of the current year
 
     @ManyToOne
     @JoinColumn(name = "report_id", nullable = false)
-    private ReportSetupEntity report;
+    private ReportTypeEntity report;
 
 }

@@ -8,6 +8,7 @@ import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -39,7 +40,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Audited
 @Builder
 @EntityListeners({AuditingEntityListener.class})
-public class ReportSetupEntity extends CommonEntity {
+public class ReportTypeEntity extends CommonEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,7 +52,7 @@ public class ReportSetupEntity extends CommonEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ReportSetupField> fields = new ArrayList<>();
+    @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.EAGER)
+    private List<ReportTypeFieldEntity> fields = new ArrayList<>();
 
 }
