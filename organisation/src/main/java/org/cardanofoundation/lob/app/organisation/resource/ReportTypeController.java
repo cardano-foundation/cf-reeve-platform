@@ -44,13 +44,13 @@ public class ReportTypeController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = AccountEventView.class)))}
             ),
     })
-    @GetMapping(value = "/{orgId}/event-codes", produces = "application/json")
+    @GetMapping(value = "/{orgId}", produces = "application/json")
     public ResponseEntity<List<ReportTypeView>> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(reportTypeService.getAllReportTypes(orgId));
     }
 
     @Operation(description = "Add mapping to Report Type field")
-    @PostMapping(value = "/{orgId}/event-codes", produces = "application/json")
+    @PostMapping(value = "/{orgId}/field-mapping", produces = "application/json")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ReportTypeFieldUpdate reportTypeFieldUpdate) {
         return reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).fold(
                 problem ->
