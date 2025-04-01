@@ -649,7 +649,7 @@ public class ReportService {
 
             List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                     allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
-                    startSearchDate.orElse(null), endDate);
+                    startSearchDate.orElse(LocalDate.EPOCH), endDate);
             // Set value
             totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity ->
                     transactionItemEntity.getOperationType().equals(OperationType.DEBIT) ?
