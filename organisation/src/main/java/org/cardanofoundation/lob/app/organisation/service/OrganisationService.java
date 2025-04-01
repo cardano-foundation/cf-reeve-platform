@@ -47,7 +47,9 @@ public class OrganisationService {
         return projectMappingRepository.findAllByOrganisationId(organisationId);
     }
 
-
+    public Set<OrganisationCurrency> getOrganisationCurrencies(String orgId){
+        return organisationCurrencyService.findAllByOrganisationId(orgId);
+    }
 
     public Set<AccountEvent> getOrganisationEventCode(String orgId) {
         return accountEventRepository.findAllByOrganisationId(orgId);
