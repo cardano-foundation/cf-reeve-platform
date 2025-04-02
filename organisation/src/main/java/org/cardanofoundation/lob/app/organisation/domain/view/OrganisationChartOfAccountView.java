@@ -36,6 +36,8 @@ public class OrganisationChartOfAccountView {
 
     private Boolean active;
 
+    private String parentCustomerCode;
+
     private OpeningBalance openingBalance;
 
     private Optional<Problem> error;
@@ -54,6 +56,7 @@ public class OrganisationChartOfAccountView {
                     .counterParty(chartOfAccount.getCounterParty())
                     .active(chartOfAccount.getActive())
                     .openingBalance(chartOfAccount.getOpeningBalance())
+                    .parentCustomerCode(chartOfAccount.getParentCustomerCode())
                     .error(Optional.empty())
                     .build();
         }
@@ -68,6 +71,7 @@ public class OrganisationChartOfAccountView {
                 .counterParty(chartOfAccount.getCounterParty())
                 .currency(chartOfAccount.getCurrencyId())
                 .active(chartOfAccount.getActive())
+                .parentCustomerCode(chartOfAccount.getParentCustomerCode())
                 .openingBalance(chartOfAccount.getOpeningBalance())
                 .build();
     }
