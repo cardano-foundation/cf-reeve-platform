@@ -41,7 +41,7 @@ public class OrganisationCheckInterceptor implements HandlerInterceptor {
                         return false;
                     }
                 } catch (Exception e) {
-                    System.out.println("Not a BaseRequest JSON");
+                    log.info("Error parsing request body: {}", e.getMessage());
                 }
             }
 
