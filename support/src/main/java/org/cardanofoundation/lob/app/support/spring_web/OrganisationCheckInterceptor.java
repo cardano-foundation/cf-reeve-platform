@@ -41,7 +41,7 @@ public class OrganisationCheckInterceptor implements HandlerInterceptor {
                         return false;
                     }
                 } catch (Exception e) {
-                    log.info("Error parsing request body: {}", e.getMessage());
+                    log.debug("Error parsing request body: {}", e.getMessage());
                 }
             }
 

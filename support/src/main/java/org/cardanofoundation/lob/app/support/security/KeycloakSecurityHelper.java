@@ -15,8 +15,7 @@ public class KeycloakSecurityHelper {
     public boolean canUserAccessOrg(String orgId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (authentication != null && authentication.getPrincipal() instanceof Jwt) {
-            Jwt jwt = (Jwt) authentication.getPrincipal();
+        if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
             List<String> organisations = jwt.getClaimAsStringList("organisations");
             return organisations.contains(orgId);
         }
