@@ -219,8 +219,10 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account (
    parent_customer_code VARCHAR(255),
    active BOOLEAN,
 
-   opening_balance_balance BIGINT,
-   opening_balance_original_currency_id VARCHAR(255),
+   opening_balance_balance_fcy BIGINT,
+   opening_balance_balance_lcy BIGINT,
+   opening_balance_original_currency_id_fcy VARCHAR(255),
+   opening_balance_original_currency_id_lcy VARCHAR(255),
    opening_balance_balance_type VARCHAR(255),
    opening_balance_date VARCHAR(255),
 
@@ -244,8 +246,10 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account_aud (
    parent_customer_code VARCHAR(255),
    active BOOLEAN,
 
-   opening_balance_balance BIGINT,
-   opening_balance_original_currency_id VARCHAR(255),
+   opening_balance_balance_fcy BIGINT,
+   opening_balance_balance_lcy BIGINT,
+   opening_balance_original_currency_id_fcy VARCHAR(255),
+   opening_balance_original_currency_id_lcy VARCHAR(255),
    opening_balance_balance_type VARCHAR(255),
    opening_balance_date VARCHAR(255),
 
