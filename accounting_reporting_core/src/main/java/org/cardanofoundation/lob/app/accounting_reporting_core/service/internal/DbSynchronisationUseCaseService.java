@@ -55,18 +55,15 @@ public class DbSynchronisationUseCaseService {
 
         if (trigger == ProcessorFlags.Trigger.REPROCESSING) {
             // TODO should we check if we are NOT changing incomingTransactions which are already marked as dispatched?
-            storeTransactions(batchId, incomingTransactions, flags);
+            storeUpdatedTransactions(batchId, incomingTransactions.transactions(), flags);
             return;
         }
 
-        String organisationId = incomingTransactions.organisationId();
-
-        processTransactionsForTheFirstTime(batchId, organisationId, transactions, Optional.of(totalTransactionsCount), flags);
+        processTransactionsForTheFirstTime(batchId, transactions, Optional.of(totalTransactionsCount), flags);
     }
 
     @Transactional
     public void processTransactionsForTheFirstTime(String batchId,
-                                                    String organisationId,
                                                     Set<TransactionEntity> incomingDetachedTransactions,
                                                     Optional<Integer> totalTransactionsCount,
                                                     ProcessorFlags flags) {
@@ -88,40 +85,105 @@ public class DbSynchronisationUseCaseService {
             boolean isDispatchMarked = txM.map(TransactionEntity::allApprovalsPassedForTransactionDispatch).orElse(false);
             boolean notStoredYet = txM.isEmpty();
             /** If is a new transaction || the new one is different from our Db copy || the transaction has an ERP source violation || transaction item has an ERP source rejection -> then should be processed*/
-            boolean isChanged = notStoredYet || (txM.map(tx -> !isIncomingTransactionERPSame(tx, incomingTx) || tx.hasAnyRejection(Source.ERP) || tx.hasAnyViolation(Source.ERP)).orElse(false));
+            boolean isChanged = notStoredYet || (txM.map(tx -> !isIncomingTransactionERPSame(tx, incomingTx)).orElse(false));
 
             if (isDispatchMarked && isChanged) {
                 log.warn("Transaction cannot be altered, it is already marked as dispatched, transactionNumber: {}", incomingTx.getTransactionInternalNumber());
-                txsAlreadyStored.add(incomingTx);
+                processingDispatchedAndChangedTransaction(incomingTx, txM, txsAlreadyStored);
+            }
+
+            if (isDispatchMarked && !isChanged) {
+                processingDispatchedAndNotChangedTransaction(incomingTx, txM, txsAlreadyStored);
             }
 
             if (isChanged && !isDispatchMarked) {
-                if (txM.isPresent()) {
-                    TransactionEntity attached = txM.orElseThrow();
-
-                    transactionConverter.copyFields(attached, incomingTx);
-                    attached.getAllItems().clear();
-                    attached.getAllItems().addAll(incomingTx.getAllItems());
-                    toProcessTransactions.add(attached);
-                } else {
-                    toProcessTransactions.add(incomingTx);
-                }
+                processingNotDispatchedAndChangedTransaction(incomingTx, txM, toProcessTransactions);
             }
         }
 
-        raiseViolationForAlreadyProcessedTransactions(txsAlreadyStored);
+        // updating BatchID of transactions that are already stored
+        accountingCoreTransactionRepository.saveAll(txsAlreadyStored);
 
-        storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
+        storeUpdatedTransactions(batchId, toProcessTransactions, flags);
+
+        updateBatchAssoc(batchId, toProcessTransactions, txsAlreadyStored);
 
         transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount);
     }
 
-    private void storeTransactions(String batchId,
-                                   OrganisationTransactions transactions,
-                                   ProcessorFlags flags) {
+    private void processingNotDispatchedAndChangedTransaction(TransactionEntity incomingTx, Optional<TransactionEntity> txM, LinkedHashSet<TransactionEntity> toProcessTransactions) {
+        if (txM.isPresent()) {
+            TransactionEntity attached = txM.orElseThrow();
+
+            transactionConverter.copyFields(attached, incomingTx);
+            attached.getAllItems().clear();
+            attached.getAllItems().addAll(incomingTx.getAllItems());
+            toProcessTransactions.add(attached);
+        } else {
+            toProcessTransactions.add(incomingTx);
+        }
+    }
+
+    private static void processingDispatchedAndNotChangedTransaction(TransactionEntity incomingTx, Optional<TransactionEntity> txM, LinkedHashSet<TransactionEntity> txsAlreadyStored) {
+        if (txM.isEmpty()) {
+            return;
+        }
+        TransactionEntity transactionEntity = txM.get();
+        transactionEntity.setBatchId(incomingTx.getBatchId());
+        // Removing the TX Version Conflict since TX is the same as published
+        Set<TransactionViolation> violations = transactionEntity.getViolations();
+        boolean removedViolation = violations.removeIf(v -> v.getCode() == TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE);
+        if (removedViolation) {
+            log.info("Removing TX Version Conflict violation for transactionNumber: {}", transactionEntity.getTransactionInternalNumber());
+            transactionEntity.setViolations(violations);
+            transactionEntity.recalcValidationStatus();
+            txsAlreadyStored.add(transactionEntity);
+        }
+    }
+
+    private void processingDispatchedAndChangedTransaction(TransactionEntity incomingTx, Optional<TransactionEntity> txM, LinkedHashSet<TransactionEntity> txsAlreadyStored) {
+        if (txM.isEmpty()) {
+            return;
+        }
+        TransactionEntity transactionEntity = txM.get();
+        transactionEntity.setBatchId(incomingTx.getBatchId());
+        // TODO we are breaking the rule here that violations are only raised in business rules code (e.g. business rules task items)
+        TransactionViolation v = TransactionViolation.builder()
+                .code(TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE)
+                .severity(WARN)
+                .source(Source.ERP)
+                .processorModule(this.getClass().getSimpleName())
+                .bag(
+                        Map.of(
+                                "transactionNumber", transactionEntity.getTransactionInternalNumber()
+                        )
+                )
+                .build();
+        transactionEntity.addViolation(v);
+        txsAlreadyStored.add(transactionEntity);
+    }
+
+    private void updateBatchAssoc(String batchId, LinkedHashSet<TransactionEntity> toProcessTransactions, LinkedHashSet<TransactionEntity> txsAlreadyStored) {
+        Set<TransactionEntity> txs = new LinkedHashSet<>(toProcessTransactions);
+        txs.addAll(txsAlreadyStored);
+
+        Set<TransactionBatchAssocEntity> transactionBatchAssocEntities = txs
+                .stream()
+                .map(tx -> {
+                    TransactionBatchAssocEntity.Id id = new TransactionBatchAssocEntity.Id(batchId, tx.getId());
+
+                    return transactionBatchAssocRepository.findById(id).orElseGet(() -> new TransactionBatchAssocEntity(id));
+                })
+                .collect(Collectors.toSet());
+
+        transactionBatchAssocRepository.saveAll(transactionBatchAssocEntities);
+    }
+
+    private void storeUpdatedTransactions(String batchId,
+                                          Set<TransactionEntity> txs,
+                                          ProcessorFlags flags) {
         log.info("Updating transaction batch, batchId: {}", batchId);
         ProcessorFlags.Trigger trigger = flags.getTrigger();
-        Set<TransactionEntity> txs = transactions.transactions();
 
         for (TransactionEntity tx : txs) {
             TransactionEntity saved = accountingCoreTransactionRepository.save(tx);
@@ -137,17 +199,6 @@ public class DbSynchronisationUseCaseService {
 
             transactionItemRepository.saveAll(tx.getAllItems());
         }
-
-        Set<TransactionBatchAssocEntity> transactionBatchAssocEntities = txs
-                .stream()
-                .map(tx -> {
-                    TransactionBatchAssocEntity.Id id = new TransactionBatchAssocEntity.Id(batchId, tx.getId());
-
-                    return transactionBatchAssocRepository.findById(id).orElseGet(() -> new TransactionBatchAssocEntity(id));
-                })
-                .collect(Collectors.toSet());
-
-        transactionBatchAssocRepository.saveAll(transactionBatchAssocEntities);
     }
 
     private boolean isIncomingTransactionERPSame(TransactionEntity existingTx,
@@ -158,33 +209,6 @@ public class DbSynchronisationUseCaseService {
         log.info("Existing transaction version:{}, incomingTx:{}", existingTxVersion, incomingTxVersion);
 
         return existingTxVersion.equals(incomingTxVersion);
-    }
-
-    // TODO we are breaking the rule here that violations are only raised in business rules code (e.g. business rules task items)
-    private void raiseViolationForAlreadyProcessedTransactions(Set<TransactionEntity> txsAlreadyDispatched) {
-        if (txsAlreadyDispatched.isEmpty()) {
-            return;
-        }
-
-        log.info("txs causing conflict count:{}", txsAlreadyDispatched.size());
-
-        for (TransactionEntity tx : txsAlreadyDispatched) {
-            log.info("tx causing conflict: {}", tx);
-
-            TransactionViolation v = TransactionViolation.builder()
-                    .code(TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE)
-                    .severity(WARN)
-                    .source(Source.ERP)
-                    .processorModule(this.getClass().getSimpleName())
-                    .bag(
-                            Map.of(
-                                    "transactionNumber", tx.getTransactionInternalNumber()
-                            )
-                    )
-                    .build();
-
-            tx.addViolation(v);
-        }
     }
 
 }
