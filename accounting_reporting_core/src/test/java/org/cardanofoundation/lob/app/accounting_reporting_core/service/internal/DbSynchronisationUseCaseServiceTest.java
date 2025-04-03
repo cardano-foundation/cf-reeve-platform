@@ -2,19 +2,26 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.DISPATCHED;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.NOT_DISPATCHED;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.WARN;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.time.YearMonth;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import lombok.val;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchAssocEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.stubbing.Answer;
@@ -47,6 +54,8 @@ class DbSynchronisationUseCaseServiceTest {
 
     @Mock
     private TransactionBatchService transactionBatchService;
+    @Mock
+    private TransactionConverter transactionCoverter;
 
     @InjectMocks
     private DbSynchronisationUseCaseService service;
@@ -242,5 +251,129 @@ class DbSynchronisationUseCaseServiceTest {
         verify(accountingCoreTransactionRepository).save(eq(tx1));
         verify(tx1, times(1)).clearAllItemsRejectionsSource(Source.ERP);
         verify(transactionBatchAssocRepository).saveAll(any(Set.class));
+    }
+
+    @Test
+    void processTransactionsForTheFirstTimeTest_emptyTxListNoInteraction(){
+
+
+        service.processTransactionsForTheFirstTime("batchId", Set.of(), Optional.of(0), new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        verify(accountingCoreTransactionRepository).findAllById(Collections.emptySet());
+        verify(accountingCoreTransactionRepository).saveAll(Collections.emptySet());
+        verify(transactionBatchAssocRepository).saveAll(Collections.emptySet());
+        verify(transactionBatchService).updateTransactionBatchStatusAndStats("batchId", Optional.of(0));
+        verifyNoMoreInteractions(accountingCoreTransactionRepository);
+        verifyNoMoreInteractions(transactionBatchAssocRepository);
+        verifyNoMoreInteractions(transactionBatchService);
+        verifyNoInteractions(transactionItemRepository);
+        verifyNoInteractions(transactionCoverter);
+    }
+
+    @Test
+    void processTransactionsForTheFirstTimeTest_dispatchedAndChanged() {
+        try (MockedStatic<ERPSourceTransactionVersionCalculator> mockedStatic = mockStatic(ERPSourceTransactionVersionCalculator.class)) {
+            TransactionEntity tx1 = Mockito.mock(TransactionEntity.class);
+            TransactionEntity tx2 = Mockito.mock(TransactionEntity.class);
+            when(tx1.getId()).thenReturn("txId");
+            when(tx2.getId()).thenReturn("txId");
+            when(tx2.getTransactionInternalNumber()).thenReturn("internalTx2Number");
+            when(tx2.allApprovalsPassedForTransactionDispatch()).thenReturn(true);
+            mockedStatic.when(() -> ERPSourceTransactionVersionCalculator.compute(tx1))
+                    .thenReturn("tx1Id");
+            mockedStatic.when(() -> ERPSourceTransactionVersionCalculator.compute(tx2))
+                    .thenReturn("tx2Id");
+            when(accountingCoreTransactionRepository.findAllById(Set.of("txId"))).thenReturn(List.of(tx2));
+
+            service.processTransactionsForTheFirstTime("batchId", Set.of(tx1), Optional.of(1), new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+            TransactionViolation v = TransactionViolation.builder()
+                    .code(TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE)
+                    .severity(WARN)
+                    .source(Source.ERP)
+                    .processorModule("DbSynchronisationUseCaseService")
+                    .bag(
+                            Map.of(
+                                    "transactionNumber", "internalTx2Number"
+                            )
+                    )
+                    .build();
+            verify(tx2).addViolation(v);
+
+            verify(accountingCoreTransactionRepository).saveAll(Set.of(tx2));
+            verify(transactionBatchAssocRepository).findById(new TransactionBatchAssocEntity.Id("batchId", "txId"));
+            verify(transactionBatchAssocRepository).saveAll(Set.of(new TransactionBatchAssocEntity(new TransactionBatchAssocEntity.Id("batchId", "txId"))));
+            verify(transactionBatchService).updateTransactionBatchStatusAndStats("batchId", Optional.of(1));
+            verifyNoMoreInteractions(accountingCoreTransactionRepository);
+            verifyNoMoreInteractions(transactionBatchAssocRepository);
+            verifyNoMoreInteractions(transactionBatchService);
+            verifyNoInteractions(transactionItemRepository);
+        }
+    }
+
+    @Test
+    void processTransactionsForTheFirstTimeTest_dispatchedAndNotChanged() {
+        try(MockedStatic<ERPSourceTransactionVersionCalculator> mockedStatic = mockStatic(ERPSourceTransactionVersionCalculator.class)) {
+            TransactionEntity tx1 = Mockito.mock(TransactionEntity.class);
+            TransactionEntity tx2 = Mockito.mock(TransactionEntity.class);
+            when(tx1.getId()).thenReturn("txId");
+            when(tx2.getId()).thenReturn("txId");
+            when(tx2.getTransactionInternalNumber()).thenReturn("internalTx2Number");
+            when(tx2.allApprovalsPassedForTransactionDispatch()).thenReturn(true);
+            LinkedHashSet<TransactionViolation> violations = new LinkedHashSet<>();
+            violations.add(TransactionViolation.builder()
+                    .code(TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE)
+                    .severity(WARN)
+                    .source(Source.ERP)
+                    .processorModule("DbSynchronisationUseCaseService")
+                    .bag(
+                            Map.of(
+                                    "transactionNumber", "internalTx2Number"
+                            )
+                    )
+                    .build());
+            when(tx2.getViolations()).thenReturn(violations);
+            mockedStatic.when(() -> ERPSourceTransactionVersionCalculator.compute(tx1))
+                    .thenReturn("tx1Id");
+            mockedStatic.when(() -> ERPSourceTransactionVersionCalculator.compute(tx2))
+                    .thenReturn("tx1Id");
+            when(accountingCoreTransactionRepository.findAllById(Set.of("txId"))).thenReturn(List.of(tx2));
+
+            service.processTransactionsForTheFirstTime("batchId", Set.of(tx1), Optional.of(1), new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+            verify(tx2).setViolations(Collections.emptySet());
+            verify(tx2).recalcValidationStatus();
+            verify(accountingCoreTransactionRepository).saveAll(Set.of(tx2));
+            verify(transactionBatchAssocRepository).findById(new TransactionBatchAssocEntity.Id("batchId","txId"));
+            verify(transactionBatchAssocRepository).saveAll(Set.of(new TransactionBatchAssocEntity(new TransactionBatchAssocEntity.Id("batchId","txId"))));
+            verify(transactionBatchService).updateTransactionBatchStatusAndStats("batchId", Optional.of(1));
+            verifyNoMoreInteractions(accountingCoreTransactionRepository);
+            verifyNoMoreInteractions(transactionBatchAssocRepository);
+            verifyNoMoreInteractions(transactionBatchService);
+            verifyNoInteractions(transactionItemRepository);
+        }
+    }
+
+    @Test
+    void processTransactionsForTheFirstTimeTest_NotDispatched() {
+        try(MockedStatic<ERPSourceTransactionVersionCalculator> mockedStatic = mockStatic(ERPSourceTransactionVersionCalculator.class)) {
+            TransactionEntity tx1 = Mockito.mock(TransactionEntity.class);
+            TransactionEntity tx2 = Mockito.mock(TransactionEntity.class);
+            when(tx1.getId()).thenReturn("txId");
+            when(tx2.getId()).thenReturn("txId");
+            when(tx2.allApprovalsPassedForTransactionDispatch()).thenReturn(false);
+            mockedStatic.when(() -> ERPSourceTransactionVersionCalculator.compute(tx1))
+                    .thenReturn("tx1Id");
+            mockedStatic.when(() -> ERPSourceTransactionVersionCalculator.compute(tx2))
+                    .thenReturn("tx2Id");
+            when(accountingCoreTransactionRepository.findAllById(Set.of("txId"))).thenReturn(List.of(tx2));
+            when(accountingCoreTransactionRepository.save(tx2)).thenReturn(tx2);
+
+            service.processTransactionsForTheFirstTime("batchId", Set.of(tx1), Optional.of(1), new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+            verify(transactionCoverter).copyFields(tx2, tx1);
+            verify(accountingCoreTransactionRepository).save(tx2);
+
+            verifyNoMoreInteractions(transactionCoverter);
+        }
     }
 }

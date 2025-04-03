@@ -56,6 +56,7 @@ public class DbSynchronisationUseCaseService {
         if (trigger == ProcessorFlags.Trigger.REPROCESSING) {
             // TODO should we check if we are NOT changing incomingTransactions which are already marked as dispatched?
             storeUpdatedTransactions(batchId, incomingTransactions.transactions(), flags);
+            updateBatchAssoc(batchId, incomingTransactions.transactions(), new LinkedHashSet<>());
             return;
         }
 
@@ -163,7 +164,7 @@ public class DbSynchronisationUseCaseService {
         txsAlreadyStored.add(transactionEntity);
     }
 
-    private void updateBatchAssoc(String batchId, LinkedHashSet<TransactionEntity> toProcessTransactions, LinkedHashSet<TransactionEntity> txsAlreadyStored) {
+    private void updateBatchAssoc(String batchId, Set<TransactionEntity> toProcessTransactions, Set<TransactionEntity> txsAlreadyStored) {
         Set<TransactionEntity> txs = new LinkedHashSet<>(toProcessTransactions);
         txs.addAll(txsAlreadyStored);
 
