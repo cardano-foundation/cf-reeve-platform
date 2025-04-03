@@ -259,7 +259,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
         return !hasAnyRejection();
     }
 
-    private void recalcValidationStatus() {
+    public void recalcValidationStatus() {
         automatedValidationStatus = violations.isEmpty() ? TxValidationStatus.VALIDATED : FAILED;
     }
 
