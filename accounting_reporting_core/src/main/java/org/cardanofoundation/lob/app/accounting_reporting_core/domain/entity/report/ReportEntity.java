@@ -210,6 +210,11 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Setter
     private LocalDateTime ledgerDispatchDate;
 
+    @Column(name = "published_by")
+    @Getter
+    @Setter
+    private String publishedBy;
+
     public void setBalanceSheetReportData(Optional<BalanceSheetData> balanceSheetReportData) {
         if (type != ReportType.BALANCE_SHEET) {
             throw new IllegalStateException("Report type is not BALANCE_SHEET!");

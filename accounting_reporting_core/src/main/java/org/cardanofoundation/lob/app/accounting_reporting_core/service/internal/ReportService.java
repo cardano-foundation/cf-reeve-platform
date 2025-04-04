@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Public
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 
 @Service
 @Slf4j
@@ -47,6 +48,7 @@ public class ReportService {
     private final PublicReportRepository publicReportRepository;
     private final OrganisationPublicApi organisationPublicApi;
     private final Clock clock;
+    private final AuthenticationUserService authenticationUserService;
 
     @Transactional
     public Either<Problem, ReportEntity> approveReportForLedgerDispatch(String reportId) {
@@ -67,6 +69,8 @@ public class ReportService {
         }
         report.setLedgerDispatchApproved(true);
         report.setLedgerDispatchDate(LocalDateTime.now(clock));
+        report.setPublishedBy(authenticationUserService.getCurrentUser());
+
         reportRepository.save(report);
 
         return Either.right(report);
