@@ -66,7 +66,7 @@ public class ChartOfAccountsService {
         if (referenceCode.isEmpty()) {
             return OrganisationChartOfAccountView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getCustomerCode()}")
+                    .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getEventRefCode()}")
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -99,33 +99,15 @@ public class ChartOfAccountsService {
                         .build()
         );
 
-        if (chartOfAccountUpdate.getEventRefCode() != null && !chartOfAccountUpdate.getEventRefCode().isEmpty()) {
-            chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
-        }
-        if (chartOfAccountUpdate.getName() != null && !chartOfAccountUpdate.getName().isEmpty()) {
-            chartOfAccount.setName(chartOfAccountUpdate.getName());
-        }
-        if (chartOfAccountUpdate.getRefCode() != null && !chartOfAccountUpdate.getRefCode().isEmpty()) {
-            chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
-        }
-        if (chartOfAccountUpdate.getSubType() != null && !chartOfAccountUpdate.getSubType().isEmpty()) {
-            chartOfAccount.setSubType(subType.get());
-        }
-        if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
-            chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode());
-        }
-        if (chartOfAccountUpdate.getCurrency() != null && !chartOfAccountUpdate.getCurrency().isEmpty()) {
-            chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
-        }
-        if (chartOfAccountUpdate.getCounterParty() != null && !chartOfAccountUpdate.getCounterParty().isEmpty()) {
-            chartOfAccount.setCounterParty(chartOfAccountUpdate.getCounterParty());
-        }
-        if (chartOfAccountUpdate.getActive() != null) {
-            chartOfAccount.setActive(chartOfAccountUpdate.getActive());
-        }
-        if (chartOfAccountUpdate.getOpeningBalance() != null) {
-            chartOfAccount.setOpeningBalance(chartOfAccountUpdate.getOpeningBalance());
-        }
+        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
+        chartOfAccount.setName(chartOfAccountUpdate.getName());
+        chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
+        chartOfAccount.setSubType(subType.get());
+        chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode());
+        chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
+        chartOfAccount.setCounterParty(chartOfAccountUpdate.getCounterParty());
+        chartOfAccount.setActive(chartOfAccountUpdate.getActive());
+        chartOfAccount.setOpeningBalance(chartOfAccountUpdate.getOpeningBalance());
 
         OrganisationChartOfAccount chartOfAccountResult = chartOfAccountRepository.save(chartOfAccount);
         return OrganisationChartOfAccountView.createSuccess(chartOfAccountResult);
