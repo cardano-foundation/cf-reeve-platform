@@ -40,6 +40,8 @@ public class ReferenceCode extends CommonEntity implements Persistable<Reference
 
     private String name;
 
+    private boolean isActive = true;
+
     @Embeddable
     @AllArgsConstructor
     @NoArgsConstructor

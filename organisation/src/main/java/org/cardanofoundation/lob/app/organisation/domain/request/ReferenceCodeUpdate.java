@@ -27,11 +27,15 @@ public class ReferenceCodeUpdate {
     @Schema(example = "0000")
     private String parentReferenceCode;
 
+    @Schema(example = "true")
+    private boolean isActive = true;
+
     public ReferenceCode toEntity(String orgId) {
         return ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCode))
                 .name(name)
                 .parentReferenceCode(parentReferenceCode)
+                .isActive(isActive)
                 .build();
     }
 }
