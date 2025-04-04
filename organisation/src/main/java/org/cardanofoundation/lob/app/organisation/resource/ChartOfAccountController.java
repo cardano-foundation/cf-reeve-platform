@@ -53,7 +53,7 @@ public class ChartOfAccountController {
                             chartOfAccountType.getId(),
                             chartOfAccountType.getOrganisationId(),
                             chartOfAccountType.getName(),
-                            chartOfAccountType.getSubType().stream().map(chartOfAccountSubType -> {
+                            chartOfAccountType.getSubTypes().stream().map(chartOfAccountSubType -> {
                                 return new OrganisationChartOfAccountSubTypeView(
                                         chartOfAccountSubType.getId(),
                                         chartOfAccountSubType.getOrganisationId(),
