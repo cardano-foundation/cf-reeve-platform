@@ -43,6 +43,8 @@ public class ReportView {
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime publishDate;
 
+    private String publishedBy;
+
     @Nullable
     private String blockChainHash;
 
