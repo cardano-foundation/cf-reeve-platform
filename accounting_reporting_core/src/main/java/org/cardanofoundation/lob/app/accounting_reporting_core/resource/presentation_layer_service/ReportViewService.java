@@ -48,6 +48,8 @@ public class ReportViewService {
         reportResponseView.setDocumentCurrencyCustomerCode(reportEntity.getOrganisation().getCurrencyId());
         reportResponseView.setOrganisationId(reportEntity.getOrganisation().getId());
         reportResponseView.setType(reportEntity.getType());
+        reportResponseView.setPublishDate(reportEntity.getLedgerDispatchDate());
+        reportResponseView.setPublishedBy(reportResponseView.getPublishedBy());
         reportResponseView.setIntervalType(reportEntity.getIntervalType());
         reportResponseView.setYear(reportEntity.getYear());
         reportResponseView.setPeriod(reportEntity.getPeriod());

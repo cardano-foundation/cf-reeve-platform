@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.views;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import javax.annotation.Nullable;
@@ -38,6 +39,11 @@ public class ReportView {
     private Boolean canBePublish;
 
     private String documentCurrencyCustomerCode;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime publishDate;
+
+    private String publishedBy;
 
     @Nullable
     private String blockChainHash;
