@@ -40,6 +40,7 @@ public class ReferenceCode extends CommonEntity implements Persistable<Reference
 
     private String name;
 
+    @Column(name = "active")
     private boolean isActive = true;
 
     @Embeddable

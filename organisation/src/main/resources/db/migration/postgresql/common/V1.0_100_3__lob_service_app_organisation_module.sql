@@ -347,7 +347,7 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account_sub_type_aud (
     reference_code VARCHAR(255) NOT NULL,
     name VARCHAR(255),
     parent_reference_code VARCHAR(255),
-    is_active BOOLEAN,
+    active BOOLEAN,
 
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
@@ -363,7 +363,7 @@ CREATE TABLE IF NOT EXISTS organisation_ref_codes_aud (
        reference_code VARCHAR(255) NOT NULL,
        name VARCHAR(255),
        parent_reference_code VARCHAR(255),
-       is_active BOOLEAN,
+       active BOOLEAN,
 
    created_by VARCHAR(255),
    updated_by VARCHAR(255),
