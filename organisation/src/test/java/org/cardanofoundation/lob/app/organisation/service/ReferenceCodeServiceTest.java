@@ -50,7 +50,7 @@ class ReferenceCodeServiceTest {
         referenceCodeView = ReferenceCodeView.fromEntity(referenceCode);
         mockOrganisation = new Organisation(ORG_ID,"testOrg","testCity","testPostCode","testProvince","testAddress","testPhone","testTaxId","IE","00000000",false,false,7305,"ISO_4217:CHF","ISO_4217:CHF","http://testWeb","email@test.com",null);
 
-        referenceCodeUpdate = new ReferenceCodeUpdate(REF_CODE, "Updated Reference",null);
+        referenceCodeUpdate = new ReferenceCodeUpdate(REF_CODE, "Updated Reference",null, true);
     }
 
     @Test

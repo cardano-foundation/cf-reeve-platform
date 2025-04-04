@@ -69,6 +69,7 @@ public class ReferenceCodeService {
 
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode());
+        referenceCode.setActive(referenceCodeUpdate.isActive());
 
         return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
     }
