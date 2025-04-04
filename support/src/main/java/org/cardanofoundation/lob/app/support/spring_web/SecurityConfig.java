@@ -30,6 +30,9 @@ public class SecurityConfig {
     @Value("${keycloak.roles.auditor}")
     private String auditorRole;
 
+    @Value("${security.csp-policy}")
+    private String cspPolicy;
+
     @Bean
     public JwtDecoder jwtDecoder() {
         return NimbusJwtDecoder.withJwkSetUri(certUrl)
@@ -39,6 +42,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(cspPolicy)))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
                         .anyRequest().permitAll() // allowing all access
