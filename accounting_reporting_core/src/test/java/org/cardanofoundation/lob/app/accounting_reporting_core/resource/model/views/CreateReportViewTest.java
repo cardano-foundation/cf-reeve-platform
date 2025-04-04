@@ -27,7 +27,7 @@ class CreateReportViewTest {
     @BeforeEach
     void setUp() {
         reportRequest = mock(ReportRequest.class);
-        when(reportRequest.getOrganisationID()).thenReturn("org-123");
+        when(reportRequest.getOrganisationId()).thenReturn("org-123");
     }
 
     @Test

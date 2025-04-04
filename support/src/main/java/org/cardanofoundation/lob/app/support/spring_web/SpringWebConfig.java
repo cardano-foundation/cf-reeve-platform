@@ -2,12 +2,14 @@ package org.cardanofoundation.lob.app.support.spring_web;
 
 import jakarta.annotation.PostConstruct;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import io.swagger.v3.oas.models.Components;
@@ -22,6 +24,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 
 @Configuration
 @Slf4j
+@RequiredArgsConstructor
 public class SpringWebConfig {
 
     @Value("${lob.cors.allowed.origins:http://localhost:3000}")
@@ -32,6 +35,8 @@ public class SpringWebConfig {
     @Value("${keycloak.authorization-url}")
     private String authorizationUrl;
 
+    private final OrganisationCheckInterceptor organisationCheckInterceptor;
+
     @PostConstruct
     public void init() {
         log.info("CORS configured allowed origins: {}", allowedOrigins);
@@ -40,6 +45,11 @@ public class SpringWebConfig {
     @Bean
     public WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
+
+            @Override
+            public void addInterceptors(InterceptorRegistry registry) {
+                registry.addInterceptor(organisationCheckInterceptor);
+            }
 
             @Override
             public void addCorsMappings(CorsRegistry registry) {

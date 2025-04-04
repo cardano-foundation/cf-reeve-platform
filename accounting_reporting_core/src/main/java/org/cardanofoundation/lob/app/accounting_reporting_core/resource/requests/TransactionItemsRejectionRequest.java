@@ -13,16 +13,13 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class TransactionItemsRejectionRequest {
-
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    @NotBlank
-    private String organisationId;
+public class TransactionItemsRejectionRequest extends BaseRequest {
 
     @Schema(example = "ReadyToApprove_3_8a283b41eab57add98278561ab51d23f3f3daa461b84ab4")
     @NotBlank

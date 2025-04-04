@@ -6,4 +6,7 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server:3.2.4")
     implementation("org.springframework.boot:spring-boot-starter-security:3.2.4")
+    // Keycloak dependencies
+    implementation("org.keycloak:keycloak-spring-boot-starter:20.0.3")
+
 }

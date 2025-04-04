@@ -13,15 +13,13 @@ import lombok.Setter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
+
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class TransactionsRequest {
-
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    @NotBlank
-    private String organisationId;
+public class TransactionsRequest extends BaseRequest {
 
     @ArraySchema(arraySchema = @Schema(example = "[ {" +
             "\"id\": \"7e9e8bcbb38a283b41eab57add98278561ab51d23a16f3e3baf3daa461b84ab4\"}," +

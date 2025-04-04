@@ -8,13 +8,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.metric.DashboardView;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class SaveDashboardRequest {
+public class SaveDashboardRequest extends BaseRequest {
 
     List<DashboardView> dashboards;
-    String organisationID;
 }

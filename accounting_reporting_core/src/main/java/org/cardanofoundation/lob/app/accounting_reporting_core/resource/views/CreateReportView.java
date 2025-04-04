@@ -21,7 +21,7 @@ public class CreateReportView {
 
     public static CreateReportView fromReportRequest(ReportRequest reportRequest) {
         return CreateReportView.builder()
-                .organisationId(reportRequest.getOrganisationID())
+                .organisationId(reportRequest.getOrganisationId())
                 .balanceSheetData(reportRequest.getReportType() != ReportType.BALANCE_SHEET ? Optional.empty() :
                         Optional.of(BalanceSheetData.builder()
                         .assets(BalanceSheetData.Assets.builder()

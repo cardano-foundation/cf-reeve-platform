@@ -4,8 +4,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.request
 import java.time.LocalDate;
 import java.util.List;
 
-import jakarta.validation.constraints.NotBlank;
-
 import javax.annotation.Nullable;
 
 import lombok.AllArgsConstructor;
@@ -16,15 +14,13 @@ import lombok.Setter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
+
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class ExtractionTransactionsRequest {
-
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    @NotBlank
-    private String organisationId;
+public class ExtractionTransactionsRequest extends BaseRequest {
 
     @Schema(example = "2023-01-01")
     private LocalDate dateFrom;
