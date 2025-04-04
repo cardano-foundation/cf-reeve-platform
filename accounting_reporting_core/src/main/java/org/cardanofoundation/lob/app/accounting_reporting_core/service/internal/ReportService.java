@@ -10,6 +10,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 
@@ -65,7 +66,7 @@ public class ReportService {
             return Either.left(canI.getLeft());
         }
         report.setLedgerDispatchApproved(true);
-
+        report.setLedgerDispatchDate(LocalDateTime.now(clock));
         reportRepository.save(report);
 
         return Either.right(report);

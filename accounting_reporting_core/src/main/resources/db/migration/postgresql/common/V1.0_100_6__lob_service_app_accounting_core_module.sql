@@ -726,6 +726,7 @@ CREATE table accounting_core_report (
 
     ledger_dispatch_approved BOOLEAN NOT NULL DEFAULT FALSE,
     ledger_dispatch_status accounting_core_ledger_dispatch_status_type NOT NULL,
+    ledger_dispatch_date TIMESTAMP WITHOUT TIME ZONE,
     primary_blockchain_type VARCHAR(255),
     primary_blockchain_hash CHAR(64),
 
@@ -811,6 +812,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_report_aud (
 
     ledger_dispatch_approved BOOLEAN NOT NULL DEFAULT FALSE,
     ledger_dispatch_status accounting_core_ledger_dispatch_status_type NOT NULL,
+    ledger_dispatch_date TIMESTAMP WITHOUT TIME ZONE,
     primary_blockchain_type VARCHAR(255),
     primary_blockchain_hash CHAR(64),
 

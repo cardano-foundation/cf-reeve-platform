@@ -4,6 +4,7 @@ import static jakarta.persistence.EnumType.STRING;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.NOT_DISPATCHED;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import jakarta.persistence.*;
@@ -203,6 +204,11 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Setter
     // https://www.baeldung.com/java-enums-jpa-postgresql
     private LedgerDispatchStatus ledgerDispatchStatus = NOT_DISPATCHED;
+
+    @Column(name = "ledger_dispatch_date")
+    @Getter
+    @Setter
+    private LocalDateTime ledgerDispatchDate;
 
     public void setBalanceSheetReportData(Optional<BalanceSheetData> balanceSheetReportData) {
         if (type != ReportType.BALANCE_SHEET) {
