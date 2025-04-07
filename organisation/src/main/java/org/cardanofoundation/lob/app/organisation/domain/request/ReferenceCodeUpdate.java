@@ -24,18 +24,19 @@ public class ReferenceCodeUpdate {
     private String name;
 
     @Nullable
-    @Schema(example = "0000")
-    private String parentReferenceCode;
+    private ReferenceCodeUpdate parentReferenceCode;
 
     @Schema(example = "true")
     private boolean isActive = true;
 
     public ReferenceCode toEntity(String orgId) {
-        return ReferenceCode.builder()
+        ReferenceCode.ReferenceCodeBuilder active = ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCode))
                 .name(name)
-                .parentReferenceCode(parentReferenceCode)
-                .isActive(isActive)
-                .build();
+                .isActive(isActive);
+        if (parentReferenceCode != null) {
+            active.parent(parentReferenceCode.toEntity(orgId));
+        }
+        return active.build();
     }
 }

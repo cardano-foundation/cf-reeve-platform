@@ -1,6 +1,10 @@
 package org.cardanofoundation.lob.app.organisation.domain.entity;
 
 
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+
 import jakarta.persistence.*;
 
 import lombok.*;
@@ -8,7 +12,9 @@ import lombok.*;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -34,6 +40,31 @@ public class OrganisationProject extends CommonEntity implements Persistable<Org
 
     @Column(name = "name", nullable = false)
     private String name;
+
+    @ManyToOne
+    @JoinColumns({
+            @JoinColumn(name = "organisation_id", referencedColumnName = "organisation_id", insertable = false, updatable = false),
+            @JoinColumn(name = "parent_customer_code", referencedColumnName = "customer_code", insertable = false, updatable = false)
+    })
+    @JsonIgnoreProperties("children")
+    @NotAudited
+    private OrganisationProject parent;
+
+    @Column(name = "parent_customer_code")
+    private String parentCustomerCode;
+
+    @OneToMany(fetch = FetchType.LAZY)
+    @JoinColumns({
+            @JoinColumn(name = "organisation_id", referencedColumnName = "organisation_id", insertable = false, updatable = false),
+            @JoinColumn(name = "customer_code", referencedColumnName = "customer_code", insertable = false, updatable = false)
+    })
+    @JsonIgnoreProperties("parent")
+    @NotAudited
+    private Set<OrganisationProject> children = new HashSet<>();
+
+    public Optional<OrganisationProject> getParent() {
+        return Optional.ofNullable(parent);
+    }
 
     @Embeddable
     @AllArgsConstructor

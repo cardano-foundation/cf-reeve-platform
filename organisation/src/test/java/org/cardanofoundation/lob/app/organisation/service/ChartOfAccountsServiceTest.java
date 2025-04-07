@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 
@@ -70,7 +71,7 @@ class ChartOfAccountsServiceTest {
                 .eventRefCode("EVT123")
                 .build();
 
-        referenceCode = new ReferenceCode(new ReferenceCode.Id(orgId, "EVT123"), "RefCode", null, true);
+        referenceCode = new ReferenceCode(new ReferenceCode.Id(orgId, "EVT123"), null, null, Collections.emptySet(), "RefCode", true);
         subType = new OrganisationChartOfAccountSubType();
         type = new OrganisationChartOfAccountType();
         subType.setType(type);

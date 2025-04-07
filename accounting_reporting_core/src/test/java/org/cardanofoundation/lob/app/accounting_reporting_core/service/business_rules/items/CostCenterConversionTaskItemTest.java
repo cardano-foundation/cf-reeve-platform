@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.COLLECTION;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.FxRevaluation;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.Journal;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.COST_CENTER_DATA_NOT_FOUND;
@@ -9,6 +10,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -69,8 +71,7 @@ class CostCenterConversionTaskItemTest {
     @Test
     void testCostCenterConversionSuccess() {
         val txId = Transaction.id("1", "1");
-
-        when(organisationPublicApiIF.findCostCenter("1", "1")).thenReturn(Optional.of(new OrganisationCostCenter(new OrganisationCostCenter.Id("1", "1"), "Cost Center 1", "2")));
+        when(organisationPublicApiIF.findCostCenter("1", "1")).thenReturn(Optional.of(new OrganisationCostCenter(new OrganisationCostCenter.Id("1", "1"), "Cost Center 1", "2", null, null, Collections.emptySet())));
 
         val txItem1 = new TransactionItemEntity();
         txItem1.setId(TransactionItem.id(txId, "0"));
