@@ -234,11 +234,15 @@ subprojects {
     pitest {
         //adds dependency to org.pitest:pitest-junit5-plugin and sets "testPlugin" to "junit5"
         jvmArgs.add("--enable-preview")
-        targetClasses.set(setOf("org.cardanofoundation.lob.app.*"))
-        targetTests.set(setOf("org.cardanofoundation.lob.app.*"))
+        //targetClasses.set(setOf("org.cardanofoundation.lob.app.*"))
+        //targetTests.set(setOf("org.cardanofoundation.lob.app.accounting_reporting_core.*"))
         exportLineCoverage = true
         timestampedReports = false
         threads = 2
+        //junit5PluginVersion.set("1.2.2")
+        outputFormats.set(listOf("HTML"))
+        mutators.set(listOf("DEFAULTS"))
+        //mutationThreshold.set(20)
     }
 
     publishing {
