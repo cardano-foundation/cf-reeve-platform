@@ -70,7 +70,7 @@ class CostCenterConversionTaskItemTest {
     @Test
     void testCostCenterConversionSuccess() {
         val txId = Transaction.id("1", "1");
-        when(organisationPublicApiIF.findCostCenter("1", "1")).thenReturn(Optional.of(new OrganisationCostCenter(new OrganisationCostCenter.Id("1", "1"), "Cost Center 1", "2", null, null, Collections.emptySet())));
+        when(organisationPublicApiIF.findCostCenter("1", "1")).thenReturn(Optional.of(new OrganisationCostCenter(new OrganisationCostCenter.Id("1", "1"), "Cost Center 1", "2", null, null)));
 
         val txItem1 = new TransactionItemEntity();
         txItem1.setId(TransactionItem.id(txId, "0"));

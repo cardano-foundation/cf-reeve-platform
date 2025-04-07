@@ -114,7 +114,7 @@ class ReferenceCodeServiceTest {
     void testUpsertReferenceCode_UpdateExisting() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, REF_CODE)).thenReturn(Optional.of(referenceCode));
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
-        referenceCode.setParent(new ReferenceCode(new ReferenceCode.Id(ORG_ID, "0102"), null, "Parent Reference", Collections.emptySet(), "2", true));
+        referenceCode.setParent(new ReferenceCode(new ReferenceCode.Id(ORG_ID, "0102"), null, "Parent Reference", "2", true));
         when(referenceCodeRepository.save(any(ReferenceCode.class))).thenReturn(referenceCode);
 
         ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
