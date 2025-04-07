@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.organisation.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 

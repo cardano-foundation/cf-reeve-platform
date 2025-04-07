@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.business
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
