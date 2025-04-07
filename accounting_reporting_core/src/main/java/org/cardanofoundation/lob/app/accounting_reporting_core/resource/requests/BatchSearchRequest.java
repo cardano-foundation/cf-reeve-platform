@@ -3,8 +3,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.request
 import java.time.LocalDate;
 import java.util.Set;
 
-import jakarta.validation.constraints.NotBlank;
-
 import javax.annotation.Nullable;
 
 import lombok.AllArgsConstructor;
@@ -18,16 +16,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class BatchSearchRequest {
-
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    @NotBlank
-    private String organisationId;
+public class BatchSearchRequest extends BaseRequest {
 
     @ArraySchema(arraySchema = @Schema(example = "[\"APPROVE\", \"PENDING\", \"INVALID\", \"PUBLISH\", \"PUBLISHED\"]", implementation = LedgerDispatchStatusView.class))
     private Set<LedgerDispatchStatusView> batchStatistics = Set.of();

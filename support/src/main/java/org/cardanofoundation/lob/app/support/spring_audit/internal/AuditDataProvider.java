@@ -14,6 +14,7 @@ import org.springframework.data.auditing.DateTimeProvider;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -30,8 +31,8 @@ public class AuditDataProvider implements AuditorAware<String>, DateTimeProvider
     @Override
     public Optional<String> getCurrentAuditor() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.isAuthenticated()) {
-            return Optional.of(authentication.getName());
+        if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof Jwt jwt) {
+            return Optional.of(jwt.getClaimAsString("name"));
         }
         return Optional.of(SYSTEM_USER);
     }

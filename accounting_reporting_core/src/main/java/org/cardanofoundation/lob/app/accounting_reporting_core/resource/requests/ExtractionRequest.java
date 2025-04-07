@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
@@ -16,10 +17,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 //@Builder todo: For testing
 @NoArgsConstructor
 @Slf4j
-public class ExtractionRequest {
-
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    private String organisationId;
+public class ExtractionRequest extends BaseRequest {
 
     //@Builder.Default todo: For testing
     @Schema(example = "2013-01-02")

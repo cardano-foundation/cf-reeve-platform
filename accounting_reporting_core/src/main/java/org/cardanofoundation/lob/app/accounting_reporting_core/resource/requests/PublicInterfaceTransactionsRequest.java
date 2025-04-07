@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import lombok.AllArgsConstructor;
@@ -15,16 +14,14 @@ import lombok.Setter;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
+
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class PublicInterfaceTransactionsRequest {
-
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    @NotBlank
-    private String organisationId;
+public class PublicInterfaceTransactionsRequest extends BaseRequest {
 
     @Schema(example = "2023-01-01")
     @NotNull
