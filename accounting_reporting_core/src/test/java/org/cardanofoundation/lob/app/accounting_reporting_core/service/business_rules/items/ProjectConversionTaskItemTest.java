@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.business
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -57,7 +58,7 @@ public class ProjectConversionTaskItemTest {
         transaction.setItems(items);
 
         when(organisationPublicApiIF.findProject("1", "cust_code1"))
-                .thenReturn(Optional.of(new OrganisationProject(new OrganisationProject.Id("1", "cust_code1"), "ext_cust_code1", "name1")));
+                .thenReturn(Optional.of(new OrganisationProject(new OrganisationProject.Id("1", "cust_code1"), "ext_cust_code1", "name1", null, null, Collections.emptySet())));
 
         projectConversionTaskItem.run(transaction);
 

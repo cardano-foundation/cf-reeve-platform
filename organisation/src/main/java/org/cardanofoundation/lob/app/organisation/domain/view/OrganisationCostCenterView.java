@@ -6,7 +6,6 @@ import lombok.Getter;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
 
-import java.util.Optional;
 
 @Getter
 @Builder
