@@ -12,6 +12,8 @@ import lombok.Setter;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
+
 @Getter
 @Setter
 @AllArgsConstructor
@@ -23,6 +25,7 @@ public class ReconciliationResponseView {
     private Optional<LocalDate> lastDateTo;
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private Optional<LocalDate> lastReconciledDate;
+    private Optional<Source> source;
     private TransactionReconciliationStatisticView statistic;
 
     @JsonProperty("transactions")
