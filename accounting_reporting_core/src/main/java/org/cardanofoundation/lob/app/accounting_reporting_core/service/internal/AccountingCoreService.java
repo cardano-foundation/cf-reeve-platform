@@ -28,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.assistanc
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Service
 @Slf4j
@@ -39,6 +40,7 @@ public class AccountingCoreService {
     private final ERPIncomingDataProcessor erpIncomingDataProcessor;
     private final OrganisationPublicApiIF organisationPublicApi;
     private final AccountingPeriodCalculator accountingPeriodCalculator;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Value("${lob.max.transaction.numbers.per.batch:600}")
     private int maxTransactionNumbersPerBatch = 600;
@@ -64,7 +66,7 @@ public class AccountingCoreService {
                     .build());
         }
 
-        val event = ScheduledIngestionEvent.builder().metadata(EventMetadata.create(ScheduledIngestionEvent.VERSION))
+        val event = ScheduledIngestionEvent.builder().metadata(EventMetadata.create(ScheduledIngestionEvent.VERSION, keycloakSecurityHelper.getCurrentUser()))
                 .organisationId(userExtractionParameters.getOrganisationId())
                 .userExtractionParameters(userExtractionParameters)
                 .build();
