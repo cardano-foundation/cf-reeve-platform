@@ -25,7 +25,6 @@ public class ReconciliationResponseView {
     private Optional<LocalDate> lastDateTo;
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private Optional<LocalDate> lastReconciledDate;
-    private Optional<Source> source;
     private TransactionReconciliationStatisticView statistic;
 
     @JsonProperty("transactions")

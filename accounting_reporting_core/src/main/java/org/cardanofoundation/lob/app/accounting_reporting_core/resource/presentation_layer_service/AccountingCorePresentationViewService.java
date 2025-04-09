@@ -91,7 +91,6 @@ public class AccountingCorePresentationViewService {
                 latestReconcilation.flatMap(ReconcilationEntity::getFrom),
                 latestReconcilation.flatMap(ReconcilationEntity::getTo),
                 latestReconcilation.map(reconcilationEntity -> reconcilationEntity.getUpdatedAt().toLocalDate()),
-                body.getSource(),
                 getTransactionReconciliationStatistic(transactionsStatistic),
                 transactions
         );

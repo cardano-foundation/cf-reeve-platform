@@ -111,7 +111,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         if (getDateFrom.isPresent()) {
             where += " AND r.createdAt > :startDate ";
         }
-        if (getDateTo.isPresent() && getDateFrom.isEmpty()) {
+        if (getDateTo.isPresent()) {
             where += " AND r.createdAt < :endDate ";
         }
 
