@@ -208,7 +208,8 @@ public class TransactionReconcilationService {
         val isOnChainMap = isOnChainE.get();
 
         for (val attachedTx : attachedTxEntities) {
-            val detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we using detatched tx ids as a way to find our attached txs
+            attachedTx.setLastReconcilation(Optional.empty()); // To avoid cyclical references when a new version exist in the ERP
+            val detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
 
             val attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
             val detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
