@@ -17,7 +17,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
@@ -37,9 +36,6 @@ public class ReconciliationFilterRequest extends BaseRequest {
 
     @Schema(example = "2014-01-31")
     private Optional<LocalDate> dateTo  = Optional.empty();
-
-    @Schema(examples = {"ERP", "LOB"})
-    private Optional<Source> source = Optional.empty();
 
     @ArraySchema(arraySchema = @Schema(example = "[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\"]"))
     private Set<ReconciliationRejectionCodeRequest> reconciliationRejectionCode = new HashSet<>();

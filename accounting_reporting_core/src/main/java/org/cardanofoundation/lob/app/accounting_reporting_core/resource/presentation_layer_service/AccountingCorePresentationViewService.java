@@ -62,7 +62,7 @@ public class AccountingCorePresentationViewService {
         long count;
         if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
             Set<Object> txDuplicated = new HashSet<>();
-            transactions = accountingCoreTransactionRepository.findAllReconciliationSpecial(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getSource(), body.getLimit(), body.getPage()).stream()
+            transactions = accountingCoreTransactionRepository.findAllReconciliationSpecial(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getLimit(), body.getPage()).stream()
                     .filter(o -> {
                         if (o[0] instanceof TransactionEntity transactionEntity && !txDuplicated.contains((transactionEntity).getId())) {
                             txDuplicated.add((transactionEntity).getId());
@@ -79,12 +79,12 @@ public class AccountingCorePresentationViewService {
                     .map(this::getReconciliationTransactionsSelector)
                     .sorted(Comparator.comparing(TransactionReconciliationTransactionsView::getId))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            count = accountingCoreTransactionRepository.findAllReconciliationSpecialCount(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getSource(), body.getLimit(), body.getPage()).size();
+            count = accountingCoreTransactionRepository.findAllReconciliationSpecialCount(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getLimit(), body.getPage()).size();
         } else {
-            transactions = transactionRepositoryGateway.findReconciliation(body.getFilter(), body.getLimit(), body.getPage()).stream()
+            transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getLimit(), body.getPage()).stream()
                     .map(this::getTransactionReconciliationView)
                     .collect(toSet());
-            count = transactionRepositoryGateway.findReconciliationCount(body.getFilter(), body.getLimit(), body.getPage()).size();
+            count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getLimit(), body.getPage()).size();
         }
         return new ReconciliationResponseView(
                 count,

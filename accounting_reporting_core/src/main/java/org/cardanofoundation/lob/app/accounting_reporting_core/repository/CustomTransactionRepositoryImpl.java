@@ -15,7 +15,6 @@ import jakarta.persistence.criteria.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
@@ -54,14 +53,13 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Optional<Source> source, Integer limit, Integer page) {
-        String jpql = reconciliationQuery(rejectionCodes, getDateFrom, getDateTo, source);
+    public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Integer limit, Integer page) {
+        String jpql = reconciliationQuery(rejectionCodes, getDateFrom, getDateTo);
 
         Query reconciliationQuery = em.createQuery(jpql);
 
         getDateFrom.ifPresent(value -> reconciliationQuery.setParameter("startDate", value.atStartOfDay()));
         getDateTo.ifPresent(value -> reconciliationQuery.setParameter("endDate", value.atTime(23, 59, 59)));
-        source.ifPresent(value -> reconciliationQuery.setParameter("source", value));
 
         reconciliationQuery.setMaxResults(limit);
 
@@ -73,7 +71,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Optional<Source> source, Integer limit, Integer page) {
+    public List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Integer limit, Integer page) {
         String jpql = "SELECT count(rv.transactionId) " +
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
@@ -115,17 +113,12 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
             where += " AND r.createdAt < :endDate ";
         }
 
-        if(source.isPresent()) {
-            where += " AND rv.source = :source ";
-        }
-
         where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ";
 
         Query resultQuery = em.createQuery(jpql + where);
 
         getDateFrom.ifPresent(value -> resultQuery.setParameter("startDate", value.atStartOfDay()));
         getDateTo.ifPresent(value -> resultQuery.setParameter("endDate", value.atTime(23, 59, 59)));
-        source.ifPresent(value -> resultQuery.setParameter("source", value));
 
         return resultQuery.getResultList();
     }
@@ -264,7 +257,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         return reconciliationQuery.getSingleResult();
     }
 
-    private String reconciliationQuery(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Optional<Source> source) {
+    private String reconciliationQuery(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo) {
         String jpql = "SELECT tr, rv " +
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
@@ -303,10 +296,6 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         }
         if (getDateTo.isPresent()) {
             where += " AND r.createdAt < :endDate ";
-        }
-
-        if(source.isPresent()) {
-            where += " AND rv.source = :source ";
         }
         where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.rejectionCode, rv.sourceDiff, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ORDER BY rv.transactionEntryDate ";
 

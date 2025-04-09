@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -21,14 +20,12 @@ public interface CustomTransactionRepository {
     List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes,
                                                 Optional<LocalDate> getDateFrom,
                                                 Optional<LocalDate> getDateTo,
-                                                Optional<Source> source,
                                                 Integer limit,
                                                 Integer page);
 
     List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes,
                                                      Optional<LocalDate> getDateFrom,
                                                      Optional<LocalDate> getDateTo,
-                                                     Optional<Source> source,
                                                      Integer limit,
                                                      Integer page);
 
