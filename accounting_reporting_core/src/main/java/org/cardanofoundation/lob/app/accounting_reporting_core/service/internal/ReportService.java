@@ -644,7 +644,7 @@ public class ReportService {
                 startSearchDate = Optional.empty();
                 totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
                         BigDecimal.ZERO :
-                organisationChartOfAccount.getOpeningBalance().getBalance()).reduce(BigDecimal.ZERO, BigDecimal::add));
+                organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).reduce(BigDecimal.ZERO, BigDecimal::add));
             }
 
             List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
