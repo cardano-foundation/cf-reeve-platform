@@ -38,6 +38,10 @@ public class OrganisationCheckInterceptor implements HandlerInterceptor {
 
             try {
                 BaseRequest baseRequest = objectMapper.readValue(body, BaseRequest.class);
+                // orgId is not set within the body, thus skipping as well
+                if(baseRequest.getOrganisationId().isBlank()) {
+                    return true;
+                }
                 boolean isUserInOrganisation = keycloakSecurityHelper.canUserAccessOrg(baseRequest.getOrganisationId());
                 if (!isUserInOrganisation) {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
