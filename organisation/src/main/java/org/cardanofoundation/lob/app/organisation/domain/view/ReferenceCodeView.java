@@ -18,6 +18,8 @@ public class ReferenceCodeView {
 
     String referenceCode;
     String description;
+    String parentReferenceCode;
+    boolean isActive;
 
     private Optional<Problem> error;
 
@@ -25,6 +27,8 @@ public class ReferenceCodeView {
         return ReferenceCodeView.builder()
                 .referenceCode(Objects.requireNonNull(referenceCode.getId()).getReferenceCode())
                 .description(referenceCode.getName())
+                .parentReferenceCode(referenceCode.getParentReferenceCode())
+                .isActive(referenceCode.isActive())
                 .error(Optional.empty())
                 .build();
     }

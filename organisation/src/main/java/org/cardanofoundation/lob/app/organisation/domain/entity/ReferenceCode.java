@@ -36,7 +36,12 @@ public class ReferenceCode extends CommonEntity implements Persistable<Reference
     })
     private Id id;
 
+    private String parentReferenceCode;
+
     private String name;
+
+    @Column(name = "active")
+    private boolean isActive = true;
 
     @Embeddable
     @AllArgsConstructor

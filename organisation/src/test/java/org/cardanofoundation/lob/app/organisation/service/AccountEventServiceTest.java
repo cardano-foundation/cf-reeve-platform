@@ -56,7 +56,6 @@ class AccountEventServiceTest {
                 .customerCode(DEBIT_REF_CODE + CREDIT_REF_CODE)
                 .name("Test Event")
                 .active(true)
-                .hierarchy("1")
                 .build();
 
         mockDebitReference = ReferenceCode.builder()
@@ -70,7 +69,7 @@ class AccountEventServiceTest {
                 .build();
 
         mockOrganisation = new Organisation(ORG_ID,"testOrg","testCity","testPostCode","testProvince","testAddress","testPhone","testTaxId","IE","00000000",false,false,7305,"ISO_4217:CHF","ISO_4217:CHF","http://testWeb","email@test.com",null);
-        mockEventCodeUpdate = new EventCodeUpdate(DEBIT_REF_CODE, CREDIT_REF_CODE, "Updated Name", "2", true);
+        mockEventCodeUpdate = new EventCodeUpdate(DEBIT_REF_CODE, CREDIT_REF_CODE, "Updated Name", true);
     }
 
     @Test
@@ -111,6 +110,8 @@ class AccountEventServiceTest {
         when(accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE))
                 .thenReturn(Optional.of(mockAccountEvent));
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+        when(accountEventRepository.save(any(AccountEvent.class))).thenReturn(mockAccountEvent);
+
 
         AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
 

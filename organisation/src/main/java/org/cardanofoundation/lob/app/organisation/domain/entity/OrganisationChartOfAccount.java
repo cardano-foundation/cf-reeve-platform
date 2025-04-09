@@ -58,8 +58,10 @@ public class OrganisationChartOfAccount extends CommonEntity implements Persista
 
     @Embedded
     @AttributeOverrides({
-            @AttributeOverride(name = "balance", column = @Column(name = "opening_balance_balance")),
-            @AttributeOverride(name = "originalCurrencyId", column = @Column(name = "opening_balance_original_currency_id")),
+            @AttributeOverride(name = "balanceFCY", column = @Column(name = "opening_balance_balance_fcy")),
+            @AttributeOverride(name = "balanceLCY", column = @Column(name = "opening_balance_balance_lcy")),
+            @AttributeOverride(name = "originalCurrencyIdFCY", column = @Column(name = "opening_balance_original_currency_id_fcy")),
+            @AttributeOverride(name = "originalCurrencyIdLCY", column = @Column(name = "opening_balance_original_currency_id_lcy")),
             @AttributeOverride(name = "balanceType", column = @Column(name = "opening_balance_balance_type")),
             @AttributeOverride(name = "date", column = @Column(name = "opening_balance_date"))
 

@@ -33,8 +33,6 @@ public class AccountEvent {
     @Column(nullable = false)
     private String name;
 
-    private String hierarchy;
-
     private Boolean active = TRUE;
 
     @Getter

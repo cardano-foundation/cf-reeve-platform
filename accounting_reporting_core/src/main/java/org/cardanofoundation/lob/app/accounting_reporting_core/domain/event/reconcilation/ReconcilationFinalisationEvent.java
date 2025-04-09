@@ -22,6 +22,9 @@ public class ReconcilationFinalisationEvent {
     @NotNull
     private EventMetadata metadata;
 
+    @NotNull
+    private long totalPrediction;
+
     @NotBlank
     private String reconciliationId;
 

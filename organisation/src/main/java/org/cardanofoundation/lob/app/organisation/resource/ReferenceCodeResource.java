@@ -11,7 +11,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -74,7 +73,8 @@ public class ReferenceCodeResource {
     }
 
     @Operation(description = "Reference Code delete")
-    @DeleteMapping(value = "/{orgId}/reference-codes/{refCode}", produces = "application/json")
+    // Removing the mapping to keep the code but disable the endpoint
+//    @DeleteMapping(value = "/{orgId}/reference-codes/{refCode}", produces = "application/json") // Removing the mapping to keep the code but disable the endpoint
     public ResponseEntity<?> deleteReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @PathVariable("refCode") String referenceCode) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);

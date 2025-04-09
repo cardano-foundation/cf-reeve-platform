@@ -49,7 +49,7 @@ public class MetricController {
     public ResponseEntity<MetricDataResponse> getDashboardData(@RequestBody GetMetricDataRequest getMetricDataRequest) {
         return ResponseEntity.ok(new MetricDataResponse(metricService.getData(
                 getMetricDataRequest.getMetricView().getMetrics(),
-                getMetricDataRequest.getOrganisationID(),
+                getMetricDataRequest.getOrganisationId(),
                 Optional.ofNullable(getMetricDataRequest.getStartDate()),
                 Optional.ofNullable(getMetricDataRequest.getEndDate()))));
     }
@@ -58,7 +58,7 @@ public class MetricController {
     @PostMapping(value = "/saveDashboard", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
     public ResponseEntity<Boolean> saveDashboard(@RequestBody SaveDashboardRequest saveDashboardRequest) {
-        boolean success = metricService.saveDashboard(saveDashboardRequest.getDashboards(), saveDashboardRequest.getOrganisationID());
+        boolean success = metricService.saveDashboard(saveDashboardRequest.getDashboards(), saveDashboardRequest.getOrganisationId());
         if (success) {
             return ResponseEntity.ok().build();
         } else {
@@ -84,7 +84,7 @@ public class MetricController {
     @PostMapping(value = "/updateDashboard", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
     public ResponseEntity<Boolean> updateDashboard(@RequestBody UpdateDashboardRequest updateDashboardRequest) {
-        metricService.updateDashboard(updateDashboardRequest.getDashboard(), updateDashboardRequest.getOrganisationID());
+        metricService.updateDashboard(updateDashboardRequest.getDashboard(), updateDashboardRequest.getOrganisationId());
         return ResponseEntity.ok().build();
     }
 }

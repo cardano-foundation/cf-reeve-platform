@@ -219,8 +219,10 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account (
    parent_customer_code VARCHAR(255),
    active BOOLEAN,
 
-   opening_balance_balance BIGINT,
-   opening_balance_original_currency_id VARCHAR(255),
+   opening_balance_balance_fcy BIGINT,
+   opening_balance_balance_lcy BIGINT,
+   opening_balance_original_currency_id_fcy VARCHAR(255),
+   opening_balance_original_currency_id_lcy VARCHAR(255),
    opening_balance_balance_type VARCHAR(255),
    opening_balance_date VARCHAR(255),
 
@@ -244,8 +246,10 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account_aud (
    parent_customer_code VARCHAR(255),
    active BOOLEAN,
 
-   opening_balance_balance BIGINT,
-   opening_balance_original_currency_id VARCHAR(255),
+   opening_balance_balance_fcy BIGINT,
+   opening_balance_balance_lcy BIGINT,
+   opening_balance_original_currency_id_fcy VARCHAR(255),
+   opening_balance_original_currency_id_lcy VARCHAR(255),
    opening_balance_balance_type VARCHAR(255),
    opening_balance_date VARCHAR(255),
 
@@ -342,6 +346,8 @@ CREATE TABLE IF NOT EXISTS organisation_chart_of_account_sub_type_aud (
     organisation_id CHAR(64) NOT NULL,
     reference_code VARCHAR(255) NOT NULL,
     name VARCHAR(255),
+    parent_reference_code VARCHAR(255),
+    active BOOLEAN,
 
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
@@ -356,6 +362,8 @@ CREATE TABLE IF NOT EXISTS organisation_ref_codes_aud (
        organisation_id CHAR(64) NOT NULL,
        reference_code VARCHAR(255) NOT NULL,
        name VARCHAR(255),
+       parent_reference_code VARCHAR(255),
+       active BOOLEAN,
 
    created_by VARCHAR(255),
    updated_by VARCHAR(255),
@@ -381,7 +389,6 @@ CREATE TABLE IF NOT EXISTS organisation_account_event (
    credit_reference_code VARCHAR(255) NOT NULL,
    customer_code VARCHAR(255) NOT NULL,
    name VARCHAR(255) NOT NULL,
-   hierarchy VARCHAR(255),
    active BOOLEAN,
 
    created_by VARCHAR(255),
@@ -402,7 +409,6 @@ CREATE TABLE IF NOT EXISTS organisation_account_event_aud (
    credit_reference_code VARCHAR(255) NOT NULL,
    customer_code VARCHAR(255) NOT NULL,
    name VARCHAR(255) NOT NULL,
-   hierarchy VARCHAR(255),
    active BOOLEAN,
 
    created_by VARCHAR(255),

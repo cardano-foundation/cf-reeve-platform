@@ -6,6 +6,8 @@ import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
 
@@ -161,6 +163,24 @@ public class OrganisationResource {
                             accountEvent.getName()
                     );
                 }).toList()
+        );
+
+    }
+
+    @Operation(description = "Organisation Chart of acount type", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCurrencyView.class)))}
+            ),
+    })
+    @GetMapping(value = "/organisation/{orgId}/currencies", produces = "application/json")
+    public ResponseEntity<Set<OrganisationCurrencyView>> organisationCurrencies(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+        return ResponseEntity.ok().body(
+                organisationService.getOrganisationCurrencies(orgId).stream().map(organisationCurrency -> {
+                    return new OrganisationCurrencyView(
+                            organisationCurrency.getId().getCustomerCode(),
+                            organisationCurrency.getCurrencyId()
+                    );
+                }).collect(Collectors.toSet())
         );
 
     }

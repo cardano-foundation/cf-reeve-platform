@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
@@ -17,10 +18,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.repor
 //@Builder todo: For testing
 @NoArgsConstructor
 @Slf4j
-public class IncomeStatementRequest {
-
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    private String organisationID;
+public class IncomeStatementRequest extends BaseRequest {
 
     @Schema(example = "INCOME_STATEMENT")
     private ReportType reportType;

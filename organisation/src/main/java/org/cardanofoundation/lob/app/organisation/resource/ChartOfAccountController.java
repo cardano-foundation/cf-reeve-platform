@@ -43,7 +43,7 @@ public class ChartOfAccountController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountTypeView.class)))}
             ),
     })
-    @GetMapping(value = "/{orgId}/chart-types", produces = "application/json")
+    @GetMapping(value = "/{orgId}/chart-type", produces = "application/json")
     @Transactional
     public ResponseEntity<List<OrganisationChartOfAccountTypeView>> getChartOfAccountTypes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(

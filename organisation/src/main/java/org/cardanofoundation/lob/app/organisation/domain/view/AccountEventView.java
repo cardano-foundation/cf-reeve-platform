@@ -21,7 +21,6 @@ public class AccountEventView {
     private String creditReferenceCode;
     private String customerCode;
     private String description;
-    private String hierarchy;
     private Boolean active;
 
     private Optional<Problem> error;
@@ -34,7 +33,6 @@ public class AccountEventView {
                 .customerCode(eventCode.getCustomerCode())
                 .organisationId(eventCode.getId().getOrganisationId())
                 .description(eventCode.getName())
-                .hierarchy(eventCode.getHierarchy())
                 .active(eventCode.getActive())
                 .error(Optional.empty())
                 .build();

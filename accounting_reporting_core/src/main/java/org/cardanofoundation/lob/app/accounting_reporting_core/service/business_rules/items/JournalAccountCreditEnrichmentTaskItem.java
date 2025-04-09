@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.CREDIT;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.Journal;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR;
@@ -56,8 +57,16 @@ public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem 
         String dummyAccount = dummyAccountM.orElseThrow();
         for (TransactionItemEntity txItem : tx.getItems()) {
             OperationType operationType = txItem.getOperationType();
-
             if (txItem.getAccountCredit().isEmpty() && operationType == CREDIT) {
+                if(txItem.getAccountDebit().isEmpty()) {
+                    tx.addViolation(TransactionViolation.builder()
+                                    .code(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY)
+                                    .severity(ERROR)
+                                    .source(ERP)
+                                    .processorModule(this.getClass().getSimpleName())
+                            .build());
+                    continue;
+                }
                 Account accountDebit = txItem.getAccountDebit().orElseThrow();
                 txItem.setAccountCredit(Optional.of(accountDebit));
 

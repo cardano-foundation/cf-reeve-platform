@@ -207,4 +207,12 @@ class OrganisationServiceTest {
         verify(organisationCurrencyService).findAllByOrganisationId(anyString());
         verifyNoMoreInteractions(costCenterService, projectMappingRepository, organisationCurrencyService);
     }
+
+    @Test
+    void getOrganisationCurrencies() {
+        Set<OrganisationCurrency> organisationCurrencies = new HashSet<>();
+        when(organisationCurrencyService.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0")).thenReturn(organisationCurrencies);
+        Set<OrganisationCurrency> result = organisationService.getOrganisationCurrencies("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
+        assertEquals(organisationCurrencies, result);
+    }
 }

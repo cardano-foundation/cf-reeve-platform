@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.request;
 
+import javax.annotation.Nullable;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,13 +19,23 @@ public class ReferenceCodeUpdate {
 
     @Schema(example = "0000")
     private String referenceCode;
+
     @Schema(example = "Example reference code")
     private String name;
+
+    @Nullable
+    @Schema(example = "0000")
+    private String parentReferenceCode;
+
+    @Schema(example = "true")
+    private boolean isActive = true;
 
     public ReferenceCode toEntity(String orgId) {
         return ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCode))
                 .name(name)
+                .parentReferenceCode(parentReferenceCode)
+                .isActive(isActive)
                 .build();
     }
 }
