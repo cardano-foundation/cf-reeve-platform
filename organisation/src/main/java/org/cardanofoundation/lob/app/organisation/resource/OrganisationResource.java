@@ -5,6 +5,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -12,9 +13,9 @@ import java.util.stream.Collectors;
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
-import lombok.val;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -28,12 +29,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
+import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
 @RequestMapping("/api")
@@ -44,6 +47,7 @@ import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 public class OrganisationResource {
 
     private final OrganisationService organisationService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Transaction types", responses = {
             @ApiResponse(content =
@@ -54,9 +58,9 @@ public class OrganisationResource {
     public ResponseEntity<?> organisationList() {
         return ResponseEntity.ok().body(
                 organisationService.findAll().stream().map(organisation -> {
-                    val today = LocalDate.now();
-                    val monthsAgo = today.minusMonths(organisation.getAccountPeriodDays());
-                    val yesterday = today.minusDays(1);
+                    LocalDate today = LocalDate.now();
+                    LocalDate monthsAgo = today.minusMonths(organisation.getAccountPeriodDays());
+                    LocalDate yesterday = today.minusDays(1);
 
                     return new OrganisationView(
                             organisation.getId(),
@@ -100,7 +104,7 @@ public class OrganisationResource {
             return organisationService.getOrganisationView(organisation1);
         });
         if (organisation.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
@@ -201,7 +205,7 @@ public class OrganisationResource {
 
         Optional<Organisation> organisationChe = organisationService.findById(Organisation.id(organisationCreate.getCountryCode(), organisationCreate.getTaxIdNumber()));
         if (organisationChe.isPresent()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_ALREADY_EXIST")
                     .withDetail(STR."Unable to crate Organisation with IdNumber: \{organisationCreate.getTaxIdNumber()} and CountryCode: \{organisationCreate.getCountryCode()}")
                     .withStatus(Status.NOT_FOUND)
@@ -212,7 +216,7 @@ public class OrganisationResource {
 
         Optional<OrganisationView> organisation = organisationService.createOrganisation(organisationCreate).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_CREATE_ERROR")
                     .withDetail(STR."Unable to create Organisation by Id: \{organisationCreate.getName()}")
                     .withStatus(Status.NOT_FOUND)
@@ -246,7 +250,7 @@ public class OrganisationResource {
     public ResponseEntity<?> organisationUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody OrganisationUpdate organisationUpdate) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
@@ -257,7 +261,7 @@ public class OrganisationResource {
 
         Optional<OrganisationView> organisation = organisationService.upsertOrganisation(organisationChe.get(), organisationUpdate).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_UPDATE_ERROR")
                     .withDetail(STR."Unable to create Organisation by Id: \{organisationUpdate.getName()}")
                     .withStatus(Status.NOT_FOUND)
@@ -269,6 +273,37 @@ public class OrganisationResource {
         return ResponseEntity.ok().body(organisation.get());
 
 
+    }
+
+    @Operation(description = "Organistion validation", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationValidationView.class))}
+            ),
+            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = "application/json", schema = @Schema(example = "{\n" +
+                    "    \"title\": \"Organisation not found\",\n" +
+                    "    \"status\": 404,\n" +
+                    "    \"detail\": \"Unable to get the organisation\"\n" +
+                    "}"))})
+    })
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @GetMapping(value = "/organisation/validate/{orgId}", produces = APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> validateOrganisation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String orgId) {
+        if(keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            Optional<Organisation> organisationOptional = organisationService.findById(orgId);
+            if(organisationOptional.isEmpty()) {
+                ThrowableProblem issue = Problem.builder()
+                        .withTitle("ORGANISATION_NOT_FOUND")
+                        .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                        .withStatus(Status.NOT_FOUND)
+                        .build();
+
+                return ResponseEntity.status(Objects.requireNonNull(issue.getStatus()).getStatusCode()).body(issue);
+            } else {
+                return ResponseEntity.ok(organisationService.validateOrganisation(organisationOptional.get()));
+            }
+        } else {
+            return ResponseEntity.status(HttpStatusCode.valueOf(403)).body("User is not allowed to access this organisation");
+        }
     }
 
 }

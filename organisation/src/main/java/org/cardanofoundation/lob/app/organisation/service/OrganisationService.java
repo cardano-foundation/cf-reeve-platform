@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -12,12 +13,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolation;
 import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
+import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationValidationView;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
 import org.cardanofoundation.lob.app.organisation.repository.*;
+import org.cardanofoundation.lob.app.organisation.service.validation.OrganisationValidationRule;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +34,7 @@ public class OrganisationService {
     private final ProjectMappingRepository projectMappingRepository;
     private final AccountEventRepository accountEventRepository;
     private final OrganisationCurrencyService organisationCurrencyService;
+    private final List<OrganisationValidationRule> validationRules;
 
     public Optional<Organisation> findById(String organisationId) {
         return organisationRepository.findById(organisationId);
@@ -172,4 +177,14 @@ public class OrganisationService {
         return organisation;
     }
 
+    public OrganisationValidationView validateOrganisation(Organisation organisation) {
+        List<OrganisationViolation> violations = new ArrayList<>();
+        validationRules.forEach(rule -> rule.validate(organisation).ifPresent(violations::addAll));
+
+        return OrganisationValidationView.builder()
+                .organisationId(organisation.getId())
+                .violations(violations)
+                .isValid(violations.isEmpty())
+                .build();
+    }
 }
