@@ -579,11 +579,11 @@ public class ReportService {
         reportEntity.setIntervalType(reportGenerateRequest.getIntervalType());
         reportEntity.setMode(USER);
         reportEntity.setDate(LocalDate.now(clock));
-        reportEntity.setOrganisation(Organisation.builder().id(reportGenerateRequest.getOrganisationID()).build());
+        reportEntity.setOrganisation(Organisation.builder().id(reportGenerateRequest.getOrganisationId()).build());
         reportEntity.setType(reportGenerateRequest.getReportType());
 
 
-        Optional<ReportTypeEntity> optionalReportSetupEntity = reportTypeRepository.findByOrganisationAndReportName(reportGenerateRequest.getOrganisationID(), reportGenerateRequest.getReportType().name());
+        Optional<ReportTypeEntity> optionalReportSetupEntity = reportTypeRepository.findByOrganisationAndReportName(reportGenerateRequest.getOrganisationId(), reportGenerateRequest.getReportType().name());
 
         if(optionalReportSetupEntity.isEmpty()) {
             return Either.left(Problem.builder()
