@@ -12,7 +12,6 @@ import lombok.Setter;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 
 @Getter
 @Setter
