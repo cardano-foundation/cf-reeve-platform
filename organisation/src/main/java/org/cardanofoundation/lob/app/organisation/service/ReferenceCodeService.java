@@ -51,7 +51,7 @@ public class ReferenceCodeService {
         }
         Optional<ReferenceCode> parentReferenceCode = Optional.empty();
         if (referenceCodeUpdate.getParentReferenceCode() != null) {
-            parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode().getReferenceCode());
+            parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
                 return ReferenceCodeView.createFail(Problem.builder()
                         .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
