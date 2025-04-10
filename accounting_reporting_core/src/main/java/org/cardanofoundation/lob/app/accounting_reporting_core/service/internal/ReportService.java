@@ -675,7 +675,7 @@ public class ReportService {
                     }
             ).reduce(BigDecimal.ZERO, BigDecimal::add));
             // Set value dynamically in reportData
-            setFieldValue(reportData, field.getName(), totalAmount);
+            setFieldValue(reportData, field.getName(), totalAmount.abs());
         } else {
             field.getChildFields().forEach(subField -> {
                 Object subFieldObject = getOrCreateNestedObject(reportData, field.getName());
