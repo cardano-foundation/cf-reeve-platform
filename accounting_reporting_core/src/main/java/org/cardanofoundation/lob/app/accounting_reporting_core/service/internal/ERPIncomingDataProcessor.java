@@ -36,14 +36,16 @@ public class ERPIncomingDataProcessor {
     public void initiateIngestion(String batchId,
                                   String organisationId,
                                   UserExtractionParameters userExtractionParameters,
-                                  SystemExtractionParameters systemExtractionParameters) {
+                                  SystemExtractionParameters systemExtractionParameters,
+                                  String user) {
         log.info("Processing ERPIngestionStored event.");
 
         transactionBatchService.createTransactionBatch(
                 batchId,
                 organisationId,
                 userExtractionParameters,
-                systemExtractionParameters
+                systemExtractionParameters,
+                user
         );
 
         log.info("Finished processing ERPIngestionStored event, event.");

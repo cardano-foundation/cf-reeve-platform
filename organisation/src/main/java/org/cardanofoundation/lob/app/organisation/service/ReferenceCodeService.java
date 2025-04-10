@@ -49,9 +49,9 @@ public class ReferenceCodeService {
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
-
-        if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
-            Optional<ReferenceCode> parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
+        Optional<ReferenceCode> parentReferenceCode = Optional.empty();
+        if (referenceCodeUpdate.getParentReferenceCode() != null) {
+            parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
                 return ReferenceCodeView.createFail(Problem.builder()
                         .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
@@ -68,7 +68,7 @@ public class ReferenceCodeService {
         );
 
         referenceCode.setName(referenceCodeUpdate.getName());
-        referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode());
+        parentReferenceCode.ifPresent(parent -> referenceCode.setParentReferenceCode(parent.getId().getReferenceCode()));
         referenceCode.setActive(referenceCodeUpdate.isActive());
 
         return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));

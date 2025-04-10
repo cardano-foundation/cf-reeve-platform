@@ -34,6 +34,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -49,6 +53,8 @@ public class AccountingCorePresentationViewService {
     private final AccountingCoreService accountingCoreService;
     private final TransactionBatchRepositoryGateway transactionBatchRepositoryGateway;
     private final TransactionReconcilationRepository transactionReconcilationRepository;
+    private final CostCenterRepository costCenterRepository;
+    private final ProjectMappingRepository projectMappingRepository;
 
     /**
      * TODO: waiting for refactoring the layer to remove this
@@ -455,34 +461,46 @@ public class AccountingCorePresentationViewService {
     }
 
     private Set<TransactionItemView> getTransactionItemView(TransactionEntity transaction) {
-        return transaction.getItems().stream().map(item -> new TransactionItemView(
-                item.getId(),
-                item.getAccountDebit().map(Account::getCode).orElse(""),
-                item.getAccountDebit().flatMap(Account::getName).orElse(""),
-                item.getAccountDebit().flatMap(Account::getRefCode).orElse(""),
-                item.getAccountCredit().map(Account::getCode).orElse(""),
-                item.getAccountCredit().flatMap(Account::getName).orElse(""),
-                item.getAccountCredit().flatMap(Account::getRefCode).orElse(""),
-                item.getAmountFcy().abs(),
-                item.getAmountLcy().abs(),
-                item.getFxRate(),
-                item.getCostCenter().map(CostCenter::getCustomerCode).orElse(""),
-                item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(""),
-                item.getCostCenter().flatMap(CostCenter::getName).orElse(""),
-                item.getProject().map(Project::getCustomerCode).orElse(""),
-                item.getProject().flatMap(Project::getName).orElse(""),
-                item.getProject().flatMap(Project::getExternalCustomerCode).orElse(""),
-                item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
-                item.getAccountEvent().map(AccountEvent::getName).orElse(""),
-                item.getDocument().map(Document::getNum).orElse(""),
-                item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
-                item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
-                item.getDocument().flatMap(document -> document.getVat().flatMap(Vat::getRate)).orElse(ZERO),
-                item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
-                item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).get().toString() : "",
-                item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(""),
-                item.getRejection().map(Rejection::getRejectionReason).orElse(null)
-        )).collect(toSet());
+        return transaction.getItems().stream().map(item -> {
+            Optional<OrganisationCostCenter> itemCostCenter = Optional.empty();
+            Optional<OrganisationProject> itemProject = Optional.empty();
+            if (transaction.getOrganisation() != null) {
+                itemCostCenter = costCenterRepository.findById(new OrganisationCostCenter.Id(transaction.getOrganisation().getId(), item.getCostCenter().map(CostCenter::getCustomerCode).orElse("")));
+                itemProject = projectMappingRepository.findById(new OrganisationProject.Id(transaction.getOrganisation().getId(), item.getProject().map(Project::getCustomerCode).orElse("")));
+            }
+            return new TransactionItemView(
+                    item.getId(),
+                    item.getAccountDebit().map(Account::getCode).orElse(""),
+                    item.getAccountDebit().flatMap(Account::getName).orElse(""),
+                    item.getAccountDebit().flatMap(Account::getRefCode).orElse(""),
+                    item.getAccountCredit().map(Account::getCode).orElse(""),
+                    item.getAccountCredit().flatMap(Account::getName).orElse(""),
+                    item.getAccountCredit().flatMap(Account::getRefCode).orElse(""),
+                    item.getAmountFcy().abs(),
+                    item.getAmountLcy().abs(),
+                    item.getFxRate(),
+                    item.getCostCenter().map(CostCenter::getCustomerCode).orElse(""),
+                    item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(""),
+                    item.getCostCenter().flatMap(CostCenter::getName).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParent().map(OrganisationCostCenter::getExternalCustomerCode).orElse("")).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParent().map(OrganisationCostCenter::getName).orElse("")).orElse(""),
+                    item.getProject().map(Project::getCustomerCode).orElse(""),
+                    item.getProject().flatMap(Project::getName).orElse(""),
+                    item.getProject().flatMap(Project::getExternalCustomerCode).orElse(""),
+                    itemProject.map(costCenter -> costCenter.getParent().map(OrganisationProject::getExternalCustomerCode).orElse("")).orElse(""),
+                    itemProject.map(costCenter -> costCenter.getParent().map(OrganisationProject::getName).orElse("")).orElse(""),
+                    item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
+                    item.getAccountEvent().map(AccountEvent::getName).orElse(""),
+                    item.getDocument().map(Document::getNum).orElse(""),
+                    item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
+                    item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
+                    item.getDocument().flatMap(document -> document.getVat().flatMap(Vat::getRate)).orElse(ZERO),
+                    item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
+                    item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).get().toString() : "",
+                    item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(""),
+                    item.getRejection().map(Rejection::getRejectionReason).orElse(null)
+            );
+        }).collect(toSet());
     }
 
     private Set<ViolationView> getViolations(TransactionEntity transaction) {

@@ -34,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.assistance.AccountingPeriodCalculator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreServiceTest {
@@ -49,6 +50,9 @@ class AccountingCoreServiceTest {
 
     @Mock
     private AccountingPeriodCalculator accountingPeriodCalculator;
+
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private AccountingCoreService accountingCoreService;
@@ -153,7 +157,6 @@ class AccountingCoreServiceTest {
 
         given(organisationPublicApi.findByOrganisationId(eq(organisationId))).willReturn(Optional.of(mock(Organisation.class)));
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
-
         // When
         Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate);
 

@@ -24,7 +24,6 @@ public class ReferenceCodeUpdate {
     private String name;
 
     @Nullable
-    @Schema(example = "0000")
     private String parentReferenceCode;
 
     @Schema(example = "true")
@@ -34,8 +33,8 @@ public class ReferenceCodeUpdate {
         return ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCode))
                 .name(name)
-                .parentReferenceCode(parentReferenceCode)
                 .isActive(isActive)
+                .parentReferenceCode(parentReferenceCode.isEmpty() ? null : parentReferenceCode)
                 .build();
     }
 }

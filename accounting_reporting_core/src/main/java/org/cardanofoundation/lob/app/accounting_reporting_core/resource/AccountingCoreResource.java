@@ -73,7 +73,7 @@ public class AccountingCoreResource {
     @GetMapping(value = "/transactions/{id}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole())")
     public ResponseEntity<?> transactionDetailSpecific(@Valid @PathVariable("id") @Parameter(example = "7e9e8bcbb38a283b41eab57add98278561ab51d23a16f3e3baf3daa461b84ab4") String id) {
-        val transactionEntity = accountingCorePresentationService.transactionDetailSpecific(id);
+        Optional<TransactionView> transactionEntity = accountingCorePresentationService.transactionDetailSpecific(id);
         if (transactionEntity.isEmpty()) {
             val issue = Problem.builder()
                     .withTitle("TX_NOT_FOUND")
