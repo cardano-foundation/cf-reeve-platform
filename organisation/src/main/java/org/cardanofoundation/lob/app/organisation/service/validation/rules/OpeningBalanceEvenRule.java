@@ -25,7 +25,7 @@ import org.cardanofoundation.lob.app.organisation.service.validation.Organisatio
 @RequiredArgsConstructor
 public class OpeningBalanceEvenRule implements OrganisationValidationRule {
 
-    private ChartOfAccountRepository chartOfAccountRepository;
+    private final ChartOfAccountRepository chartOfAccountRepository;
 
     @Override
     public Optional<List<OrganisationViolation>> validate(Organisation organisation) {
