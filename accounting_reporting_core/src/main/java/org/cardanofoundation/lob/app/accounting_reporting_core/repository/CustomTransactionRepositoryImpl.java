@@ -20,6 +20,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxVal
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterSource;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 
@@ -124,7 +125,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<TransactionEntity> findAllReconciliation(ReconciliationFilterStatusRequest filter, Integer limit, Integer page) {
+    public List<TransactionEntity> findAllReconciliation(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Integer limit, Integer page) {
         switch (filter) {
             case RECONCILED -> {
                 CriteriaBuilder builder = em.getCriteriaBuilder();
@@ -133,6 +134,14 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
 
                 criteriaQuery.select(rootEntry);
                 criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("finalStatus"), ReconcilationCode.OK)));
+                sourceO.ifPresent(source -> {
+                    if(source.equals(ReconciliationFilterSource.ERP)) {
+                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("source"), ReconcilationCode.OK)));
+                    }
+                    if(source.equals(ReconciliationFilterSource.BLOCKCHAIN)) {
+                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.NOK)));
+                    }
+                });
                 criteriaQuery.orderBy(builder.desc(rootEntry.get("entryDate")));
                 TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
                 theQuery.setMaxResults(limit);

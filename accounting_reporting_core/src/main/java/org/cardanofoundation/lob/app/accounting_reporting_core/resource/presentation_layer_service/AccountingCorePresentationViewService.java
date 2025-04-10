@@ -87,7 +87,7 @@ public class AccountingCorePresentationViewService {
                     .collect(Collectors.toCollection(LinkedHashSet::new));
             count = accountingCoreTransactionRepository.findAllReconciliationSpecialCount(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getLimit(), body.getPage()).size();
         } else {
-            transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getLimit(), body.getPage()).stream()
+            transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getSource(), body.getLimit(), body.getPage()).stream()
                     .map(this::getTransactionReconciliationView)
                     .collect(toSet());
             count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getLimit(), body.getPage()).size();

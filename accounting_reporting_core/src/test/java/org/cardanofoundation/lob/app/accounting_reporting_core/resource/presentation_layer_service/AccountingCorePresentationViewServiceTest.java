@@ -52,7 +52,7 @@ class AccountingCorePresentationViewServiceTest {
     void testAllReconiciliationTransaction_successfulUnprocessed() {
         when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(accountingCoreTransactionRepository.findAllReconciliation(any(ReconciliationFilterStatusRequest.class), anyInt(), anyInt())).thenReturn(List.of());
+        when(accountingCoreTransactionRepository.findAllReconciliation(any(ReconciliationFilterStatusRequest.class), eq(Optional.empty()), anyInt(), anyInt())).thenReturn(List.of());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
@@ -77,7 +77,7 @@ class AccountingCorePresentationViewServiceTest {
         verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
         verify(accountingCoreTransactionRepository).findAllReconciliationCount(any(),any(),any());
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
-        verify(accountingCoreTransactionRepository).findAllReconciliation(any(ReconciliationFilterStatusRequest.class), anyInt(), anyInt());
+        verify(accountingCoreTransactionRepository).findAllReconciliation(any(ReconciliationFilterStatusRequest.class), eq(Optional.empty()), anyInt(), anyInt());
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository, transactionRepositoryGateway);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway);
     }
