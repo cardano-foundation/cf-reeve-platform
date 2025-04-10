@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -31,7 +32,7 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
@@ -271,8 +272,8 @@ public class ReportService {
                                                      short year,
                                                      short period) {
         log.info(reportType.name() + ":: Saving report...");
-        if(reportType == BALANCE_SHEET && createReportView.getBalanceSheetData().isEmpty() ||
-        reportType == INCOME_STATEMENT && createReportView.getIncomeStatementData().isEmpty()) {
+        if (reportType == BALANCE_SHEET && createReportView.getBalanceSheetData().isEmpty() ||
+                reportType == INCOME_STATEMENT && createReportView.getIncomeStatementData().isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("INVALID_REPORT_TYPE")
                     .withDetail(STR."Report type is not valid. Expected BALANCE_SHEET but got \{reportType}.")
@@ -323,9 +324,9 @@ public class ReportService {
         reportEntity.setMode(USER); // Assuming USER is a constant in ReportMode enum
         reportEntity.setDate(LocalDate.now(clock));
 
-        if(reportType == BALANCE_SHEET) {
+        if (reportType == BALANCE_SHEET) {
             reportEntity.setBalanceSheetReportData(createReportView.getBalanceSheetData());
-        } else if(reportType == INCOME_STATEMENT) {
+        } else if (reportType == INCOME_STATEMENT) {
             reportEntity.setIncomeStatementReportData(createReportView.getIncomeStatementData());
         }
 
@@ -340,8 +341,8 @@ public class ReportService {
         return reportRepository.findAllByOrganisationId(organisationId);
     }
 
-    public Set<ReportEntity> findAllByTypeAndPeriod(String organistionId,ReportType reportType, IntervalType intervalType, short year, short period) {
-        return publicReportRepository.findAllByTypeAndPeriod(organistionId,reportType, intervalType, year, period);
+    public Set<ReportEntity> findAllByTypeAndPeriod(String organistionId, ReportType reportType, IntervalType intervalType, short year, short period) {
+        return publicReportRepository.findAllByTypeAndPeriod(organistionId, reportType, intervalType, year, period);
     }
 
     public Either<Problem, ReportEntity> exist(String organisationId, ReportType reportType, IntervalType intervalType, short year, short period) {
@@ -585,7 +586,7 @@ public class ReportService {
 
         Optional<ReportTypeEntity> optionalReportSetupEntity = reportTypeRepository.findByOrganisationAndReportName(reportGenerateRequest.getOrganisationId(), reportGenerateRequest.getReportType().name());
 
-        if(optionalReportSetupEntity.isEmpty()) {
+        if (optionalReportSetupEntity.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("REPORT_SETUP_NOT_FOUND")
                     .withDetail(String.format("Report setup for %s not found.", reportGenerateRequest.getReportType().name()))
@@ -628,7 +629,7 @@ public class ReportService {
 
     private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate) {
         if (field.getChildFields().isEmpty()) {
-            if(field.getMappingTypes().isEmpty()) {
+            if (field.getMappingTypes().isEmpty()) {
                 log.debug(STR."Field \{field.getName()} has no mapping type, skipping...");
                 return;
             }
@@ -637,25 +638,37 @@ public class ReportService {
             Optional<LocalDate> startSearchDate = Optional.of(startDate);
             BigDecimal totalAmount = BigDecimal.ZERO;
 
-            if(field.isAccumulatedYearly()) {
+            if (field.isAccumulatedYearly()) {
                 startSearchDate = Optional.of(LocalDate.of(startDate.getYear(), 1, 1));
-            } else if(field.isAccumulated()) {
+            } else if (field.isAccumulated()) {
                 // TODO this calculation can be optimized by using already published reports
                 startSearchDate = Optional.empty();
                 totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
                         BigDecimal.ZERO :
-                organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).reduce(BigDecimal.ZERO, BigDecimal::add));
+                        organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).reduce(BigDecimal.ZERO, BigDecimal::add));
             }
 
             List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                     allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
                     startSearchDate.orElse(LocalDate.EPOCH), endDate);
+            Map<String, OrganisationChartOfAccount> collect = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
+
             // Set value
-            totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity ->
-                    transactionItemEntity.getOperationType().equals(OperationType.DEBIT) ?
-                            transactionItemEntity.getAmountLcy() :
-                            transactionItemEntity.getAmountLcy().negate() // negating the amount since it's a credit operation
-                    ).reduce(BigDecimal.ZERO, BigDecimal::add));
+            totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity -> {
+                        // Skipping invalid transaction Items
+                        if (transactionItemEntity.getStatus() != TxItemValidationStatus.OK) {
+                            return BigDecimal.ZERO;
+                        }
+                        BigDecimal amount = BigDecimal.ZERO;
+                        if (transactionItemEntity.getAccountDebit().isPresent() && collect.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
+                            amount = amount.add(transactionItemEntity.getAmountLcy());
+                        }
+                        if (transactionItemEntity.getAccountCredit().isPresent() && collect.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
+                            amount = amount.add(transactionItemEntity.getAmountLcy().negate());
+                        }
+                        return amount.stripTrailingZeros();
+                    }
+            ).reduce(BigDecimal.ZERO, BigDecimal::add));
             // Set value dynamically in reportData
             setFieldValue(reportData, field.getName(), totalAmount);
         } else {

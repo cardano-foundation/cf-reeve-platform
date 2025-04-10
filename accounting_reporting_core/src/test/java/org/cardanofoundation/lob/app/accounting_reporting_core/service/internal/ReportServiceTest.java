@@ -1268,7 +1268,7 @@ class ReportServiceTest {
         assertTrue(balanceSheetReportData.isPresent());
         BalanceSheetData balanceSheetData = balanceSheetReportData.get();
         BigDecimal profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
-        assertThat(profitForTheYear).isEqualTo(BigDecimal.TEN);
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
 
     }
 
