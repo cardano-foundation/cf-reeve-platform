@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -48,6 +49,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
@@ -65,6 +67,7 @@ public class ReportService {
     private final PublicReportRepository publicReportRepository;
     private final OrganisationPublicApi organisationPublicApi;
     private final Clock clock;
+    private final AuthenticationUserService authenticationUserService;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final ReportTypeRepository reportTypeRepository;
@@ -88,6 +91,8 @@ public class ReportService {
             return Either.left(canI.getLeft());
         }
         report.setLedgerDispatchApproved(true);
+        report.setLedgerDispatchDate(LocalDateTime.now(clock));
+        report.setPublishedBy(authenticationUserService.getCurrentUser());
 
         reportRepository.save(report);
 

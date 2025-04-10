@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS organisation_cost_center (
    organisation_id CHAR(64) NOT NULL,
    customer_code VARCHAR(255) NOT NULL,
    external_customer_code VARCHAR(255) NOT NULL,
+   parent_customer_code VARCHAR(255),
    name VARCHAR(255) NOT NULL,
 
    created_by VARCHAR(255),
@@ -151,6 +152,7 @@ CREATE TABLE IF NOT EXISTS organisation_cost_center_aud (
    organisation_id CHAR(64) NOT NULL,
    customer_code VARCHAR(255) NOT NULL,
    external_customer_code VARCHAR(255) NOT NULL,
+   parent_customer_code VARCHAR(255),
    name VARCHAR(255) NOT NULL,
 
    created_by VARCHAR(255),
@@ -174,6 +176,7 @@ CREATE TABLE IF NOT EXISTS organisation_project (
    organisation_id CHAR(64) NOT NULL,
    customer_code VARCHAR(255) NOT NULL,
    external_customer_code VARCHAR(255) NOT NULL,
+   parent_customer_code VARCHAR(255),
    name VARCHAR(255) NOT NULL,
 
    created_by VARCHAR(255),
@@ -188,6 +191,7 @@ CREATE TABLE IF NOT EXISTS organisation_project_aud (
    organisation_id CHAR(64) NOT NULL,
    customer_code VARCHAR(255) NOT NULL,
    external_customer_code VARCHAR(255) NOT NULL,
+   parent_customer_code VARCHAR(255),
    name VARCHAR(255) NOT NULL,
 
    created_by VARCHAR(255),

@@ -120,13 +120,7 @@ public class OrganisationResource {
     @GetMapping(value = "/organisation/{orgId}/cost-center", produces = "application/json")
     public ResponseEntity<?> organisationCostCenter(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
-                organisationService.getAllCostCenter(orgId).stream().map(organisationCostCenter -> {
-                    return new OrganisationCostCenterView(
-                            organisationCostCenter.getId() != null ? organisationCostCenter.getId().getCustomerCode() : null,
-                            organisationCostCenter.getExternalCustomerCode(),
-                            organisationCostCenter.getName()
-                    );
-                }).toList());
+                organisationService.getAllCostCenter(orgId).stream().map(OrganisationCostCenterView::fromEntity).toList());
 
     }
 
@@ -138,14 +132,7 @@ public class OrganisationResource {
     @GetMapping(value = "/organisation/{orgId}/project", produces = "application/json")
     public ResponseEntity<?> organisationProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
-                organisationService.getAllProjects(orgId).stream().map(organisationProject -> {
-                    return new OrganisationCostCenterView(
-                            organisationProject.getId() != null ? organisationProject.getId().getCustomerCode() : null,
-                            organisationProject.getExternalCustomerCode(),
-                            organisationProject.getName()
-                    );
-                }).toList());
-
+                organisationService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).toList());
     }
 
     @Operation(description = "Organisation Chart of acount type", responses = {
