@@ -640,23 +640,27 @@ public class ReportService {
             }
             // Set value
             Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(OrganisationChartOfAccountSubType::getId).toList());
-            Optional<LocalDate> startSearchDate = Optional.of(startDate);
+            Optional<LocalDate> startSearchDate;
             BigDecimal totalAmount = BigDecimal.ZERO;
 
             if (field.isAccumulatedYearly()) {
                 startSearchDate = Optional.of(LocalDate.of(startDate.getYear(), 1, 1));
             } else if (field.isAccumulated()) {
                 // TODO this calculation can be optimized by using already published reports
-                startSearchDate = Optional.empty();
-                totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
-                        BigDecimal.ZERO :
-                        organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).reduce(BigDecimal.ZERO, BigDecimal::add));
+                startSearchDate = Optional.of(LocalDate.EPOCH);
+            } else {
+                startSearchDate = Optional.of(startDate);
             }
+            // adding Opening Balance if the startDate is before the OpeningBalance Date
+            totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
+                    BigDecimal.ZERO :
+                    organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ? organisationChartOfAccount.getOpeningBalance().getBalanceLCY() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
 
             List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                     allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
                     startSearchDate.orElse(LocalDate.EPOCH), endDate);
-            Map<String, OrganisationChartOfAccount> collect = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
+            Map<String, OrganisationChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
 
             // Set value
             totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity -> {
@@ -665,10 +669,10 @@ public class ReportService {
                             return BigDecimal.ZERO;
                         }
                         BigDecimal amount = BigDecimal.ZERO;
-                        if (transactionItemEntity.getAccountDebit().isPresent() && collect.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
+                        if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
                             amount = amount.add(transactionItemEntity.getAmountLcy());
                         }
-                        if (transactionItemEntity.getAccountCredit().isPresent() && collect.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
+                        if (transactionItemEntity.getAccountCredit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
                             amount = amount.add(transactionItemEntity.getAmountLcy().negate());
                         }
                         return amount.stripTrailingZeros();
