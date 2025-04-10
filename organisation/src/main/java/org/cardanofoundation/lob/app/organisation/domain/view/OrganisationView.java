@@ -61,7 +61,7 @@ public class OrganisationView {
 
     private Set<OrganisationCostCenterView> costCenters;
 
-    private Set<OrganisationCostCenterView> projects;
+    private Set<OrganisationProjectView> projects;
 
     private Set<String> organisationCurrencies;
 

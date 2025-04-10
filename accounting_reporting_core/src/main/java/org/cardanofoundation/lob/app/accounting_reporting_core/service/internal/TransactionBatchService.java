@@ -60,7 +60,7 @@ public class TransactionBatchService {
     public void createTransactionBatch(String batchId,
                                        String organisationId,
                                        UserExtractionParameters userExtractionParameters,
-                                       SystemExtractionParameters systemExtractionParameters) {
+                                       SystemExtractionParameters systemExtractionParameters, String user) {
         log.info("Creating transaction batch, batchId: {}, filteringParameters: {}", batchId, userExtractionParameters);
 
         if (transactionBatchRepository.findById(batchId).isPresent()) {
@@ -75,6 +75,7 @@ public class TransactionBatchService {
         transactionBatchEntity.setTransactions(Set.of());
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setStatus(CREATED);
+        transactionBatchEntity.setCreatedBy(user);
 
         transactionBatchRepository.save(transactionBatchEntity);
 

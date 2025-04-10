@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -19,6 +18,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCre
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationValidationView;
+import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationProjectView;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
 import org.cardanofoundation.lob.app.organisation.repository.*;
 import org.cardanofoundation.lob.app.organisation.service.validation.OrganisationValidationRule;
@@ -52,7 +52,7 @@ public class OrganisationService {
         return projectMappingRepository.findAllByOrganisationId(organisationId);
     }
 
-    public Set<OrganisationCurrency> getOrganisationCurrencies(String orgId){
+    public Set<OrganisationCurrency> getOrganisationCurrencies(String orgId) {
         return organisationCurrencyService.findAllByOrganisationId(orgId);
     }
 
@@ -61,7 +61,7 @@ public class OrganisationService {
     }
 
     @Transactional
-    public Optional<Organisation> createOrganisation(OrganisationCreate organisationCreate){
+    public Optional<Organisation> createOrganisation(OrganisationCreate organisationCreate) {
 
         Organisation organisationO = new Organisation();
         organisationO.setId(Organisation.id(organisationCreate.getCountryCode(), organisationCreate.getTaxIdNumber()));
@@ -137,18 +137,9 @@ public class OrganisationService {
                 organisation.getPostCode(),
                 organisation.getProvince(),
                 organisation.getCountryCode(),
-                getAllCostCenter(organisation.getId()).stream().map(organisationCostCenter ->
-                        new OrganisationCostCenterView(
-                            organisationCostCenter.getId() != null ? organisationCostCenter.getId().getCustomerCode() : null,
-                            organisationCostCenter.getExternalCustomerCode(),
-                            organisationCostCenter.getName()
-                    )).collect(Collectors.toSet()),
-                getAllProjects(organisation.getId()).stream().map(organisationProject ->
-                        new OrganisationCostCenterView(
-                            organisationProject.getId() != null ? organisationProject.getId().getCustomerCode() : null,
-                            organisationProject.getExternalCustomerCode(),
-                            organisationProject.getName()
-                    )).collect(Collectors.toSet()),
+                getAllCostCenter(organisation.getId()).stream()
+                        .map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()),
+                getAllProjects(organisation.getId()).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()),
                 organisationCurrencyService.findAllByOrganisationId(organisation.getId())
                         .stream()
                         .map(organisationCurrency ->
@@ -170,8 +161,6 @@ public class OrganisationService {
         organisation.setWebsiteUrl(organisationCreate.getWebsiteUrl());
         organisation.setCurrencyId(organisationCreate.getCurrencyId());
         organisation.setReportCurrencyId(organisationCreate.getReportCurrencyId());
-
-
 
 
         return organisation;

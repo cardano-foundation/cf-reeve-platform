@@ -39,11 +39,19 @@ public class TransactionItemView {
 
     private String costCenterName;
 
+    private String parentCostCenterCustomerCode;
+
+    private String parentCostCenterName;
+
     private String projectCustomerCode;
 
     private String projectName;
 
     private String projectExternalCustomerCode;
+
+    private String parentProjectCustomerCode;
+
+    private String parentProjectName;
 
     private String accountEventCode;
 

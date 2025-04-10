@@ -112,17 +112,15 @@ class ReferenceCodeServiceTest {
     @Test
     void testUpsertReferenceCode_UpdateExisting() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, REF_CODE)).thenReturn(Optional.of(referenceCode));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, "0102")).thenReturn(Optional.of(referenceCode));
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
-        referenceCode.setParentReferenceCode("0102");
+        referenceCode.setParent(new ReferenceCode(new ReferenceCode.Id(ORG_ID, "0102"), null, "Parent Reference", "2", true));
         when(referenceCodeRepository.save(any(ReferenceCode.class))).thenReturn(referenceCode);
 
-        referenceCodeUpdate.setParentReferenceCode("0102");
         ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("Updated Reference", result.getDescription());
-        assertEquals("0102", result.getParentReferenceCode());
+        assertEquals("0102", result.getParentReferenceCode().getReferenceCode());
         verify(referenceCodeRepository).save(referenceCode);
     }
 
@@ -130,7 +128,8 @@ class ReferenceCodeServiceTest {
     void testUpsertReferenceCode_UpdateExistingNotFindParentCode() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, "0102")).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
-        referenceCodeUpdate.setParentReferenceCode("0102");
+
+        referenceCodeUpdate.setParentReferenceCode(new ReferenceCodeUpdate("0102", "Parent Reference", null, true));
         ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
 
         assertTrue(result.getError().isPresent());

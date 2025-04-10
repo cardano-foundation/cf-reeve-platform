@@ -18,19 +18,21 @@ public class ReferenceCodeView {
 
     String referenceCode;
     String description;
-    String parentReferenceCode;
+    ReferenceCodeView parentReferenceCode;
     boolean isActive;
 
     private Optional<Problem> error;
 
     public static ReferenceCodeView fromEntity(ReferenceCode referenceCode) {
-        return ReferenceCodeView.builder()
+        ReferenceCodeViewBuilder builder = ReferenceCodeView.builder()
                 .referenceCode(Objects.requireNonNull(referenceCode.getId()).getReferenceCode())
                 .description(referenceCode.getName())
-                .parentReferenceCode(referenceCode.getParentReferenceCode())
                 .isActive(referenceCode.isActive())
-                .error(Optional.empty())
-                .build();
+                .error(Optional.empty());
+        if(referenceCode.getParent().isPresent()) {
+            builder.parentReferenceCode(ReferenceCodeView.fromEntity(referenceCode.getParent().get()));
+        }
+        return builder.build();
     }
 
     public static ReferenceCodeView createFail(Problem error) {

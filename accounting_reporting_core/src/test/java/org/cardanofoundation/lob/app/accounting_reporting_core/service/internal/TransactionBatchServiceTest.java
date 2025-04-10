@@ -64,7 +64,7 @@ class TransactionBatchServiceTest {
     void createTransactionBatchDuplicateBatchId() {
         when(transactionBatchRepository.findById("batchId")).thenReturn(Optional.of(new TransactionBatchEntity()));
 
-        transactionBatchService.createTransactionBatch("batchId", "organisationId", null, null);
+        transactionBatchService.createTransactionBatch("batchId", "organisationId", null, null, "system");
 
         verify(transactionBatchRepository).findById("batchId");
         verifyNoMoreInteractions(transactionBatchRepository);
@@ -77,13 +77,14 @@ class TransactionBatchServiceTest {
         when(transactionBatchRepository.findById("batchId")).thenReturn(Optional.empty());
         when(transactionConverter.convertToDbDetached(any(SystemExtractionParameters.class), any(UserExtractionParameters.class))).thenReturn(FilteringParameters.builder().build());
 
-        transactionBatchService.createTransactionBatch("batchId", "organisationId", UserExtractionParameters.builder().build(), SystemExtractionParameters.builder().build());
+        transactionBatchService.createTransactionBatch("batchId", "organisationId", UserExtractionParameters.builder().build(), SystemExtractionParameters.builder().build(), "system123");
 
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
         transactionBatchEntity.setId("batchId");
         transactionBatchEntity.setTransactions(Set.of());
         transactionBatchEntity.setFilteringParameters(FilteringParameters.builder().build());
         transactionBatchEntity.setStatus(TransactionBatchStatus.CREATED);
+        transactionBatchEntity.setCreatedBy("system123");
 
         verify(transactionBatchRepository).findById("batchId");
         verify(transactionBatchRepository).save(transactionBatchEntity);

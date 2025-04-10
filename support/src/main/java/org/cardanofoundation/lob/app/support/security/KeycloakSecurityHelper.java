@@ -15,6 +15,7 @@ public class KeycloakSecurityHelper {
 
     @Value("${keycloak.enabled:true}")
     private boolean keycloakEnabled;
+    private final String SYSTEM_USER = "system";
 
     public boolean canUserAccessOrg(String orgId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -28,6 +29,14 @@ public class KeycloakSecurityHelper {
             return organisations.contains(orgId);
         }
         return false;
+    }
+
+    public String getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof Jwt jwt) {
+            return jwt.getClaimAsString("name");
+        }
+        return SYSTEM_USER;
     }
 
 }
