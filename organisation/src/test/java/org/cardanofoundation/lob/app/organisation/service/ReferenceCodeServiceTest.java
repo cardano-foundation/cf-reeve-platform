@@ -129,7 +129,7 @@ class ReferenceCodeServiceTest {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, "0102")).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        referenceCodeUpdate.setParentReferenceCode(new ReferenceCodeUpdate("0102", "Parent Reference", null, true));
+        referenceCodeUpdate.setParentReferenceCode("0102");
         ReferenceCodeView result = referenceCodeService.upsertReferenceCode(ORG_ID, referenceCodeUpdate);
 
         assertTrue(result.getError().isPresent());
