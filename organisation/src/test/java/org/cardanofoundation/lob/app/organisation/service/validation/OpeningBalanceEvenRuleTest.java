@@ -1,5 +1,21 @@
 package org.cardanofoundation.lob.app.organisation.service.validation;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolation;
 import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolationType;
@@ -8,20 +24,6 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.service.validation.rules.OpeningBalanceEvenRule;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class OpeningBalanceEvenRuleTest {
