@@ -33,6 +33,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 import org.cardanofoundation.lob.app.support.reactive.DebouncerManager;
+import org.cardanofoundation.lob.app.support.spring_audit.internal.AuditorContext;
 
 @Service
 @Slf4j
@@ -76,6 +77,7 @@ public class TransactionBatchService {
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setStatus(CREATED);
         transactionBatchEntity.setCreatedBy(user);
+        AuditorContext.setCurrentUser(user);
 
         transactionBatchRepository.save(transactionBatchEntity);
 
