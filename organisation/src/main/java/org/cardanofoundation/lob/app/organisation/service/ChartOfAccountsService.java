@@ -103,7 +103,7 @@ public class ChartOfAccountsService {
         chartOfAccount.setName(chartOfAccountUpdate.getName());
         chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
         chartOfAccount.setSubType(subType.get());
-        chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode());
+        chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode() == null || chartOfAccountUpdate.getParentCustomerCode().isEmpty() ? null : chartOfAccountUpdate.getParentCustomerCode());
         chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
         chartOfAccount.setCounterParty(chartOfAccountUpdate.getCounterParty());
         chartOfAccount.setActive(chartOfAccountUpdate.getActive());

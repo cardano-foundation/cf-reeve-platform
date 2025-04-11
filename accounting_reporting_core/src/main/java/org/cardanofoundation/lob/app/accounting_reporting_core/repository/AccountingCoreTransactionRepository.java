@@ -41,4 +41,14 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         """)
     Set<TransactionEntity> findDispatchedTransactionInDateRange(@Param("organisationId") String organisationId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
+@Query("SELECT t FROM accounting_reporting_core.TransactionEntity t" +
+            " WHERE t.organisation.id = :organisationId" +
+            " AND t.entryDate BETWEEN :startDate AND :endDate" +
+            " AND t.id not in (:ids)" +
+            " ORDER BY t.createdAt ASC, t.id ASC")
+    Set<TransactionEntity> findByEntryDateRangeAndNotInReconciliation(@Param("organisationId") String organisactionId,
+                                                                      @Param("startDate") LocalDate startDate,
+                                                                      @Param("endDate") LocalDate endDate,
+                                                                      @Param("ids") Set<String> ids);
+
 }

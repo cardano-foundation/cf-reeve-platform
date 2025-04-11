@@ -8,7 +8,9 @@ import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,9 +21,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
@@ -39,6 +43,7 @@ public class NetSuiteReconcilationService {
     private final ExtractionParametersFilteringService extractionParametersFilteringService;
     private final NetSuiteParser netSuiteParser;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
     private final int sendBatchSize;
     private final String netsuiteInstanceId;
@@ -228,6 +233,21 @@ public class NetSuiteReconcilationService {
             );
 
             val totalTransactions = transactionsWithExtractionParametersApplied.size();
+
+            // Update all transactions that are not in the reconciliation but in the same date range.
+            val attachedTxIds = transactionsWithExtractionParametersApplied.stream()
+                    .map(Transaction::getId)
+                    .collect(Collectors.toSet());
+
+            accountingCoreTransactionRepository.findByEntryDateRangeAndNotInReconciliation(organisationId,
+                    from,
+                    to,
+                    attachedTxIds
+            ).forEach(tx -> {
+                val txEntity = tx;
+                txEntity.setReconcilation(Optional.empty());
+                accountingCoreTransactionRepository.save(txEntity);
+            });
 
             Partitions.partition(transactionsWithExtractionParametersApplied, sendBatchSize).forEach(txPartition -> {
                 val reconcilationChunkEventBuilder = ReconcilationChunkEvent.builder()

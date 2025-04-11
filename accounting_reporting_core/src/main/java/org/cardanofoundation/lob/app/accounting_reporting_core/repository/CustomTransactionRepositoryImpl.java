@@ -82,7 +82,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
-                "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL) ";
+                "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL) AND ((rv.rejectionCode = 'TX_NOT_IN_ERP' AND tr.ledgerDispatchApproved IS TRUE) OR (rv.rejectionCode != 'TX_NOT_IN_ERP')) ";
 
         String where = "";
         if (!rejectionCodes.isEmpty()) {
@@ -186,7 +186,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
-                "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL)  " +
+                "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL) AND tr.ledgerDispatchApproved IS TRUE " +
                 STR."AND rv.rejectionCode = '" + ReconcilationRejectionCode.TX_NOT_IN_ERP + "' " +
                 "GROUP BY rv.transactionId " +
                 ") ";
@@ -246,7 +246,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
-                "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL)  " +
+                "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL) AND ((rv.rejectionCode = 'TX_NOT_IN_ERP' AND tr.ledgerDispatchApproved IS TRUE) OR (rv.rejectionCode != 'TX_NOT_IN_ERP')) " +
                 "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType " +
                 ") ";
 
@@ -269,7 +269,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
-                "WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation.id IS NULL) ";
+                "WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation.id IS NULL) AND ((rv.rejectionCode = 'TX_NOT_IN_ERP' AND tr.ledgerDispatchApproved IS TRUE) OR (rv.rejectionCode != 'TX_NOT_IN_ERP')) ";
 
         String where = "";
         if (!rejectionCodes.isEmpty()) {
