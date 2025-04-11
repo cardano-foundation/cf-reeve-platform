@@ -49,7 +49,7 @@ public class ReportViewService {
         reportResponseView.setOrganisationId(reportEntity.getOrganisation().getId());
         reportResponseView.setType(reportEntity.getType());
         reportResponseView.setPublishDate(reportEntity.getLedgerDispatchDate());
-        reportResponseView.setPublishedBy(reportResponseView.getPublishedBy());
+        reportResponseView.setPublishedBy(reportEntity.getPublishedBy());
         reportResponseView.setIntervalType(reportEntity.getIntervalType());
         reportResponseView.setYear(reportEntity.getYear());
         reportResponseView.setPeriod(reportEntity.getPeriod());
