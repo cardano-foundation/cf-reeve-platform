@@ -90,7 +90,7 @@ public class AccountingCorePresentationViewService {
             transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getSource(), body.getLimit(), body.getPage()).stream()
                     .map(this::getTransactionReconciliationView)
                     .collect(toSet());
-            count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getLimit(), body.getPage()).size();
+            count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getSource(), body.getLimit(), body.getPage()).size();
         }
         return new ReconciliationResponseView(
                 count,

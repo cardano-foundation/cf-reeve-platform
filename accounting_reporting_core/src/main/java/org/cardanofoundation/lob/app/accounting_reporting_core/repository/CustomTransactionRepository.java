@@ -36,6 +36,7 @@ public interface CustomTransactionRepository {
                                                   Integer page);
 
     List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter,
+                                                       Optional<ReconciliationFilterSource> sourceO,
                                                        Integer limit,
                                                        Integer page);
 

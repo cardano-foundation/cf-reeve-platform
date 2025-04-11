@@ -75,7 +75,7 @@ class AccountingCorePresentationViewServiceTest {
 
 
         verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
-        verify(accountingCoreTransactionRepository).findAllReconciliationCount(any(),any(),any());
+        verify(accountingCoreTransactionRepository).findAllReconciliationCount(any(),eq(Optional.empty()), any(),any());
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verify(accountingCoreTransactionRepository).findAllReconciliation(any(ReconciliationFilterStatusRequest.class), eq(Optional.empty()), anyInt(), anyInt());
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository, transactionRepositoryGateway);

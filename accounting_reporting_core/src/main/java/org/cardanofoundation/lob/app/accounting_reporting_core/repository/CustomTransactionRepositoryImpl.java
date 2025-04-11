@@ -139,7 +139,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                         criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("source"), ReconcilationCode.OK)));
                     }
                     if(source.equals(ReconciliationFilterSource.BLOCKCHAIN)) {
-                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.NOK)));
+                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.OK)));
                     }
                 });
                 criteriaQuery.orderBy(builder.desc(rootEntry.get("entryDate")));
@@ -170,12 +170,22 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter, Integer limit, Integer page) {
+    public List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Integer limit, Integer page) {
         CriteriaBuilder builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
         Root<TransactionEntity> rootEntry = criteriaQuery.from(TransactionEntity.class);
 
         criteriaQuery.select(rootEntry);
+        if(filter.equals(ReconciliationFilterStatusRequest.RECONCILED)) {
+            sourceO.ifPresent(source -> {
+                if (source.equals(ReconciliationFilterSource.ERP)) {
+                    criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("source"), ReconcilationCode.OK)));
+                }
+                if (source.equals(ReconciliationFilterSource.BLOCKCHAIN)) {
+                    criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.OK)));
+                }
+            });
+        }
         criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("finalStatus"), ReconcilationCode.OK)));
         TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
 
