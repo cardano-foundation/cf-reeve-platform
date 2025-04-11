@@ -34,7 +34,7 @@ public class AuditDataProvider implements AuditorAware<String>, DateTimeProvider
         if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof Jwt jwt) {
             return Optional.of(jwt.getClaimAsString("name"));
         }
-        return Optional.of(SYSTEM_USER);
+        return Optional.of(AuditorContext.getCurrentUser().orElse(SYSTEM_USER));
     }
 
     @Override
