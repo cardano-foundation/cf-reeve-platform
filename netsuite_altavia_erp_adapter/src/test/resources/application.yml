@@ -1,0 +1,8 @@
+lob:
+  netsuite:
+    client:
+      token-url: ${LOB_NETSUITE_CLIENT_TOKEN_URL:<enter value>}
+      private-key-file-path: ${LOB_NETSUITE_CLIENT_PRIVATE_KEY_FILE_PATH:<enter value>}
+      url: ${LOB_NETSUITE_CLIENT_URL:<enter value>}
+      client-id: ${LOB_NETSUITE_CLIENT_CLIENT_ID:<enter value>}
+      certificate-id: ${LOB_NETSUITE_CLIENT_CERTIFICATE_ID:<enter value>}
