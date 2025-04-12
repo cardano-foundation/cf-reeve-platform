@@ -15,10 +15,7 @@ CREATE TABLE netsuite_adapter_ingestion (
    updated_by VARCHAR(255),
    created_at TIMESTAMP WITHOUT TIME ZONE,
    updated_at TIMESTAMP WITHOUT TIME ZONE,
-   ingestion_body TEXT NOT NULL,
-   ingestion_body_debug TEXT,
    adapter_instance_id VARCHAR(255) NOT NULL,
-   ingestion_body_checksum VARCHAR(255) NOT NULL,
    CONSTRAINT pk_netsuite_adapter_ingestion PRIMARY KEY (id)
 );
 
