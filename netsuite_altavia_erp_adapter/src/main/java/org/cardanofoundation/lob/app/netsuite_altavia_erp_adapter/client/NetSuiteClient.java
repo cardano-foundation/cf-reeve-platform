@@ -149,7 +149,7 @@ public class NetSuiteClient {
             } else {
                 Optional<String> searchResultString = retrievedData.get();
                 if (searchResultString.isEmpty()) {
-                    return Either.right(Optional.empty());
+                    return Either.right(Optional.of(lines));
                 } else {
                     try {
                         TransactionDataSearchResult transactionDataSearchResult = objectMapper.readValue(searchResultString.get(), TransactionDataSearchResult.class);
@@ -161,12 +161,14 @@ public class NetSuiteClient {
                             hasMore = false;
                         }
                     } catch (JsonProcessingException e) {
+//                        log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
+//                        return Either.left(Problem.builder()
+//                                .withStatus(Status.INTERNAL_SERVER_ERROR)
+//                                .withTitle(NETSUITE_API_ERROR)
+//                                .withDetail(e.getMessage())
+//                                .build());
+                        hasMore = false;
                         log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
-                        return Either.left(Problem.builder()
-                                .withStatus(Status.INTERNAL_SERVER_ERROR)
-                                .withTitle(NETSUITE_API_ERROR)
-                                .withDetail(e.getMessage())
-                                .build());
                     }
                 }
 
@@ -223,6 +225,10 @@ public class NetSuiteClient {
                         .build());
             }
         }
+        if(response.getStatusCode().is1xxInformational()) {
+            log.info("Netsuite response success...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
+            return Either.right(Optional.empty());
+        }
 
         return Either.left(Problem.builder()
                 .withStatus(Status.valueOf(response.getStatusCode().value()))
@@ -242,7 +248,7 @@ public class NetSuiteClient {
         // This is just to be sure that we are not sending multiple recordspercall parameters
         baseUrl = baseUrl.replaceAll("&recordspercall=\\d+", "");
 
-        baseUrl = baseUrl + "recordspercall=" + recordsPerCall;
+        baseUrl = baseUrl + "&recordspercall=" + recordsPerCall;
         if (start.isPresent()) {
             baseUrl = baseUrl + "&start=" + start.get();
         }

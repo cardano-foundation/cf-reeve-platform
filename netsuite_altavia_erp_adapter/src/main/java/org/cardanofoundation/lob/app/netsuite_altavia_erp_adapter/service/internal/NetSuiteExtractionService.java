@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Tr
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionBodyRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
@@ -47,6 +48,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 public class NetSuiteExtractionService {
 
     private final IngestionRepository ingestionRepository;
+    private final IngestionBodyRepository ingestionBodyRepository;
     private final NetSuiteClient netSuiteClient;
     private final TransactionConverter transactionConverter;
     private final ApplicationEventPublisher applicationEventPublisher;
@@ -125,7 +127,7 @@ public class NetSuiteExtractionService {
             NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
             netSuiteIngestion.setId(batchId);
             netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            bodyM.get().forEach(netsuiteTransactionLinesJson -> {
+            for(String netsuiteTransactionLinesJson : bodyM.get()) {
                 String ingestionBodyChecksum = md5(netsuiteTransactionLinesJson);
                 String compressedBody = MoreCompress.compress(netsuiteTransactionLinesJson);
                 log.info("Before compression: {}, compressed: {}", netsuiteTransactionLinesJson.length(), compressedBody.length());
@@ -139,9 +141,10 @@ public class NetSuiteExtractionService {
                 body.setId(ingestionBodyChecksum);
                 body.setNetsuiteIngestionId(batchId);
                 netSuiteIngestion.addBody(body);
-            });
-
+            }
+//            ingestionBodyRepository.saveAll(netSuiteIngestion.getIngestionBodies());
             NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
+
 
             Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
             if (systemExtractionParametersE.isLeft()) {
