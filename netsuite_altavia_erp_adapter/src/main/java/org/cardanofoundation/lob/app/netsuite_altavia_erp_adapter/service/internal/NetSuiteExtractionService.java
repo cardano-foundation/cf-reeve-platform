@@ -137,6 +137,7 @@ public class NetSuiteExtractionService {
                 }
                 body.setIngestionBodyChecksum(ingestionBodyChecksum);
                 body.setId(ingestionBodyChecksum);
+                body.setNetsuiteIngestionId(batchId);
                 netSuiteIngestion.addBody(body);
             });
 

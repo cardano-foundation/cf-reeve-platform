@@ -134,6 +134,7 @@ public class NetSuiteReconcilationService {
                 }
                 body.setIngestionBodyChecksum(ingestionBodyChecksum);
                 body.setId(ingestionBodyChecksum);
+                body.setNetsuiteIngestionId(reconcilationRequestId);
                 netSuiteIngestion.addBody(body);
             });
 

@@ -29,6 +29,9 @@ public class NetsuiteIngestionBody extends CommonEntity implements Persistable<S
     @Column(name = "ingestion_body", nullable = false, length = 999_999, columnDefinition = "TEXT")
     private String ingestionBody;
 
+    @Column(name = "netsuite_ingestion_id", nullable = false)
+    private String netsuiteIngestionId;
+
     @Column(name = "ingestion_body_debug", nullable = false, length = 999_999, columnDefinition = "TEXT")
     private String ingestionBodyDebug;
 
