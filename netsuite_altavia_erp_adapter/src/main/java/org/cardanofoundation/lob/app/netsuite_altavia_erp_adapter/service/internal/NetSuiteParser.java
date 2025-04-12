@@ -4,7 +4,6 @@ import java.util.List;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,19 +21,7 @@ public class NetSuiteParser {
 
     public Either<Problem, List<TxLine>> parseSearchResults(String jsonString) {
         try {
-            val transactionDataSearchResult = objectMapper.readValue(jsonString, TransactionDataSearchResult.class);
-
-            // TODO how to handle pagination and more results to fetch?
-
-            if (transactionDataSearchResult.more()) {
-                log.warn("More data available in the search result, pagination not implemented yet!");
-
-                return Either.left(Problem.builder()
-                        .withTitle("PAGINATION_NOT_IMPLEMENTED")
-                        .withDetail("More data available in the search result, pagination not implemented yet!")
-                        .build()
-                );
-            }
+            TransactionDataSearchResult transactionDataSearchResult = objectMapper.readValue(jsonString, TransactionDataSearchResult.class);
 
             return Either.right(transactionDataSearchResult.lines());
         } catch (JsonProcessingException e) {

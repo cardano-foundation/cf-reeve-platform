@@ -8,6 +8,7 @@ import static org.cardanofoundation.lob.app.support.crypto.MD5Hashing.md5;
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +36,7 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuit
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
@@ -69,8 +71,7 @@ public class NetSuiteExtractionService {
 
             LocalDate fromExtractionDate = userExtractionParameters.getFrom();
             LocalDate toExtractionDate = userExtractionParameters.getTo();
-
-            Either<Problem, Optional<String>> netSuiteJsonE = netSuiteClient.retrieveLatestNetsuiteTransactionLines(fromExtractionDate, toExtractionDate);
+            Either<Problem, Optional<List<String>>> netSuiteJsonE = netSuiteClient.retrieveLatestNetsuiteTransactionLines(fromExtractionDate, toExtractionDate);
 
             if (netSuiteJsonE.isLeft()) {
                 log.error("Error retrieving data from NetSuite API: {}", netSuiteJsonE.getLeft().getDetail());
@@ -96,7 +97,7 @@ public class NetSuiteExtractionService {
                 return;
             }
 
-            Optional<String> bodyM = netSuiteJsonE.get();
+            Optional<List<String>> bodyM = netSuiteJsonE.get();
             if (bodyM.isEmpty()) {
                 log.warn("No data to read from NetSuite API..., bailing out!");
 
@@ -121,20 +122,22 @@ public class NetSuiteExtractionService {
                 return;
             }
 
-            String netsuiteTransactionLinesJson = bodyM.get();
-            String ingestionBodyChecksum = md5(netsuiteTransactionLinesJson);
             NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
             netSuiteIngestion.setId(batchId);
-
-            String compressedBody = MoreCompress.compress(netsuiteTransactionLinesJson);
-            log.info("Before compression: {}, compressed: {}", netsuiteTransactionLinesJson.length(), compressedBody.length());
-
-            netSuiteIngestion.setIngestionBody(compressedBody);
-            if (isNetSuiteInstanceDebugMode) {
-                netSuiteIngestion.setIngestionBodyDebug(netsuiteTransactionLinesJson);
-            }
             netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            netSuiteIngestion.setIngestionBodyChecksum(ingestionBodyChecksum);
+            bodyM.get().forEach(netsuiteTransactionLinesJson -> {
+                String ingestionBodyChecksum = md5(netsuiteTransactionLinesJson);
+                String compressedBody = MoreCompress.compress(netsuiteTransactionLinesJson);
+                log.info("Before compression: {}, compressed: {}", netsuiteTransactionLinesJson.length(), compressedBody.length());
+
+                NetsuiteIngestionBody body = new NetsuiteIngestionBody();
+                body.setIngestionBody(compressedBody);
+                if (isNetSuiteInstanceDebugMode) {
+                    body.setIngestionBodyDebug(netsuiteTransactionLinesJson);
+                }
+                body.setIngestionBodyChecksum(ingestionBodyChecksum);
+                netSuiteIngestion.addBody(body);
+            });
 
             NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
 
@@ -240,7 +243,7 @@ public class NetSuiteExtractionService {
             }
             NetSuiteIngestionEntity netsuiteIngestion = netsuiteIngestionM.orElseThrow();
 
-            Either<Problem, List<TxLine>> transactionDataSearchResultE = netSuiteParser.parseSearchResults(requireNonNull(decompress(netsuiteIngestion.getIngestionBody())));
+            Either<Problem, List<TxLine>> transactionDataSearchResultE = getTxLinesFromBodies(netsuiteIngestion.getIngestionBodies());
 
             if (transactionDataSearchResultE.isEmpty()) {
                 Problem problem = transactionDataSearchResultE.getLeft();
@@ -325,6 +328,18 @@ public class NetSuiteExtractionService {
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
         }
+    }
+
+    private Either<Problem, List<TxLine>> getTxLinesFromBodies(List<NetsuiteIngestionBody> ingestionBodies) {
+        List<TxLine> txLines = new ArrayList<>();
+        for (NetsuiteIngestionBody ingestionBody : ingestionBodies) {
+            Either<Problem, List<TxLine>> txLinesE = netSuiteParser.parseSearchResults(requireNonNull(decompress(ingestionBody.getIngestionBody())));
+            if (txLinesE.isLeft()) {
+                return txLinesE;
+            }
+            txLines.addAll(txLinesE.get());
+        }
+        return Either.right(txLines);
     }
 
 }

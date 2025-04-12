@@ -7,27 +7,36 @@ import static org.cardanofoundation.lob.app.support.crypto.MD5Hashing.md5;
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.vavr.control.Either;
+import org.zalando.problem.Problem;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
@@ -58,23 +67,23 @@ public class NetSuiteReconcilationService {
                                       LocalDate reconcileTo) {
         log.info("Running reconciliation...");
 
-        val reconcilationRequestId = digestAsHex(UUID.randomUUID().toString());
+        String reconcilationRequestId = digestAsHex(UUID.randomUUID().toString());
 
-        val netSuiteJsonE = netSuiteClient.retrieveLatestNetsuiteTransactionLines(reconcileFrom, reconcileTo);
+        Either<Problem, Optional<List<String>>> netSuiteJsonE = netSuiteClient.retrieveLatestNetsuiteTransactionLines(reconcileFrom, reconcileTo);
 
         if (netSuiteJsonE.isLeft()) {
             log.error("Error retrieving data from NetSuite API: {}", netSuiteJsonE.getLeft().getDetail());
 
-            val problem = netSuiteJsonE.getLeft();
+            Problem problem = netSuiteJsonE.getLeft();
 
-            val bag = Map.<String, Object>of(
+            Map<String, Object> bag = Map.<String, Object>of(
                     "adapterInstanceId", netsuiteInstanceId,
                     "netsuiteUrl", netSuiteClient.getBaseUrl(),
                     "technicalErrorTitle", problem.getTitle(),
                     "technicalErrorDetail", problem.getDetail()
             );
 
-            val reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+            ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationRequestId)
                     .organisationId(organisationId)
@@ -84,20 +93,20 @@ public class NetSuiteReconcilationService {
             applicationEventPublisher.publishEvent(reconcilationFailedEvent);
             return;
         }
-        val bodyM = netSuiteJsonE.get();
+        Optional<List<String>> bodyM = netSuiteJsonE.get();
         if (bodyM.isEmpty()) {
             log.warn("No data to read from NetSuite API..., bailing out!");
 
-            val problem = netSuiteJsonE.getLeft();
+            Problem problem = netSuiteJsonE.getLeft();
 
-            val bag = Map.<String, Object>of(
+            Map<String, Object> bag = Map.<String, Object>of(
                     "adapterInstanceId", netsuiteInstanceId,
                     "netsuiteUrl", netSuiteClient.getBaseUrl(),
                     "technicalErrorTitle", problem.getTitle(),
                     "technicalErrorDetail", problem.getDetail()
             );
 
-            val reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+            ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationRequestId)
                     .organisationId(organisationId)
@@ -109,22 +118,25 @@ public class NetSuiteReconcilationService {
         }
 
         try {
-            val netsuiteTransactionLinesJson = bodyM.get();
-            val ingestionBodyChecksum = md5(netsuiteTransactionLinesJson);
-            val netSuiteIngestion = new NetSuiteIngestionEntity();
+
+            NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
             netSuiteIngestion.setId(reconcilationRequestId);
-
-            val compressedBody = MoreCompress.compress(netsuiteTransactionLinesJson);
-            log.info("Before compression: {}, compressed: {}", netsuiteTransactionLinesJson.length(), compressedBody.length());
-
-            netSuiteIngestion.setIngestionBody(compressedBody);
-            if (isNetSuiteInstanceDebugMode) {
-                netSuiteIngestion.setIngestionBodyDebug(netsuiteTransactionLinesJson);
-            }
             netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            netSuiteIngestion.setIngestionBodyChecksum(ingestionBodyChecksum);
+            bodyM.get().forEach(netsuiteTransactionLinesJson -> {
+                String ingestionBodyChecksum = md5(netsuiteTransactionLinesJson);
+                String compressedBody = MoreCompress.compress(netsuiteTransactionLinesJson);
+                log.info("Before compression: {}, compressed: {}", netsuiteTransactionLinesJson.length(), compressedBody.length());
 
-            val storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
+                NetsuiteIngestionBody body = new NetsuiteIngestionBody();
+                body.setIngestionBody(compressedBody);
+                if (isNetSuiteInstanceDebugMode) {
+                    body.setIngestionBodyDebug(netsuiteTransactionLinesJson);
+                }
+                body.setIngestionBodyChecksum(ingestionBodyChecksum);
+                netSuiteIngestion.addBody(body);
+            });
+
+            NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
 
             applicationEventPublisher.publishEvent(ReconcilationStartedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationStartedEvent.VERSION))
@@ -137,12 +149,12 @@ public class NetSuiteReconcilationService {
 
             log.info("NetSuite ingestion started.");
         } catch (Exception e) {
-            val bag = Map.<String, Object>of(
+            Map<String, Object> bag = Map.<String, Object>of(
                     "adapterInstanceId", netsuiteInstanceId,
                     "technicalErrorMessage", e.getMessage()
             );
 
-            val reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+            ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationRequestId)
                     .organisationId(organisationId)
@@ -162,16 +174,16 @@ public class NetSuiteReconcilationService {
         try {
             log.info("Continue reconcilation..., reconcilationId: {}", reconcilationId);
 
-            val netsuiteIngestionM = ingestionRepository.findById(reconcilationId);
+            Optional<NetSuiteIngestionEntity> netsuiteIngestionM = ingestionRepository.findById(reconcilationId);
             if (netsuiteIngestionM.isEmpty()) {
                 log.error("NetSuite ingestion not found, reconcilationId: {}", reconcilationId);
 
-                val bag = Map.<String, Object>of(
+                Map<String, Object> bag = Map.<String, Object>of(
                         "organisationId", organisationId,
                         "reconcilationId", reconcilationId
                 );
 
-                val reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+                ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                         .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                         .reconciliationId(reconcilationId)
                         .organisationId(organisationId)
@@ -182,20 +194,20 @@ public class NetSuiteReconcilationService {
                 return;
             }
 
-            val netsuiteIngestion = netsuiteIngestionM.orElseThrow();
+            NetSuiteIngestionEntity netsuiteIngestion = netsuiteIngestionM.orElseThrow();
 
-            val transactionDataSearchResultE = netSuiteParser.parseSearchResults(requireNonNull(decompress(netsuiteIngestion.getIngestionBody())));
+            Either<Problem, List<TxLine>> transactionDataSearchResultE = getTxLinesFromBodies(netsuiteIngestion.getIngestionBodies());
 
             if (transactionDataSearchResultE.isEmpty()) {
-                val problem = transactionDataSearchResultE.getLeft();
+                Problem problem = transactionDataSearchResultE.getLeft();
 
-                val bag = Map.<String, Object>of(
+                Map<String, Object> bag = Map.<String, Object>of(
                         "reconcilationId", reconcilationId,
                         "organisationId", organisationId,
                         "technicalErrorTitle", problem.getTitle(),
                         "technicalErrorDetail", problem.getDetail()
                 );
-                val reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+                ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                         .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                         .reconciliationId(reconcilationId)
                         .organisationId(organisationId)
@@ -206,11 +218,11 @@ public class NetSuiteReconcilationService {
                 return;
             }
 
-            val transactionDataSearchResult = transactionDataSearchResultE.get();
-            val transactionsE = transactionConverter.convert(organisationId, reconcilationId, transactionDataSearchResult);
+            List<TxLine> transactionDataSearchResult = transactionDataSearchResultE.get();
+            Either<FatalError, Transactions> transactionsE = transactionConverter.convert(organisationId, reconcilationId, transactionDataSearchResult);
 
             if (transactionsE.isLeft()) {
-                val reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+                ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                         .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                         .reconciliationId(reconcilationId)
                         .organisationId(organisationId)
@@ -221,21 +233,21 @@ public class NetSuiteReconcilationService {
                 return;
             }
 
-            val transactions = transactionsE.get();
-            val txs = transactions.transactions();
+            Transactions transactions = transactionsE.get();
+            Set<Transaction> txs = transactions.transactions();
 
             // sanity check, actually this should be already pre-filtered by the previious business processes (e.g. asking for transactions only for the organisation or within certain date range)
-            val transactionsWithExtractionParametersApplied = extractionParametersFilteringService.applyExtractionParameters(
+            Set<Transaction> transactionsWithExtractionParametersApplied = extractionParametersFilteringService.applyExtractionParameters(
                     txs,
                     organisationId,
                     from,
                     to
             );
 
-            val totalTransactions = transactionsWithExtractionParametersApplied.size();
+            int totalTransactions = transactionsWithExtractionParametersApplied.size();
 
             // Update all transactions that are not in the reconciliation but in the same date range.
-            val attachedTxIds = transactionsWithExtractionParametersApplied.stream()
+            Set<String> attachedTxIds = transactionsWithExtractionParametersApplied.stream()
                     .map(Transaction::getId)
                     .collect(Collectors.toSet());
 
@@ -244,13 +256,13 @@ public class NetSuiteReconcilationService {
                     to,
                     attachedTxIds
             ).forEach(tx -> {
-                val txEntity = tx;
+                TransactionEntity txEntity = tx;
                 txEntity.setReconcilation(Optional.empty());
                 accountingCoreTransactionRepository.save(txEntity);
             });
 
             Partitions.partition(transactionsWithExtractionParametersApplied, sendBatchSize).forEach(txPartition -> {
-                val reconcilationChunkEventBuilder = ReconcilationChunkEvent.builder()
+                ReconcilationChunkEvent.ReconcilationChunkEventBuilder reconcilationChunkEventBuilder = ReconcilationChunkEvent.builder()
                         .metadata(EventMetadata.create(ReconcilationChunkEvent.VERSION))
                         .reconciliationId(reconcilationId)
                         .organisationId(organisationId)
@@ -266,12 +278,12 @@ public class NetSuiteReconcilationService {
         } catch (Exception e) {
             log.error("Fatal error while processing NetSuite ingestion", e);
 
-            val bag = Map.<String, Object>of(
+            Map<String, Object> bag = Map.<String, Object>of(
                     "adapterInstanceId", netsuiteInstanceId,
                     "technicalErrorMessage", e.getMessage()
             );
 
-            val reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+            ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
@@ -280,6 +292,18 @@ public class NetSuiteReconcilationService {
 
             applicationEventPublisher.publishEvent(reconcilationFailedEvent);
         }
+    }
+
+    private Either<Problem, List<TxLine>> getTxLinesFromBodies(List<NetsuiteIngestionBody> ingestionBodies) {
+        List<TxLine> txLines = new ArrayList<>();
+        for (NetsuiteIngestionBody ingestionBody : ingestionBodies) {
+            Either<Problem, List<TxLine>> txLinesE = netSuiteParser.parseSearchResults(requireNonNull(decompress(ingestionBody.getIngestionBody())));
+            if (txLinesE.isLeft()) {
+                return txLinesE;
+            }
+            txLines.addAll(txLinesE.get());
+        }
+        return Either.right(txLines);
     }
 
 }

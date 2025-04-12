@@ -22,6 +22,21 @@ CREATE TABLE netsuite_adapter_ingestion (
    CONSTRAINT pk_netsuite_adapter_ingestion PRIMARY KEY (id)
 );
 
+CREATE TABLE netsuite_adapter_ingestion_body(
+    id CHAR(64) NOT NULL,
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    ingestion_body TEXT NOT NULL,
+    ingestion_body_debug TEXT,
+    ingestion_body_checksum VARCHAR(255) NOT NULL,
+    netsuite_ingestion_id CHAR(64) NOT NULL,
+    CONSTRAINT pk_netsuite_adapter_ingestion_body PRIMARY KEY (id),
+    CONSTRAINT fk_netsuite_adapter_ingestion_body FOREIGN KEY (netsuite_ingestion_id)
+        REFERENCES netsuite_adapter_ingestion (id) ON DELETE CASCADE
+);
+
 CREATE TABLE netsuite_adapter_code_mapping (
    mapping_id CHAR(64) NOT NULL,
    internal_id BIGINT NOT NULL,
