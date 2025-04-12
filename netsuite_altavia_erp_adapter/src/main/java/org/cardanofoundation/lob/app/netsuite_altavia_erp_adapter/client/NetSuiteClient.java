@@ -156,7 +156,7 @@ public class NetSuiteClient {
                         lines.add(searchResultString.get());
                         if(transactionDataSearchResult.more()) {
                             hasMore = true;
-                            start += recordsPerCall;
+                            start += 1;
                         } else {
                             hasMore = false;
                         }
