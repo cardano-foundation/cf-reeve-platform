@@ -37,7 +37,6 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Tr
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
-import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionBodyRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
@@ -48,7 +47,6 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 public class NetSuiteExtractionService {
 
     private final IngestionRepository ingestionRepository;
-    private final IngestionBodyRepository ingestionBodyRepository;
     private final NetSuiteClient netSuiteClient;
     private final TransactionConverter transactionConverter;
     private final ApplicationEventPublisher applicationEventPublisher;
