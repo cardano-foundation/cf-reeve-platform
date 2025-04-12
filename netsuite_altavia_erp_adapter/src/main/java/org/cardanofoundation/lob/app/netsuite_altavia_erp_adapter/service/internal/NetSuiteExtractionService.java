@@ -136,6 +136,7 @@ public class NetSuiteExtractionService {
                     body.setIngestionBodyDebug(netsuiteTransactionLinesJson);
                 }
                 body.setIngestionBodyChecksum(ingestionBodyChecksum);
+                body.setId(ingestionBodyChecksum);
                 netSuiteIngestion.addBody(body);
             });
 

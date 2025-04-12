@@ -133,6 +133,7 @@ public class NetSuiteReconcilationService {
                     body.setIngestionBodyDebug(netsuiteTransactionLinesJson);
                 }
                 body.setIngestionBodyChecksum(ingestionBodyChecksum);
+                body.setId(ingestionBodyChecksum);
                 netSuiteIngestion.addBody(body);
             });
 
