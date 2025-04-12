@@ -161,12 +161,6 @@ public class NetSuiteClient {
                             hasMore = false;
                         }
                     } catch (JsonProcessingException e) {
-//                        log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
-//                        return Either.left(Problem.builder()
-//                                .withStatus(Status.INTERNAL_SERVER_ERROR)
-//                                .withTitle(NETSUITE_API_ERROR)
-//                                .withDetail(e.getMessage())
-//                                .build());
                         hasMore = false;
                         log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
                     }
