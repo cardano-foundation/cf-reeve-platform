@@ -56,7 +56,6 @@ public class NetSuiteExtractionService {
     @Value("${lob.events.netsuite.to.core.netsuite.instance.debug.mode:true}")
     private final boolean isNetSuiteInstanceDebugMode;
 
-    @Transactional
     public void startNewERPExtraction(String organisationId,
                                       String user,
                                       UserExtractionParameters userExtractionParameters) {
@@ -118,13 +117,7 @@ public class NetSuiteExtractionService {
                 return;
             }
 
-            NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
-            netSuiteIngestion.setId(batchId);
-            netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
-            netSuiteParser.addLinesToNetsuiteIngestion(bodyM, batchId, isNetSuiteInstanceDebugMode);
-
-
+            NetSuiteIngestionEntity storedNetsuiteIngestion = saveToDataBase(batchId, bodyM);
 
 
             Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
@@ -178,6 +171,16 @@ public class NetSuiteExtractionService {
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
         }
+    }
+
+    @Transactional
+    NetSuiteIngestionEntity saveToDataBase(String batchId, Optional<List<String>> bodyM) {
+        NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
+        netSuiteIngestion.setId(batchId);
+        netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
+        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
+        netSuiteParser.addLinesToNetsuiteIngestion(bodyM, batchId, isNetSuiteInstanceDebugMode);
+        return storedNetsuiteIngestion;
     }
 
     @Transactional
