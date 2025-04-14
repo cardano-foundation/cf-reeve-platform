@@ -186,7 +186,7 @@ public class NetSuiteClient {
 
         if (response.getStatusCode().is2xxSuccessful()) {
             final String body = response.getBody();
-            log.info("Netsuite response success...customerCode:{}, message:{}", response.getStatusCode().value(), body);
+            log.info("Netsuite response success...customerCode:{}", response.getStatusCode().value());
 
             try {
                 JsonNode bodyJsonTree = objectMapper.readTree(body);
