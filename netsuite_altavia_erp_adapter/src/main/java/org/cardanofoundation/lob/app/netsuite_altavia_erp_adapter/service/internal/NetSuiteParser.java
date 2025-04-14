@@ -81,7 +81,7 @@ public class NetSuiteParser {
             }
             body.setIngestionBodyChecksum(ingestionBodyChecksum);
             body.setNetsuiteIngestionId(batchId);
-            ingestionBodyRepository.saveAndFlush(body);
+            ingestionBodyRepository.save(body);
         }
 
     }
@@ -91,7 +91,7 @@ public class NetSuiteParser {
         NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
         netSuiteIngestion.setId(batchId);
         netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
+        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.save(netSuiteIngestion);
         this.addLinesToNetsuiteIngestion(bodyM, batchId, isNetSuiteInstanceDebugMode);
         return storedNetsuiteIngestion;
     }
