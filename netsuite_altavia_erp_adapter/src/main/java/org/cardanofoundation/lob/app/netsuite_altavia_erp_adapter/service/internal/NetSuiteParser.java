@@ -76,7 +76,7 @@ public class NetSuiteParser {
             body.setIngestionBodyChecksum(ingestionBodyChecksum);
             body.setId(ingestionBodyChecksum);
             body.setNetsuiteIngestionId(batchId);
-            ingestionBodyRepository.save(body);
+            ingestionBodyRepository.saveAndFlush(body);
         }
 
     }
