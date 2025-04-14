@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -20,11 +22,12 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class NetsuiteIngestionBody extends CommonEntity implements Persistable<String> {
+public class NetsuiteIngestionBody extends CommonEntity implements Persistable<Long> {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
-    private String id;
+    private Long id;
 
     @Column(name = "ingestion_body", nullable = false, length = 999_999, columnDefinition = "TEXT")
     private String ingestionBody;

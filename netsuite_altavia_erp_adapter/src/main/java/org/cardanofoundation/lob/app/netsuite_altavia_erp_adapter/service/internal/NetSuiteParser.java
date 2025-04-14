@@ -80,7 +80,6 @@ public class NetSuiteParser {
                 body.setIngestionBodyDebug(netsuiteTransactionLinesJson);
             }
             body.setIngestionBodyChecksum(ingestionBodyChecksum);
-            body.setId(ingestionBodyChecksum);
             body.setNetsuiteIngestionId(batchId);
             ingestionBodyRepository.saveAndFlush(body);
         }

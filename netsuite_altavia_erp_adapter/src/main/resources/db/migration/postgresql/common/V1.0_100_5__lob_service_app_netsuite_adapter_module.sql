@@ -20,7 +20,7 @@ CREATE TABLE netsuite_adapter_ingestion (
 );
 
 CREATE TABLE netsuite_adapter_ingestion_body(
-    id CHAR(64) NOT NULL,
+    id SERIAL PRIMARY KEY,
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
     created_at TIMESTAMP WITHOUT TIME ZONE,
