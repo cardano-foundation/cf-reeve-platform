@@ -242,9 +242,9 @@ public class NetSuiteClient {
         // This is just to be sure that we are not sending multiple recordspercall parameters
         baseUrl = baseUrl.replaceAll("&recordspercall=\\d+", "");
 
-        baseUrl = baseUrl + "&recordspercall=" + recordsPerCall;
+        baseUrl = STR."\{baseUrl}&recordspercall=\{recordsPerCall}";
         if (start.isPresent()) {
-            baseUrl = baseUrl + "&start=" + start.get();
+            baseUrl = STR."\{baseUrl}&start=\{start.get()}";
         }
         String uriString = UriComponentsBuilder.fromHttpUrl(baseUrl)
                 .queryParam("trandate:within", isoFormatDates(from, to)).toUriString();

@@ -2,12 +2,9 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.inter
 
 import static java.util.Objects.requireNonNull;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError.Code.ADAPTER_ERROR;
-import static org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress.decompress;
-import static org.cardanofoundation.lob.app.support.crypto.MD5Hashing.md5;
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,7 +24,6 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
@@ -36,9 +32,8 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuit
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
-import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
-import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.Constants;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
@@ -76,11 +71,11 @@ public class NetSuiteReconcilationService {
 
             Problem problem = netSuiteJsonE.getLeft();
 
-            Map<String, Object> bag = Map.<String, Object>of(
-                    "adapterInstanceId", netsuiteInstanceId,
-                    "netsuiteUrl", netSuiteClient.getBaseUrl(),
-                    "technicalErrorTitle", problem.getTitle(),
-                    "technicalErrorDetail", problem.getDetail()
+            Map<String, Object> bag = Map.of(
+                    Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
+                    Constants.NETSUITE_BAG_NETSUITE_URL, netSuiteClient.getBaseUrl(),
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_TITLE, requireNonNull(problem.getTitle()),
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_DETAIL, requireNonNull(problem.getDetail())
             );
 
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
@@ -99,11 +94,11 @@ public class NetSuiteReconcilationService {
 
             Problem problem = netSuiteJsonE.getLeft();
 
-            Map<String, Object> bag = Map.<String, Object>of(
-                    "adapterInstanceId", netsuiteInstanceId,
-                    "netsuiteUrl", netSuiteClient.getBaseUrl(),
-                    "technicalErrorTitle", problem.getTitle(),
-                    "technicalErrorDetail", problem.getDetail()
+            Map<String, Object> bag = Map.of(
+                    Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
+                    Constants.NETSUITE_BAG_NETSUITE_URL, netSuiteClient.getBaseUrl(),
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_TITLE, requireNonNull(problem.getTitle()),
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_DETAIL, requireNonNull(problem.getDetail())
             );
 
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
@@ -122,24 +117,11 @@ public class NetSuiteReconcilationService {
             NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
             netSuiteIngestion.setId(reconcilationRequestId);
             netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            for(String netsuiteTransactionLinesJson : bodyM.get()) {
-                String ingestionBodyChecksum = md5(netsuiteTransactionLinesJson);
-                String compressedBody = MoreCompress.compress(netsuiteTransactionLinesJson);
-                log.info("Before compression: {}, compressed: {}", netsuiteTransactionLinesJson.length(), compressedBody.length());
+            netSuiteParser.addLinesToNetsuiteIngestion(bodyM, reconcilationRequestId, netSuiteIngestion, isNetSuiteInstanceDebugMode);
 
-                NetsuiteIngestionBody body = new NetsuiteIngestionBody();
-                body.setIngestionBody(compressedBody);
-                if (isNetSuiteInstanceDebugMode) {
-                    body.setIngestionBodyDebug(netsuiteTransactionLinesJson);
-                }
-                body.setIngestionBodyChecksum(ingestionBodyChecksum);
-                body.setId(ingestionBodyChecksum);
-                body.setNetsuiteIngestionId(reconcilationRequestId);
-                netSuiteIngestion.addBody(body);
-            }
-//            ingestionBodyRepository.saveAll(netSuiteIngestion.getIngestionBodies());
             NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
 
+            assert storedNetsuiteIngestion.getId() != null;
             applicationEventPublisher.publishEvent(ReconcilationStartedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationStartedEvent.VERSION))
                     .reconciliationId(storedNetsuiteIngestion.getId())
@@ -151,9 +133,9 @@ public class NetSuiteReconcilationService {
 
             log.info("NetSuite ingestion started.");
         } catch (Exception e) {
-            Map<String, Object> bag = Map.<String, Object>of(
-                    "adapterInstanceId", netsuiteInstanceId,
-                    "technicalErrorMessage", e.getMessage()
+            Map<String, Object> bag = Map.of(
+                    Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, e.getMessage()
             );
 
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
@@ -180,9 +162,9 @@ public class NetSuiteReconcilationService {
             if (netsuiteIngestionM.isEmpty()) {
                 log.error("NetSuite ingestion not found, reconcilationId: {}", reconcilationId);
 
-                Map<String, Object> bag = Map.<String, Object>of(
-                        "organisationId", organisationId,
-                        "reconcilationId", reconcilationId
+                Map<String, Object> bag = Map.of(
+                        Constants.NETSUITE_BAG_ORGANISATION_ID, organisationId,
+                        Constants.NETSUITE_BAG_RECONCILATION_ID, reconcilationId
                 );
 
                 ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
@@ -198,16 +180,16 @@ public class NetSuiteReconcilationService {
 
             NetSuiteIngestionEntity netsuiteIngestion = netsuiteIngestionM.orElseThrow();
 
-            Either<Problem, List<TxLine>> transactionDataSearchResultE = getTxLinesFromBodies(netsuiteIngestion.getIngestionBodies());
+            Either<Problem, List<TxLine>> transactionDataSearchResultE = netSuiteParser.getAllTxLinesFromBodies(netsuiteIngestion.getIngestionBodies());
 
             if (transactionDataSearchResultE.isEmpty()) {
                 Problem problem = transactionDataSearchResultE.getLeft();
 
-                Map<String, Object> bag = Map.<String, Object>of(
-                        "reconcilationId", reconcilationId,
-                        "organisationId", organisationId,
-                        "technicalErrorTitle", problem.getTitle(),
-                        "technicalErrorDetail", problem.getDetail()
+                Map<String, Object> bag = Map.of(
+                        Constants.NETSUITE_BAG_RECONCILATION_ID, reconcilationId,
+                        Constants.NETSUITE_BAG_ORGANISATION_ID, organisationId,
+                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_TITLE, requireNonNull(problem.getTitle()),
+                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_DETAIL, requireNonNull(problem.getDetail())
                 );
                 ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                         .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
@@ -258,9 +240,8 @@ public class NetSuiteReconcilationService {
                     to,
                     attachedTxIds
             ).forEach(tx -> {
-                TransactionEntity txEntity = tx;
-                txEntity.setReconcilation(Optional.empty());
-                accountingCoreTransactionRepository.save(txEntity);
+                tx.setReconcilation(Optional.empty());
+                accountingCoreTransactionRepository.save(tx);
             });
 
             Partitions.partition(transactionsWithExtractionParametersApplied, sendBatchSize).forEach(txPartition -> {
@@ -280,9 +261,9 @@ public class NetSuiteReconcilationService {
         } catch (Exception e) {
             log.error("Fatal error while processing NetSuite ingestion", e);
 
-            Map<String, Object> bag = Map.<String, Object>of(
-                    "adapterInstanceId", netsuiteInstanceId,
-                    "technicalErrorMessage", e.getMessage()
+            Map<String, Object> bag = Map.of(
+                    Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, e.getMessage()
             );
 
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
@@ -294,18 +275,6 @@ public class NetSuiteReconcilationService {
 
             applicationEventPublisher.publishEvent(reconcilationFailedEvent);
         }
-    }
-
-    private Either<Problem, List<TxLine>> getTxLinesFromBodies(List<NetsuiteIngestionBody> ingestionBodies) {
-        List<TxLine> txLines = new ArrayList<>();
-        for (NetsuiteIngestionBody ingestionBody : ingestionBodies) {
-            Either<Problem, List<TxLine>> txLinesE = netSuiteParser.parseSearchResults(requireNonNull(decompress(ingestionBody.getIngestionBody())));
-            if (txLinesE.isLeft()) {
-                return txLinesE;
-            }
-            txLines.addAll(txLinesE.get());
-        }
-        return Either.right(txLines);
     }
 
 }
