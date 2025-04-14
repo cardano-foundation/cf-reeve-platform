@@ -23,6 +23,7 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Tx
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionBodyRepository;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,13 +32,15 @@ class NetsuiteParserTest {
     private NetSuiteParser netsuiteParser;
     @Mock
     private IngestionBodyRepository ingestionBodyRepository;
+    @Mock
+    private IngestionRepository ingestionRepository;
 
     @BeforeEach
     void init() {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
         objectMapper.findAndRegisterModules();
-        netsuiteParser = new NetSuiteParser(objectMapper, ingestionBodyRepository);
+        netsuiteParser = new NetSuiteParser(objectMapper, ingestionRepository, ingestionBodyRepository, "123");
     }
 
     String json = """

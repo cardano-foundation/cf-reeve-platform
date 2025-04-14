@@ -117,7 +117,7 @@ public class NetSuiteExtractionService {
                 return;
             }
 
-            NetSuiteIngestionEntity storedNetsuiteIngestion = saveToDataBase(batchId, bodyM);
+            NetSuiteIngestionEntity storedNetsuiteIngestion = netSuiteParser.saveToDataBase(batchId, bodyM, isNetSuiteInstanceDebugMode);
 
 
             Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
@@ -171,16 +171,6 @@ public class NetSuiteExtractionService {
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
         }
-    }
-
-    @Transactional // extracting the save to a separate method to avoid transaction issues
-    NetSuiteIngestionEntity saveToDataBase(String batchId, Optional<List<String>> bodyM) {
-        NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
-        netSuiteIngestion.setId(batchId);
-        netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
-        netSuiteParser.addLinesToNetsuiteIngestion(bodyM, batchId, isNetSuiteInstanceDebugMode);
-        return storedNetsuiteIngestion;
     }
 
     @Transactional

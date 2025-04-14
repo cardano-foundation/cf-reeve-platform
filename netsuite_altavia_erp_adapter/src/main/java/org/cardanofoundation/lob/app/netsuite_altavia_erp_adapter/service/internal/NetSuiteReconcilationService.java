@@ -114,12 +114,7 @@ public class NetSuiteReconcilationService {
 
         try {
 
-            NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
-            netSuiteIngestion.setId(reconcilationRequestId);
-            netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            netSuiteParser.addLinesToNetsuiteIngestion(bodyM, reconcilationRequestId, isNetSuiteInstanceDebugMode);
-
-            NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
+            NetSuiteIngestionEntity storedNetsuiteIngestion = netSuiteParser.saveToDataBase(reconcilationRequestId, bodyM, isNetSuiteInstanceDebugMode);
 
             assert storedNetsuiteIngestion.getId() != null;
             applicationEventPublisher.publishEvent(ReconcilationStartedEvent.builder()
