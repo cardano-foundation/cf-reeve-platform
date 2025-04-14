@@ -208,7 +208,7 @@ public class TransactionConverter {
                     );
                 } catch (Exception e) {
                     log.error("Error while creating human readable validation issue: {}", e.getMessage());
-                    return Map.of("message", (Object) e.getMessage().toString());
+                    return Map.of("message", (Object)"Error while creating human readable validation issue");
                 }
         }).toList();
     }
