@@ -18,8 +18,8 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TransactionDataSearchResult;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
-import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionBodyRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
 
 @Slf4j
@@ -27,6 +27,7 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompr
 public class NetSuiteParser {
 
     private final ObjectMapper objectMapper;
+    private final IngestionBodyRepository ingestionBodyRepository;
 
     public Either<Problem, List<TxLine>> parseSearchResults(String jsonString) {
         try {
@@ -55,7 +56,7 @@ public class NetSuiteParser {
         return Either.right(txLines);
     }
 
-    public void addLinesToNetsuiteIngestion(Optional<List<String>> bodyM, String batchId, NetSuiteIngestionEntity netSuiteIngestion, boolean isNetSuiteInstanceDebugMode) {
+    public void addLinesToNetsuiteIngestion(Optional<List<String>> bodyM, String batchId, boolean isNetSuiteInstanceDebugMode) {
         if(bodyM.isEmpty()) {
             return;
         }
@@ -75,8 +76,9 @@ public class NetSuiteParser {
             body.setIngestionBodyChecksum(ingestionBodyChecksum);
             body.setId(ingestionBodyChecksum);
             body.setNetsuiteIngestionId(batchId);
-            netSuiteIngestion.addBody(body);
+            ingestionBodyRepository.save(body);
         }
+
     }
 
 }

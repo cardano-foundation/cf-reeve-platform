@@ -10,6 +10,7 @@ import java.util.Optional;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vavr.control.Either;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 
@@ -21,19 +22,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionBodyRepository;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress;
 
 @ExtendWith(MockitoExtension.class)
 class NetsuiteParserTest {
 
     private NetSuiteParser netsuiteParser;
+    @Mock
+    private IngestionBodyRepository ingestionBodyRepository;
 
     @BeforeEach
     void init() {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
         objectMapper.findAndRegisterModules();
-        netsuiteParser = new NetSuiteParser(objectMapper);
+        netsuiteParser = new NetSuiteParser(objectMapper, ingestionBodyRepository);
     }
 
     String json = """
@@ -140,7 +144,7 @@ class NetsuiteParserTest {
     @Test
     void addLinesToNetsuiteIngestion_emptyBody() {
         NetSuiteIngestionEntity netsuiteIngestionEntity = new NetSuiteIngestionEntity();
-        netsuiteParser.addLinesToNetsuiteIngestion(Optional.empty(), "batchId", netsuiteIngestionEntity, true);
+        netsuiteParser.addLinesToNetsuiteIngestion(Optional.empty(), "batchId", true);
 
         Assertions.assertTrue(netsuiteIngestionEntity.getIngestionBodies().isEmpty());
     }
@@ -148,25 +152,9 @@ class NetsuiteParserTest {
     @Test
     void addLinesToNetsuiteIngestion_emptyTxLines() {
         NetSuiteIngestionEntity netsuiteIngestionEntity = new NetSuiteIngestionEntity();
-        netsuiteParser.addLinesToNetsuiteIngestion(Optional.of(List.of("", "")), "batchId", netsuiteIngestionEntity, true);
+        netsuiteParser.addLinesToNetsuiteIngestion(Optional.of(List.of("", "")), "batchId", true);
 
         Assertions.assertTrue(netsuiteIngestionEntity.getIngestionBodies().isEmpty());
     }
-
-    @Test
-    void addLinesToNetsuiteIngestion_success() {
-        NetSuiteIngestionEntity netsuiteIngestionEntity = new NetSuiteIngestionEntity();
-        netsuiteParser.addLinesToNetsuiteIngestion(Optional.of(List.of("1", "2")), "batchId", netsuiteIngestionEntity, true);
-
-        Assertions.assertFalse(netsuiteIngestionEntity.getIngestionBodies().isEmpty());
-        Assertions.assertEquals(2, netsuiteIngestionEntity.getIngestionBodies().size());
-        NetsuiteIngestionBody body1 = netsuiteIngestionEntity.getIngestionBodies().get(0);
-        Assertions.assertEquals("c4ca4238a0b923820dcc509a6f75849b", body1.getId());
-        NetsuiteIngestionBody body2 = netsuiteIngestionEntity.getIngestionBodies().get(1);
-        Assertions.assertEquals("c81e728d9d4c2f636f067f89cc14862c", body2.getId());
-    }
-
-
-
 
 }

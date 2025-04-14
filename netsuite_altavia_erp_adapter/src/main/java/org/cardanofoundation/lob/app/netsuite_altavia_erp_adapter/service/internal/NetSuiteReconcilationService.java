@@ -117,7 +117,7 @@ public class NetSuiteReconcilationService {
             NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
             netSuiteIngestion.setId(reconcilationRequestId);
             netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            netSuiteParser.addLinesToNetsuiteIngestion(bodyM, reconcilationRequestId, netSuiteIngestion, isNetSuiteInstanceDebugMode);
+            netSuiteParser.addLinesToNetsuiteIngestion(bodyM, reconcilationRequestId, isNetSuiteInstanceDebugMode);
 
             NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
 

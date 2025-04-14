@@ -121,7 +121,8 @@ public class NetSuiteExtractionService {
             NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
             netSuiteIngestion.setId(batchId);
             netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-            netSuiteParser.addLinesToNetsuiteIngestion(bodyM, batchId, netSuiteIngestion, isNetSuiteInstanceDebugMode);
+
+            netSuiteParser.addLinesToNetsuiteIngestion(bodyM, batchId, isNetSuiteInstanceDebugMode);
 
             NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
 
