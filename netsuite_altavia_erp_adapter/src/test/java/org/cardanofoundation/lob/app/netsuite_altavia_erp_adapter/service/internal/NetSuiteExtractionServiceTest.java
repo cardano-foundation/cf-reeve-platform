@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import org.junit.jupiter.api.Disabled;
 import org.springframework.context.ApplicationEventPublisher;
 
 import io.vavr.control.Either;
@@ -23,6 +22,7 @@ import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 

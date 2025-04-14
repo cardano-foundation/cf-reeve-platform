@@ -200,12 +200,16 @@ public class TransactionConverter {
 
     private static List<Map<String, Object>> humanReadable(Set<ConstraintViolation<TxLine>> validationIssues) {
         return validationIssues.stream().map(c -> {
-            return Map.of(
-                    "bean", c.getRootBean().getClass().getName(),
-                    "msg", c.getMessage(),
-                    "property", c.getPropertyPath().toString(),
-                    "invalidValue", c.getInvalidValue()
-            );
+                try {
+                    return Map.of(
+                            "propertyPath", c.getPropertyPath().toString(),
+                            "message", c.getMessage(),
+                            "invalidValue", c.getInvalidValue()
+                    );
+                } catch (Exception e) {
+                    log.error("Error while creating human readable validation issue: {}", e.getMessage());
+                    return Map.of("message", (Object) e.getMessage().toString());
+                }
         }).toList();
     }
 
