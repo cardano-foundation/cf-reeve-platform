@@ -8,4 +8,6 @@ dependencies {
     implementation(project(":accounting_reporting_core"))
     implementation(project(":organisation"))
     implementation(project(":support"))
+
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 }
