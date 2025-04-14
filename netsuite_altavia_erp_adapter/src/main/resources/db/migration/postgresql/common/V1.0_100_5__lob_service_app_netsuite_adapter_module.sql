@@ -29,7 +29,6 @@ CREATE TABLE netsuite_adapter_ingestion_body(
     ingestion_body_debug TEXT,
     ingestion_body_checksum VARCHAR(255) NOT NULL,
     netsuite_ingestion_id CHAR(64) NOT NULL,
-    CONSTRAINT pk_netsuite_adapter_ingestion_body PRIMARY KEY (id),
     CONSTRAINT fk_netsuite_adapter_ingestion_body FOREIGN KEY (netsuite_ingestion_id)
         REFERENCES netsuite_adapter_ingestion (id) ON DELETE CASCADE
 );
