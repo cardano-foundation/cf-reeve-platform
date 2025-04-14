@@ -173,7 +173,7 @@ public class NetSuiteExtractionService {
         }
     }
 
-    @Transactional
+    @Transactional // extracting the save to a separate method to avoid transaction issues
     NetSuiteIngestionEntity saveToDataBase(String batchId, Optional<List<String>> bodyM) {
         NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
         netSuiteIngestion.setId(batchId);
