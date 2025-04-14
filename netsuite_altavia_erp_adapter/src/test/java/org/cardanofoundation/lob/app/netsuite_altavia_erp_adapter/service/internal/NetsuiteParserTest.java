@@ -122,8 +122,8 @@ class NetsuiteParserTest {
 
     @Test
     void getAllTxLinesFromBodies_successfull() {
-        NetsuiteIngestionBody body1 = new NetsuiteIngestionBody("1", MoreCompress.compress(json), "1", json, "123");
-        NetsuiteIngestionBody body2 = new NetsuiteIngestionBody("2", MoreCompress.compress(json), "1", json, "123");
+        NetsuiteIngestionBody body1 = new NetsuiteIngestionBody(1L, MoreCompress.compress(json), "1", json, "123");
+        NetsuiteIngestionBody body2 = new NetsuiteIngestionBody(2L, MoreCompress.compress(json), "1", json, "123");
 
         Either<Problem, List<TxLine>> allTxLinesFromBodies = netsuiteParser.getAllTxLinesFromBodies(List.of(body1, body2));
         assertTrue(allTxLinesFromBodies.isRight());
@@ -137,8 +137,8 @@ class NetsuiteParserTest {
                 {
                   "more": true
                 """;
-        NetsuiteIngestionBody body1 = new NetsuiteIngestionBody("1", MoreCompress.compress(json), "1", json, "123");
-        NetsuiteIngestionBody body2 = new NetsuiteIngestionBody("2", MoreCompress.compress(wrongJson), "1", json, "123");
+        NetsuiteIngestionBody body1 = new NetsuiteIngestionBody(1L, MoreCompress.compress(json), "1", json, "123");
+        NetsuiteIngestionBody body2 = new NetsuiteIngestionBody(2L, MoreCompress.compress(wrongJson), "1", json, "123");
 
         Either<Problem, List<TxLine>> allTxLinesFromBodies = netsuiteParser.getAllTxLinesFromBodies(List.of(body1, body2));
         Assertions.assertTrue(allTxLinesFromBodies.isLeft());

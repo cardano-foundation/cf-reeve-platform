@@ -119,8 +119,8 @@ class NetSuiteExtractionServiceTest {
     void testStartNewERPExtraction_successfull() {
         when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of(List.of("TestBody"))));
         when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.right(SystemExtractionParameters.builder().build()));
-        when(ingestionRepository.saveAndFlush(any())).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody("1", "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
-        when(netSuiteParser.saveToDataBase("id", Optional.of(List.of("TestBody")), true)).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody("1", "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
+        when(ingestionRepository.saveAndFlush(any())).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
+        when(netSuiteParser.saveToDataBase("id", Optional.of(List.of("TestBody")), true)).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
         verify(netSuiteClient).retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class));
@@ -153,7 +153,7 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testContinueERPExtraction_orgIdMismatch() {
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody("1", "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum")))));
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum")))));
         netSuiteExtractionService.continueERPExtraction("id", "orgId", UserExtractionParameters.builder().organisationId("org1").from(LocalDate.now()).to(LocalDate.now()).build(), SystemExtractionParameters.builder().organisationId("orgId2").build());
 
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchFailedEvent.class));
@@ -163,7 +163,7 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testContinueERPExtraction_parseSearchFailed() {
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody("1", ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
         when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.left(Problem.builder()
                 .withStatus(Status.BAD_REQUEST)
                 .withTitle("testTitle")
@@ -180,7 +180,7 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testContinueERPExtraction_transactionConvertFailed() {
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody("1", ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
         when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.right(List.of()));
         when(transactionConverter.convert("org", "id", List.of())).thenReturn(Either.left(new FatalError(FatalError.Code.ADAPTER_ERROR, "test", Map.of())));
 
@@ -195,7 +195,7 @@ class NetSuiteExtractionServiceTest {
     @Test
     void testContinueERPExtraction_transactionConvertSuccess() {
         TxLine mockTxLine = mock(TxLine.class);
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody("1", ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
         when(transactionConverter.convert("orgId", "id", List.of(mockTxLine))).thenReturn(Either.right(new Transactions("org", Set.of())));
         when(extractionParametersFilteringService.applyExtractionParameters(any(), any(), any())).thenReturn(Set.of(Transaction.builder().id("id1").build(), Transaction.builder().id("id2").build(), Transaction.builder().id("id3").build()));
         when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.right(List.of(mockTxLine)));
