@@ -121,10 +121,10 @@ public class NetSuiteExtractionService {
             NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
             netSuiteIngestion.setId(batchId);
             netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-
+            NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
             netSuiteParser.addLinesToNetsuiteIngestion(bodyM, batchId, isNetSuiteInstanceDebugMode);
 
-            NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
+
 
 
             Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
