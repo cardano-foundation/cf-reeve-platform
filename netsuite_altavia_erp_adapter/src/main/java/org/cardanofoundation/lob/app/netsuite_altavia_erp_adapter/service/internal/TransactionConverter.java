@@ -153,7 +153,7 @@ public class TransactionConverter {
         return validationIssues.stream().map(c -> {
             String propertyPath = c.getPropertyPath() != null ? c.getPropertyPath().toString() : "null";
             String message = c.getMessage() != null ? c.getMessage() : "null";
-            Object invalidValue = c.getInvalidValue(); // can be null, but that's OK in a Map
+            Object invalidValue = c.getInvalidValue() != null ? c.getInvalidValue() : "null"; // can be null, but that's OK in a Map
 
             return Map.of("propertyPath", propertyPath, "message", message, "invalidValue", invalidValue);
         }).toList();
