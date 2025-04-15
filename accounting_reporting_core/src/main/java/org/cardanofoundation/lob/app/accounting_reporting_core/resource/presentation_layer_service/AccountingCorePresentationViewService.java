@@ -549,6 +549,15 @@ public class AccountingCorePresentationViewService {
             items = tx.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(toSet());
         }
 
+        if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
+            items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
+                    .forEach(item -> {
+                        item.setAmountLcy(item.getAmountLcy().negate());
+                        item.setAmountFcy(item.getAmountFcy().negate());
+                    });
+        }
+
         return items.stream()
                 .map(TransactionItemEntity::getAmountLcy)
                 .reduce(ZERO, BigDecimal::add).abs();
