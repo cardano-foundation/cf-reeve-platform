@@ -117,7 +117,7 @@ public class NetSuiteExtractionService {
                 return;
             }
 
-            NetSuiteIngestionEntity storedNetsuiteIngestion = netSuiteParser.saveToDataBase(batchId, bodyM, isNetSuiteInstanceDebugMode);
+            NetSuiteIngestionEntity storedNetsuiteIngestion = netSuiteParser.saveToDataBase(batchId, bodyM, isNetSuiteInstanceDebugMode, user);
 
 
             Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);

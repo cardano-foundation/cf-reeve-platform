@@ -57,7 +57,7 @@ public class NetSuiteReconcilationService {
 
     @Transactional
     public void startERPReconcilation(String organisationId,
-                                      String initiator,
+                                      String user,
                                       LocalDate reconcileFrom,
                                       LocalDate reconcileTo) {
         log.info("Running reconciliation...");
@@ -79,7 +79,7 @@ public class NetSuiteReconcilationService {
             );
 
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
-                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
+                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION, user))
                     .reconciliationId(reconcilationRequestId)
                     .organisationId(organisationId)
                     .error(new FatalError(FatalError.Code.ADAPTER_ERROR, "CLIENT_ERROR", bag))
@@ -102,7 +102,7 @@ public class NetSuiteReconcilationService {
             );
 
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
-                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
+                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION, user))
                     .reconciliationId(reconcilationRequestId)
                     .organisationId(organisationId)
                     .error(new FatalError(FatalError.Code.ADAPTER_ERROR, "NO_DATA", bag))
@@ -114,11 +114,11 @@ public class NetSuiteReconcilationService {
 
         try {
 
-            NetSuiteIngestionEntity storedNetsuiteIngestion = netSuiteParser.saveToDataBase(reconcilationRequestId, bodyM, isNetSuiteInstanceDebugMode);
+            NetSuiteIngestionEntity storedNetsuiteIngestion = netSuiteParser.saveToDataBase(reconcilationRequestId, bodyM, isNetSuiteInstanceDebugMode, user);
 
             assert storedNetsuiteIngestion.getId() != null;
             applicationEventPublisher.publishEvent(ReconcilationStartedEvent.builder()
-                    .metadata(EventMetadata.create(ReconcilationStartedEvent.VERSION))
+                    .metadata(EventMetadata.create(ReconcilationStartedEvent.VERSION, user))
                     .reconciliationId(storedNetsuiteIngestion.getId())
                     .organisationId(organisationId)
                     .from(reconcileFrom)
@@ -134,7 +134,7 @@ public class NetSuiteReconcilationService {
             );
 
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
-                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
+                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION, user))
                     .reconciliationId(reconcilationRequestId)
                     .organisationId(organisationId)
                     .error(new FatalError(FatalError.Code.ADAPTER_ERROR, "EXCEPTION", bag))

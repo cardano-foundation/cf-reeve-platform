@@ -4,6 +4,8 @@ import static java.util.Objects.requireNonNull;
 import static org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress.decompress;
 import static org.cardanofoundation.lob.app.support.crypto.MD5Hashing.md5;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +36,7 @@ public class NetSuiteParser {
     private final IngestionRepository ingestionRepository;
     private final IngestionBodyRepository ingestionBodyRepository;
     private final String netsuiteInstanceId;
+    private final Clock clock;
 
     public Either<Problem, List<TxLine>> parseSearchResults(String jsonString) {
         try {
@@ -62,7 +65,7 @@ public class NetSuiteParser {
         return Either.right(txLines);
     }
 
-    public void addLinesToNetsuiteIngestion(Optional<List<String>> bodyM, String batchId, boolean isNetSuiteInstanceDebugMode) {
+    public void addLinesToNetsuiteIngestion(Optional<List<String>> bodyM, NetSuiteIngestionEntity netSuiteIngestion, String batchId, boolean isNetSuiteInstanceDebugMode, String user) {
         if(bodyM.isEmpty()) {
             return;
         }
@@ -81,18 +84,27 @@ public class NetSuiteParser {
             }
             body.setIngestionBodyChecksum(ingestionBodyChecksum);
             body.setNetsuiteIngestionId(batchId);
-            ingestionBodyRepository.save(body);
+            body.setCreatedBy(user);
+            body.setUpdatedBy(user);
+            body.setCreatedAt(LocalDateTime.now(clock));
+            body.setUpdatedAt(LocalDateTime.now(clock));
+            netSuiteIngestion.addBody(body);
         }
 
     }
 
     @Transactional
-    NetSuiteIngestionEntity saveToDataBase(String batchId, Optional<List<String>> bodyM, boolean isNetSuiteInstanceDebugMode) {
+    NetSuiteIngestionEntity saveToDataBase(String batchId, Optional<List<String>> bodyM, boolean isNetSuiteInstanceDebugMode, String user) {
         NetSuiteIngestionEntity netSuiteIngestion = new NetSuiteIngestionEntity();
         netSuiteIngestion.setId(batchId);
         netSuiteIngestion.setAdapterInstanceId(netsuiteInstanceId);
-        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.save(netSuiteIngestion);
-        this.addLinesToNetsuiteIngestion(bodyM, batchId, isNetSuiteInstanceDebugMode);
+        netSuiteIngestion.setCreatedBy(user);
+        netSuiteIngestion.setUpdatedBy(user);
+        netSuiteIngestion.setCreatedAt(LocalDateTime.now(clock));
+        netSuiteIngestion.setUpdatedAt(LocalDateTime.now(clock));
+        this.addLinesToNetsuiteIngestion(bodyM, netSuiteIngestion, batchId, isNetSuiteInstanceDebugMode, user);
+        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
+
         return storedNetsuiteIngestion;
     }
 

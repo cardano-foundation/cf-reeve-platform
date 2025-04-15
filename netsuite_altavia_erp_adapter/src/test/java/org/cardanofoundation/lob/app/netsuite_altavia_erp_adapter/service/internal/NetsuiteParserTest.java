@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,7 +41,8 @@ class NetsuiteParserTest {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
         objectMapper.findAndRegisterModules();
-        netsuiteParser = new NetSuiteParser(objectMapper, ingestionRepository, ingestionBodyRepository, "123");
+        Clock clock = Clock.systemUTC();
+        netsuiteParser = new NetSuiteParser(objectMapper, ingestionRepository, ingestionBodyRepository, "123", clock);
     }
 
     String json = """
@@ -147,7 +149,7 @@ class NetsuiteParserTest {
     @Test
     void addLinesToNetsuiteIngestion_emptyBody() {
         NetSuiteIngestionEntity netsuiteIngestionEntity = new NetSuiteIngestionEntity();
-        netsuiteParser.addLinesToNetsuiteIngestion(Optional.empty(), "batchId", true);
+        netsuiteParser.addLinesToNetsuiteIngestion(Optional.empty(), netsuiteIngestionEntity, "batchId", true, "user");
 
         Assertions.assertTrue(netsuiteIngestionEntity.getIngestionBodies().isEmpty());
     }
@@ -155,7 +157,7 @@ class NetsuiteParserTest {
     @Test
     void addLinesToNetsuiteIngestion_emptyTxLines() {
         NetSuiteIngestionEntity netsuiteIngestionEntity = new NetSuiteIngestionEntity();
-        netsuiteParser.addLinesToNetsuiteIngestion(Optional.of(List.of("", "")), "batchId", true);
+        netsuiteParser.addLinesToNetsuiteIngestion(Optional.of(List.of("", "")), netsuiteIngestionEntity, "batchId", true, "user");
 
         Assertions.assertTrue(netsuiteIngestionEntity.getIngestionBodies().isEmpty());
     }

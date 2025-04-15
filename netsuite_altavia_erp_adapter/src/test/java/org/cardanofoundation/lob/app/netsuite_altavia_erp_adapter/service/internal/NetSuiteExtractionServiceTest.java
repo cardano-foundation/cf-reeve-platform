@@ -120,7 +120,7 @@ class NetSuiteExtractionServiceTest {
         when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of(List.of("TestBody"))));
         when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.right(SystemExtractionParameters.builder().build()));
         when(ingestionRepository.saveAndFlush(any())).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
-        when(netSuiteParser.saveToDataBase("id", Optional.of(List.of("TestBody")), true)).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
+        when(netSuiteParser.saveToDataBase("id", Optional.of(List.of("TestBody")), true, "userId")).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
         verify(netSuiteClient).retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class));
