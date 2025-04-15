@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -22,7 +24,6 @@ import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -115,18 +116,14 @@ class NetSuiteExtractionServiceTest {
     }
 
     @Test
-    @Disabled("Disabled until we have a proper test for the database")
     void testStartNewERPExtraction_successfull() {
         when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of(List.of("TestBody"))));
         when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.right(SystemExtractionParameters.builder().build()));
-        when(ingestionRepository.saveAndFlush(any())).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
-        when(netSuiteParser.saveToDataBase("id", Optional.of(List.of("TestBody")), true, "userId")).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
+        when(netSuiteParser.saveToDataBase(anyString(), eq(Optional.of(List.of("TestBody"))), eq(true), eq("userId"))).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
         verify(netSuiteClient).retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class));
-        verify(systemExtractionParametersFactory).createSystemExtractionParameters("orgId");
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchStartedEvent.class));
-        verify(ingestionRepository).saveAndFlush(any());
         verifyNoMoreInteractions(netSuiteClient, systemExtractionParametersFactory, applicationEventPublisher, ingestionRepository);
     }
 

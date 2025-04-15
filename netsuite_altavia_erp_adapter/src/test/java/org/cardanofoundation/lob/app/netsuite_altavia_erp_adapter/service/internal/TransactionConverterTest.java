@@ -20,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -83,13 +82,11 @@ class TransactionConverterTest {
     }
 
     @Test
-    @Disabled
     void testConvert_validationError() {
         TxLine mockTxLine = mock(TxLine.class);
         ConstraintViolation<TxLine> mockViolation = mock(ConstraintViolation.class);
         Path mockPath = mock(Path.class);
         when(mockPath.toString()).thenReturn("path");
-        when(mockViolation.getRootBean()).thenReturn(mockTxLine);
         when(mockViolation.getMessage()).thenReturn("Message");
         when(mockViolation.getPropertyPath()).thenReturn(mockPath);
         when(mockViolation.getInvalidValue()).thenReturn("invalidaValue");
