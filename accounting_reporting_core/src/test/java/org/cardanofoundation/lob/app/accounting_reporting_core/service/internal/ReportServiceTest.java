@@ -9,7 +9,10 @@ import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.val;
 
@@ -20,23 +23,38 @@ import org.zalando.problem.Problem;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 
 class ReportServiceTest {
 
     @Mock
     private ReportRepository reportRepository;
-
     @Mock
     private OrganisationPublicApi organisationPublicApi;
+    @Mock
+    private ReportTypeRepository reportTypeRepository;
+    @Mock
+    private ChartOfAccountRepository chartOfAccountRepository;
+    @Mock
+    private TransactionItemRepository transactionItemRepository;
 
     @Spy
     private Clock clock = Clock.systemUTC();
@@ -229,7 +247,6 @@ class ReportServiceTest {
 
         assertThat(resultE.isLeft()).isTrue();
         assertThat(resultE.getLeft().getTitle()).isEqualTo("EMPTY_REPORT_DATA");
-        //verify(reportRepository).save(any(ReportEntity.class));
     }
 
     @Test
@@ -1194,6 +1211,65 @@ class ReportServiceTest {
         verify(organisationPublicApi).findByOrganisationId(organisationId);
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoInteractions(reportRepository);
+    }
+
+    @Test
+    void reportGenerate_OrgNotFound() {
+        String organisationId = "org-123";
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        request.setOrganisationId(organisationId);
+        when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> result = reportService.reportGenerate(request);
+
+        assertTrue(result.isLeft());
+        assertThat(result.getLeft().getTitle()).isEqualTo("REPORT_SETUP_NOT_FOUND");
+        verify(reportTypeRepository).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+    }
+
+    @Test
+    void reportGenerate_generateBalanceSheet() {
+        String organisationId = "org-123";
+        ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        request.setOrganisationId(organisationId);
+        ReportTypeFieldEntity reportTypeFieldEntityCapital = mock(ReportTypeFieldEntity.class);
+        ReportTypeFieldEntity reportTypeFieldEntityProfit = mock(ReportTypeFieldEntity.class);
+        OrganisationChartOfAccountSubType organisationChartOfAccountSubType = mock(OrganisationChartOfAccountSubType.class);
+        OrganisationChartOfAccount organisationChartOfAccount = mock(OrganisationChartOfAccount.class);
+        OrganisationChartOfAccount.Id organisationChartOfAccountId = mock(OrganisationChartOfAccount.Id.class);
+        TransactionItemEntity transactionItemEntity = mock(TransactionItemEntity.class);
+        LocalDate startDate = LocalDate.of(2025, 1, 1);
+        LocalDate endDate = LocalDate.of(2025, 12, 31);
+
+        when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.of(reportTypeEntity));
+        when(reportTypeEntity.getFields()).thenReturn(List.of(reportTypeFieldEntityCapital));
+        when(reportTypeFieldEntityCapital.getParent()).thenReturn(null);
+        when(reportTypeFieldEntityCapital.getName()).thenReturn("CAPITAL");
+        when(reportTypeFieldEntityProfit.getName()).thenReturn("PROFIT_FOR_THE_YEAR");
+        when(reportTypeFieldEntityCapital.getChildFields()).thenReturn(List.of(reportTypeFieldEntityProfit));
+        when(reportTypeFieldEntityProfit.getMappingTypes()).thenReturn(List.of(organisationChartOfAccountSubType));
+        when(organisationChartOfAccountSubType.getId()).thenReturn(1L);
+        when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(List.of(1L))).thenReturn(Set.of(organisationChartOfAccount));
+        when(reportTypeFieldEntityProfit.isAccumulated()).thenReturn(false);
+        when(reportTypeFieldEntityProfit.isAccumulatedYearly()).thenReturn(false);
+        when(organisationChartOfAccount.getId()).thenReturn(organisationChartOfAccountId);
+        when(organisationChartOfAccountId.getCustomerCode()).thenReturn("CustomerCode");
+        when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(List.of("CustomerCode"), startDate, endDate)).thenReturn(List.of(transactionItemEntity));
+        when(transactionItemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
+        when(transactionItemEntity.getAmountLcy()).thenReturn(BigDecimal.TEN);
+
+        Either<Problem, ReportEntity> result = reportService.reportGenerate(request);
+
+        assertTrue(result.isRight());
+        verify(reportTypeRepository).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        ReportEntity reportEntity = result.get();
+        Optional<BalanceSheetData> balanceSheetReportData = reportEntity.getBalanceSheetReportData();
+        assertTrue(balanceSheetReportData.isPresent());
+        BalanceSheetData balanceSheetData = balanceSheetReportData.get();
+        BigDecimal profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
+
     }
 
 }

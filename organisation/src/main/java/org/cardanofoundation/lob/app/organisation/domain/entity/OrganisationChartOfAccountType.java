@@ -36,7 +36,7 @@ public class OrganisationChartOfAccountType extends CommonEntity {
     private String name;
 
     @OneToMany(mappedBy = "type", orphanRemoval = true, fetch = LAZY, cascade = CascadeType.ALL)
-    private Set<OrganisationChartOfAccountSubType> subType = new LinkedHashSet<>();
+    private Set<OrganisationChartOfAccountSubType> subTypes = new LinkedHashSet<>();
 
 
 }

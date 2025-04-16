@@ -431,3 +431,90 @@ CREATE TABLE IF NOT EXISTS organisation_account_event_aud (
    FOREIGN KEY (rev) REFERENCES revinfo (rev) MATCH SIMPLE
    ON UPDATE NO ACTION ON DELETE NO ACTION
 );
+
+CREATE TABLE organisation_report_setup (
+    id BIGINT PRIMARY KEY,
+    organisation_id VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE
+);
+
+CREATE TABLE organisation_report_setup_aud (
+    id BIGINT,
+    organisation_id VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+    -- Special columns for audit tables
+    rev INTEGER NOT NULL,
+    revtype SMALLINT,
+
+    -- Primary Key for the audit table
+    CONSTRAINT pk_organisation_report_setup_aud PRIMARY KEY (id, rev, revtype)
+);
+
+CREATE TABLE organisation_report_setup_field (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    accumulated BOOLEAN NOT NULL,
+    accumulated_yearly BOOLEAN NOT NULL,
+    report_id BIGINT,
+    parent_id BIGINT,
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    FOREIGN KEY (report_id)
+        REFERENCES organisation_report_setup(id)
+     ON DELETE CASCADE
+);
+
+CREATE TABLE organisation_report_setup_field_aud (
+    id BIGINT,
+    name VARCHAR(255) NOT NULL,
+    accumulated BOOLEAN NOT NULL,
+    accumulated_yearly BOOLEAN NOT NULL,
+    report_id BIGINT,
+    parent_id BIGINT,
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    FOREIGN KEY (report_id)
+     REFERENCES organisation_report_setup(id)
+     ON DELETE CASCADE,
+    -- Special columns for audit tables
+    rev INTEGER NOT NULL,
+    revtype SMALLINT,
+
+    -- Primary Key for the audit table
+    CONSTRAINT pk_organisation_report_setup_field_aud PRIMARY KEY (id)
+);
+
+CREATE TABLE organisation_report_setup_field_subtype_mapping (
+    field_id BIGINT NOT NULL,
+    sub_type_id BIGINT NOT NULL,
+    PRIMARY KEY (field_id, sub_type_id),
+    FOREIGN KEY (field_id) REFERENCES organisation_report_setup_field(id) ON DELETE CASCADE,
+    FOREIGN KEY (sub_type_id) REFERENCES organisation_chart_of_account_sub_type(id) ON DELETE CASCADE
+);
+
+CREATE TABLE organisation_report_setup_field_subtype_mapping_aud (
+    field_id BIGINT NOT NULL,
+    sub_type_id BIGINT NOT NULL,
+    FOREIGN KEY (field_id) REFERENCES organisation_report_setup_field(id) ON DELETE CASCADE,
+    FOREIGN KEY (sub_type_id) REFERENCES organisation_chart_of_account_sub_type(id) ON DELETE CASCADE,
+
+    -- Special columns for audit tables
+    rev INTEGER NOT NULL,
+    revtype SMALLINT,
+
+    -- Primary Key for the audit table
+    CONSTRAINT pk_organisation_setup_field_subtype_mapping_aud PRIMARY KEY (field_id, sub_type_id)
+);

@@ -7,12 +7,20 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.BALANCE_SHEET;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.INCOME_STATEMENT;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
+
+import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,17 +33,28 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.PublicReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 
 @Service
@@ -49,6 +68,10 @@ public class ReportService {
     private final OrganisationPublicApi organisationPublicApi;
     private final Clock clock;
     private final AuthenticationUserService authenticationUserService;
+    private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
+    private final ChartOfAccountRepository chartOfAccountRepository;
+    private final ReportTypeRepository reportTypeRepository;
+    private final TransactionItemRepository transactionItemRepository;
 
     @Transactional
     public Either<Problem, ReportEntity> approveReportForLedgerDispatch(String reportId) {
@@ -254,8 +277,8 @@ public class ReportService {
                                                      short year,
                                                      short period) {
         log.info(reportType.name() + ":: Saving report...");
-        if(reportType == BALANCE_SHEET && createReportView.getBalanceSheetData().isEmpty() ||
-        reportType == INCOME_STATEMENT && createReportView.getIncomeStatementData().isEmpty()) {
+        if (reportType == BALANCE_SHEET && createReportView.getBalanceSheetData().isEmpty() ||
+                reportType == INCOME_STATEMENT && createReportView.getIncomeStatementData().isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("INVALID_REPORT_TYPE")
                     .withDetail(STR."Report type is not valid. Expected BALANCE_SHEET but got \{reportType}.")
@@ -306,9 +329,9 @@ public class ReportService {
         reportEntity.setMode(USER); // Assuming USER is a constant in ReportMode enum
         reportEntity.setDate(LocalDate.now(clock));
 
-        if(reportType == BALANCE_SHEET) {
+        if (reportType == BALANCE_SHEET) {
             reportEntity.setBalanceSheetReportData(createReportView.getBalanceSheetData());
-        } else if(reportType == INCOME_STATEMENT) {
+        } else if (reportType == INCOME_STATEMENT) {
             reportEntity.setIncomeStatementReportData(createReportView.getIncomeStatementData());
         }
 
@@ -323,8 +346,8 @@ public class ReportService {
         return reportRepository.findAllByOrganisationId(organisationId);
     }
 
-    public Set<ReportEntity> findAllByTypeAndPeriod(String organistionId,ReportType reportType, IntervalType intervalType, short year, short period) {
-        return publicReportRepository.findAllByTypeAndPeriod(organistionId,reportType, intervalType, year, period);
+    public Set<ReportEntity> findAllByTypeAndPeriod(String organistionId, ReportType reportType, IntervalType intervalType, short year, short period) {
+        return publicReportRepository.findAllByTypeAndPeriod(organistionId, reportType, intervalType, year, period);
     }
 
     public Either<Problem, ReportEntity> exist(String organisationId, ReportType reportType, IntervalType intervalType, short year, short period) {
@@ -550,5 +573,184 @@ public class ReportService {
         ReportEntity report = new ReportEntity();
         report.setVer(clock.millis());
         return report;
+    }
+
+    public Either<Problem, ReportEntity> reportGenerate(@Valid ReportGenerateRequest reportGenerateRequest) {
+        LocalDate startDate = getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear());
+        LocalDate endDate = getEndDate(reportGenerateRequest.getIntervalType(), getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear()));
+
+        ReportEntity reportEntity = new ReportEntity();
+        reportEntity.setYear(reportGenerateRequest.getYear());
+        reportEntity.setPeriod(Optional.of(reportGenerateRequest.getPeriod()));
+        reportEntity.setIntervalType(reportGenerateRequest.getIntervalType());
+        reportEntity.setMode(USER);
+        reportEntity.setDate(LocalDate.now(clock));
+        reportEntity.setOrganisation(Organisation.builder().id(reportGenerateRequest.getOrganisationId()).build());
+        reportEntity.setType(reportGenerateRequest.getReportType());
+
+
+        Optional<ReportTypeEntity> optionalReportSetupEntity = reportTypeRepository.findByOrganisationAndReportName(reportGenerateRequest.getOrganisationId(), reportGenerateRequest.getReportType().name());
+
+        if (optionalReportSetupEntity.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle("REPORT_SETUP_NOT_FOUND")
+                    .withDetail(String.format("Report setup for %s not found.", reportGenerateRequest.getReportType().name()))
+                    .withStatus(Status.BAD_REQUEST)
+                    .with("reportType", reportGenerateRequest.getReportType().name())
+                    .build());
+        }
+        ReportTypeEntity reportTypeEntity = optionalReportSetupEntity.get();
+        switch (reportGenerateRequest.getReportType()) {
+            case BALANCE_SHEET -> {
+                BalanceSheetData balanceSheetData = new BalanceSheetData();
+                fillReportData(balanceSheetData, reportTypeEntity, startDate, endDate);
+                reportEntity.setBalanceSheetReportData(Optional.of(balanceSheetData));
+            }
+            case INCOME_STATEMENT -> {
+                IncomeStatementData incomeStatementData = new IncomeStatementData();
+                fillReportData(incomeStatementData, reportTypeEntity, startDate, endDate);
+                reportEntity.setIncomeStatementReportData(Optional.of(incomeStatementData));
+            }
+            default -> {
+                return Either.left(Problem.builder()
+                        .withTitle("INVALID_REPORT_TYPE")
+                        .withDetail(String.format("Report type is not valid. Expected BALANCE_SHEET or INCOME_STATEMENT but got %s.", reportGenerateRequest.getReportType()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .with("reportType", reportGenerateRequest.getReportType())
+                        .build());
+            }
+        }
+
+        return Either.right(reportEntity);
+    }
+
+    private void fillReportData(Object reportData, ReportTypeEntity reportTypeEntity, LocalDate startDate, LocalDate endDate) {
+        // if we can solve it differently it would be better
+        Set<ReportTypeFieldEntity> topLevelFields = reportTypeEntity.getFields().stream().filter(field -> field.getParent() == null).collect(Collectors.toSet());
+        topLevelFields.forEach(reportTypeFieldEntity -> {
+            fillObjectRecursively(reportData, reportTypeFieldEntity, startDate, endDate);
+        });
+    }
+
+    private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate) {
+        if (field.getChildFields().isEmpty()) {
+            if (field.getMappingTypes().isEmpty()) {
+                log.debug(STR."Field \{field.getName()} has no mapping type, skipping...");
+                return;
+            }
+            // Set value
+            Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(OrganisationChartOfAccountSubType::getId).toList());
+            Optional<LocalDate> startSearchDate;
+            BigDecimal totalAmount = BigDecimal.ZERO;
+
+            if (field.isAccumulatedYearly()) {
+                startSearchDate = Optional.of(LocalDate.of(startDate.getYear(), 1, 1));
+            } else if (field.isAccumulated()) {
+                // TODO this calculation can be optimized by using already published reports
+                startSearchDate = Optional.of(LocalDate.EPOCH);
+            } else {
+                startSearchDate = Optional.of(startDate);
+            }
+            // adding Opening Balance if the startDate is before the OpeningBalance Date
+            totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
+                    BigDecimal.ZERO :
+                    organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ? organisationChartOfAccount.getOpeningBalance().getBalanceLCY() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+
+            List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                    allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
+                    startSearchDate.orElse(LocalDate.EPOCH), endDate);
+            Map<String, OrganisationChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
+
+            // Set value
+            totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity -> {
+                        // Skipping invalid transaction Items
+                        if (transactionItemEntity.getStatus() != TxItemValidationStatus.OK) {
+                            return BigDecimal.ZERO;
+                        }
+                        BigDecimal amount = BigDecimal.ZERO;
+                        if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
+                            amount = amount.add(transactionItemEntity.getAmountLcy());
+                        }
+                        if (transactionItemEntity.getAccountCredit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
+                            amount = amount.add(transactionItemEntity.getAmountLcy().negate());
+                        }
+                        return amount.stripTrailingZeros();
+                    }
+            ).reduce(BigDecimal.ZERO, BigDecimal::add));
+            // Set value dynamically in reportData
+            setFieldValue(reportData, field.getName(), totalAmount.abs());
+        } else {
+            field.getChildFields().forEach(subField -> {
+                Object subFieldObject = getOrCreateNestedObject(reportData, field.getName());
+                fillObjectRecursively(subFieldObject, subField, startDate, endDate);
+            });
+        }
+    }
+
+    private Object getOrCreateNestedObject(Object object, String fieldName) {
+        try {
+            Field field = object.getClass().getDeclaredField(toCamelCase(fieldName));
+            field.setAccessible(true);
+
+            Object value = field.get(object);
+            if (value == null) {
+                // Instantiate the nested field if null
+                value = field.getType().getDeclaredConstructor().newInstance();
+                field.set(object, value);
+            }
+            return value;
+        } catch (NoSuchFieldException | IllegalAccessException | InstantiationException | NoSuchMethodException |
+                 InvocationTargetException e) {
+            throw new RuntimeException("Failed to get or create field: " + fieldName, e);
+        }
+    }
+
+    private void setFieldValue(Object object, String fieldName, Object value) {
+        try {
+            Field field = object.getClass().getDeclaredField(toCamelCase(fieldName));
+            field.setAccessible(true);
+            field.set(object, value);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Failed to set field: " + fieldName, e);
+        }
+    }
+
+    private LocalDate getStartDate(IntervalType intervalType, int period, short year) {
+        switch (intervalType) {
+            case MONTH:
+                return LocalDate.of(year, period, 1);
+            case QUARTER:
+                int month = (period - 1) * 3 + 1; // Convert quarter to starting month
+                return LocalDate.of(year, month, 1);
+            case YEAR:
+                return LocalDate.of(year, 1, 1);
+            default:
+                throw new IllegalArgumentException("Unsupported IntervalType: " + intervalType);
+        }
+    }
+
+    private LocalDate getEndDate(IntervalType intervalType, LocalDate startDate) {
+        switch (intervalType) {
+            case MONTH:
+                return startDate.plusMonths(1).minusDays(1);
+            case QUARTER:
+                return startDate.plusMonths(3).minusDays(1);
+            case YEAR:
+                return startDate.plusYears(1).minusDays(1);
+            default:
+                throw new IllegalArgumentException("Unsupported IntervalType: " + intervalType);
+        }
+    }
+
+    private String toCamelCase(String input) {
+        String[] parts = input.toLowerCase().split("_");
+        StringBuilder camelCaseString = new StringBuilder(parts[0]); // Keep the first word lowercase
+
+        for (int i = 1; i < parts.length; i++) {
+            camelCaseString.append(parts[i].substring(0, 1).toUpperCase()).append(parts[i].substring(1));
+        }
+
+        return camelCaseString.toString();
     }
 }
