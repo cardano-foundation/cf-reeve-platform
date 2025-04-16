@@ -26,14 +26,14 @@ import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApi
 public class TransactionSubmissionConfig {
 
     @Bean
-    @Profile(value = { "dev--yaci-dev-kit", "test"} )
+    @Profile(value = { "blockfrost"} )
     public BlockchainTransactionSubmissionService backendServiceTransactionSubmissionService(
             @Qualifier("yaci_blockfrost") BackendService backendService) {
         return new BackendServiceBlockchainTransactionSubmissionService(backendService);
     }
 
     @Bean
-    @Profile(value = { "dev--yaci-dev-kit", "test", "prod"} )
+    @Profile(value = { "blockfrost"} )
     public UtxoSupplier utxoSupplier(@Qualifier("yaci_blockfrost") BackendService backendService) {
         return new DefaultUtxoSupplier(backendService.getUtxoService());
     }
@@ -101,7 +101,7 @@ public class TransactionSubmissionConfig {
 //    }
 
     @Bean
-    @Profile( value = { "prod", "dev--preprod" } )
+    @Profile( value = { "submit-api" } )
     public BlockchainTransactionSubmissionService cardanoSummitTransactionSubmissionService(HttpClient httpClient,
                                                                                             @Value("${lob.blockchain_publisher.tx.submit.url}") String cardanoSubmitApiUrl,
                                                                                             @Value("${lob.blockchain_publisher.tx.submit.timeout.in.seconds}") int timeoutInSeconds,
@@ -110,7 +110,7 @@ public class TransactionSubmissionConfig {
     }
 
     @Bean
-    @Profile( value = { "prod", "dev--preprod" } )
+    @Profile( value = { "submit-api" } )
     public HttpClient httpClient(@Value("${lob.blockchain_publisher.tx.submit.timeout.in.seconds:30}") int timeoutInSeconds) {
         return HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_2)
