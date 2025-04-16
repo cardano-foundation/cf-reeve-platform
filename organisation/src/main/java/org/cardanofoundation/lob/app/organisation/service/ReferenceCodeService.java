@@ -68,9 +68,10 @@ public class ReferenceCodeService {
         );
 
         referenceCode.setName(referenceCodeUpdate.getName());
-        parentReferenceCode.ifPresent(parent -> referenceCode.setParentReferenceCode(parent.getId().getReferenceCode()));
-        referenceCode.setActive(referenceCodeUpdate.isActive());
+        referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
+        referenceCode.setActive(referenceCodeUpdate.isActive());
+        // The reference code returning is not the latest version after save
         return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
     }
 }
