@@ -1,8 +1,8 @@
 package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal;
 
-import static java.util.Objects.requireNonNull;
-import static org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreCompress.decompress;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -38,6 +38,7 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuit
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -99,7 +100,7 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testStartNewERPExtraction_errorCreatingExtractionParams() {
-        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of("TestBody")));
+        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of(List.of("TestBody"))));
         when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.left(Problem.builder()
                 .withStatus(Status.BAD_REQUEST)
                 .withTitle("testTitle")
@@ -116,15 +117,13 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testStartNewERPExtraction_successfull() {
-        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of("TestBody")));
+        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of(List.of("TestBody"))));
         when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.right(SystemExtractionParameters.builder().build()));
-        when(ingestionRepository.saveAndFlush(any())).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", "ingestionBody","ingestionBodyDebug", "ingestionChecksum"));
+        when(netSuiteParser.saveToDataBase(anyString(), eq(Optional.of(List.of("TestBody"))), eq(true), eq("userId"))).thenReturn(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum"))));
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
         verify(netSuiteClient).retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class));
-        verify(systemExtractionParametersFactory).createSystemExtractionParameters("orgId");
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchStartedEvent.class));
-        verify(ingestionRepository).saveAndFlush(any());
         verifyNoMoreInteractions(netSuiteClient, systemExtractionParametersFactory, applicationEventPublisher, ingestionRepository);
     }
 
@@ -151,7 +150,7 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testContinueERPExtraction_orgIdMismatch() {
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", "ingestionBody","ingestionBodyDebug", "ingestionChecksum")));
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, "ingestionBody", "id", "ingestionBodyDebug", "ingestionChecksum")))));
         netSuiteExtractionService.continueERPExtraction("id", "orgId", UserExtractionParameters.builder().organisationId("org1").from(LocalDate.now()).to(LocalDate.now()).build(), SystemExtractionParameters.builder().organisationId("orgId2").build());
 
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchFailedEvent.class));
@@ -161,8 +160,8 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testContinueERPExtraction_parseSearchFailed() {
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", ingestionBody,"ingestionBodyDebug", "ingestionChecksum")));
-        when(netSuiteParser.parseSearchResults(requireNonNull(decompress(ingestionBody)))).thenReturn(Either.left(Problem.builder()
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
+        when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.left(Problem.builder()
                 .withStatus(Status.BAD_REQUEST)
                 .withTitle("testTitle")
                 .withDetail("testDetail")
@@ -172,36 +171,36 @@ class NetSuiteExtractionServiceTest {
 
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchFailedEvent.class));
         verify(ingestionRepository).findById("id");
-        verify(netSuiteParser).parseSearchResults(requireNonNull(decompress(ingestionBody)));
+        verify(netSuiteParser).getAllTxLinesFromBodies(any());
         verifyNoMoreInteractions(applicationEventPublisher, ingestionRepository, netSuiteParser);
     }
 
     @Test
     void testContinueERPExtraction_transactionConvertFailed() {
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", ingestionBody,"ingestionBodyDebug", "ingestionChecksum")));
-        when(netSuiteParser.parseSearchResults(requireNonNull(decompress(ingestionBody)))).thenReturn(Either.right(List.of()));
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
+        when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.right(List.of()));
         when(transactionConverter.convert("org", "id", List.of())).thenReturn(Either.left(new FatalError(FatalError.Code.ADAPTER_ERROR, "test", Map.of())));
+
         netSuiteExtractionService.continueERPExtraction("id", "orgId", UserExtractionParameters.builder().organisationId("org").from(LocalDate.now()).to(LocalDate.now()).build(), SystemExtractionParameters.builder().organisationId("org").build());
 
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchFailedEvent.class));
         verify(ingestionRepository).findById("id");
-        verify(netSuiteParser).parseSearchResults(requireNonNull(decompress(ingestionBody)));
+        verify(netSuiteParser).getAllTxLinesFromBodies(any());
         verifyNoMoreInteractions(applicationEventPublisher, ingestionRepository, netSuiteParser);
     }
 
     @Test
     void testContinueERPExtraction_transactionConvertSuccess() {
         TxLine mockTxLine = mock(TxLine.class);
-        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", ingestionBody,"ingestionBodyDebug", "ingestionChecksum")));
-        when(netSuiteParser.parseSearchResults(requireNonNull(decompress(ingestionBody)))).thenReturn(Either.right(List.of(mockTxLine)));
+        when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
         when(transactionConverter.convert("orgId", "id", List.of(mockTxLine))).thenReturn(Either.right(new Transactions("org", Set.of())));
         when(extractionParametersFilteringService.applyExtractionParameters(any(), any(), any())).thenReturn(Set.of(Transaction.builder().id("id1").build(), Transaction.builder().id("id2").build(), Transaction.builder().id("id3").build()));
+        when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.right(List.of(mockTxLine)));
 
         netSuiteExtractionService.continueERPExtraction("id", "orgId", UserExtractionParameters.builder().organisationId("org").from(LocalDate.now()).to(LocalDate.now()).build(), SystemExtractionParameters.builder().organisationId("org").build());
 
         verify(applicationEventPublisher, times(3)).publishEvent(any(TransactionBatchChunkEvent.class));
         verify(ingestionRepository).findById("id");
-        verify(netSuiteParser).parseSearchResults(requireNonNull(decompress(ingestionBody)));
         verify(transactionConverter).convert("orgId", "id", List.of(mockTxLine));
         verifyNoMoreInteractions(applicationEventPublisher, ingestionRepository, netSuiteParser, transactionConverter);
     }

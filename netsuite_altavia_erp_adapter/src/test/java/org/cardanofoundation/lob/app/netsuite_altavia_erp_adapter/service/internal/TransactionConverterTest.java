@@ -87,7 +87,6 @@ class TransactionConverterTest {
         ConstraintViolation<TxLine> mockViolation = mock(ConstraintViolation.class);
         Path mockPath = mock(Path.class);
         when(mockPath.toString()).thenReturn("path");
-        when(mockViolation.getRootBean()).thenReturn(mockTxLine);
         when(mockViolation.getMessage()).thenReturn("Message");
         when(mockViolation.getPropertyPath()).thenReturn(mockPath);
         when(mockViolation.getInvalidValue()).thenReturn("invalidaValue");

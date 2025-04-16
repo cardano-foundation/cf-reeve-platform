@@ -1,8 +1,15 @@
 package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 import lombok.AllArgsConstructor;
@@ -29,18 +36,17 @@ public class NetSuiteIngestionEntity extends CommonEntity implements Persistable
     @Column(name = "adapter_instance_id", nullable = false)
     private String adapterInstanceId;
 
-    @Column(name = "ingestion_body", nullable = false, length = 999_999, columnDefinition = "TEXT")
-    private String ingestionBody;
-
-    @Column(name = "ingestion_body_debug", nullable = false, length = 999_999, columnDefinition = "TEXT")
-    private String ingestionBodyDebug;
-
-    @Column(name = "ingestion_body_checksum", nullable = false)
-    private String ingestionBodyChecksum;
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @JoinColumn(name = "netsuite_ingestion_id", referencedColumnName = "id")
+    private List<NetsuiteIngestionBody> ingestionBodies = new ArrayList<>();
 
     @Override
     public String getId() {
         return id;
+    }
+
+    public void addBody(NetsuiteIngestionBody body) {
+        this.ingestionBodies.add(body);
     }
 
 }

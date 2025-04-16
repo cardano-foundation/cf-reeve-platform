@@ -441,7 +441,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_item (
 
    FOREIGN KEY (transaction_id) REFERENCES accounting_core_transaction (transaction_id),
 
-   fx_rate DECIMAL(12, 8) NOT NULL,
+   fx_rate DECIMAL(30, 15) NOT NULL,
 
    rejection_reason accounting_core_rejection_reason_type,
 
@@ -456,15 +456,15 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_item (
    account_event_code VARCHAR(255),
    account_event_name VARCHAR(255),
 
-   amount_fcy DECIMAL(30, 8) NOT NULL,
-   amount_lcy DECIMAL(30, 8) NOT NULL,
+   amount_fcy DECIMAL(30, 15) NOT NULL,
+   amount_lcy DECIMAL(30, 15) NOT NULL,
 
    document_num VARCHAR(255),
    document_currency_customer_code VARCHAR(255),
    document_currency_id accounting_core_currency_id_type,
 
    document_vat_customer_code VARCHAR(255),
-   document_vat_rate DECIMAL(12, 8),
+   document_vat_rate DECIMAL(30, 15),
 
    document_counterparty_customer_code VARCHAR(255),
    document_counterparty_type accounting_core_counter_party_type,
@@ -496,7 +496,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_item_aud (
 
    --FOREIGN KEY (transaction_id) REFERENCES accounting_core_transaction (transaction_id),
 
-   fx_rate DECIMAL(12, 8) NOT NULL,
+   fx_rate DECIMAL(30, 15) NOT NULL,
 
    rejection_reason accounting_core_rejection_reason_type,
 
@@ -511,15 +511,15 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_item_aud (
    account_event_code VARCHAR(255),
    account_event_name VARCHAR(255),
 
-   amount_fcy DECIMAL(30, 8) NOT NULL,
-   amount_lcy DECIMAL(30, 8) NOT NULL,
+   amount_fcy DECIMAL(30, 15) NOT NULL,
+   amount_lcy DECIMAL(30, 15) NOT NULL,
 
    document_num VARCHAR(255),
    document_currency_customer_code VARCHAR(255),
    document_currency_id accounting_core_currency_id_type,
 
    document_vat_customer_code VARCHAR(255),
-   document_vat_rate DECIMAL(12, 8),
+   document_vat_rate DECIMAL(30, 15),
 
    document_counterparty_customer_code VARCHAR(255),
    document_counterparty_type accounting_core_counter_party_type,
