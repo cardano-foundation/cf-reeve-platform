@@ -247,7 +247,7 @@ public class NetSuiteClient {
             baseUrl = STR."\{baseUrl}&start=\{start.get()}";
         }
         String uriString = UriComponentsBuilder.fromHttpUrl(baseUrl)
-                .queryParam("trandate:within", isoFormatDates(from, to)).toUriString();
+                .queryParam("trandate", "within:" + isoFormatDates(from, to)).toUriString();
         log.info("Call to url: {}", uriString);
         RestClient.RequestHeadersSpec<?> uri = restClient.get().uri(uriString);
         accessToken.ifPresent(s -> uri.header("Authorization", STR."Bearer \{s}"));

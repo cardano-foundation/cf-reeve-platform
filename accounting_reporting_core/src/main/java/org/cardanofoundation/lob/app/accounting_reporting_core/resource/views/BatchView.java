@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.views;
 
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
@@ -49,4 +50,6 @@ public class BatchView {
 
     @ArraySchema(arraySchema = @Schema(implementation = TransactionView.class))
     private Set<TransactionView> transactions = new LinkedHashSet<>();
+
+    private Map<String, Object> details;
 }
