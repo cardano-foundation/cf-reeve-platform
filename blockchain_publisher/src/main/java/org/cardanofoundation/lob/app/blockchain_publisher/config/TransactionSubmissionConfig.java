@@ -26,14 +26,14 @@ import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApi
 public class TransactionSubmissionConfig {
 
     @Bean
-    @Profile(value = { "blockfrost"} )
+    @Profile(value = { "blockfrost", "dev--yaci-dev-kit"} )
     public BlockchainTransactionSubmissionService backendServiceTransactionSubmissionService(
             @Qualifier("yaci_blockfrost") BackendService backendService) {
         return new BackendServiceBlockchainTransactionSubmissionService(backendService);
     }
 
     @Bean
-    @Profile(value = { "blockfrost"} )
+    @Profile(value = { "blockfrost", "dev--yaci-dev-kit"} )
     public UtxoSupplier utxoSupplier(@Qualifier("yaci_blockfrost") BackendService backendService) {
         return new DefaultUtxoSupplier(backendService.getUtxoService());
     }
