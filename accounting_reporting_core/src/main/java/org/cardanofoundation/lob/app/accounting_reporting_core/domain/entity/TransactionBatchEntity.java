@@ -51,7 +51,7 @@ public class TransactionBatchEntity extends CommonEntity implements Persistable<
     @NotNull
     private FilteringParameters filteringParameters;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "accounting_core_transaction_batch_assoc",
             joinColumns = @JoinColumn(name = "transaction_batch_id"),

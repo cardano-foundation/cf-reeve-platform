@@ -265,7 +265,7 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
 
         if (!body.getTxStatus().isEmpty()) {
             Join<TransactionBatchEntity, TransactionEntity> transactionEntityJoin = rootEntry.join("transactions", JoinType.INNER);
-            andPredicates.add(builder.in(transactionEntityJoin.get("status")).value(body.getTxStatus()));
+            andPredicates.add(builder.in(transactionEntityJoin.get("overallStatus")).value(body.getTxStatus()));
         }
 
         return andPredicates;
