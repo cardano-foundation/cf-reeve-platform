@@ -17,8 +17,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.chrono.ChronoLocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -43,6 +45,7 @@ import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.responses.TokenReponse;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TransactionDataSearchResult;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -57,6 +60,7 @@ public class NetSuiteClient {
     private final String privateKeyFilePath;
     private final String certificateId;
     private final String clientId;
+    private final Integer recordsPerCall;
 
     private Optional<String> accessToken = Optional.empty();
     private Optional<LocalDateTime> accessTokenExpiration = Optional.empty();
@@ -67,6 +71,7 @@ public class NetSuiteClient {
     public void init() {
         log.info("Initializing NetSuite client...");
         log.info("token url: {}", tokenUrl);
+
         refreshToken();
     }
 
@@ -133,10 +138,44 @@ public class NetSuiteClient {
         }
     }
 
-    public Either<Problem, Optional<String>> retrieveLatestNetsuiteTransactionLines(LocalDate extractionFrom, LocalDate extractionTo) {
+    public Either<Problem, Optional<List<String>>> retrieveLatestNetsuiteTransactionLines(LocalDate extractionFrom, LocalDate extractionTo) {
+        boolean hasMore;
+        List<String> lines = new ArrayList<>();
+        int start = 0;
+        do {
+            Either<Problem, Optional<String>> retrievedData = retrieveTransactionLineData(extractionFrom, extractionTo, Optional.of(start));
+            if (retrievedData.isLeft()) {
+                return Either.left(retrievedData.getLeft());
+            } else {
+                Optional<String> searchResultString = retrievedData.get();
+                if (searchResultString.isEmpty()) {
+                    return Either.right(Optional.of(lines));
+                } else {
+                    try {
+                        TransactionDataSearchResult transactionDataSearchResult = objectMapper.readValue(searchResultString.get(), TransactionDataSearchResult.class);
+                        lines.add(searchResultString.get());
+                        if(transactionDataSearchResult.more()) {
+                            hasMore = true;
+                            start += 1;
+                        } else {
+                            hasMore = false;
+                        }
+                    } catch (JsonProcessingException e) {
+                        hasMore = false;
+                        log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
+                    }
+                }
+
+            }
+        } while(hasMore);
+        log.info("Netsuite response success...customerCode:{}, messageCount:{}", 200, lines.size());
+        return Either.right(Optional.of(lines));
+    }
+
+    private Either<Problem, Optional<String>> retrieveTransactionLineData(LocalDate extractionFrom, LocalDate extractionTo, Optional<Integer> start) {
         ResponseEntity<String> response;
         try {
-            response = callForTransactionLinesData(extractionFrom, extractionTo);
+            response = callForTransactionLinesData(extractionFrom, extractionTo, start);
         } catch (IOException e) {
             return Either.left(Problem.builder()
                     .withStatus(Status.INTERNAL_SERVER_ERROR)
@@ -147,7 +186,7 @@ public class NetSuiteClient {
 
         if (response.getStatusCode().is2xxSuccessful()) {
             final String body = response.getBody();
-            log.info("Netsuite response success...customerCode:{}, message:{}", response.getStatusCode().value(), body);
+            log.info("Netsuite response success...customerCode:{}", response.getStatusCode().value());
 
             try {
                 JsonNode bodyJsonTree = objectMapper.readTree(body);
@@ -180,6 +219,10 @@ public class NetSuiteClient {
                         .build());
             }
         }
+        if(response.getStatusCode().is1xxInformational()) {
+            log.info("Netsuite response success...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
+            return Either.right(Optional.empty());
+        }
 
         return Either.left(Problem.builder()
                 .withStatus(Status.valueOf(response.getStatusCode().value()))
@@ -188,14 +231,23 @@ public class NetSuiteClient {
                 .build());
     }
 
-    private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to) throws IOException {
+    private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) throws IOException {
         log.info("Retrieving data from NetSuite...");
 
         if(LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
             refreshToken();
         }
+        String baseUrl = this.baseUrl;
+        // Remove the recordspercall parameter if it exists, since we are setting it by ourselves
+        // This is just to be sure that we are not sending multiple recordspercall parameters
+        baseUrl = baseUrl.replaceAll("&recordspercall=\\d+", "");
+
+        baseUrl = STR."\{baseUrl}&recordspercall=\{recordsPerCall}";
+        if (start.isPresent()) {
+            baseUrl = STR."\{baseUrl}&start=\{start.get()}";
+        }
         String uriString = UriComponentsBuilder.fromHttpUrl(baseUrl)
-                .queryParam("trandate:within", isoFormatDates(from, to)).toUriString();
+                .queryParam("trandate", "within:" + isoFormatDates(from, to)).toUriString();
         log.info("Call to url: {}", uriString);
         RestClient.RequestHeadersSpec<?> uri = restClient.get().uri(uriString);
         accessToken.ifPresent(s -> uri.header("Authorization", STR."Bearer \{s}"));

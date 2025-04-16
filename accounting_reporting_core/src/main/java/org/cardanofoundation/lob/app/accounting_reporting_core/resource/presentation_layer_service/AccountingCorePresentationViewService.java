@@ -143,7 +143,8 @@ public class AccountingCorePresentationViewService {
                             transactionBatchEntity.getStatus(),
                             statistic,
                             filteringParameters,
-                            transactions
+                            transactions,
+                            transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
                     );
                 }
         );
@@ -168,7 +169,9 @@ public class AccountingCorePresentationViewService {
                                     transactionBatchEntity.getStatus(),
                                     statistic,
                                     this.getFilteringParameters(transactionBatchEntity.getFilteringParameters()),
-                                    Set.of()
+                                    Set.of(),
+                                    transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
+
                             );
                         }
                 ).toList();

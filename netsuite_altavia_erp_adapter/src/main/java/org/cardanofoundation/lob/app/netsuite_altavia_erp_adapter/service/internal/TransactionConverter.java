@@ -41,9 +41,7 @@ public class TransactionConverter {
     private final String netsuiteInstanceId;
     private final FinancialPeriodSource financialPeriodSource;
 
-    public Either<FatalError, Transactions> convert(String organisationId,
-                                                    String batchId,
-                                                    List<TxLine> txLines) {
+    public Either<FatalError, Transactions> convert(String organisationId, String batchId, List<TxLine> txLines) {
         ArrayList<TxLine> searchResultsByOrganisation = new ArrayList<>();
         LinkedHashSet<Transaction> transactions = new LinkedHashSet<>();
 
@@ -61,9 +59,7 @@ public class TransactionConverter {
             }
         }
 
-        Map<String, List<TxLine>> searchResultItemsPerTransactionNumber = searchResultsByOrganisation
-                .stream()
-                .collect(groupingBy(TxLine::transactionNumber));
+        Map<String, List<TxLine>> searchResultItemsPerTransactionNumber = searchResultsByOrganisation.stream().collect(groupingBy(TxLine::transactionNumber));
 
         for (Map.Entry<String, List<TxLine>> entry : searchResultItemsPerTransactionNumber.entrySet()) {
             List<TxLine> transactionLevelTxLines = entry.getValue();
@@ -79,10 +75,7 @@ public class TransactionConverter {
         return Either.right(new Transactions(organisationId, transactions));
     }
 
-    private Either<FatalError, Optional<Transaction>> createTransactionFromSearchResultItems(String organisationId,
-                                                                                             String batchId,
-                                                                                             List<TxLine> txLines
-    ) {
+    private Either<FatalError, Optional<Transaction>> createTransactionFromSearchResultItems(String organisationId, String batchId, List<TxLine> txLines) {
         if (txLines.isEmpty()) {
             return Either.right(Optional.empty());
         }
@@ -107,12 +100,7 @@ public class TransactionConverter {
             Set<ConstraintViolation<TxLine>> validationIssues = validator.validate(txLine);
             boolean isValid = validationIssues.isEmpty();
             if (!isValid) {
-                Map<String, Object> bag = Map.of(
-                        "organisationId", organisationId,
-                        "txId", txId,
-                        "internalTransactionNumber", txLine.transactionNumber(),
-                        "validationIssues", humanReadable(validationIssues)
-                );
+                Map<String, Object> bag = Map.of("organisationId", organisationId, "txId", txId, "internalTransactionNumber", txLine.transactionNumber(), "validationIssues", humanReadable(validationIssues));
 
                 log.error("Validation failed for transaction: {}", bag);
 
@@ -124,16 +112,15 @@ public class TransactionConverter {
             OperationType operationType;
             BigDecimal amountLcy;
             BigDecimal amountFcy;
-            if(txLine.amountDebit() != null && txLine.amountCredit() != null ||
-                    txLine.amountDebitForeignCurrency() != null && txLine.amountCreditForeignCurrency() != null) {
+            if (txLine.amountDebit() != null && txLine.amountCredit() != null || txLine.amountDebitForeignCurrency() != null && txLine.amountCreditForeignCurrency() != null) {
                 // Error when both amounts are non-zero
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", txId);
                 return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", Map.of()));
-            } else if(txLine.amountDebit() != null || txLine.amountDebitForeignCurrency() != null) {
+            } else if (txLine.amountDebit() != null || txLine.amountDebitForeignCurrency() != null) {
                 operationType = OperationType.DEBIT;
                 amountLcy = MoreBigDecimal.zeroForNull(txLine.amountDebit());
                 amountFcy = MoreBigDecimal.zeroForNull(txLine.amountDebitForeignCurrency());
-            } else if(txLine.amountCredit() != null || txLine.amountCreditForeignCurrency() != null) {
+            } else if (txLine.amountCredit() != null || txLine.amountCreditForeignCurrency() != null) {
                 operationType = OperationType.CREDIT;
                 amountLcy = MoreBigDecimal.zeroForNull(txLine.amountCredit());
                 amountFcy = MoreBigDecimal.zeroForNull(txLine.amountCreditForeignCurrency());
@@ -150,62 +137,25 @@ public class TransactionConverter {
 
             Optional<Document> documentM = convertDocument(organisationId, txLine);
 
-            TransactionItem txItem = TransactionItem.builder()
-                    .id(TransactionItem.id(txId, txLine.lineID().toString()))
-                    .accountDebit(Optionals.zip(normaliseString(txLine.name()), normaliseString(txLine.number()), (accountDebitName, accountDebitCode) -> {
-                        return Account.builder()
-                                .name(Optional.of(accountDebitName))
-                                .code(accountDebitCode)
-                                .build();
-                    }))
-                    .accountCredit(accountCreditCodeM.map(accountCreditCode -> {
-                                return Account.builder()
-                                        .code(accountCreditCode)
-                                        .build();
-                            })
-                    )
-                    .project(projectCodeM.map(pc -> Project.builder()
-                            .customerCode(pc)
-                            .build()
-                    ))
-                    .costCenter(costCenterM.map(cc -> CostCenter.builder()
-                            .customerCode(cc)
-                            .build()
-                    ))
-                    .document(documentM)
-                    .fxRate(fxRate)
-                    .amountLcy(amountLcy)
-                    .amountFcy(amountFcy)
-                    .operationType(operationType)
-                    .build();
+            TransactionItem txItem = TransactionItem.builder().id(TransactionItem.id(txId, txLine.lineID().toString())).accountDebit(Optionals.zip(normaliseString(txLine.name()), normaliseString(txLine.number()), (accountDebitName, accountDebitCode) -> {
+                return Account.builder().name(Optional.of(accountDebitName)).code(accountDebitCode).build();
+            })).accountCredit(accountCreditCodeM.map(accountCreditCode -> {
+                return Account.builder().code(accountCreditCode).build();
+            })).project(projectCodeM.map(pc -> Project.builder().customerCode(pc).build())).costCenter(costCenterM.map(cc -> CostCenter.builder().customerCode(cc).build())).document(documentM).fxRate(fxRate).amountLcy(amountLcy).amountFcy(amountFcy).operationType(operationType).build();
 
             txItems.add(txItem);
         }
 
-        return Either.right(Optional.of(Transaction.builder()
-                .id(txId)
-                .internalTransactionNumber(internalTransactionNumber)
-                .entryDate(txDate)
-                .batchId(batchId)
-                .transactionType(transactionType)
-                .accountingPeriod(accountingPeriod)
-                .organisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation.builder()
-                        .id(organisationId)
-                        .build()
-                )
-                .items(txItems)
-                .build())
-        );
+        return Either.right(Optional.of(Transaction.builder().id(txId).internalTransactionNumber(internalTransactionNumber).entryDate(txDate).batchId(batchId).transactionType(transactionType).accountingPeriod(accountingPeriod).organisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation.builder().id(organisationId).build()).items(txItems).build()));
     }
 
     private static List<Map<String, Object>> humanReadable(Set<ConstraintViolation<TxLine>> validationIssues) {
         return validationIssues.stream().map(c -> {
-            return Map.of(
-                    "bean", c.getRootBean().getClass().getName(),
-                    "msg", c.getMessage(),
-                    "property", c.getPropertyPath().toString(),
-                    "invalidValue", c.getInvalidValue()
-            );
+            String propertyPath = c.getPropertyPath() != null ? c.getPropertyPath().toString() : "null";
+            String message = c.getMessage() != null ? c.getMessage() : "null";
+            Object invalidValue = c.getInvalidValue() != null ? c.getInvalidValue() : "null"; // can be null, but that's OK in a Map
+
+            return Map.of("propertyPath", propertyPath, "message", message, "invalidValue", invalidValue);
         }).toList();
     }
 
@@ -220,18 +170,11 @@ public class TransactionConverter {
         };
     }
 
-    private Either<FatalError, TransactionType> transactionType(String organisationId,
-                                                                String txId,
-                                                                TxLine txLine) {
+    private Either<FatalError, TransactionType> transactionType(String organisationId, String txId, TxLine txLine) {
         Optional<TransactionType> transactionTypeM = transactionTypeMapper.apply(txLine.type());
 
         if (transactionTypeM.isEmpty()) {
-            Map<String, Object> bag = Map.<String, Object>of(
-                    "organisationId", organisationId,
-                    "internalTransactionNumber", txLine.transactionNumber(),
-                    "txId", txId,
-                    "type", txLine.type()
-            );
+            Map<String, Object> bag = Map.<String, Object>of("organisationId", organisationId, "internalTransactionNumber", txLine.transactionNumber(), "txId", txId, "type", txLine.type());
 
             return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTION_TYPE_NOT_YET_KNOWN", bag));
         }
@@ -245,8 +188,7 @@ public class TransactionConverter {
         if (documentNumberM.isPresent()) {
             String documentNumber = documentNumberM.orElseThrow();
 
-            Optional<String> taxItemM = normaliseString(txLine.taxItem())
-                    .map(String::trim);
+            Optional<String> taxItemM = normaliseString(txLine.taxItem()).map(String::trim);
 
             Optional<String> vatCodeM = Optional.<String>empty();
             if (taxItemM.isPresent()) {
@@ -261,32 +203,18 @@ public class TransactionConverter {
                 }
             }
 
-            return Optional.of(Document.builder()
-                    .number(documentNumber)
-                    .currency(Currency.builder()
-                            .customerCode(txLine.currencySymbol())
-                            .build())
-                    .vat(vatCodeM.map(cc -> Vat.builder()
-                            .customerCode(cc)
-                            .build()))
-                    .counterparty(convertCounterparty(txLine))
-                    .build()
-            );
+            return Optional.of(Document.builder().number(documentNumber).currency(Currency.builder().customerCode(txLine.currencySymbol()).build()).vat(vatCodeM.map(cc -> Vat.builder().customerCode(cc).build())).counterparty(convertCounterparty(txLine)).build());
         }
 
         return Optional.empty();
     }
 
     private static Optional<Counterparty> convertCounterparty(TxLine txLine) {
-        return normaliseString(txLine.counterPartyId()).map(customerCode -> Counterparty.builder()
-                .customerCode(customerCode)
-                .type(VENDOR) // TODO CF hardcoded for now
-                .name(normaliseString(txLine.counterPartyName()))
-                .build());
+        return normaliseString(txLine.counterPartyId()).map(customerCode -> Counterparty.builder().customerCode(customerCode).type(VENDOR) // TODO CF hardcoded for now
+                .name(normaliseString(txLine.counterPartyName())).build());
     }
 
-    private Optional<String> accountCreditCode(String organisationId,
-                                               String accountMain) {
+    private Optional<String> accountCreditCode(String organisationId, String accountMain) {
         Optional<String> accountCodeCreditM = normaliseString(accountMain);
 
         if (accountCodeCreditM.isPresent()) {
@@ -308,8 +236,7 @@ public class TransactionConverter {
         return Optional.empty();
     }
 
-    private Optional<String> costCenterCode(String organisationId,
-                                            TxLine txLine) {
+    private Optional<String> costCenterCode(String organisationId, TxLine txLine) {
         Optional<String> costCenterM = MoreString.normaliseString(txLine.costCenter());
 
         if (costCenterM.isPresent()) {
@@ -334,10 +261,7 @@ public class TransactionConverter {
         Optional<String> organisationIdM = codesMappingService.getCodeMapping(netsuiteInstanceId, txLine.subsidiary(), ORGANISATION);
 
         if (organisationIdM.isEmpty()) {
-            Map<String, Object> bag = Map.<String, Object>of(
-                    "netsuiteInstanceId", netsuiteInstanceId,
-                    "subsidiary", txLine.subsidiary()
-            );
+            Map<String, Object> bag = Map.<String, Object>of("netsuiteInstanceId", netsuiteInstanceId, "subsidiary", txLine.subsidiary());
 
             return Either.left(new FatalError(ADAPTER_ERROR, "ORGANISATION_NOT_IMPORTED", bag));
         }
@@ -345,8 +269,7 @@ public class TransactionConverter {
         return Either.right(organisationIdM.orElseThrow());
     }
 
-    private Optional<String> projectCode(String organisationId,
-                                         TxLine txLine) {
+    private Optional<String> projectCode(String organisationId, TxLine txLine) {
         Optional<String> projectM = normaliseString(txLine.project());
 
         if (projectM.isPresent()) {
