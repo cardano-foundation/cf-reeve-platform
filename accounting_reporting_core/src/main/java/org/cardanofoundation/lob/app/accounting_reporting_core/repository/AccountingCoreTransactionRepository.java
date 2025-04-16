@@ -51,4 +51,6 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
                                                                       @Param("endDate") LocalDate endDate,
                                                                       @Param("ids") Set<String> ids);
 
+    Set<TransactionEntity> findAllByBatchId(String batchId);
+
 }

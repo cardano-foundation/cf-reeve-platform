@@ -4,39 +4,38 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.VALIDATED;
 
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 
 @Service
 @Slf4j
 public class TxBatchStatusCalculator {
 
-    public TransactionBatchStatus reCalcStatus(TransactionBatchEntity transactionBatchEntity,
+    public TransactionBatchStatus reCalcStatus(Set<TransactionEntity> transactions,
                                                Optional<Integer> totalTransactionsCount) {
-        val allBatchTransactions = transactionBatchEntity.getTransactions();
 
-        val validTransactionsCount = allBatchTransactions
+        long validTransactionsCount = transactions
                 .stream()
                 .filter(transactionEntity -> transactionEntity.getAutomatedValidationStatus() == VALIDATED)
                 .count();
 
-        val dispatchedTransactionsCount = allBatchTransactions
+        long dispatchedTransactionsCount = transactions
                 .stream()
                 .filter(transactionEntity -> transactionEntity.getLedgerDispatchStatus() == DISPATCHED)
                 .count();
 
-        val completedTransactionsCount = allBatchTransactions
+        long completedTransactionsCount = transactions
                 .stream()
                 .filter(transactionEntity -> transactionEntity.getLedgerDispatchStatus() == COMPLETED)
                 .count();
 
-        val finalisedTransactionsCount = allBatchTransactions
+        long finalisedTransactionsCount = transactions
                 .stream()
                 .filter(transactionEntity -> transactionEntity.getLedgerDispatchStatus() == FINALIZED)
                 .count();
