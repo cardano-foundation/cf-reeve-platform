@@ -42,7 +42,7 @@ The repository is organized into several modules, each responsible for specific 
 - **Support:** Provides support utilities and services for the platform. This includes logging, error handling, and other auxiliary functions that enhance the platform's robustness and maintainability.
 - **_backend-services/cf-lob-ledger-follower-app:** A backend service responsible for monitoring the blockchain ledger. It tracks new transactions and updates, ensuring that the platform remains synchronized with the latest state of the blockchain.
 
-- **Notification Gateway (Coming soon):** Manages the notification system within the platform. It handles the dispatching of alerts and notifications to users or other systems based on specific events or triggers within the LOB platform.
+- **Notification Gateway (Coming soon):** Manages the notification system within the platform. It handles the dispatching of alerts and notifications to users or other systems based on specific events or triggers within the Reeve platform.
 
 ## Architecture
 This repository uses [Spring Modulith](https://github.com/spring-projects/spring-modulith) architecture to organize the codebase into modules. The architecture is designed to promote modularity, scalability, and maintainability, allowing for the independent development and deployment of different components.
@@ -63,17 +63,17 @@ This project offers the needed components to customize an own application. To ru
 - Implement for your ERP system the needed adapter to integrate the Reeve platform with your system (or if it's NetSuite Altavia ERP, use the provided adapter)
 - Start your Spring Boot Application
 
-**We will provide a sample application in the near future to demonstrate how to use the ReeveLOB platform.**
+**We will provide a sample application in the near future to demonstrate how to use the Reeve platform.**
 
 
 ## Documentation
 
-| Link                                                                                        | Audience   |
-|---------------------------------------------------------------------------------------------|------------|
-| [On-chain Format](docs/onChainFormat.md)                                                    | Developers |
-| [Dataflow within the System](docs/dataflow.md)                                              | Developers |
-| [Code Of Conduct](https://github.com/cardano-foundation/cf-lob-platform/CODE-OF-CONDUCT.md) | Developers |
-| [Contributing](https://github.com/cardano-foundation/cf-lob-platform/CONTRIBUTING.md)       | Developers |
-| [Security](https://github.com/cardano-foundation/cf-lob-platform/SECURITY.md)               | Developers |
+| Link                                           | Audience   |
+|------------------------------------------------|------------|
+| [On-chain Format](docs/onChainFormat.md)       | Developers |
+| [Dataflow within the System](docs/dataflow.md) | Developers |
+| [Code Of Conduct](CODE-OF-CONDUCT.md)          | Developers |
+| [Contributing](CONTRIBUTING.md)                | Developers |
+| [Security](SECURITY.md)                        | Developers |
 
 <hr/>
