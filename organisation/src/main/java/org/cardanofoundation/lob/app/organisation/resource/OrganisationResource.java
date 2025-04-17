@@ -2,8 +2,7 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
-import java.time.LocalDate;
-import java.util.LinkedHashSet;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -22,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -49,41 +49,29 @@ public class OrganisationResource {
     private final OrganisationService organisationService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
-    @Operation(description = "Transaction types", responses = {
+    @Operation(description = "Transaction types",
+            parameters = {
+            @Parameter(
+                    name = "orgIds",
+                    description = "Optional list of organisation IDs",
+                    in = ParameterIn.QUERY,
+                    required = false,
+                    array = @ArraySchema(schema = @Schema(type = "string"))
+            )
+        }, responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationView.class)))}
             ),
     })
     @GetMapping(value = "/organisation", produces = "application/json")
-    public ResponseEntity<?> organisationList() {
+    public ResponseEntity<List<OrganisationView>> organisationList(@RequestParam(value = "orgIds", required = false) Optional<String[]> orgIds) {
         return ResponseEntity.ok().body(
-                organisationService.findAll().stream().map(organisation -> {
-                    LocalDate today = LocalDate.now();
-                    LocalDate monthsAgo = today.minusMonths(organisation.getAccountPeriodDays());
-                    LocalDate yesterday = today.minusDays(1);
-
-                    return new OrganisationView(
-                            organisation.getId(),
-                            organisation.getName(),
-                            organisation.getTaxIdNumber(),
-                            organisation.getCurrencyId(),
-                            organisation.getReportCurrencyId(),
-                            monthsAgo,
-                            yesterday,
-                            organisation.getAdminEmail(),
-                            organisation.getPhoneNumber(),
-                            organisation.getAddress(),
-                            organisation.getCity(),
-                            organisation.getPostCode(),
-                            organisation.getProvince(),
-                            organisation.getCountryCode(),
-                            new LinkedHashSet<>(),
-                            new LinkedHashSet<>(),
-                            new LinkedHashSet<>(),
-                            organisation.getWebsiteUrl(),
-                            organisation.getLogo()
-                    );
-                }).toList()
+                orgIds.map(orgs -> Arrays.stream(orgs)
+                        .map(organisationService::findById)
+                        .filter(Optional::isPresent)
+                        .map(Optional::get)
+                        .map(organisationService::getOrganisationView)
+                        .toList()).orElse(organisationService.findAll().stream().map(organisationService::getOrganisationView).toList())
         );
     }
 
