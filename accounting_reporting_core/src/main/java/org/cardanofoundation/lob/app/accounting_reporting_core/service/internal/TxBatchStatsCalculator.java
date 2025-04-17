@@ -11,19 +11,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.BatchStatistics;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 
 @Service
 @Slf4j
 public class TxBatchStatsCalculator {
 
-    public BatchStatistics reCalcStats(TransactionBatchEntity txBatch,
+    public BatchStatistics reCalcStats(Set<TransactionEntity> transactions,
+                                       Optional<BatchStatistics> existingBatchStatistics,
                                        Optional<Integer> totalTransactionsCount) {
-        Set<TransactionEntity> transactions = txBatch.getTransactions();
 
         return BatchStatistics.builder()
-                .totalTransactionsCount(totalTransactionsCount.orElseGet(() -> txBatch.getBatchStatistics().flatMap(BatchStatistics::getTotalTransactionsCount).orElse(0)))
+                .totalTransactionsCount(totalTransactionsCount.orElseGet(() -> existingBatchStatistics.flatMap(BatchStatistics::getTotalTransactionsCount).orElse(0)))
                 .processedTransactionsCount(transactions.size())
                 .approvedTransactionsCount((int) transactions.stream().filter(TransactionEntity::getTransactionApproved).count())
                 .approvedTransactionsDispatchCount((int) transactions.stream().filter(TransactionEntity::getLedgerDispatchApproved).count())
@@ -34,10 +33,10 @@ public class TxBatchStatsCalculator {
 
                 .failedTransactionsCount((int) transactions.stream().filter(tx -> tx.getAutomatedValidationStatus() == FAILED).count())
 
-                .failedSourceLOBTransactionsCount((int) txBatch.getTransactions().stream()
+                .failedSourceLOBTransactionsCount((int) transactions.stream()
                         .filter(tx -> tx.getAutomatedValidationStatus() == FAILED).count())
 
-                .failedSourceERPTransactionsCount((int) txBatch.getTransactions().stream()
+                .failedSourceERPTransactionsCount((int) transactions.stream()
                         .filter(tx -> tx.getAutomatedValidationStatus() == FAILED).count())
 
                 .build();

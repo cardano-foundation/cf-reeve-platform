@@ -27,6 +27,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserE
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.BatchStatistics;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Details;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
@@ -136,7 +137,6 @@ public class TransactionBatchService {
         log.info("Transaction batch status updated, batchId: {}", batchId);
     }
 
-    @Transactional(propagation = SUPPORTS)
     private void invokeUpdateTransactionBatchStatusAndStats(String batchId,
                                                             Optional<Integer> totalTransactionsCount) {
         log.info("EXPENSIVE::Updating transaction batch status and statistics, batchId: {}", batchId);
@@ -149,7 +149,8 @@ public class TransactionBatchService {
         }
 
         val txBatch = txBatchM.orElseThrow();
-        log.info("Batch tx count:{}", txBatch.getTransactions().size());
+        Set<TransactionEntity> allTransactions = transactionBatchRepositoryGateway.findAllTransactionsByBatchId(txBatch.getId());
+        log.info("Batch tx count:{}", allTransactions.size());
 
         if (txBatch.getStatus() == FINALIZED) {
             log.warn("Transaction batch already finalized or failed, batchId: {}", batchId);
@@ -158,8 +159,8 @@ public class TransactionBatchService {
 
         val totalTxCount = totalTxCount(txBatch, totalTransactionsCount);
 
-        txBatch.setBatchStatistics(txBatchStatsCalculator.reCalcStats(txBatch, totalTxCount));
-        txBatch.setStatus(txBatchStatusCalculator.reCalcStatus(txBatch, totalTxCount));
+        txBatch.setBatchStatistics(txBatchStatsCalculator.reCalcStats(allTransactions, txBatch.getBatchStatistics(), totalTxCount));
+        txBatch.setStatus(txBatchStatusCalculator.reCalcStatus(allTransactions, totalTxCount));
 
         transactionBatchRepository.save(txBatch);
 
