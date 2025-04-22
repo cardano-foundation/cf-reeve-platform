@@ -106,15 +106,15 @@ public class IncomeStatementData implements Validable, Summable {
     @Embeddable
     public static class CostOfGoodsAndServices implements Summable {
 
-        private BigDecimal costOfProvidingServices;
+        private BigDecimal externalServices;
 
-        public Optional<BigDecimal> getCostOfProvidingServices() {
-            return Optional.ofNullable(costOfProvidingServices);
+        public Optional<BigDecimal> getExternalServices() {
+            return Optional.ofNullable(externalServices);
         }
 
         @Override
         public BigDecimal sumOf() {
-            return BigDecimals.sum(costOfProvidingServices);
+            return BigDecimals.sum(externalServices);
         }
 
     }
@@ -236,15 +236,15 @@ public class IncomeStatementData implements Validable, Summable {
     @Embeddable
     public static class TaxExpenses implements Summable {
 
-        private BigDecimal incomeTaxExpense;
+        private BigDecimal directTaxes;
 
-        public Optional<BigDecimal> getIncomeTaxExpense() {
-            return Optional.ofNullable(incomeTaxExpense);
+        public Optional<BigDecimal> getDirectTaxes() {
+            return Optional.ofNullable(directTaxes);
         }
 
         @Override
         public BigDecimal sumOf() {
-            return BigDecimals.sum(incomeTaxExpense);
+            return BigDecimals.sum(directTaxes);
         }
 
     }

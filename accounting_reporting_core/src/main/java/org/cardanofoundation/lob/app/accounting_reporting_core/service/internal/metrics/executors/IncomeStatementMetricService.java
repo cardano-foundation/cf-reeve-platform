@@ -59,7 +59,7 @@ public class IncomeStatementMetricService extends MetricExecutor {
         reportEntities.forEach(reportEntity -> {
             if(reportEntity.getIncomeStatementReportData().isPresent()) {
                 IncomeStatementData incomeStatementData = reportEntity.getIncomeStatementReportData().get();
-                incomeStatementData.getCostOfGoodsAndServices().ifPresent(costOfGoodsAndServices -> totalExpenses.merge(IncomeStatemenCategories.COST_OF_SERVICE, costOfGoodsAndServices.getCostOfProvidingServices().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
+                incomeStatementData.getCostOfGoodsAndServices().ifPresent(costOfGoodsAndServices -> totalExpenses.merge(IncomeStatemenCategories.COST_OF_SERVICE, costOfGoodsAndServices.getExternalServices().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
                 incomeStatementData.getOperatingExpenses().ifPresent(operatingExpenses -> {
                     totalExpenses.merge(IncomeStatemenCategories.PERSONNEL_EXPENSES, operatingExpenses.getPersonnelExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
                     // Other Operating Expenses
@@ -72,7 +72,7 @@ public class IncomeStatementMetricService extends MetricExecutor {
                     totalExpenses.merge(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, otherOperatingExpenses, Integer::sum);
                 });
                 incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> totalExpenses.merge(IncomeStatemenCategories.FINANCIAL_EXPENSES, financialIncome.getFinancialExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
-                incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> totalExpenses.merge(IncomeStatemenCategories.TAX_EXPENSES, taxExpenses.getIncomeTaxExpense().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
+                incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> totalExpenses.merge(IncomeStatemenCategories.TAX_EXPENSES, taxExpenses.getDirectTaxes().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
             }
         });
         return totalExpenses;

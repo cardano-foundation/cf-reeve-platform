@@ -672,8 +672,8 @@ CREATE table accounting_core_report (
 
     -- Main data fields
     -- Balance Sheet::Assets
-    data_balance_sheet__assets_non_current_property_plant_equip DECIMAL(30, 8),
-    data_balance_sheet__operating_expenses_depreciation_ta DECIMAL(30, 8),
+    data_balance_sheet__assets_non_current_tangible_assets DECIMAL(30, 8),
+    data_balance_sheet__assets_non_current_intangible_assets DECIMAL(30, 8),
     data_balance_sheet__assets_non_current_investments DECIMAL(30, 8),
     data_balance_sheet__assets_non_current_financial_assets DECIMAL(30, 8),
 
@@ -685,7 +685,7 @@ CREATE table accounting_core_report (
     -- Balance Sheet::Liabilities
     data_balance_sheet__liabilities_non_current_provisions DECIMAL(30, 8),
     data_balance_sheet__liabilities_current_trade_accounts DECIMAL(30, 8),
-    data_balance_sheet__liabilities_current_other_liabilit DECIMAL(30, 8),
+    data_balance_sheet__liabilities_current_other_liabilities DECIMAL(30, 8),
     data_balance_sheet__liabilities_current_accruals_and_short DECIMAL(30, 8),
 
     -- Balance Sheet::Capital
@@ -697,7 +697,7 @@ CREATE table accounting_core_report (
     data_income_statement__revenues_other_income DECIMAL(30, 8),
     data_income_statement__revenues_build_long_term_provision DECIMAL(30, 8),
 
-    data_income_statement__cost_goods_and_services_providing_serv DECIMAL(30, 8),
+    data_income_statement__cost_goods_and_services_external_serv DECIMAL(30, 8),
 
     -- Income Statement::Operating Expenses
     data_income_statement__operating_expenses_personnel_expenses DECIMAL(30, 8),
@@ -717,7 +717,7 @@ CREATE table accounting_core_report (
     data_income_statement__operating_expenses_extraordin_exp DECIMAL(30, 8),
 
     -- Income Statement::Tax Expenses
-    data_income_statement__tax_expenses_income_tax_expense DECIMAL(30, 8),
+    data_income_statement__tax_expenses_direct_taxes DECIMAL(30, 8),
 
     -- Calculated field by the JPA
     data_income_statement__profit_for_the_year DECIMAL(30, 8),

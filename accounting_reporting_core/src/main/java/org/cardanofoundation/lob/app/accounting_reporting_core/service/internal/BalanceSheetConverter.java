@@ -29,7 +29,7 @@ public class BalanceSheetConverter {
 
     private Optional<NonCurrentAssets> convertNonCurrentAssets(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData.Assets.NonCurrentAssets> nonCurrentAssets) {
         return nonCurrentAssets.map(nc -> NonCurrentAssets.builder()
-                .propertyPlantEquipment(nc.getPropertyPlantEquipment().orElse(null))
+                .propertyPlantEquipment(nc.getTangibleAssets().orElse(null))
                 .intangibleAssets(nc.getIntangibleAssets().orElse(null))
                 .investments(nc.getInvestments().orElse(null))
                 .financialAssets(nc.getFinancialAssets().orElse(null))
@@ -61,7 +61,7 @@ public class BalanceSheetConverter {
     private Optional<CurrentLiabilities> convertCurrentLiabilities(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData.Liabilities.CurrentLiabilities> currentLiabilities) {
         return currentLiabilities.map(cl -> CurrentLiabilities.builder()
                 .tradeAccountsPayables(cl.getTradeAccountsPayables().orElse(null))
-                .otherCurrentLiabilities(cl.getOtherCurrentLiabilities().orElse(null))
+                .otherCurrentLiabilities(cl.getOtherShortTermLiabilities().orElse(null))
                 .accrualsAndShortTermProvisions(cl.getAccrualsAndShortTermProvisions().orElse(null))
                 .build());
     }

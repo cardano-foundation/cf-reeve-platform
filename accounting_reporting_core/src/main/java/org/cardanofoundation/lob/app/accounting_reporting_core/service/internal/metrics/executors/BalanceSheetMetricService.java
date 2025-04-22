@@ -48,7 +48,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
         reportEntities.forEach(reportEntity -> reportEntity.getBalanceSheetReportData().flatMap(BalanceSheetData::getLiabilities).ifPresent(liabilities -> {
             liabilities.getCurrentLiabilities().ifPresent(currentLiabilities -> {
                 currentLiabilities.getTradeAccountsPayables().ifPresent(tradeAccountsPayables -> totalLiabilities[0] = totalLiabilities[0].add(tradeAccountsPayables));
-                currentLiabilities.getOtherCurrentLiabilities().ifPresent(otherCurrentLiabilities -> totalLiabilities[0] = totalLiabilities[0].add(otherCurrentLiabilities));
+                currentLiabilities.getOtherShortTermLiabilities().ifPresent(otherCurrentLiabilities -> totalLiabilities[0] = totalLiabilities[0].add(otherCurrentLiabilities));
                 currentLiabilities.getAccrualsAndShortTermProvisions().ifPresent(accruals -> totalLiabilities[0] = totalLiabilities[0].add(accruals));
             });
             liabilities.getNonCurrentLiabilities().flatMap(BalanceSheetData.Liabilities.NonCurrentLiabilities::getProvisions).ifPresent(provisions -> totalLiabilities[0] = totalLiabilities[0].add(provisions));
@@ -72,7 +72,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
             assets.getNonCurrentAssets().ifPresent(nonCurrentAssets -> {
                 nonCurrentAssets.getFinancialAssets().ifPresent(financialAssets -> totalAssets[0] = totalAssets[0].add(financialAssets));
                 nonCurrentAssets.getIntangibleAssets().ifPresent(intangibleAssets -> totalAssets[0] = totalAssets[0].add(intangibleAssets));
-                nonCurrentAssets.getPropertyPlantEquipment().ifPresent(propertyPlantEquipment -> totalAssets[0] = totalAssets[0].add(propertyPlantEquipment));
+                nonCurrentAssets.getTangibleAssets().ifPresent(propertyPlantEquipment -> totalAssets[0] = totalAssets[0].add(propertyPlantEquipment));
                 nonCurrentAssets.getInvestments().ifPresent(investments -> totalAssets[0] = totalAssets[0].add(investments));
             });
         }));
@@ -106,7 +106,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
                         intangibleAssets -> assetCategories.merge(BalanceSheetCategories.OTHER, intangibleAssets.intValue(), Integer::sum));
                 nonCurrentAssets.getInvestments().ifPresent(
                         investments -> assetCategories.merge(BalanceSheetCategories.OTHER, investments.intValue(), Integer::sum));
-                nonCurrentAssets.getPropertyPlantEquipment().ifPresent(
+                nonCurrentAssets.getTangibleAssets().ifPresent(
                         propertyPlantEquipment -> assetCategories.merge(BalanceSheetCategories.OTHER, propertyPlantEquipment.intValue(), Integer::sum));
             });
         }));
@@ -157,7 +157,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
                     accruals -> liabilityMap.merge(BalanceSheetCategories.ACCRUSAL_AND_SHORT_TERM_PROVISIONS, accruals.intValue(), Integer::sum));
             currentLiabilities.getTradeAccountsPayables().ifPresent(
                     tradeAccountsPayables -> liabilityMap.merge(BalanceSheetCategories.TRADE_ACCOUNTS_PAYABLE, tradeAccountsPayables.intValue(), Integer::sum));
-            currentLiabilities.getOtherCurrentLiabilities().ifPresent(
+            currentLiabilities.getOtherShortTermLiabilities().ifPresent(
                     otherCurrentLiabilities -> liabilityMap.merge(BalanceSheetCategories.OTHER, otherCurrentLiabilities.intValue(), Integer::sum));
         });
         liabilities.getNonCurrentLiabilities().flatMap(BalanceSheetData.Liabilities.NonCurrentLiabilities::getProvisions).ifPresent(
@@ -185,7 +185,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
             nonCurrentAssets.getInvestments().ifPresent(
                     investments -> assetMap.merge(BalanceSheetCategories.INVESTMENTS, investments.intValue(), Integer::sum));
 
-            nonCurrentAssets.getPropertyPlantEquipment().ifPresent(
+            nonCurrentAssets.getTangibleAssets().ifPresent(
                     propertyPlantEquipment -> assetMap.merge(BalanceSheetCategories.PROPERTY_PLANT_EQUIPMENT, propertyPlantEquipment.intValue(), Integer::sum));
         });
     }

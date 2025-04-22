@@ -89,7 +89,7 @@ public class API3MetadataSerialiser {
         balanceSheetData.getAssets().ifPresent(assets -> {
             assets.getNonCurrentAssets().ifPresent(nca -> {
                 MetadataMap nonCurrentAssetsMap = MetadataBuilder.createMap();
-                nca.getPropertyPlantEquipment().ifPresent(value -> nonCurrentAssetsMap.put("property_plant_equipment", value.toString()));
+                nca.getTangibleAssets().ifPresent(value -> nonCurrentAssetsMap.put("tangible_assets", value.toString()));
                 nca.getIntangibleAssets().ifPresent(value -> nonCurrentAssetsMap.put("intangible_assets", value.toString()));
                 nca.getInvestments().ifPresent(value -> nonCurrentAssetsMap.put("investments", value.toString()));
                 nca.getFinancialAssets().ifPresent(value -> nonCurrentAssetsMap.put("financial_assets", value.toString()));
@@ -120,7 +120,7 @@ public class API3MetadataSerialiser {
             liabilities.getCurrentLiabilities().ifPresent(cl -> {
                 MetadataMap currentLiabilitiesMap = MetadataBuilder.createMap();
                 cl.getTradeAccountsPayables().ifPresent(value -> currentLiabilitiesMap.put("trade_accounts_payables", value.toString()));
-                cl.getOtherCurrentLiabilities().ifPresent(value -> currentLiabilitiesMap.put("other_current_liabilities", value.toString()));
+                cl.getOtherShortTermLiabilities().ifPresent(value -> currentLiabilitiesMap.put("other_short_term_liabilities", value.toString()));
                 cl.getAccrualsAndShortTermProvisions().ifPresent(value -> currentLiabilitiesMap.put("accruals_and_short_term_provisions", value.toString()));
                 liabilitiesMap.put("current_liabilities", currentLiabilitiesMap);
             });
@@ -152,7 +152,7 @@ public class API3MetadataSerialiser {
 
         incomeStatementData.getCostOfGoodsAndServices().ifPresent(cogs -> {
             MetadataMap cogsMap = MetadataBuilder.createMap();
-            cogs.getCostOfProvidingServices().ifPresent(value -> cogsMap.put("cost_of_providing_services", value.toString()));
+            cogs.getExternalServices().ifPresent(value -> cogsMap.put("external_services", value.toString()));
             dataMap.put("cost_of_goods_and_services", cogsMap);
         });
 
@@ -186,7 +186,7 @@ public class API3MetadataSerialiser {
 
         incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> {
             MetadataMap taxExpensesMap = MetadataBuilder.createMap();
-            taxExpenses.getIncomeTaxExpense().ifPresent(value -> taxExpensesMap.put("income_tax_expense", value.toString()));
+            taxExpenses.getDirectTaxes().ifPresent(value -> taxExpensesMap.put("direct_taxes", value.toString()));
             dataMap.put("tax_expenses", taxExpensesMap);
         });
 
