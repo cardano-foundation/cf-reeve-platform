@@ -49,7 +49,7 @@ public class OrganisationResource {
     private final OrganisationService organisationService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
-    @Operation(description = "Transaction types",
+    @Operation(description = "Organisations",
             parameters = {
             @Parameter(
                     name = "orgIds",
@@ -127,7 +127,7 @@ public class OrganisationResource {
                 organisationService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).toList());
     }
 
-    @Operation(description = "Organisation Chart of acount type", responses = {
+    @Operation(description = "Organisation Events", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationEventView.class)))}
             ),
@@ -175,7 +175,7 @@ public class OrganisationResource {
                     "}"))})
     })
     @PostMapping(value = "/organisation", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> organisationCreate(@Valid @RequestBody OrganisationCreate organisationCreate) {
 
         Optional<Organisation> organisationChe = organisationService.findById(Organisation.id(organisationCreate.getCountryCode(), organisationCreate.getTaxIdNumber()));
@@ -220,7 +220,7 @@ public class OrganisationResource {
                     "    \"detail\": \"Unable to create Organisation\"\n" +
                     "}"))})
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @PostMapping(value = "/organisation/{orgId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> organisationUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody OrganisationUpdate organisationUpdate) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
@@ -260,7 +260,7 @@ public class OrganisationResource {
                     "    \"detail\": \"Unable to get the organisation\"\n" +
                     "}"))})
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @GetMapping(value = "/organisation/validate/{orgId}", produces = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> validateOrganisation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String orgId) {
         if(keycloakSecurityHelper.canUserAccessOrg(orgId)) {
