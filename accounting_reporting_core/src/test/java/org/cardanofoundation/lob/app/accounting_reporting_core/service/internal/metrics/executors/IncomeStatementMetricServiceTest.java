@@ -94,7 +94,7 @@ class IncomeStatementMetricServiceTest {
     private IncomeStatementData getTestIncomeStatementData() {
         return IncomeStatementData.builder()
                 .costOfGoodsAndServices(IncomeStatementData.CostOfGoodsAndServices.builder()
-                        .costOfProvidingServices(BigDecimal.TEN)
+                        .externalServices(BigDecimal.TEN)
                         .build())
                 .operatingExpenses(IncomeStatementData.OperatingExpenses.builder()
                         .personnelExpenses(BigDecimal.TEN)
@@ -111,7 +111,7 @@ class IncomeStatementMetricServiceTest {
                         .realisedGainsOnSaleOfCryptocurrencies(BigDecimal.TEN) // INCOME - what's with this one?
                         .build())
                 .taxExpenses(IncomeStatementData.TaxExpenses.builder()
-                        .incomeTaxExpense(BigDecimal.TEN)
+                        .directTaxes(BigDecimal.TEN)
                         .build())
                 .extraordinaryIncome(IncomeStatementData.ExtraordinaryIncome.builder()
                         .extraordinaryExpenses(BigDecimal.TEN) // Expenses - what's with this one?
