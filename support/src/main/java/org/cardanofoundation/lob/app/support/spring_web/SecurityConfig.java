@@ -30,6 +30,12 @@ public class SecurityConfig {
     @Value("${keycloak.roles.auditor}")
     private String auditorRole;
 
+    @Value("${keycloak.roles.accountant}")
+    private String accountantRole;
+
+    @Value("${keycloak.roles.admin}")
+    private String adminRole;
+
     @Value("${security.csp-policy}")
     private String cspPolicy;
 
