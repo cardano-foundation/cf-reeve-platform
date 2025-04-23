@@ -57,7 +57,7 @@ public class AccountEventController {
             ),
     })
     @PostMapping(value = "/{orgId}/event-codes", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> upsertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
 
@@ -75,7 +75,7 @@ public class AccountEventController {
     })
     // Removing the mapping to keep the code but disable the endpoint
 //    @DeleteMapping(value = "/{orgId}/{refCode}", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> deleteReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @PathVariable("refCode") String referenceCode) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);

@@ -42,7 +42,7 @@ public class ExtractionController {
                     })
             }
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ExtractionTransactionView> transactionSearch(@Valid @RequestBody ExtractionTransactionsRequest transactionsRequest) {
         return ResponseEntity
                 .ok()
