@@ -34,6 +34,11 @@ public class ReconciliationFilterRequest extends BaseRequest {
     @Schema(example = "2014-01-01")
     private Optional<LocalDate> dateFrom  = Optional.empty();
 
+    @Schema(example = "2014-01-31")
+    private Optional<LocalDate> dateTo  = Optional.empty();
+
+    private Optional<ReconciliationFilterSource> source = Optional.empty();
+
     @ArraySchema(arraySchema = @Schema(example = "[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\"]"))
     private Set<ReconciliationRejectionCodeRequest> reconciliationRejectionCode = new HashSet<>();
 

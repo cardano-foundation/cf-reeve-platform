@@ -78,9 +78,9 @@ public class SpringWebConfig {
                                                 .tokenUrl(tokenUrl)
                                                 .scopes(new Scopes().addString("openid", "openid"))))))
                 .addSecurityItem(new SecurityRequirement().addList("keycloakAuth"))
-                .info(new Info().title("Lob Service")
+                .info(new Info().title("Reeve Service")
                         .license(new License().name("Apache License 2.0")
-                        .url("https://github.com/cardano-foundation/cf-lob/blob/main/LICENSE")));
+                        .url("https://github.com/cardano-foundation/cf-reeve-platform/blob/main/LICENSE")));
     }
 
 }

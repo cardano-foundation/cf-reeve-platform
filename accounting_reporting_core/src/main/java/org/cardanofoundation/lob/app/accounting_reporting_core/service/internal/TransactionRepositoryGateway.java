@@ -26,7 +26,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionItemsRejectionRequest.TxItemRejectionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionsRequest;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
@@ -219,33 +218,4 @@ public class TransactionRepositoryGateway {
         return accountingCoreTransactionRepository.findByEntryDateRangeAndNotReconciledYet(organisationId, from, to);
     }
 
-    public List<TransactionEntity> findReconciliation(ReconciliationFilterStatusRequest filter, Integer limit, Integer page) {
-        return accountingCoreTransactionRepository.findAllReconciliation(filter, limit, page);
-    }
-
-    public List<TransactionEntity> findReconciliationCount(ReconciliationFilterStatusRequest filter, Integer limit, Integer page) {
-        return accountingCoreTransactionRepository.findAllReconciliationCount(filter, limit, page);
-    }
-
 }
-
-//    public Either<Problem, Boolean> changeTransactionComment(String txId, String userComment) {
-//        val txM = transactionRepository.findById(txId);
-//
-//        if (txM.isEmpty()) {
-//            return Either.left(Problem.builder()
-//                    .withTitle("TX_NOT_FOUND")
-//                    .withDetail(STR."Transaction with id \{txId} not found")
-//                    .with("txId", txId)
-//                    .build()
-//            );
-//        }
-//
-//        val tx = txM.orElseThrow();
-//
-//        tx.setUserComment(userComment);
-//
-//        val savedTx = transactionRepository.save(tx);
-//
-//        return Either.right(savedTx.getUserComment().equals(userComment));
-//    }

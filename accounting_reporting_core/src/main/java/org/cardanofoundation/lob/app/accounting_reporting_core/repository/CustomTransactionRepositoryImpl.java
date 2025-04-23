@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -15,13 +14,13 @@ import jakarta.persistence.criteria.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterSource;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 
@@ -55,17 +54,13 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Integer limit, Integer page) {
-        val jpql = reconciliationQuery(rejectionCodes, getDateFrom);
+    public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Integer limit, Integer page) {
+        String jpql = reconciliationQuery(rejectionCodes, getDateFrom, getDateTo);
 
-        val reconciliationQuery = em.createQuery(jpql);
+        Query reconciliationQuery = em.createQuery(jpql);
 
-        if (getDateFrom.isPresent()) {
-            LocalDateTime startDate = getDateFrom.get().atStartOfDay();
-            LocalDateTime endDate = getDateFrom.get().atTime(23, 59, 59);
-            reconciliationQuery.setParameter("startDate", startDate);
-            reconciliationQuery.setParameter("endDate", endDate);
-        }
+        getDateFrom.ifPresent(value -> reconciliationQuery.setParameter("startDate", value.atStartOfDay()));
+        getDateTo.ifPresent(value -> reconciliationQuery.setParameter("endDate", value.atTime(23, 59, 59)));
 
         reconciliationQuery.setMaxResults(limit);
 
@@ -77,8 +72,8 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Integer limit, Integer page) {
-        val jpql = "SELECT count(rv.transactionId) " +
+    public List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Integer limit, Integer page) {
+        String jpql = "SELECT count(rv.transactionId) " +
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
@@ -113,25 +108,24 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         }
 
         if (getDateFrom.isPresent()) {
-            where += " AND r.createdAt > :startDate AND r.createdAt < :endDate ";
+            where += " AND r.createdAt > :startDate ";
+        }
+        if (getDateTo.isPresent()) {
+            where += " AND r.createdAt < :endDate ";
         }
 
         where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ";
 
         Query resultQuery = em.createQuery(jpql + where);
 
-        if (getDateFrom.isPresent()) {
-            LocalDateTime startDate = getDateFrom.get().atStartOfDay();
-            LocalDateTime endDate = getDateFrom.get().atTime(23, 59, 59);
-            resultQuery.setParameter("startDate", startDate);
-            resultQuery.setParameter("endDate", endDate);
-        }
+        getDateFrom.ifPresent(value -> resultQuery.setParameter("startDate", value.atStartOfDay()));
+        getDateTo.ifPresent(value -> resultQuery.setParameter("endDate", value.atTime(23, 59, 59)));
 
         return resultQuery.getResultList();
     }
 
     @Override
-    public List<TransactionEntity> findAllReconciliation(ReconciliationFilterStatusRequest filter, Integer limit, Integer page) {
+    public List<TransactionEntity> findAllReconciliation(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Integer limit, Integer page) {
         switch (filter) {
             case RECONCILED -> {
                 CriteriaBuilder builder = em.getCriteriaBuilder();
@@ -140,6 +134,14 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
 
                 criteriaQuery.select(rootEntry);
                 criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("finalStatus"), ReconcilationCode.OK)));
+                sourceO.ifPresent(source -> {
+                    if(source.equals(ReconciliationFilterSource.ERP)) {
+                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("source"), ReconcilationCode.OK)));
+                    }
+                    if(source.equals(ReconciliationFilterSource.BLOCKCHAIN)) {
+                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.OK)));
+                    }
+                });
                 criteriaQuery.orderBy(builder.desc(rootEntry.get("entryDate")));
                 TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
                 theQuery.setMaxResults(limit);
@@ -168,12 +170,22 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter, Integer limit, Integer page) {
+    public List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Integer limit, Integer page) {
         CriteriaBuilder builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
         Root<TransactionEntity> rootEntry = criteriaQuery.from(TransactionEntity.class);
 
         criteriaQuery.select(rootEntry);
+        if(filter.equals(ReconciliationFilterStatusRequest.RECONCILED)) {
+            sourceO.ifPresent(source -> {
+                if (source.equals(ReconciliationFilterSource.ERP)) {
+                    criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("source"), ReconcilationCode.OK)));
+                }
+                if (source.equals(ReconciliationFilterSource.BLOCKCHAIN)) {
+                    criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.OK)));
+                }
+            });
+        }
         criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("finalStatus"), ReconcilationCode.OK)));
         TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
 
@@ -197,7 +209,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
                 "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL)  " +
-                STR."AND rv.rejectionCode = '" + ReconcilationRejectionCode.TX_NOT_IN_LOB + "' " +
+                "AND rv.rejectionCode = '" + ReconcilationRejectionCode.TX_NOT_IN_LOB + "' " +
                 "GROUP BY rv.transactionId " +
                 ") ";
 
@@ -207,7 +219,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
                 "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL)  " +
-                STR."AND rv.rejectionCode = '" + ReconcilationRejectionCode.SINK_RECONCILATION_FAIL + "' " +
+                "AND rv.rejectionCode = '" + ReconcilationRejectionCode.SINK_RECONCILATION_FAIL + "' " +
                 "GROUP BY rv.transactionId " +
                 ") ";
 
@@ -217,7 +229,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
                 "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL)  " +
-                STR."AND rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' " +
+                "AND rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' " +
                 "AND tr.ledgerDispatchApproved IS FALSE " +
                 "GROUP BY rv.transactionId " +
                 ") ";
@@ -228,7 +240,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
                 "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL)  " +
-                STR."AND rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' " +
+                "AND rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' " +
                 "AND tr.ledgerDispatchApproved IS TRUE " +
                 "GROUP BY rv.transactionId " +
 
@@ -259,12 +271,12 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
 
         String finalQuery = STR."select (\{missingInERP}) missingInERP,(\{inProcessing}) inProcessing ,(\{newInERP}) newInERP ,(\{newVersionNotPublished}) newVersionNotPublished ,(\{newVersion}) newVersion ,(\{txOk}) txOk ,(\{txNok}) txNok ,(\{txNever}) txNever ";
 
-        val reconciliationQuery = em.createQuery(finalQuery);
+        Query reconciliationQuery = em.createQuery(finalQuery);
 
         return reconciliationQuery.getSingleResult();
     }
 
-    private String reconciliationQuery(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom) {
+    private String reconciliationQuery(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo) {
         String jpql = "SELECT tr, rv " +
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
@@ -299,7 +311,10 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         }
 
         if (getDateFrom.isPresent()) {
-            where += " AND r.createdAt > :startDate AND r.createdAt < :endDate ";
+            where += " AND r.createdAt > :startDate ";
+        }
+        if (getDateTo.isPresent()) {
+            where += " AND r.createdAt < :endDate ";
         }
         where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.rejectionCode, rv.sourceDiff, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ORDER BY rv.transactionEntryDate ";
 
