@@ -69,7 +69,7 @@ public class BalanceSheetData  {
         public static class NonCurrentAssets {
 
             @Nullable
-            private BigDecimal propertyPlantEquipment;
+            private BigDecimal tangibleAssets;
 
             @Nullable
             private BigDecimal intangibleAssets;
@@ -80,8 +80,8 @@ public class BalanceSheetData  {
             @Nullable
             private BigDecimal financialAssets;
 
-            public Optional<BigDecimal> getPropertyPlantEquipment() {
-                return Optional.ofNullable(propertyPlantEquipment);
+            public Optional<BigDecimal> getTangibleAssets() {
+                return Optional.ofNullable(tangibleAssets);
             }
 
             public Optional<BigDecimal> getIntangibleAssets() {
@@ -189,7 +189,7 @@ public class BalanceSheetData  {
             private BigDecimal tradeAccountsPayables;
 
             @Nullable
-            private BigDecimal otherCurrentLiabilities;
+            private BigDecimal otherShortTermLiabilities;
 
             @Nullable
             private BigDecimal accrualsAndShortTermProvisions;
@@ -198,8 +198,8 @@ public class BalanceSheetData  {
                 return Optional.ofNullable(tradeAccountsPayables);
             }
 
-            public Optional<BigDecimal> getOtherCurrentLiabilities() {
-                return Optional.ofNullable(otherCurrentLiabilities);
+            public Optional<BigDecimal> getOtherShortTermLiabilities() {
+                return Optional.ofNullable(otherShortTermLiabilities);
             }
 
             public Optional<BigDecimal> getAccrualsAndShortTermProvisions() {

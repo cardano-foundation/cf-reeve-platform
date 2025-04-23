@@ -44,7 +44,7 @@ class API3MetadataSerialiserTest {
         val balanceSheetData = BalanceSheetData.builder()
                 .assets(BalanceSheetData.Assets.builder()
                         .nonCurrentAssets(BalanceSheetData.Assets.NonCurrentAssets.builder()
-                                .propertyPlantEquipment(BigDecimal.valueOf(10000))
+                                .tangibleAssets(BigDecimal.valueOf(10000))
                                 .intangibleAssets(BigDecimal.valueOf(5000))
                                 .investments(BigDecimal.valueOf(20000))
                                 .financialAssets(BigDecimal.valueOf(30000))
@@ -62,7 +62,7 @@ class API3MetadataSerialiserTest {
                                 .build())
                         .currentLiabilities(BalanceSheetData.Liabilities.CurrentLiabilities.builder()
                                 .tradeAccountsPayables(BigDecimal.valueOf(1500))
-                                .otherCurrentLiabilities(BigDecimal.valueOf(2000))
+                                .otherShortTermLiabilities(BigDecimal.valueOf(2000))
                                 .accrualsAndShortTermProvisions(BigDecimal.valueOf(2500))
                                 .build())
                         .build())
@@ -114,7 +114,7 @@ class API3MetadataSerialiserTest {
         assertThat(assets).isNotNull();
 
         val nonCurrentAssets = (MetadataMap) assets.get("non_current_assets");
-        assertThat(nonCurrentAssets.get("property_plant_equipment")).isEqualTo("10000");
+        assertThat(nonCurrentAssets.get("tangible_assets")).isEqualTo("10000");
         assertThat(nonCurrentAssets.get("intangible_assets")).isEqualTo("5000");
         assertThat(nonCurrentAssets.get("investments")).isEqualTo("20000");
         assertThat(nonCurrentAssets.get("financial_assets")).isEqualTo("30000");
@@ -131,7 +131,7 @@ class API3MetadataSerialiserTest {
 
         val currentLiabilities = (MetadataMap) liabilities.get("current_liabilities");
         assertThat(currentLiabilities.get("trade_accounts_payables")).isEqualTo("1500");
-        assertThat(currentLiabilities.get("other_current_liabilities")).isEqualTo("2000");
+        assertThat(currentLiabilities.get("other_short_term_liabilities")).isEqualTo("2000");
         assertThat(currentLiabilities.get("accruals_and_short_term_provisions")).isEqualTo("2500");
 
         val capital = (MetadataMap) data.get("capital");
@@ -151,7 +151,7 @@ class API3MetadataSerialiserTest {
                         .buildOfLongTermProvision(BigDecimal.valueOf(5000))
                         .build())
                 .costOfGoodsAndServices(IncomeStatementData.CostOfGoodsAndServices.builder()
-                        .costOfProvidingServices(BigDecimal.valueOf(2000))
+                        .externalServices(BigDecimal.valueOf(2000))
                         .build())
                 .profitForTheYear(BigDecimal.valueOf(7000))
                 .build();
@@ -189,7 +189,7 @@ class API3MetadataSerialiserTest {
         assertThat(revenues.get("build_of_long_term_provision")).isEqualTo("5000");
 
         val costOfGoodsAndServices = (MetadataMap) data.get("cost_of_goods_and_services");
-        assertThat(costOfGoodsAndServices.get("cost_of_providing_services")).isEqualTo("2000");
+        assertThat(costOfGoodsAndServices.get("external_services")).isEqualTo("2000");
 
         assertThat(data.get("profit_for_the_year")).isEqualTo("17000");
     }

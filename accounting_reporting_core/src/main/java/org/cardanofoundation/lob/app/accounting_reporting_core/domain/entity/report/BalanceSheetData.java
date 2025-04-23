@@ -90,7 +90,7 @@ public class BalanceSheetData implements Validable, Summable {
         public static class NonCurrentAssets implements Summable {
 
             @Nullable
-            private BigDecimal propertyPlantEquipment;
+            private BigDecimal tangibleAssets;
 
             @Nullable
             private BigDecimal intangibleAssets;
@@ -102,11 +102,11 @@ public class BalanceSheetData implements Validable, Summable {
             private BigDecimal financialAssets;
 
             public BigDecimal sumOf() {
-                return BigDecimals.sum(propertyPlantEquipment, intangibleAssets, investments, financialAssets);
+                return BigDecimals.sum(tangibleAssets, intangibleAssets, investments, financialAssets);
             }
 
-            public Optional<BigDecimal> getPropertyPlantEquipment() {
-                return Optional.ofNullable(propertyPlantEquipment);
+            public Optional<BigDecimal> getTangibleAssets() {
+                return Optional.ofNullable(tangibleAssets);
             }
 
             public Optional<BigDecimal> getIntangibleAssets() {
@@ -221,21 +221,21 @@ public class BalanceSheetData implements Validable, Summable {
             @Nullable
             private BigDecimal tradeAccountsPayables;
             @Nullable
-            private BigDecimal otherCurrentLiabilities;
+            private BigDecimal otherShortTermLiabilities;
             @Nullable
             private BigDecimal accrualsAndShortTermProvisions;
 
             @Override
             public BigDecimal sumOf() {
-                return BigDecimals.sum(tradeAccountsPayables, otherCurrentLiabilities, accrualsAndShortTermProvisions);
+                return BigDecimals.sum(tradeAccountsPayables, otherShortTermLiabilities, accrualsAndShortTermProvisions);
             }
 
             public Optional<BigDecimal> getTradeAccountsPayables() {
                 return Optional.ofNullable(tradeAccountsPayables);
             }
 
-            public Optional<BigDecimal> getOtherCurrentLiabilities() {
-                return Optional.ofNullable(otherCurrentLiabilities);
+            public Optional<BigDecimal> getOtherShortTermLiabilities() {
+                return Optional.ofNullable(otherShortTermLiabilities);
             }
 
             public Optional<BigDecimal> getAccrualsAndShortTermProvisions() {

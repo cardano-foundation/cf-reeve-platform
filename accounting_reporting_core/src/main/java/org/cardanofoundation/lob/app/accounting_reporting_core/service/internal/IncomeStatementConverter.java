@@ -37,7 +37,7 @@ public class IncomeStatementConverter {
 
     private Optional<CostOfServicesAndGoods> convertCostOfServicesAndGoods(Optional<IncomeStatementData.CostOfGoodsAndServices> costOfGoodsAndServices) {
         return costOfGoodsAndServices.map(c -> CostOfServicesAndGoods.builder()
-                .costOfProvidingServices(c.getCostOfProvidingServices().orElse(null))
+                .costOfProvidingServices(c.getExternalServices().orElse(null))
                 .build());
     }
 
@@ -69,7 +69,7 @@ public class IncomeStatementConverter {
 
     private Optional<TaxExpenses> convertTaxExpenses(Optional<IncomeStatementData.TaxExpenses> taxExpenses) {
         return taxExpenses.map(te -> TaxExpenses.builder()
-                .incomeTaxExpense(te.getIncomeTaxExpense().orElse(null))
+                .incomeTaxExpense(te.getDirectTaxes().orElse(null))
                 .build());
     }
 
