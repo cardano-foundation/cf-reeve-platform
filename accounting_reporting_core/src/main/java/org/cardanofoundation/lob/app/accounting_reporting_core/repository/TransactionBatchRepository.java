@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -29,5 +30,5 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
     WHERE tb.id = :batchId
     GROUP BY tb.id
     """)
-    BatchStatisticsView getBatchStatisticViewForBatchId(@Param("batchId") String batchId, @Param("lobRejectReasons") Set<RejectionReason> lobRejectionReasons, @Param("erpRejectionReasons") Set<RejectionReason> erpRejectionReasons);
+    Optional<BatchStatisticsView> getBatchStatisticViewForBatchId(@Param("batchId") String batchId, @Param("lobRejectReasons") Set<RejectionReason> lobRejectionReasons, @Param("erpRejectionReasons") Set<RejectionReason> erpRejectionReasons);
 }

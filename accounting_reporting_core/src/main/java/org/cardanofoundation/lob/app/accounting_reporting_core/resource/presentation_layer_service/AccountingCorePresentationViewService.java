@@ -130,7 +130,7 @@ public class AccountingCorePresentationViewService {
                             transactionBatchEntity.getId(),
                             getSourceBasedRejectionReasons(Source.LOB),
                             getSourceBasedRejectionReasons(ERP)
-                    );
+                    ).orElse(new BatchStatisticsView(0, 0, 0, 0, 0, 0));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
 
                     return new BatchView(
@@ -158,7 +158,8 @@ public class AccountingCorePresentationViewService {
                 .stream()
                 .map(
                         transactionBatchEntity -> {
-                            BatchStatisticsView statistic = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(transactionBatchEntity.getId(), sourceBasedRejectionReasonsLob, sourceBasedRejectionReasonsErp);
+                            BatchStatisticsView statistic = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(transactionBatchEntity.getId(), sourceBasedRejectionReasonsLob, sourceBasedRejectionReasonsErp)
+                                    .orElse(new BatchStatisticsView(0, 0, 0, 0, 0, 0));
                             return new BatchView(
                                     transactionBatchEntity.getId(),
                                     transactionBatchEntity.getCreatedAt().toString(),

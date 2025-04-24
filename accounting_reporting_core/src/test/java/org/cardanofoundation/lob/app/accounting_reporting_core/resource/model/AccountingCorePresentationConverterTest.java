@@ -218,7 +218,7 @@ class AccountingCorePresentationConverterTest {
         transaction1.setBatchId(batchId);
         transaction2.setBatchId(batchId);
         BatchStatisticsView batchStatisticsView = new BatchStatisticsView(0, 0, 2, 0, 0, 2);
-        when(transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(batchId, getSourceBasedRejectionReasons(Source.LOB), getSourceBasedRejectionReasons(Source.ERP))).thenReturn(batchStatisticsView);
+        when(transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(batchId, getSourceBasedRejectionReasons(Source.LOB), getSourceBasedRejectionReasons(Source.ERP))).thenReturn(Optional.of(batchStatisticsView));
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
 
         Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId);
