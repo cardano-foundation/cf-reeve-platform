@@ -18,9 +18,12 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
     @Query("""
             SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView(
                 tb.id,
-                CAST(COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM tx.violations v WHERE v.source = 'ERP') OR EXISTS(SELECT 1 FROM tx.items ti WHERE ti.rejection.rejectionReason IN :erpRejectionReasons) THEN tx.id END) AS java.lang.Integer),
-                CAST(COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM tx.violations v WHERE v.source = 'LOB') OR EXISTS(SELECT 1 FROM tx.items ti WHERE ti.rejection.rejectionReason IN :lobRejectReasons) THEN tx.id END) AS java.lang.Integer),
-                CAST(COUNT(DISTINCT CASE WHEN tx.automatedValidationStatus = 'VALIDATED' AND NOT EXISTS (SELECT 1 FROM tx.violations v) THEN tx.id END) AS java.lang.Integer),
+                CAST(COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM tx.violations v WHERE v.source = 'ERP')
+                    OR EXISTS(SELECT 1 FROM tx.items ti WHERE ti.rejection.rejectionReason IN :erpRejectionReasons) THEN tx.id END) AS java.lang.Integer),
+                CAST(COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM tx.violations v WHERE v.source = 'LOB') OR
+                        (EXISTS(SELECT 1 FROM tx.items ti WHERE ti.rejection.rejectionReason IN :lobRejectReasons)
+                        AND NOT EXISTS(SELECT 1 FROM tx.items ti WHERE ti.rejection.rejectionReason IN :erpRejectionReasons)) THEN tx.id END) AS java.lang.Integer),
+                CAST(COUNT(DISTINCT CASE WHEN tx.automatedValidationStatus = 'VALIDATED' AND tx.transactionApproved = false AND NOT EXISTS (SELECT 1 FROM tx.violations v) THEN tx.id END) AS java.lang.Integer),
                 CAST(COUNT(DISTINCT CASE WHEN tx.automatedValidationStatus = 'VALIDATED' AND tx.transactionApproved = true THEN tx.id END) AS java.lang.Integer),
                 CAST(COUNT(DISTINCT CASE WHEN tx.ledgerDispatchStatus = 'FINALIZED' THEN tx.id END) AS java.lang.Integer),
                 CAST(COUNT(DISTINCT tx.id) AS java.lang.Integer)
