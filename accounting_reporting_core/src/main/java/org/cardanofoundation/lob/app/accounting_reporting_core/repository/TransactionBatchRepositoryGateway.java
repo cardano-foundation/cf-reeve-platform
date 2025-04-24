@@ -46,7 +46,7 @@ public class TransactionBatchRepositoryGateway {
         return transactionRepository.findAllByBatchId(batchId);
     }
 
-    public Optional<BatchStatisticsView> getBatchStatisticViewForBatchId(String batchId, Set<RejectionReason> lobRejectionReasons, Set<RejectionReason> erpRejectionReasons) {
+    public List<BatchStatisticsView> getBatchStatisticViewForBatchId(List<String> batchId, Set<RejectionReason> lobRejectionReasons, Set<RejectionReason> erpRejectionReasons) {
         return transactionBatchRepository.getBatchStatisticViewForBatchId(batchId, lobRejectionReasons, erpRejectionReasons);
     }
 

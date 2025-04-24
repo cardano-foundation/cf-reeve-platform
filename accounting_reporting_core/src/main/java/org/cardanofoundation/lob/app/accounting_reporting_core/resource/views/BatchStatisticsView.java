@@ -11,6 +11,8 @@ import lombok.Setter;
 @AllArgsConstructor
 public class BatchStatisticsView {
 
+    private String batchId;
+
     @Nullable
     private Integer invalid;
 

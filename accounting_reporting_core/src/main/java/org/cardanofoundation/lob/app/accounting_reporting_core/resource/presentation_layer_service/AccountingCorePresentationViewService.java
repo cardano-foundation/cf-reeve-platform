@@ -11,6 +11,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.service.in
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -126,11 +127,13 @@ public class AccountingCorePresentationViewService {
     public Optional<BatchView> batchDetail(String batchId) {
         return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
                     Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-                    BatchStatisticsView statistic = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(
-                            transactionBatchEntity.getId(),
+                    List<BatchStatisticsView> batchStatisticViewForBatchId = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(List.of(transactionBatchEntity.getId()),
                             getSourceBasedRejectionReasons(Source.LOB),
                             getSourceBasedRejectionReasons(ERP)
-                    ).orElse(new BatchStatisticsView(0, 0, 0, 0, 0, 0));
+                    );
+                    BatchStatisticsView statistic = Optional.ofNullable(batchStatisticViewForBatchId.getFirst())
+                            .orElse(new BatchStatisticsView(transactionBatchEntity.getId(), 0, 0, 0, 0, 0, 0
+                    ));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
 
                     return new BatchView(
@@ -154,12 +157,16 @@ public class AccountingCorePresentationViewService {
         BatchsDetailView batchDetailView = new BatchsDetailView();
         Set<RejectionReason> sourceBasedRejectionReasonsLob = getSourceBasedRejectionReasons(Source.LOB);
         Set<RejectionReason> sourceBasedRejectionReasonsErp = getSourceBasedRejectionReasons(ERP);
-        List<BatchView> batches = transactionBatchRepositoryGateway.findByFilter(body)
+        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body);
+        Map<String, BatchStatisticsView> batchStatisticViews = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(
+                        transactionBatchEntities.stream().map(TransactionBatchEntity::getId).toList(), sourceBasedRejectionReasonsLob, sourceBasedRejectionReasonsErp)
+                .stream().collect(Collectors.toMap(BatchStatisticsView::getBatchId, Function.identity()));
+        List<BatchView> batches = transactionBatchEntities
                 .stream()
                 .map(
                         transactionBatchEntity -> {
-                            BatchStatisticsView statistic = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(transactionBatchEntity.getId(), sourceBasedRejectionReasonsLob, sourceBasedRejectionReasonsErp)
-                                    .orElse(new BatchStatisticsView(0, 0, 0, 0, 0, 0));
+                            BatchStatisticsView statistic = Optional.ofNullable(batchStatisticViews.get(transactionBatchEntity.getId()))
+                                    .orElse(new BatchStatisticsView(transactionBatchEntity.getId(), 0, 0, 0, 0, 0, 0));
                             return new BatchView(
                                     transactionBatchEntity.getId(),
                                     transactionBatchEntity.getCreatedAt().toString(),
