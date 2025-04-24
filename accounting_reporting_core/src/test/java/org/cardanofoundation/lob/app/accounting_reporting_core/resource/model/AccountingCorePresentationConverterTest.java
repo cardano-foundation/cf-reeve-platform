@@ -14,7 +14,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 import io.vavr.control.Either;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -35,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.SearchRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
