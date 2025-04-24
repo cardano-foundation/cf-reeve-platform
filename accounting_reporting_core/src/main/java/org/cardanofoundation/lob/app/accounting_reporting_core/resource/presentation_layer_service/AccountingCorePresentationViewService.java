@@ -126,7 +126,11 @@ public class AccountingCorePresentationViewService {
     public Optional<BatchView> batchDetail(String batchId) {
         return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
                     Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-                    BatchStatisticsView statistic = this.getBatchesStatistics(transactions);
+                    BatchStatisticsView statistic = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(
+                            transactionBatchEntity.getId(),
+                            getSourceBasedRejectionReasons(Source.LOB),
+                            getSourceBasedRejectionReasons(ERP)
+                    );
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
 
                     return new BatchView(
@@ -154,8 +158,6 @@ public class AccountingCorePresentationViewService {
                 .stream()
                 .map(
                         transactionBatchEntity -> {
-//                            Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-//                            BatchStatisticsView statistic = this.getBatchesStatistics(transactions);
                             BatchStatisticsView statistic = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(transactionBatchEntity.getId(), sourceBasedRejectionReasonsLob, sourceBasedRejectionReasonsErp);
                             return new BatchView(
                                     transactionBatchEntity.getId(),
@@ -251,29 +253,6 @@ public class AccountingCorePresentationViewService {
         }
 
         return BatchReprocessView.createSuccess(batchId);
-    }
-
-    private BatchStatisticsView getBatchesStatistics(Set<TransactionView> transactions) {
-        long invalid = transactions.stream().filter(transactionView -> INVALID == transactionView.getStatistic()).count();
-
-        long pending = transactions.stream().filter(transactionView -> PENDING == transactionView.getStatistic()).count();
-
-        long approve = transactions.stream().filter(transactionView -> APPROVE == transactionView.getStatistic()).count();
-
-        long publish = transactions.stream().filter(transactionView -> PUBLISH == transactionView.getStatistic()).count();
-
-        long published = transactions.stream().filter(transactionView -> PUBLISHED == transactionView.getStatistic()).count();
-
-        long total = transactions.size();
-
-        return new BatchStatisticsView(
-                (int) invalid,
-                (int) pending,
-                (int) approve,
-                (int) publish,
-                (int) published,
-                (int) total
-        );
     }
 
     private FilteringParametersView getFilteringParameters(FilteringParameters filteringParameters) {
