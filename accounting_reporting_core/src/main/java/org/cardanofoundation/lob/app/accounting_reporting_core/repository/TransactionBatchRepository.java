@@ -27,8 +27,8 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
                 CAST(COUNT(DISTINCT CASE WHEN tx.automatedValidationStatus = 'VALIDATED' AND tx.ledgerDispatchApproved = false AND tx.ledgerDispatchStatus = 'NOT_DISPATCHED' AND tx.transactionApproved = false
                 AND NOT EXISTS (SELECT 1 FROM tx.items ti WHERE ti.rejection.rejectionReason IN :lobRejectReasons OR ti.rejection.rejectionReason IN :erpRejectionReasons)
                 AND NOT EXISTS (SELECT 1 FROM tx.violations v) THEN tx.id END) AS java.lang.Integer),
-                CAST(COUNT(DISTINCT CASE WHEN tx.automatedValidationStatus = 'VALIDATED' AND tx.transactionApproved = true THEN tx.id END) AS java.lang.Integer),
-                CAST(COUNT(DISTINCT CASE WHEN tx.ledgerDispatchStatus = 'FINALIZED' THEN tx.id END) AS java.lang.Integer),
+                CAST(COUNT(DISTINCT CASE WHEN tx.automatedValidationStatus = 'VALIDATED' AND tx.transactionApproved = true AND tx.ledgerDispatchApproved = false THEN tx.id END) AS java.lang.Integer),
+                CAST(COUNT(DISTINCT CASE WHEN tx.automatedValidationStatus = 'VALIDATED' AND tx.transactionApproved = true AND tx.ledgerDispatchApproved = true THEN tx.id END) AS java.lang.Integer),
                 CAST(COUNT(DISTINCT tx.id) AS java.lang.Integer)
             )
             FROM accounting_reporting_core.TransactionBatchEntity tb
