@@ -47,7 +47,7 @@ public class ReportRequest extends BaseRequest {
 
     @Nullable
     @Schema(example = "-5819594.52")
-    private String costOfProvidingServices;
+    private String externalServices;
 
     @Nullable
     @Schema(example = "947865.18")
@@ -75,7 +75,7 @@ public class ReportRequest extends BaseRequest {
 
     @Nullable
     @Schema(example = "-102451.91")
-    private String incomeTaxExpense;
+    private String directTaxes;
 
     @Nullable
     @Schema(example = "-13364269.18")
@@ -103,7 +103,7 @@ public class ReportRequest extends BaseRequest {
 
     @Nullable
     @Schema(example = "56493.71")
-    private String propertyPlantEquipment;
+    private String tangibleAssets;
 
     @Nullable
     @Schema(example = "3480.00")
@@ -143,7 +143,7 @@ public class ReportRequest extends BaseRequest {
 
     @Nullable
     @Schema(example = "617835.67")
-    private String otherCurrentLiabilities;
+    private String otherShortTermLiabilities;
 
     @Nullable
     @Schema(example = "3523134.10")

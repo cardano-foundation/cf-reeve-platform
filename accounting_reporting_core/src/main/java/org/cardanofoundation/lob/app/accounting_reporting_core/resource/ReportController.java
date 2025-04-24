@@ -39,6 +39,7 @@ public class ReportController {
 
     @Tag(name = "Reporting", description = "Generate Report based on on-chain data")
     @PostMapping(value = "/report-generate", produces = "application/json")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportResponseView> reportGenerate(@Valid @RequestBody ReportGenerateRequest reportGenerateRequest) {
         return reportService.reportGenerate(reportGenerateRequest).fold(
                 problem -> {
@@ -53,7 +54,7 @@ public class ReportController {
 
     @Tag(name = "Reporting", description = "Report Parameters")
     @GetMapping(value = "/report-parameters/{orgId}", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportingParametersView> reportParameters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
 
         HashMap<String, String> currencyOrg = new HashMap<>();
@@ -70,7 +71,7 @@ public class ReportController {
 
     @Tag(name = "Reporting", description = "Create Balance Sheet")
     @PostMapping(value = "/report-create", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportResponseView> reportCreate(@Valid @RequestBody ReportRequest reportSaveRequest) {
 
         return reportViewService.reportCreate(reportSaveRequest)
@@ -86,7 +87,7 @@ public class ReportController {
 
     @Tag(name = "Reporting", description = "Create Income Statement")
     @PostMapping(value = "/report-search", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportResponseView> reportSearch(@Valid @RequestBody ReportSearchRequest reportSearchRequest) {
 
         return reportService.exist(
@@ -107,7 +108,7 @@ public class ReportController {
 
     @Tag(name = "Reporting", description = "Report list")
     @GetMapping(value = "/report-list/{orgId}", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportResponseView> reportList(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(ReportResponseView.createSuccess(reportService.findAllByOrgId(
                         orgId

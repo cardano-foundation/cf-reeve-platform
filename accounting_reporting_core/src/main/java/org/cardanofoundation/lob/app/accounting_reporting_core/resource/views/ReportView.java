@@ -64,7 +64,7 @@ public class ReportView {
     private LocalDate date;
 
     @Schema(example = "265306.12")
-    private String propertyPlantEquipment;
+    private String tangibleAssets;
 
     @Schema(example = "63673.47")
     private String intangibleAssets;
@@ -94,7 +94,7 @@ public class ReportView {
     private String tradeAccountsPayables;
 
     @Schema(example = "10000.00")
-    private String otherCurrentLiabilities;
+    private String otherShortTermLiabilities;
 
     @Schema(example = "5000.00")
     private String accrualsAndShortTermProvisions;
@@ -115,7 +115,7 @@ public class ReportView {
     private String buildOfLongTermProvision;
 
     @Schema(example = "500000.15")
-    private String costOfProvidingServices;
+    private String externalServices;
 
     @Schema(example = "500000.15")
     private String personnelExpenses;
@@ -151,7 +151,7 @@ public class ReportView {
     private String extraordinaryExpenses;
 
     @Schema(example = "1000.51")
-    private String incomeTaxExpense;
+    private String directTaxes;
 
 
 }

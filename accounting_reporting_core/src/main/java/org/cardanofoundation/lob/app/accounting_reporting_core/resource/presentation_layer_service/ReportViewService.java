@@ -71,7 +71,7 @@ public class ReportViewService {
         }
         reportResponseView.setVer(reportEntity.getVer());
         //BalanceSheet
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getPropertyPlantEquipment()))).ifPresent(bigDecimal -> reportResponseView.setPropertyPlantEquipment(bigDecimal.toString()));
+        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getTangibleAssets()))).ifPresent(bigDecimal -> reportResponseView.setTangibleAssets(bigDecimal.toString()));
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getIntangibleAssets()))).ifPresent(bigDecimal -> reportResponseView.setIntangibleAssets(bigDecimal.toString()));
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getInvestments()))).ifPresent(bigDecimal -> reportResponseView.setInvestments(bigDecimal.toString()));
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getFinancialAssets()))).ifPresent(bigDecimal -> reportResponseView.setFinancialAssets(bigDecimal.toString()));
@@ -84,7 +84,7 @@ public class ReportViewService {
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getNonCurrentLiabilities().flatMap(nonCurrentLiabilities -> nonCurrentLiabilities.getProvisions()))).ifPresent(bigDecimal -> reportResponseView.setProvisions(bigDecimal.toString()));
 
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getCurrentLiabilities().flatMap(currentLiabilities -> currentLiabilities.getTradeAccountsPayables()))).ifPresent(bigDecimal -> reportResponseView.setTradeAccountsPayables(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getCurrentLiabilities().flatMap(currentLiabilities -> currentLiabilities.getOtherCurrentLiabilities()))).ifPresent(bigDecimal -> reportResponseView.setOtherCurrentLiabilities(bigDecimal.toString()));
+        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getCurrentLiabilities().flatMap(currentLiabilities -> currentLiabilities.getOtherShortTermLiabilities()))).ifPresent(bigDecimal -> reportResponseView.setOtherShortTermLiabilities(bigDecimal.toString()));
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getCurrentLiabilities().flatMap(currentLiabilities -> currentLiabilities.getAccrualsAndShortTermProvisions()))).ifPresent(bigDecimal -> reportResponseView.setAccrualsAndShortTermProvisions(bigDecimal.toString()));
 
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getCapital().flatMap(capital -> capital.getCapital())).ifPresent(bigDecimal -> reportResponseView.setCapital(bigDecimal.toString()));
@@ -95,7 +95,7 @@ public class ReportViewService {
         reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getRevenues().flatMap(revenues -> revenues.getOtherIncome())).ifPresent(bigDecimal -> reportResponseView.setOtherIncome(bigDecimal.toString()));
         reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getRevenues().flatMap(revenues -> revenues.getBuildOfLongTermProvision())).ifPresent(bigDecimal -> reportResponseView.setBuildOfLongTermProvision(bigDecimal.toString()));
 
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getCostOfGoodsAndServices().flatMap(costOfGoodsAndServices -> costOfGoodsAndServices.getCostOfProvidingServices())).ifPresent(bigDecimal -> reportResponseView.setCostOfProvidingServices(bigDecimal.toString()));
+        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getCostOfGoodsAndServices().flatMap(costOfGoodsAndServices -> costOfGoodsAndServices.getExternalServices())).ifPresent(bigDecimal -> reportResponseView.setExternalServices(bigDecimal.toString()));
 
         reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getOperatingExpenses().flatMap(operatingExpenses -> operatingExpenses.getPersonnelExpenses())).ifPresent(bigDecimal -> reportResponseView.setPersonnelExpenses(bigDecimal.toString()));
         reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getOperatingExpenses().flatMap(operatingExpenses -> operatingExpenses.getGeneralAndAdministrativeExpenses())).ifPresent(bigDecimal -> reportResponseView.setGeneralAndAdministrativeExpenses(bigDecimal.toString()));
@@ -111,7 +111,7 @@ public class ReportViewService {
 
         reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getExtraordinaryIncome().flatMap(extraordinaryIncome -> extraordinaryIncome.getExtraordinaryExpenses())).ifPresent(bigDecimal -> reportResponseView.setExtraordinaryExpenses(bigDecimal.toString()));
 
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getTaxExpenses().flatMap(taxExpenses -> taxExpenses.getIncomeTaxExpense())).ifPresent(bigDecimal -> reportResponseView.setIncomeTaxExpense(bigDecimal.toString()));
+        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getTaxExpenses().flatMap(taxExpenses -> taxExpenses.getDirectTaxes())).ifPresent(bigDecimal -> reportResponseView.setDirectTaxes(bigDecimal.toString()));
         reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getProfitForTheYear()).ifPresent(bigDecimal -> reportResponseView.setProfitForTheYear(bigDecimal.toString()));
 
         return reportResponseView;

@@ -1,10 +1,13 @@
 package org.cardanofoundation.lob.app.organisation.domain.entity;
 
 
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import jakarta.persistence.Embeddable;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 
 import lombok.*;
 
@@ -28,6 +31,7 @@ public class OpeningBalance {
 
     private String originalCurrencyIdLCY;
 
+    @Enumerated(EnumType.STRING)
     private OperationType balanceType;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")

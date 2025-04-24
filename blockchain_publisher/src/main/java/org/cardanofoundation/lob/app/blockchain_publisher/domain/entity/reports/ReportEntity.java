@@ -135,8 +135,8 @@ public class ReportEntity extends CommonDateOnlyEntity implements Persistable<St
     @Embedded
     @AttributeOverrides({
             // Balance Sheet::Assets - Non-Current Assets
-            @AttributeOverride(name = "assets.nonCurrentAssets.propertyPlantEquipment", column = @Column(name = "data_balance_sheet__assets_non_current_property_plant_equip")),
-            @AttributeOverride(name = "assets.nonCurrentAssets.intangibleAssets", column = @Column(name = "data_balance_sheet__operating_expenses_depreciation_ta")),
+            @AttributeOverride(name = "assets.nonCurrentAssets.tangibleAssets", column = @Column(name = "data_balance_sheet__assets_non_current_tangible_assets")),
+            @AttributeOverride(name = "assets.nonCurrentAssets.intangibleAssets", column = @Column(name = "data_balance_sheet__assets_non_current_intangible_assets")),
             @AttributeOverride(name = "assets.nonCurrentAssets.investments", column = @Column(name = "data_balance_sheet__assets_non_current_investments")),
             @AttributeOverride(name = "assets.nonCurrentAssets.financialAssets", column = @Column(name = "data_balance_sheet__assets_non_current_financial_assets")),
 
@@ -151,7 +151,7 @@ public class ReportEntity extends CommonDateOnlyEntity implements Persistable<St
 
             // Balance Sheet::Liabilities - Current Liabilities
             @AttributeOverride(name = "liabilities.currentLiabilities.tradeAccountsPayables", column = @Column(name = "data_balance_sheet__liabilities_current_trade_accounts")),
-            @AttributeOverride(name = "liabilities.currentLiabilities.otherCurrentLiabilities", column = @Column(name = "data_balance_sheet__liabilities_current_other_liabilit")),
+            @AttributeOverride(name = "liabilities.currentLiabilities.otherShortTermLiabilities", column = @Column(name = "data_balance_sheet__liabilities_current_other_liabilities")),
             @AttributeOverride(name = "liabilities.currentLiabilities.accrualsAndShortTermProvisions", column = @Column(name = "data_balance_sheet__liabilities_current_accruals_and_short")),
 
             // Balance Sheet::Capital
@@ -168,7 +168,7 @@ public class ReportEntity extends CommonDateOnlyEntity implements Persistable<St
             @AttributeOverride(name = "revenues.otherIncome", column = @Column(name = "data_income_statement__revenues_other_income")),
             @AttributeOverride(name = "revenues.buildOfLongTermProvision", column = @Column(name = "data_income_statement__revenues_build_long_term_provision")),
 
-            @AttributeOverride(name = "costOfGoodsAndServices.costOfProvidingServices", column = @Column(name = "data_income_statement__cost_goods_and_services_providing_serv")), // was too long
+            @AttributeOverride(name = "costOfGoodsAndServices.externalServices", column = @Column(name = "data_income_statement__cost_goods_and_services_external_serv")), // was too long
 
             // Operating Expenses
             @AttributeOverride(name = "operatingExpenses.personnelExpenses", column = @Column(name = "data_income_statement__operating_expenses_personnel_expenses")),
@@ -188,7 +188,7 @@ public class ReportEntity extends CommonDateOnlyEntity implements Persistable<St
             @AttributeOverride(name = "extraordinaryIncome.extraordinaryExpenses", column = @Column(name = "data_income_statement__operating_expenses_extraordin_exp")),
 
             // Tax Expenses
-            @AttributeOverride(name = "taxExpenses.incomeTaxExpense", column = @Column(name = "data_income_statement__tax_expenses_income_tax_expense")),
+            @AttributeOverride(name = "taxExpenses.directTaxes", column = @Column(name = "data_income_statement__tax_expenses_direct_taxes")),
 
             @AttributeOverride(name = "extraordinaryIncome.extraordinaryExpenses", column = @Column(name = "data_income_statement__operating_expenses_extraordin_exp")),
             @AttributeOverride(name = "profitForTheYear", column = @Column(name = "data_income_statement__profit_for_the_year"))
