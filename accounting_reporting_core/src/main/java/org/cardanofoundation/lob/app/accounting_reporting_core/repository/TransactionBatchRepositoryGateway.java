@@ -10,9 +10,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView;
 
 @Service
 @Slf4j
@@ -42,6 +44,10 @@ public class TransactionBatchRepositoryGateway {
 
     public Set<TransactionEntity> findAllTransactionsByBatchId(String batchId) {
         return transactionRepository.findAllByBatchId(batchId);
+    }
+
+    public BatchStatisticsView getBatchStatisticViewForBatchId(String batchId, Set<RejectionReason> lobRejectionReasons, Set<RejectionReason> erpRejectionReasons) {
+        return transactionBatchRepository.getBatchStatisticViewForBatchId(batchId, lobRejectionReasons, erpRejectionReasons);
     }
 
 }

@@ -4,6 +4,7 @@ import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason.getSourceBasedRejectionReasons;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
 
@@ -22,6 +23,7 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
@@ -146,13 +148,15 @@ public class AccountingCorePresentationViewService {
 
     public BatchsDetailView listAllBatch(BatchSearchRequest body) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-
+        Set<RejectionReason> sourceBasedRejectionReasonsLob = getSourceBasedRejectionReasons(Source.LOB);
+        Set<RejectionReason> sourceBasedRejectionReasonsErp = getSourceBasedRejectionReasons(ERP);
         List<BatchView> batches = transactionBatchRepositoryGateway.findByFilter(body)
                 .stream()
                 .map(
                         transactionBatchEntity -> {
-                            Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-                            BatchStatisticsView statistic = this.getBatchesStatistics(transactions);
+//                            Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
+//                            BatchStatisticsView statistic = this.getBatchesStatistics(transactions);
+                            BatchStatisticsView statistic = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(transactionBatchEntity.getId(), sourceBasedRejectionReasonsLob, sourceBasedRejectionReasonsErp);
                             return new BatchView(
                                     transactionBatchEntity.getId(),
                                     transactionBatchEntity.getCreatedAt().toString(),
