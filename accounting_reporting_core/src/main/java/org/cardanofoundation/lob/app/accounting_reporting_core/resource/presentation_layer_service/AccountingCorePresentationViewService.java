@@ -146,8 +146,8 @@ public class AccountingCorePresentationViewService {
 
     public BatchsDetailView listAllBatch(BatchSearchRequest body) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-
-        List<BatchView> batches = transactionBatchRepositoryGateway.findByFilter(body)
+        List<TransactionBatchEntity> byFilter = transactionBatchRepositoryGateway.findByFilter(body);
+        List<BatchView> batches = byFilter
                 .stream()
                 .map(
                         transactionBatchEntity -> {
