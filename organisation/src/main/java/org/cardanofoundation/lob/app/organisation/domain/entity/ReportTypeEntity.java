@@ -53,6 +53,7 @@ public class ReportTypeEntity extends CommonEntity {
     private String name;
 
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.EAGER)
+    @Builder.Default
     private List<ReportTypeFieldEntity> fields = new ArrayList<>();
 
 }

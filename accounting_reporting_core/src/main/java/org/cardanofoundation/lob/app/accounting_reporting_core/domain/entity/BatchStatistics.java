@@ -20,6 +20,7 @@ public class BatchStatistics {
 
     private int total;
     private int processedTransactions;
+    private int readyToApproveTransactions;
     private int pendingTransactions;
     private int approvedTransactions;
     private int publishedTransactions;

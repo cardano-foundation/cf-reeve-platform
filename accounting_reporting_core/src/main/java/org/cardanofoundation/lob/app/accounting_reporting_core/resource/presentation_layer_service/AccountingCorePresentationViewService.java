@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -106,8 +107,8 @@ public class AccountingCorePresentationViewService {
         List<TransactionEntity> transactions = transactionRepositoryGateway.findAllByStatus(
                 body.getOrganisationId(),
                 body.getStatus(),
-                body.getTransactionType()
-        );
+                body.getTransactionType(),
+                PageRequest.of(body.getPage(), body.getSize()));
 
         return transactions.stream()
                 .map(this::getTransactionView)

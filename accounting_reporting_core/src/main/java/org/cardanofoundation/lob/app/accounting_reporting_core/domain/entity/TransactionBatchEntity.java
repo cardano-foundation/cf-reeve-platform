@@ -62,6 +62,7 @@ public class TransactionBatchEntity extends CommonEntity implements Persistable<
     @AttributeOverrides({
             @AttributeOverride(name = "total", column = @Column(name = "stats_total_transactions_count")),
             @AttributeOverride(name = "processedTransactions", column = @Column(name = "stats_processed_transactions_count")),
+            @AttributeOverride(name = "readyToApproveTransactions", column = @Column(name = "stats_ready_transactions_count")),
             @AttributeOverride(name = "pendingTransactions", column = @Column(name = "stats_pending_transactions_count")),
             @AttributeOverride(name = "approvedTransactions", column = @Column(name = "stats_approved_transactions_count")),
             @AttributeOverride(name = "publishedTransactions", column = @Column(name = "stats_published_transactions_count")),

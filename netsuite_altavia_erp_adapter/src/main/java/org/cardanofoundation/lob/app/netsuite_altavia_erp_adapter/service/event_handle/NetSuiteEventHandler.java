@@ -54,6 +54,7 @@ public class NetSuiteEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleScheduledReconciliationEvent(ScheduledReconcilationEvent scheduledReconcilationEvent) {
         log.info("Handling handleScheduledReconciliationEvent...");
 
@@ -68,6 +69,7 @@ public class NetSuiteEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleCreatedReconciliationEvent(ReconcilationCreatedEvent reconcilationCreatedEvent) {
         log.info("Handling handleCreatedReconciliationEvent...");
 

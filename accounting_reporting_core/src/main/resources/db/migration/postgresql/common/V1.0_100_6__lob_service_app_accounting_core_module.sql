@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_batch (
 
    stats_total_transactions_count INT,
    stats_processed_transactions_count INT,
+   stats_ready_transactions_count INT,
    stats_pending_transactions_count INT,
    stats_approved_transactions_count INT,
    stats_published_transactions_count INT,
@@ -209,6 +210,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_batch_aud (
 
     stats_total_transactions_count INT,
     stats_processed_transactions_count INT,
+    stats_ready_transactions_count INT,
     stats_pending_transactions_count INT,
     stats_approved_transactions_count INT,
     stats_published_transactions_count INT,

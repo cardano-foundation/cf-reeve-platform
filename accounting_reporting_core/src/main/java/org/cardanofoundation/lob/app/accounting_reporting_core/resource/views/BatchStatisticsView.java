@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.views;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.BatchStatistics;
@@ -10,6 +11,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Bat
 @Getter
 @Setter
 @AllArgsConstructor
+@NoArgsConstructor
 public class BatchStatisticsView {
 
     private String batchId;
@@ -30,9 +32,10 @@ public class BatchStatisticsView {
         return BatchStatistics.builder()
                 .total(totalTransactions)
                 .processedTransactions(total)
+                .readyToApproveTransactions(approve)
                 .pendingTransactions(pending)
-                .approvedTransactions(approve)
-                .publishedTransactions(publish)
+                .approvedTransactions(publish)
+                .publishedTransactions(published)
                 .invalidTransactions(invalid)
                 .build();
     }
@@ -42,14 +45,19 @@ public class BatchStatisticsView {
                 batchId,
                 batchStatistics.getInvalidTransactions(),
                 batchStatistics.getPendingTransactions(),
-                batchStatistics.getProcessedTransactions()
-                        - batchStatistics.getInvalidTransactions()
-                        - batchStatistics.getPendingTransactions()
-                        - batchStatistics.getPublishedTransactions()
-                        - batchStatistics.getApprovedTransactions(),
+                batchStatistics.getReadyToApproveTransactions(),
                 batchStatistics.getApprovedTransactions(),
                 batchStatistics.getPublishedTransactions(),
                 batchStatistics.getTotal()
         );
+    }
+
+    public void merge(BatchStatisticsView other) {
+        this.invalid += other.invalid;
+        this.pending += other.pending;
+        this.approve += other.approve;
+        this.publish += other.publish;
+        this.published += other.published;
+        this.total += other.total;
     }
 }

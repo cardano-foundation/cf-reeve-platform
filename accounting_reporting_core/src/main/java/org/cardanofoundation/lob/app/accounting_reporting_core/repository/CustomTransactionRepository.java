@@ -14,7 +14,11 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 
 public interface CustomTransactionRepository {
 
-    List<TransactionEntity> findAllByStatus(String organisationId,
+//    List<TransactionEntity> findAllByStatus(String organisationId,
+//                                            List<TxValidationStatus> txValidationStatuses,
+//                                            List<TransactionType> transactionType,
+//                                            PageRequest pageRequest);
+        List<TransactionEntity> findAllByStatus(String organisationId,
                                             List<TxValidationStatus> txValidationStatuses,
                                             List<TransactionType> transactionType);
 

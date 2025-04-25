@@ -8,6 +8,7 @@ import static org.mockito.Mockito.*;
 import java.time.YearMonth;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import lombok.val;
@@ -56,7 +57,7 @@ class DbSynchronisationUseCaseServiceTest {
         val organisationTransactions = new OrganisationTransactions("org1", Set.of());
 
         service.execute(batchId, organisationTransactions, 0, new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
-        verify(transactionBatchService).updateTransactionBatchStatusAndStats(eq(batchId), eq(0));
+        verify(transactionBatchService).updateTransactionBatchStatusAndStats(eq(batchId), eq(0), eq(Optional.empty()));
         verifyNoInteractions(accountingCoreTransactionRepository);
         verifyNoInteractions(transactionItemRepository);
     }

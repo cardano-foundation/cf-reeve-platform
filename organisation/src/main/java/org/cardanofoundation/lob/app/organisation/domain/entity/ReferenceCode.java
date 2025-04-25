@@ -56,6 +56,7 @@ public class ReferenceCode extends CommonEntity implements Persistable<Reference
     private String name;
 
     @Column(name = "active")
+    @Builder.Default
     private boolean isActive = true;
 
     @Embeddable

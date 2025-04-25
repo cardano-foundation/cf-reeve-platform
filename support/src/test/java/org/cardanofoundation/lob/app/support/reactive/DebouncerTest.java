@@ -13,11 +13,13 @@ public class DebouncerTest {
 
     private Runnable task;
     private Debouncer debouncer;
+    private TransactionalTaskRunner taskRunner;
 
     @BeforeEach
     public void setUp() {
         task = mock(Runnable.class);
-        debouncer = new Debouncer(task, Duration.ofMillis(100)); // Using a short delay for testing
+        taskRunner = mock(TransactionalTaskRunner.class);
+        debouncer = new Debouncer(task, Duration.ofMillis(100), taskRunner); // Using a short delay for testing
     }
 
     @AfterEach
@@ -37,7 +39,7 @@ public class DebouncerTest {
         MILLISECONDS.sleep(200);
 
         // Verify that the task is executed only once
-        verify(task, times(1)).run();
+        verify(taskRunner, times(1)).runInNewTransaction(task);
     }
 
     @Test
@@ -49,7 +51,7 @@ public class DebouncerTest {
         MILLISECONDS.sleep(200); // Wait more than the debouncing delay
 
         // Verify that the task is executed only once, ensuring the first call was cancelled
-        verify(task, times(1)).run();
+        verify(taskRunner, times(1)).runInNewTransaction(task);
     }
 
 //    @Test

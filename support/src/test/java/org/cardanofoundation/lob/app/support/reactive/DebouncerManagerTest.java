@@ -21,12 +21,15 @@ public class DebouncerManagerTest {
 
     private DebouncerManager debouncerManager;
 
+    private TransactionalTaskRunner transactionalTaskRunner;
+
     @Mock
     private Runnable task;
 
     @BeforeEach
     public void setUp() {
-        debouncerManager = new DebouncerManager(Duration.ofSeconds(1));
+        transactionalTaskRunner = new TransactionalTaskRunner();
+        debouncerManager = new DebouncerManager(Duration.ofSeconds(1), transactionalTaskRunner);
     }
 
     @Test

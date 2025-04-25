@@ -43,6 +43,9 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     private AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
     @Mock
+    private TransactionBatchService transactionBatchService;
+
+    @Mock
     private LedgerService ledgerService;
 
     @InjectMocks

@@ -87,7 +87,7 @@ class TransactionBatchServiceTest {
         transactionBatchEntity.setCreatedBy("system123");
 
         verify(transactionBatchRepository).findById("batchId");
-        verify(transactionBatchRepository).save(transactionBatchEntity);
+        verify(transactionBatchRepository).saveAndFlush(transactionBatchEntity);
         verify(transactionConverter).convertToDbDetached(any(SystemExtractionParameters.class), any(UserExtractionParameters.class));
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchCreatedEvent.class));
         verifyNoMoreInteractions(transactionBatchRepository);

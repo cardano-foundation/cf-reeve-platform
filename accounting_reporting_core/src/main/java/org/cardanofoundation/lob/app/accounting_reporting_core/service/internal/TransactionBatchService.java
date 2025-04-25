@@ -27,6 +27,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Det
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.FilteringParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchAssocEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
@@ -52,7 +53,7 @@ public class TransactionBatchService {
     private final TxBatchStatsCalculator txBatchStatsCalculator;
     private final DebouncerManager debouncerManager;
 
-    @Value("${batch.stats.debounce.duration:PT3S}")
+    @Value("${batch.stats.debounce.duration:PT5S}")
     private Duration batchStatsDebounceDuration;
 
     public Optional<TransactionBatchEntity> findById(String batchId) {
@@ -97,15 +98,16 @@ public class TransactionBatchService {
 
     @Transactional
     public void updateTransactionBatchStatusAndStats(String batchId,
-                                                     Integer totalTransactionsCount) {
+                                                     int totalTransactionsCount,
+                                                     Optional<Set<TransactionEntity>> entities) {
         try {
-            Debouncer debouncer = debouncerManager.getDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, totalTransactionsCount), batchStatsDebounceDuration);
+            Debouncer debouncer = debouncerManager.getDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.of(totalTransactionsCount), entities), batchStatsDebounceDuration);
 
             debouncer.call();
         } catch (ExecutionException e) {
             log.warn("Error while getting debouncer for batchId: {}", batchId, e);
 
-            invokeUpdateTransactionBatchStatusAndStats(batchId, totalTransactionsCount);
+            invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.of(totalTransactionsCount), entities);
         }
     }
 
@@ -138,8 +140,9 @@ public class TransactionBatchService {
         log.info("Transaction batch status updated, batchId: {}", batchId);
     }
 
-    private void invokeUpdateTransactionBatchStatusAndStats(String batchId,
-                                                            int totalTransactionsCount) {
+    public void invokeUpdateTransactionBatchStatusAndStats(String batchId,
+                                                            Optional<Integer> totalTransactionsCountO,
+                                                            Optional<Set<TransactionEntity>> transactionEntities) {
         log.info("EXPENSIVE::Updating transaction batch status and statistics, batchId: {}", batchId);
 
         Optional<TransactionBatchEntity> txBatchM = transactionBatchRepositoryGateway.findById(batchId);
@@ -150,23 +153,18 @@ public class TransactionBatchService {
         }
 
         TransactionBatchEntity txBatch = txBatchM.orElseThrow();
-        Optional<BatchStatisticsView> batchStatisticViewForBatchId = transactionBatchRepository.getBatchStatisticViewForBatchId(batchId);
-        if(batchStatisticViewForBatchId.isEmpty()) {
-            log.error("Transaction batch statistics not found for id: {}", batchId);
 
-        } else {
+        BatchStatisticsView batchStatisticsView = new BatchStatisticsView();
+        transactionBatchRepository.getBatchStatisticViewForBatchId(batchId).ifPresent(batchStatisticsView::merge);
 
-
-            if (txBatch.getStatus() == FINALIZED) {
-                log.warn("Transaction batch already finalized or failed, batchId: {}", batchId);
-                return;
-            }
-            BatchStatisticsView batchStatisticsView = batchStatisticViewForBatchId.orElseThrow();
-
-            txBatch.setBatchStatistics(batchStatisticsView.toBatchStatistics(totalTransactionsCount));
-            txBatch.setStatus(txBatchStatusCalculator.reCalcStatus(batchStatisticsView, totalTransactionsCount));
-            transactionBatchRepository.save(txBatch);
+        if (txBatch.getStatus() == FINALIZED) {
+            log.warn("Transaction batch already finalized or failed, batchId: {}", batchId);
+            return;
         }
+        int totalTransactionsCount = totalTransactionsCountO.orElse(batchStatisticsView.getTotal());
+        txBatch.setBatchStatistics(batchStatisticsView.toBatchStatistics(totalTransactionsCount));
+        txBatch.setStatus(txBatchStatusCalculator.reCalcStatus(batchStatisticsView, totalTransactionsCount));
+        transactionBatchRepository.save(txBatch);
 
 
         log.info("EXPENSIVE::Transaction batch status and statistics updated, batchId: {}", batchId);
@@ -188,7 +186,7 @@ public class TransactionBatchService {
                     .collect(Collectors.toSet());
 
             for (TransactionBatchEntity txBatch : transactionBatchRepository.findAllById(allBatchesIdsAssociatedWithThisTransaction)) {
-                updateTransactionBatchStatusAndStats(txBatch.getId(), totalTxCount(txBatch, Optional.empty()).get());
+                updateTransactionBatchStatusAndStats(txBatch.getId(), totalTxCount(txBatch, Optional.empty()).get(), Optional.empty());
             }
         }
     }

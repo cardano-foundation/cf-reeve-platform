@@ -4,6 +4,7 @@ import static java.util.stream.Collectors.toMap;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.WARN;
 
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -48,7 +49,7 @@ public class DbSynchronisationUseCaseService {
 
         if (transactions.isEmpty()) {
             log.info("No transactions to process, batchId: {}", batchId);
-            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount);
+            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.empty());
 
             return;
         }
@@ -61,14 +62,14 @@ public class DbSynchronisationUseCaseService {
 
         String organisationId = incomingTransactions.organisationId();
 
-        processTransactionsForTheFirstTime(batchId, organisationId, transactions, Optional.of(totalTransactionsCount), flags);
+        processTransactionsForTheFirstTime(batchId, organisationId, transactions, totalTransactionsCount, flags);
     }
 
     @Transactional
     public void processTransactionsForTheFirstTime(String batchId,
                                                     String organisationId,
                                                     Set<TransactionEntity> incomingDetachedTransactions,
-                                                    Optional<Integer> totalTransactionsCount,
+                                                    int totalTransactionsCount,
                                                     ProcessorFlags flags) {
         LinkedHashSet<TransactionEntity> txsAlreadyStored = new LinkedHashSet<>();
 
@@ -111,18 +112,18 @@ public class DbSynchronisationUseCaseService {
 
         raiseViolationForAlreadyProcessedTransactions(txsAlreadyStored);
 
-        storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
+        Set<TransactionEntity> transactionEntities = storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
 
-        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount.get());
+        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.of(transactionEntities));
     }
 
-    private void storeTransactions(String batchId,
+    private Set<TransactionEntity> storeTransactions(String batchId,
                                    OrganisationTransactions transactions,
                                    ProcessorFlags flags) {
         log.info("Updating transaction batch, batchId: {}", batchId);
         ProcessorFlags.Trigger trigger = flags.getTrigger();
         Set<TransactionEntity> txs = transactions.transactions();
-
+        Set<TransactionEntity> savedEntities = new HashSet<>();
         for (TransactionEntity tx : txs) {
             TransactionEntity saved = accountingCoreTransactionRepository.save(tx);
             saved.getAllItems().forEach(i -> i.setTransaction(saved));
@@ -136,6 +137,7 @@ public class DbSynchronisationUseCaseService {
             }
 
             transactionItemRepository.saveAll(tx.getAllItems());
+            savedEntities.add(saved);
         }
 
         Set<TransactionBatchAssocEntity> transactionBatchAssocEntities = txs
@@ -148,6 +150,7 @@ public class DbSynchronisationUseCaseService {
                 .collect(Collectors.toSet());
 
         transactionBatchAssocRepository.saveAll(transactionBatchAssocEntities);
+        return savedEntities;
     }
 
     private boolean isIncomingTransactionERPSame(TransactionEntity existingTx,

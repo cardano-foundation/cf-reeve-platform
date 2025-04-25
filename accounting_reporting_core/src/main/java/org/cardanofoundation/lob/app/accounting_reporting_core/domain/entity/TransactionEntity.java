@@ -178,7 +178,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Setter
     private Set<TransactionViolation> violations = new LinkedHashSet<>();
 
-    private Optional<TransactionProcessingStatus> getProcessingStatus() {
+    public Optional<TransactionProcessingStatus> getProcessingStatus() {
         return Optional.ofNullable(processingStatus);
     }
 

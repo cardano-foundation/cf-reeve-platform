@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ public class TransactionRepositoryGateway {
 
     private final TransactionItemRepository transactionItemRepository;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
+    private final TransactionBatchService transactionBatchService;
     private final LedgerService ledgerService;
 
     @Transactional
@@ -122,10 +124,13 @@ public class TransactionRepositoryGateway {
         val transactionIds = transactionsRequest.getTransactionIds();
 
         val transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
+        Set<String> batchIds = new HashSet<>();
         for (val transactionId : transactionIds) {
             try {
                 val transactionEntities = approveTransaction(transactionId.getId());
-
+                if(transactionEntities.isRight()) {
+                    batchIds.add(transactionEntities.get().getBatchId());
+                }
                 transactionsApprovalResponseListE.add(transactionEntities);
             } catch (DataAccessException dae) {
                 log.error("Error approving transaction: {}", transactionId, dae);
@@ -135,6 +140,9 @@ public class TransactionRepositoryGateway {
                 transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
             }
         }
+
+        batchIds.forEach(batchId -> transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
+
 
         return transactionsApprovalResponseListE;
     }
@@ -204,7 +212,8 @@ public class TransactionRepositoryGateway {
 
     public List<TransactionEntity> findAllByStatus(String organisationId,
                                                    List<TxValidationStatus> validationStatuses,
-                                                   List<TransactionType> transactionType) {
+                                                   List<TransactionType> transactionType, PageRequest pageRequest) {
+        // TODO add Pagerequest once the frontend is ready
         return accountingCoreTransactionRepository.findAllByStatus(organisationId, validationStatuses, transactionType);
     }
 

@@ -12,9 +12,10 @@ import com.google.common.cache.CacheBuilder;
 
 public class DebouncerManager {
 
+    private final TransactionalTaskRunner transactionalTaskRunner;
     private final Cache<String, Debouncer> debouncerCache;
 
-    public DebouncerManager(Duration duration) {
+    public DebouncerManager(Duration duration, TransactionalTaskRunner transactionalTaskRunner) {
         debouncerCache = CacheBuilder.newBuilder()
                 .expireAfterAccess(duration.toMillis(), MILLISECONDS)
                 .removalListener(notification -> {
@@ -24,12 +25,13 @@ public class DebouncerManager {
                     }
                 })
                 .build();
+        this.transactionalTaskRunner = transactionalTaskRunner;
     }
 
     public Debouncer getDebouncer(String id,
                                   Runnable task,
                                   Duration delay) throws ExecutionException {
-        return debouncerCache.get(id, () -> new Debouncer(task, delay));
+        return debouncerCache.get(id, () -> new Debouncer(task, delay, transactionalTaskRunner));
     }
 
     public void cleanup() {

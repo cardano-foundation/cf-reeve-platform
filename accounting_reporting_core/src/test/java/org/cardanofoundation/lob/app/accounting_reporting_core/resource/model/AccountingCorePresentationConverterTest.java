@@ -12,8 +12,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
-import org.springframework.data.domain.PageRequest;
-
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -35,7 +33,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.SearchRequest;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
@@ -126,7 +123,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity2.setLedgerDispatchApproved(Boolean.TRUE);
         transactionEntity2.setOverallStatus(TransactionStatus.OK);
 
-        when(transactionRepositoryGateway.findAllByStatus(any(), any(), any())).thenReturn(List.of(transactionEntity, transactionEntity2, transactionEntity3));
+        when(transactionRepositoryGateway.findAllByStatus(any(), any(), any(), any())).thenReturn(List.of(transactionEntity, transactionEntity2, transactionEntity3));
 
         List<TransactionView> result = accountingCorePresentationConverter.allTransactions(searchRequest);
 
@@ -192,7 +189,7 @@ class AccountingCorePresentationConverterTest {
 
         String batchId = "batch-id";
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
-        BatchStatistics batchStatistics = BatchStatistics.builder().totalTransactionsCount(10).failedTransactionsCount(1).approvedTransactionsCount(8).approvedTransactionsDispatchCount(5).finalizedTransactionsCount(6).processedTransactionsCount(10).build();
+        BatchStatistics batchStatistics = BatchStatistics.builder().total(10).pendingTransactions(1).invalidTransactions(8).approvedTransactions(5).publishedTransactions(6).readyToApproveTransactions(10).build();
 
         TransactionEntity transaction1 = new TransactionEntity();
         transaction1.setId("tx-id1");
@@ -215,11 +212,12 @@ class AccountingCorePresentationConverterTest {
         transactions.add(transaction2);
         transactionBatchEntity.setTransactions(transactions);
         transactionBatchEntity.setStatus(TransactionBatchStatus.CREATED);
+        transactionBatchEntity.setBatchStatistics(BatchStatistics.builder()
+                .readyToApproveTransactions(2)
+                .total(2).build());
 
         transaction1.setBatchId(batchId);
         transaction2.setBatchId(batchId);
-        BatchStatisticsView batchStatisticsView = new BatchStatisticsView(batchId, 0, 0, 2, 0, 0, 2);
-        when(transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(List.of(batchId), PageRequest.of(0,1))).thenReturn(List.of(batchStatisticsView));
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
 
         Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId);
@@ -260,7 +258,7 @@ class AccountingCorePresentationConverterTest {
         batchSearchRequest.setTransactionTypes(Set.of(TransactionType.CardCharge));
         FilteringParameters filteringParameters = new FilteringParameters("pros", List.of(TransactionType.CardCharge), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), Collections.singletonList("batch"));
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
-        BatchStatistics batchStatistics = BatchStatistics.builder().totalTransactionsCount(10).failedTransactionsCount(1).approvedTransactionsCount(9).finalizedTransactionsCount(10).build();
+        BatchStatistics batchStatistics = BatchStatistics.builder().total(10).invalidTransactions(1).pendingTransactions(9).publishedTransactions(10).build();
         transactionBatchEntity.setId("batch-id");
         transactionBatchEntity.setCreatedAt(LocalDateTime.now());
         transactionBatchEntity.setUpdatedAt(LocalDateTime.now());
