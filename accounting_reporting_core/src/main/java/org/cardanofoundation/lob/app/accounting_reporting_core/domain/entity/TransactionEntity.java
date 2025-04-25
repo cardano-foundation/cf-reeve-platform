@@ -4,6 +4,7 @@ import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.FetchType.EAGER;
 import static java.util.stream.Collectors.toSet;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.NOT_DISPATCHED;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 
 import java.time.LocalDate;
@@ -58,6 +59,11 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Getter
     @Setter
     private String batchId;
+
+    @Column(name = "processing_status")
+    @Enumerated(STRING)
+    @Setter
+    private TransactionProcessingStatus processingStatus;
 
     @Column(name = "accounting_period", nullable = false)
     @Getter
@@ -171,6 +177,60 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Getter
     @Setter
     private Set<TransactionViolation> violations = new LinkedHashSet<>();
+
+    private Optional<TransactionProcessingStatus> getProcessingStatus() {
+        return Optional.ofNullable(processingStatus);
+    }
+
+    @PrePersist
+    @PreUpdate
+    private void updateProcessingStatus() {
+        if (FAILED == getAutomatedValidationStatus()) {
+            if (getViolations().stream().anyMatch(v -> v.getSource() == ERP)) {
+                this.setProcessingStatus(TransactionProcessingStatus.INVALID);
+                return;
+            }
+            if (hasAnyRejection()) {
+                if (getItems().stream().anyMatch(transactionItemEntity -> transactionItemEntity.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == ERP))) {
+                    this.setProcessingStatus(TransactionProcessingStatus.INVALID);
+                    return;
+                }
+                this.setProcessingStatus(TransactionProcessingStatus.PENDING);
+                return;
+            }
+            this.setProcessingStatus(TransactionProcessingStatus.PENDING);
+            return;
+        }
+
+        if (hasAnyRejection()) {
+            if (getItems().stream().anyMatch(transactionItemEntity -> transactionItemEntity.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == ERP))) {
+                this.setProcessingStatus(TransactionProcessingStatus.INVALID);
+                return;
+            }
+            this.setProcessingStatus(TransactionProcessingStatus.PENDING);
+            return;
+        }
+
+        switch (getLedgerDispatchStatus()) {
+            case NOT_DISPATCHED, MARK_DISPATCH -> {
+                if (Boolean.TRUE.equals(getLedgerDispatchApproved())) {
+                    this.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
+                    return;
+                }
+
+                if (Boolean.TRUE.equals(getTransactionApproved())) {
+                    this.setProcessingStatus(TransactionProcessingStatus.PUBLISH);
+                    return;
+                }
+            }
+
+            case DISPATCHED, COMPLETED, FINALIZED -> {
+                this.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
+                return;
+            }
+        }
+        this.setProcessingStatus(TransactionProcessingStatus.APPROVE);
+    }
 
     public boolean allApprovalsPassedForTransactionDispatch() {
         return transactionApproved && ledgerDispatchApproved;
