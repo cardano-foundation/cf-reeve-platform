@@ -1,10 +1,11 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.views;
 
-import javax.annotation.Nullable;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.BatchStatistics;
 
 @Getter
 @Setter
@@ -13,21 +14,42 @@ public class BatchStatisticsView {
 
     private String batchId;
 
-    @Nullable
-    private Integer invalid;
+    private int invalid;
 
-    @Nullable
-    private Integer pending;
+    private int pending;
 
-    @Nullable
-    private Integer approve;
+    private int approve;
 
-    @Nullable
-    private Integer publish;
+    private int publish;
 
-    @Nullable
-    private Integer published;
+    private int published;
 
-    @Nullable
-    private Integer total;
+    private int total;
+
+    public BatchStatistics toBatchStatistics(int totalTransactions) {
+        return BatchStatistics.builder()
+                .total(totalTransactions)
+                .processedTransactions(total)
+                .pendingTransactions(pending)
+                .approvedTransactions(approve)
+                .publishedTransactions(publish)
+                .invalidTransactions(invalid)
+                .build();
+    }
+
+    public static BatchStatisticsView from(String batchId, BatchStatistics batchStatistics) {
+        return new BatchStatisticsView(
+                batchId,
+                batchStatistics.getInvalidTransactions(),
+                batchStatistics.getPendingTransactions(),
+                batchStatistics.getProcessedTransactions()
+                        - batchStatistics.getInvalidTransactions()
+                        - batchStatistics.getPendingTransactions()
+                        - batchStatistics.getPublishedTransactions()
+                        - batchStatistics.getApprovedTransactions(),
+                batchStatistics.getApprovedTransactions(),
+                batchStatistics.getPublishedTransactions(),
+                batchStatistics.getTotal()
+        );
+    }
 }

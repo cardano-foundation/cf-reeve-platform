@@ -32,7 +32,6 @@ public class ERPIncomingDataProcessor {
     private final TransactionBatchService transactionBatchService;
     private final DbSynchronisationUseCaseService dbSynchronisationUseCaseService;
 
-    @Transactional
     public void initiateIngestion(String batchId,
                                   String organisationId,
                                   UserExtractionParameters userExtractionParameters,

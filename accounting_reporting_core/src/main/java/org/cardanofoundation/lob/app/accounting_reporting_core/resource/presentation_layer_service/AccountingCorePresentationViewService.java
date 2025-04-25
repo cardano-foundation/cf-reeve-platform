@@ -4,20 +4,17 @@ import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason.getSourceBasedRejectionReasons;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +22,6 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
@@ -128,11 +124,8 @@ public class AccountingCorePresentationViewService {
     public Optional<BatchView> batchDetail(String batchId) {
         return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
                     Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-                    List<BatchStatisticsView> batchStatisticViewForBatchId = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(List.of(transactionBatchEntity.getId()), PageRequest.of(0, 1));
 
-                    BatchStatisticsView statistic = Optional.ofNullable(batchStatisticViewForBatchId.getFirst())
-                            .orElse(new BatchStatisticsView(transactionBatchEntity.getId(), 0, 0, 0, 0, 0, 0
-                    ));
+                    BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
 
                     return new BatchView(
@@ -154,18 +147,12 @@ public class AccountingCorePresentationViewService {
 
     public BatchsDetailView listAllBatch(BatchSearchRequest body) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-        Set<RejectionReason> sourceBasedRejectionReasonsLob = getSourceBasedRejectionReasons(Source.LOB);
-        Set<RejectionReason> sourceBasedRejectionReasonsErp = getSourceBasedRejectionReasons(ERP);
         List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body);
-        Map<String, BatchStatisticsView> batchStatisticViews = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(
-                        transactionBatchEntities.stream().map(TransactionBatchEntity::getId).toList(), PageRequest.of(body.getPage(), body.getLimit()))
-                .stream().collect(Collectors.toMap(BatchStatisticsView::getBatchId, Function.identity()));
         List<BatchView> batches = transactionBatchEntities
                 .stream()
                 .map(
                         transactionBatchEntity -> {
-                            BatchStatisticsView statistic = Optional.ofNullable(batchStatisticViews.get(transactionBatchEntity.getId()))
-                                    .orElse(new BatchStatisticsView(transactionBatchEntity.getId(), 0, 0, 0, 0, 0, 0));
+                            BatchStatisticsView statistic = BatchStatisticsView.from(transactionBatchEntity.getId(), transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                             return new BatchView(
                                     transactionBatchEntity.getId(),
                                     transactionBatchEntity.getCreatedAt().toString(),

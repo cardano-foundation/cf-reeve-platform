@@ -47,17 +47,7 @@ public class TransactionBatchRepositoryGateway {
     }
 
     public List<BatchStatisticsView> getBatchStatisticViewForBatchId(List<String> batchId, PageRequest pageRequest) {
-        List<BatchStatisticsViewProjection> batchStatisticViewForBatchId = transactionBatchRepository.getBatchStatisticViewForBatchId(batchId, pageRequest);
-        return batchStatisticViewForBatchId.stream()
-                .map(batchStatisticsViewProjection -> new BatchStatisticsView(
-                        batchStatisticsViewProjection.getBatchId(),
-                        batchStatisticsViewProjection.getInvalid(),
-                        batchStatisticsViewProjection.getPending(),
-                        batchStatisticsViewProjection.getApprove(),
-                        batchStatisticsViewProjection.getPublish(),
-                        batchStatisticsViewProjection.getPublished(),
-                        batchStatisticsViewProjection.getTotal()))
-                .toList();
+        return transactionBatchRepository.getBatchStatisticViewForBatchId(batchId, pageRequest);
     }
 
 }

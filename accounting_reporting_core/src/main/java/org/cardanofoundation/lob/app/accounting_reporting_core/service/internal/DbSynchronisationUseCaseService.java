@@ -48,7 +48,7 @@ public class DbSynchronisationUseCaseService {
 
         if (transactions.isEmpty()) {
             log.info("No transactions to process, batchId: {}", batchId);
-            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, Optional.of(totalTransactionsCount));
+            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount);
 
             return;
         }
@@ -113,7 +113,7 @@ public class DbSynchronisationUseCaseService {
 
         storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
 
-        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount);
+        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount.get());
     }
 
     private void storeTransactions(String batchId,

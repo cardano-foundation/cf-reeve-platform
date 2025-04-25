@@ -60,16 +60,12 @@ public class TransactionBatchEntity extends CommonEntity implements Persistable<
     private Set<TransactionEntity> transactions = new LinkedHashSet<>();
 
     @AttributeOverrides({
-            @AttributeOverride(name = "totalTransactionsCount", column = @Column(name = "stats_total_transactions_count")),
-            @AttributeOverride(name = "processedTransactionsCount", column = @Column(name = "stats_processed_transactions_count")),
-            @AttributeOverride(name = "failedTransactionsCount", column = @Column(name = "stats_failed_transactions_count")),
-            @AttributeOverride(name = "approvedTransactionsCount", column = @Column(name = "stats_approved_transactions_count")),
-            @AttributeOverride(name = "approvedTransactionsDispatchCount", column = @Column(name = "stats_approved_transactions_dispatch_count")),
-            @AttributeOverride(name = "dispatchedTransactionsCount", column = @Column(name = "stats_dispatched_transactions_count")),
-            @AttributeOverride(name = "completedTransactionsCount", column = @Column(name = "stats_completed_transactions_count")),
-            @AttributeOverride(name = "finalizedTransactionsCount", column = @Column(name = "stats_finalized_transactions_count")),
-            @AttributeOverride(name = "failedSourceERPTransactionsCount", column = @Column(name = "stats_failed_source_erp_transactions_count")),
-            @AttributeOverride(name = "failedSourceLOBTransactionsCount", column = @Column(name = "stats_failed_source_lob_transactions_count")),
+            @AttributeOverride(name = "total", column = @Column(name = "stats_total_transactions_count")),
+            @AttributeOverride(name = "processedTransactions", column = @Column(name = "stats_processed_transactions_count")),
+            @AttributeOverride(name = "pendingTransactions", column = @Column(name = "stats_pending_transactions_count")),
+            @AttributeOverride(name = "approvedTransactions", column = @Column(name = "stats_approved_transactions_count")),
+            @AttributeOverride(name = "publishedTransactions", column = @Column(name = "stats_published_transactions_count")),
+            @AttributeOverride(name = "invalidTransactions", column = @Column(name = "stats_invalid_transactions_count")),
     })
     @Nullable
     private BatchStatistics batchStatistics = new BatchStatistics();

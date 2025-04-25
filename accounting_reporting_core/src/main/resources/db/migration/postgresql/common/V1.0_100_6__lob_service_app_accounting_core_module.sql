@@ -177,14 +177,10 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_batch (
 
    stats_total_transactions_count INT,
    stats_processed_transactions_count INT,
-   stats_failed_transactions_count INT,
+   stats_pending_transactions_count INT,
    stats_approved_transactions_count INT,
-   stats_approved_transactions_dispatch_count INT,
-   stats_dispatched_transactions_count INT,
-   stats_completed_transactions_count INT,
-   stats_finalized_transactions_count INT,
-   stats_failed_source_erp_transactions_count INT,
-   stats_failed_source_lob_transactions_count INT,
+   stats_published_transactions_count INT,
+   stats_invalid_transactions_count INT,
 
    detail_code VARCHAR(255),
    detail_subcode VARCHAR(255),
@@ -213,14 +209,10 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_batch_aud (
 
     stats_total_transactions_count INT,
     stats_processed_transactions_count INT,
-    stats_failed_transactions_count INT,
+    stats_pending_transactions_count INT,
     stats_approved_transactions_count INT,
-    stats_approved_transactions_dispatch_count INT,
-    stats_dispatched_transactions_count INT,
-    stats_completed_transactions_count INT,
-    stats_finalized_transactions_count INT,
-    stats_failed_source_erp_transactions_count INT,
-    stats_failed_source_lob_transactions_count INT,
+    stats_published_transactions_count INT,
+    stats_invalid_transactions_count INT,
 
     detail_code VARCHAR(255),
     detail_subcode VARCHAR(255),
@@ -255,7 +247,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction (
    transaction_id CHAR(64) NOT NULL,
    type accounting_core_transaction_type NOT NULL,
    batch_id CHAR(64) NOT NULL,
-
+   processing_status VARCHAR(255),
    FOREIGN KEY (batch_id) REFERENCES accounting_core_transaction_batch (transaction_batch_id),
 
    entry_date DATE NOT NULL,
@@ -297,7 +289,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_transaction_aud (
    transaction_id CHAR(64) NOT NULL,
    type accounting_core_transaction_type NOT NULL,
    batch_id CHAR(64) NOT NULL,
-
+   processing_status VARCHAR(255),
    --FOREIGN KEY (batch_id) REFERENCES accounting_core_transaction_batch (transaction_batch_id),
 
    entry_date DATE NOT NULL,
