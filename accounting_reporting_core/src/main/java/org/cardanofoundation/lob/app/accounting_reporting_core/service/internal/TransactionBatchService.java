@@ -50,7 +50,6 @@ public class TransactionBatchService {
     private final TransactionBatchAssocRepository transactionBatchAssocRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final TxBatchStatusCalculator txBatchStatusCalculator;
-    private final TxBatchStatsCalculator txBatchStatsCalculator;
     private final DebouncerManager debouncerManager;
 
     @Value("${batch.stats.debounce.duration:PT5S}")

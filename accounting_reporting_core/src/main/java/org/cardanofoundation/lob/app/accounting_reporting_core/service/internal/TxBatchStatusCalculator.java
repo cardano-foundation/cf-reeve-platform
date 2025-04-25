@@ -15,19 +15,16 @@ public class TxBatchStatusCalculator {
 
     public TransactionBatchStatus reCalcStatus(BatchStatisticsView view,
                                                int totalTransactionsCount) {
-
+        TransactionBatchStatus status = TransactionBatchStatus.PROCESSING;
         if(totalTransactionsCount == view.getTotal()) {
-            return TransactionBatchStatus.FINISHED;
-        }
-        if(totalTransactionsCount == view.getTotal() && view.getApprove() == 0 && view.getInvalid() == 0 && view.getPending() == 0) {
-            return TransactionBatchStatus.COMPLETE; // All transaction are approved
+            status = TransactionBatchStatus.FINISHED;
         }
 
         if(totalTransactionsCount == view.getPublished()) {
-            return TransactionBatchStatus.FINALIZED; // All transaction are published
+            status = TransactionBatchStatus.FINALIZED; // All transaction are published
         }
 
-        return TransactionBatchStatus.PROCESSING;
+        return status;
     }
 
 }
