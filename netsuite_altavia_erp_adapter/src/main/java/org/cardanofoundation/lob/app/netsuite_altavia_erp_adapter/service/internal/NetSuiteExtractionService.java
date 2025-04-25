@@ -288,6 +288,18 @@ public class NetSuiteExtractionService {
 
                 applicationEventPublisher.publishEvent(batchChunkEventBuilder.build());
             });
+            if(transactionsWithExtractionParametersApplied.isEmpty()) {
+                // Notifying the API component that the batch is empty
+                applicationEventPublisher.publishEvent(TransactionBatchChunkEvent.builder()
+                        .metadata(EventMetadata.create(TransactionBatchChunkEvent.VERSION))
+                        .batchId(netsuiteIngestion.getId())
+                        .organisationId(organisationId)
+                        .systemExtractionParameters(systemExtractionParameters)
+                        .totalTransactionsCount(transactionsWithExtractionParametersApplied.size())
+                        .transactions(transactionsWithExtractionParametersApplied)
+                        .status(FINISHED)
+                        .build());
+            }
 
             log.info("NetSuite ingestion fully completed.");
         } catch (Exception e) {
