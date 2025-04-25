@@ -59,6 +59,7 @@ public class TransactionBatchService {
         return transactionBatchRepository.findById(batchId);
     }
 
+    @Transactional
     public void createTransactionBatch(String batchId,
                                        String organisationId,
                                        UserExtractionParameters userExtractionParameters,
@@ -94,6 +95,7 @@ public class TransactionBatchService {
         );
     }
 
+    @Transactional
     public void updateTransactionBatchStatusAndStats(String batchId,
                                                      Integer totalTransactionsCount) {
         try {
@@ -151,7 +153,7 @@ public class TransactionBatchService {
         Optional<BatchStatisticsView> batchStatisticViewForBatchId = transactionBatchRepository.getBatchStatisticViewForBatchId(batchId);
         if(batchStatisticViewForBatchId.isEmpty()) {
             log.error("Transaction batch statistics not found for id: {}", batchId);
-            txBatch.setStatus(FAILED);
+
         } else {
 
 
@@ -163,8 +165,9 @@ public class TransactionBatchService {
 
             txBatch.setBatchStatistics(batchStatisticsView.toBatchStatistics(totalTransactionsCount));
             txBatch.setStatus(txBatchStatusCalculator.reCalcStatus(batchStatisticsView, totalTransactionsCount));
+            transactionBatchRepository.save(txBatch);
         }
-        transactionBatchRepository.save(txBatch);
+
 
         log.info("EXPENSIVE::Transaction batch status and statistics updated, batchId: {}", batchId);
     }
