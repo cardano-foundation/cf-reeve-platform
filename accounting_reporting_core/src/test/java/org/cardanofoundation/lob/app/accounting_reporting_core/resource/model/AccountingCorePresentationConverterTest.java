@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.model;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.CORE_CURRENCY_NOT_FOUND;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason.getSourceBasedRejectionReasons;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -12,6 +11,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+
+import org.springframework.data.domain.PageRequest;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -218,7 +219,7 @@ class AccountingCorePresentationConverterTest {
         transaction1.setBatchId(batchId);
         transaction2.setBatchId(batchId);
         BatchStatisticsView batchStatisticsView = new BatchStatisticsView(batchId, 0, 0, 2, 0, 0, 2);
-        when(transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(List.of(batchId), getSourceBasedRejectionReasons(Source.LOB), getSourceBasedRejectionReasons(Source.ERP))).thenReturn(List.of(batchStatisticsView));
+        when(transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(List.of(batchId), PageRequest.of(0,1))).thenReturn(List.of(batchStatisticsView));
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
 
         Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId);

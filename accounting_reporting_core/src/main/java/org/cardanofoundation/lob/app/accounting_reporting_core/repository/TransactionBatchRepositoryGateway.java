@@ -7,10 +7,10 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
@@ -46,8 +46,18 @@ public class TransactionBatchRepositoryGateway {
         return transactionRepository.findAllByBatchId(batchId);
     }
 
-    public List<BatchStatisticsView> getBatchStatisticViewForBatchId(List<String> batchId, Set<RejectionReason> lobRejectionReasons, Set<RejectionReason> erpRejectionReasons) {
-        return transactionBatchRepository.getBatchStatisticViewForBatchId(batchId);
+    public List<BatchStatisticsView> getBatchStatisticViewForBatchId(List<String> batchId, PageRequest pageRequest) {
+        List<BatchStatisticsViewProjection> batchStatisticViewForBatchId = transactionBatchRepository.getBatchStatisticViewForBatchId(batchId, pageRequest);
+        return batchStatisticViewForBatchId.stream()
+                .map(batchStatisticsViewProjection -> new BatchStatisticsView(
+                        batchStatisticsViewProjection.getBatchId(),
+                        batchStatisticsViewProjection.getInvalid(),
+                        batchStatisticsViewProjection.getPending(),
+                        batchStatisticsViewProjection.getApprove(),
+                        batchStatisticsViewProjection.getPublish(),
+                        batchStatisticsViewProjection.getPublished(),
+                        batchStatisticsViewProjection.getTotal()))
+                .toList();
     }
 
 }

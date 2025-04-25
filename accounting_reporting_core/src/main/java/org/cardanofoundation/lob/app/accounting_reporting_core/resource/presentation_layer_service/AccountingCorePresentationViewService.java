@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -127,10 +128,8 @@ public class AccountingCorePresentationViewService {
     public Optional<BatchView> batchDetail(String batchId) {
         return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
                     Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-                    List<BatchStatisticsView> batchStatisticViewForBatchId = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(List.of(transactionBatchEntity.getId()),
-                            getSourceBasedRejectionReasons(Source.LOB),
-                            getSourceBasedRejectionReasons(ERP)
-                    );
+                    List<BatchStatisticsView> batchStatisticViewForBatchId = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(List.of(transactionBatchEntity.getId()), PageRequest.of(0, 1));
+
                     BatchStatisticsView statistic = Optional.ofNullable(batchStatisticViewForBatchId.getFirst())
                             .orElse(new BatchStatisticsView(transactionBatchEntity.getId(), 0, 0, 0, 0, 0, 0
                     ));
@@ -159,7 +158,7 @@ public class AccountingCorePresentationViewService {
         Set<RejectionReason> sourceBasedRejectionReasonsErp = getSourceBasedRejectionReasons(ERP);
         List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body);
         Map<String, BatchStatisticsView> batchStatisticViews = transactionBatchRepositoryGateway.getBatchStatisticViewForBatchId(
-                        transactionBatchEntities.stream().map(TransactionBatchEntity::getId).toList(), sourceBasedRejectionReasonsLob, sourceBasedRejectionReasonsErp)
+                        transactionBatchEntities.stream().map(TransactionBatchEntity::getId).toList(), PageRequest.of(body.getPage(), body.getLimit()))
                 .stream().collect(Collectors.toMap(BatchStatisticsView::getBatchId, Function.identity()));
         List<BatchView> batches = transactionBatchEntities
                 .stream()
