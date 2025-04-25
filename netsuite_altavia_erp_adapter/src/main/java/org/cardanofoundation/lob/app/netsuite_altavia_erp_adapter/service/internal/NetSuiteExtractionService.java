@@ -268,16 +268,16 @@ public class NetSuiteExtractionService {
 
             Set<Transaction> transactionsWithExtractionParametersApplied = extractionParametersFilteringService
                     .applyExtractionParameters(transactions.transactions(), userExtractionParameters, systemExtractionParameters);
-
+            TransactionBatchChunkEvent.TransactionBatchChunkEventBuilder batchChunkEventBuilder = TransactionBatchChunkEvent.builder()
+                    .metadata(EventMetadata.create(TransactionBatchChunkEvent.VERSION))
+                    .batchId(netsuiteIngestion.getId())
+                    .organisationId(organisationId)
+                    .systemExtractionParameters(systemExtractionParameters)
+                    .totalTransactionsCount(transactionsWithExtractionParametersApplied.size());
             Partitions.partition(transactionsWithExtractionParametersApplied, sendBatchSize).forEach(txPartition -> {
                 assert netsuiteIngestion.getId() != null;
-                TransactionBatchChunkEvent.TransactionBatchChunkEventBuilder batchChunkEventBuilder = TransactionBatchChunkEvent.builder()
-                        .metadata(EventMetadata.create(TransactionBatchChunkEvent.VERSION))
-                        .batchId(netsuiteIngestion.getId())
-                        .organisationId(organisationId)
-                        .systemExtractionParameters(systemExtractionParameters)
-                        .totalTransactionsCount(transactionsWithExtractionParametersApplied.size())
-                        .transactions(txPartition.asSet());
+
+                    batchChunkEventBuilder.transactions(txPartition.asSet());
                 if (txPartition.isFirst()) {
                     batchChunkEventBuilder.status(STARTED);
                 } else if (txPartition.isLast()) {
@@ -290,12 +290,7 @@ public class NetSuiteExtractionService {
             });
             if(transactionsWithExtractionParametersApplied.isEmpty()) {
                 // Notifying the API component that the batch is empty
-                applicationEventPublisher.publishEvent(TransactionBatchChunkEvent.builder()
-                        .metadata(EventMetadata.create(TransactionBatchChunkEvent.VERSION))
-                        .batchId(netsuiteIngestion.getId())
-                        .organisationId(organisationId)
-                        .systemExtractionParameters(systemExtractionParameters)
-                        .totalTransactionsCount(transactionsWithExtractionParametersApplied.size())
+                applicationEventPublisher.publishEvent(batchChunkEventBuilder
                         .transactions(transactionsWithExtractionParametersApplied)
                         .status(FINISHED)
                         .build());
