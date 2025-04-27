@@ -56,6 +56,7 @@ public class DbSynchronisationUseCaseService {
 
         if (trigger == ProcessorFlags.Trigger.REPROCESSING) {
             // TODO should we check if we are NOT changing incomingTransactions which are already marked as dispatched?
+            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.of(transactions));
             storeTransactions(batchId, incomingTransactions, flags);
             return;
         }

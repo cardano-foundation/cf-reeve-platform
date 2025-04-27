@@ -184,7 +184,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @PrePersist
     @PreUpdate
-    private void updateProcessingStatus() {
+    public void updateProcessingStatus() {
         if (FAILED == getAutomatedValidationStatus()) {
             if (getViolations().stream().anyMatch(v -> v.getSource() == ERP)) {
                 this.setProcessingStatus(TransactionProcessingStatus.INVALID);

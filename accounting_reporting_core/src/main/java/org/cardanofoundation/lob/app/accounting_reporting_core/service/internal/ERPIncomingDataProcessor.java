@@ -17,6 +17,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserE
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.BusinessRulesPipelineProcessor;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
 
@@ -31,6 +32,7 @@ public class ERPIncomingDataProcessor {
     private BusinessRulesPipelineProcessor businessRulesPipelineProcessor;
     private final TransactionBatchService transactionBatchService;
     private final DbSynchronisationUseCaseService dbSynchronisationUseCaseService;
+    private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
     @Transactional
     public void initiateIngestion(String batchId,
@@ -63,7 +65,8 @@ public class ERPIncomingDataProcessor {
 
         // run or re-run business rules
         businessRulesPipelineProcessor.run(allOrgTransactions,processorFlags);
-
+        // Saving all transactions to retrigger the update process status in-case there are only changes after reprocessing within the items
+        accountingCoreTransactionRepository.saveAll(transactions);
         dbSynchronisationUseCaseService.execute(batchId,
                 allOrgTransactions,
                 totalTransactionsCount,

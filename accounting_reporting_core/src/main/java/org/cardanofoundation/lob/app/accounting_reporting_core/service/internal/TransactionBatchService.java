@@ -29,6 +29,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
@@ -51,6 +52,7 @@ public class TransactionBatchService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final TxBatchStatusCalculator txBatchStatusCalculator;
     private final DebouncerManager debouncerManager;
+    private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
     @Value("${batch.stats.debounce.duration:PT5S}")
     private Duration batchStatsDebounceDuration;
@@ -154,6 +156,12 @@ public class TransactionBatchService {
         TransactionBatchEntity txBatch = txBatchM.orElseThrow();
 
         BatchStatisticsView batchStatisticsView = new BatchStatisticsView();
+        // Triggering to update the status of all changed transactions within this batch, to be sure to have the latest status
+        transactionEntities.ifPresent(entities -> {
+            entities.forEach(TransactionEntity::updateProcessingStatus);
+            accountingCoreTransactionRepository.saveAll(entities);
+        });
+
         transactionBatchRepository.getBatchStatisticViewForBatchId(batchId).ifPresent(batchStatisticsView::merge);
 
         if (txBatch.getStatus() == FINALIZED) {
