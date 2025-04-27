@@ -65,8 +65,7 @@ public class ERPIncomingDataProcessor {
 
         // run or re-run business rules
         businessRulesPipelineProcessor.run(allOrgTransactions,processorFlags);
-        // Saving all transactions to retrigger the update process status in-case there are only changes after reprocessing within the items
-        accountingCoreTransactionRepository.saveAll(transactions);
+
         dbSynchronisationUseCaseService.execute(batchId,
                 allOrgTransactions,
                 totalTransactionsCount,

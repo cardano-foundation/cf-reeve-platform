@@ -56,6 +56,8 @@ public class DbSynchronisationUseCaseService {
 
         if (trigger == ProcessorFlags.Trigger.REPROCESSING) {
             // TODO should we check if we are NOT changing incomingTransactions which are already marked as dispatched?
+
+
             transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.of(transactions));
             storeTransactions(batchId, incomingTransactions, flags);
             return;
@@ -113,9 +115,9 @@ public class DbSynchronisationUseCaseService {
 
         raiseViolationForAlreadyProcessedTransactions(txsAlreadyStored);
 
-        Set<TransactionEntity> transactionEntities = storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
-
-        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.of(transactionEntities));
+        storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
+        // we don't need to pass in Transactions, since we just saved them and the status was updated
+        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.empty());
     }
 
     private Set<TransactionEntity> storeTransactions(String batchId,
