@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -122,9 +123,9 @@ public class AccountingCorePresentationViewService {
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Optional<BatchView> batchDetail(String batchId) {
+    public Optional<BatchView> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
         return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
+                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, page);
 
                     BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
@@ -261,8 +262,8 @@ public class AccountingCorePresentationViewService {
         );
     }
 
-    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity) {
-        return transactionBatchEntity.getTransactions().stream()
+    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable) {
+        return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status, pageable).stream()
                 .map(this::getTransactionView)
                 .sorted(Comparator.comparing(TransactionView::getAmountTotalLcy).reversed())
                 .collect(Collectors.toCollection(LinkedHashSet::new));

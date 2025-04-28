@@ -15,6 +15,8 @@ import jakarta.persistence.criteria.Root;
 
 import lombok.val;
 
+import org.springframework.data.domain.PageRequest;
+
 import org.mockito.Mockito;
 
 import org.junit.jupiter.api.Assertions;
@@ -59,7 +61,9 @@ class CustomBlockchainReaderAccountingCoreTransactionRepositoryImplTestView {
         Mockito.when(em.createQuery(criteriaQuery)).thenReturn(transactionEntityTypedQuery);
         CustomTransactionRepositoryImpl customTransactionRepository = new CustomTransactionRepositoryImpl(em);
 
-        List<TransactionEntity> elresult = customTransactionRepository.findAllByStatus("OrgId", List.of(TxValidationStatus.valueOf(String.valueOf(VALIDATED))), List.of(TransactionType.valueOf(String.valueOf(VendorBill))));
+        List<TransactionEntity> elresult = customTransactionRepository.findAllByStatus("OrgId",
+                List.of(TxValidationStatus.valueOf(String.valueOf(VALIDATED))),
+                List.of(TransactionType.valueOf(String.valueOf(VendorBill))), PageRequest.of(0, 100));
 
         //Mockito.verify(builder,Mockito.times(4)).isTrue(builder.literal(true));
         verify(builder, times(1)).in(validationStatus);

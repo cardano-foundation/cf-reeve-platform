@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -27,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
@@ -50,6 +54,8 @@ class AccountingCorePresentationConverterTest {
 
     @Mock
     private TransactionBatchRepositoryGateway transactionBatchRepositoryGateway;
+    @Mock
+    private AccountingCoreTransactionRepository transactionRepository;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationConverter;
@@ -219,8 +225,9 @@ class AccountingCorePresentationConverterTest {
         transaction1.setBatchId(batchId);
         transaction2.setBatchId(batchId);
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionRepository.findAllByBatchId(batchId, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
-        Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId);
+        Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged());
 
         assertEquals(true, result.isPresent());
         assertEquals(batchId, result.get().getId());

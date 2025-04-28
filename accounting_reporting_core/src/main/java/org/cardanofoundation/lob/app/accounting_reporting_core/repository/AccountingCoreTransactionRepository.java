@@ -1,14 +1,18 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 
 public interface AccountingCoreTransactionRepository extends JpaRepository<TransactionEntity, String>, CustomTransactionRepository {
 
@@ -52,5 +56,16 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
                                                                       @Param("ids") Set<String> ids);
 
     Set<TransactionEntity> findAllByBatchId(String batchId);
+
+    @Query("""
+    SELECT t FROM accounting_reporting_core.TransactionEntity t
+    WHERE t.batchId = :batchId
+    AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
+    """)
+    Page<TransactionEntity> findAllByBatchId(
+            @Param("batchId") String batchId,
+            @Param("txStatus") List<TransactionProcessingStatus> txStatus,
+            Pageable page
+    );
 
 }
