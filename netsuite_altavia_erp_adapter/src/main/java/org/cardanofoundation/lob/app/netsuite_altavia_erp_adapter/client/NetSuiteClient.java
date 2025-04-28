@@ -241,13 +241,13 @@ public class NetSuiteClient {
         // Remove the recordspercall parameter if it exists, since we are setting it by ourselves
         // This is just to be sure that we are not sending multiple recordspercall parameters
         baseUrl = baseUrl.replaceAll("&recordspercall=\\d+", "");
-
-        baseUrl = STR."\{baseUrl}&recordspercall=\{recordsPerCall}";
+        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(baseUrl);
+        uriComponentsBuilder = uriComponentsBuilder.queryParam("recordspercall", recordsPerCall);
+        uriComponentsBuilder = uriComponentsBuilder.queryParam("trandate", "within:" + isoFormatDates(from, to));
         if (start.isPresent()) {
-            baseUrl = STR."\{baseUrl}&start=\{start.get()}";
+            uriComponentsBuilder = uriComponentsBuilder.queryParam("start", start.get());
         }
-        String uriString = UriComponentsBuilder.fromHttpUrl(baseUrl)
-                .queryParam("trandate", "within:" + isoFormatDates(from, to)).toUriString();
+        String uriString = uriComponentsBuilder.toUriString();
         log.info("Call to url: {}", uriString);
         RestClient.RequestHeadersSpec<?> uri = restClient.get().uri(uriString);
         accessToken.ifPresent(s -> uri.header("Authorization", STR."Bearer \{s}"));
