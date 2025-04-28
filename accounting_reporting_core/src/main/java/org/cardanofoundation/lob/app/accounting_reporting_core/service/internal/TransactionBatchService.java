@@ -99,7 +99,7 @@ public class TransactionBatchService {
 
     @Transactional
     public void updateTransactionBatchStatusAndStats(String batchId,
-                                                     int totalTransactionsCount,
+                                                     Integer totalTransactionsCount,
                                                      Optional<Set<TransactionEntity>> entities) {
         try {
             Debouncer debouncer = debouncerManager.getDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.of(totalTransactionsCount), entities), batchStatsDebounceDuration);

@@ -56,10 +56,17 @@ public class DbSynchronisationUseCaseService {
 
         if (trigger == ProcessorFlags.Trigger.REPROCESSING) {
             // TODO should we check if we are NOT changing incomingTransactions which are already marked as dispatched?
-
-
-            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.of(transactions));
             storeTransactions(batchId, incomingTransactions, flags);
+            Set<String> batchIdsToReprocess = transactions.stream()
+                    .flatMap(transactionEntity ->
+                            transactionBatchAssocRepository.findAllByTxId(transactionEntity.getId())
+                                    .stream()
+                                    .map(transactionBatchAssocEntity -> transactionBatchAssocEntity.getId().getTransactionBatchId())
+                    )
+                    .collect(Collectors.toSet());
+
+            batchIdsToReprocess.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
+
             return;
         }
 
@@ -85,7 +92,7 @@ public class DbSynchronisationUseCaseService {
                 .collect(toMap(TransactionEntity::getId, Function.identity()));
 
         LinkedHashSet<TransactionEntity> toProcessTransactions = new LinkedHashSet<>();
-
+        Set<String> batchesToBeUpdated = new HashSet<>();
         for (TransactionEntity incomingTx : incomingDetachedTransactions) {
             Optional<TransactionEntity> txM = Optional.ofNullable(databaseTransactionsMap.get(incomingTx.getId()));
 
@@ -102,7 +109,7 @@ public class DbSynchronisationUseCaseService {
             if (isChanged && !isDispatchMarked) {
                 if (txM.isPresent()) {
                     TransactionEntity attached = txM.orElseThrow();
-
+                    batchesToBeUpdated.add(attached.getBatchId());
                     transactionConverter.copyFields(attached, incomingTx);
                     attached.getAllItems().clear();
                     attached.getAllItems().addAll(incomingTx.getAllItems());
@@ -118,6 +125,7 @@ public class DbSynchronisationUseCaseService {
         storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
         // we don't need to pass in Transactions, since we just saved them and the status was updated
         transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.empty());
+        batchesToBeUpdated.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
     }
 
     private Set<TransactionEntity> storeTransactions(String batchId,
