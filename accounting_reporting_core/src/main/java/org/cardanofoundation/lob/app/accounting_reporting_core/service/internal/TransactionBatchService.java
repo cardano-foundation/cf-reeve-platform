@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -99,16 +100,16 @@ public class TransactionBatchService {
 
     @Transactional
     public void updateTransactionBatchStatusAndStats(String batchId,
-                                                     Integer totalTransactionsCount,
+                                                     @Nullable Integer totalTransactionsCount,
                                                      Optional<Set<TransactionEntity>> entities) {
         try {
-            Debouncer debouncer = debouncerManager.getDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.of(totalTransactionsCount), entities), batchStatsDebounceDuration);
+            Debouncer debouncer = debouncerManager.getDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.ofNullable(totalTransactionsCount), entities), batchStatsDebounceDuration);
 
             debouncer.call();
         } catch (ExecutionException e) {
             log.warn("Error while getting debouncer for batchId: {}", batchId, e);
 
-            invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.of(totalTransactionsCount), entities);
+            invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.ofNullable(totalTransactionsCount), entities);
         }
     }
 
