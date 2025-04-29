@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
@@ -38,6 +39,7 @@ public class DbSynchronisationUseCaseService {
     private final TransactionBatchAssocRepository transactionBatchAssocRepository;
     private final TransactionBatchService transactionBatchService;
 
+    @Transactional
     public void execute(String batchId,
                         OrganisationTransactions incomingTransactions,
                         int totalTransactionsCount,
@@ -64,7 +66,6 @@ public class DbSynchronisationUseCaseService {
 
             batchIdsToReprocess.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.of(transactions)));
             storeTransactions(batchId, incomingTransactions, flags);
-
 
             return;
         }
