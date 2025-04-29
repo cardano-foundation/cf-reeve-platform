@@ -198,6 +198,10 @@ public class TransactionRepositoryGateway {
 
             transactionItemEntitiesE.add(Either.right(savedTxItem));
         }
+        // Updating the transaction batch status and stats
+        tx.updateProcessingStatus();
+        accountingCoreTransactionRepository.save(tx);
+        transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(tx.getBatchId(), Optional.empty(), Optional.empty());
 
         return transactionItemEntitiesE;
     }
