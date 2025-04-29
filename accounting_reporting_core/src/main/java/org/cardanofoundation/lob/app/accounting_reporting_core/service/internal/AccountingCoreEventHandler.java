@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
@@ -45,6 +46,7 @@ public class AccountingCoreEventHandler {
 
 
     @EventListener
+    @Async
     public void handleLedgerUpdatedEvent(TxsLedgerUpdatedEvent event) {
         log.info("Received handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
 
@@ -57,6 +59,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleReportsLedgerUpdated(ReportsLedgerUpdatedEvent event) {
         log.info("Received handleReportsLedgerUpdated, event: {}", event);
 
@@ -68,6 +71,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleTransactionBatchFailedEvent(TransactionBatchFailedEvent event) {
         log.info("Received handleTransactionBatchFailedEvent event, event: {}", event);
 
@@ -84,6 +88,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleTransactionBatchStartedEvent(TransactionBatchStartedEvent event) {
         log.info("Received handleTransactionBatchStartedEvent event, event: {}", event);
 
@@ -99,6 +104,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener // we need a sync process to avoid out of order events
+    @Async
     public void handleTransactionBatchChunkEvent(TransactionBatchChunkEvent transactionBatchChunkEvent) {
         String batchId = transactionBatchChunkEvent.getBatchId();
 
@@ -119,6 +125,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleReconcilationChunkFailedEvent(ReconcilationFailedEvent event) {
         log.info("Received handleReconcilationChunkFailedEvent event, event: {}", event);
 
@@ -134,6 +141,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleReconcilationStartedEvent(ReconcilationStartedEvent event) {
         log.info("Received handleReconcilationStartedEvent, event: {}", event);
 
@@ -143,6 +151,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener // we need a sync process to avoid out of order events
+    @Async
     public void handleReconcilationChunkEvent(ReconcilationChunkEvent event) {
         log.info("Received handleReconcilationChunkEvent, event: {}", event);
 
@@ -173,6 +182,7 @@ public class AccountingCoreEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleReconcilationFinalisation(ReconcilationFinalisationEvent event) {
         log.info("Received handleReconcilationFinalisation, event: {}", event);
 

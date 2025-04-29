@@ -57,7 +57,7 @@ class DbSynchronisationUseCaseServiceTest {
         val organisationTransactions = new OrganisationTransactions("org1", Set.of());
 
         service.execute(batchId, organisationTransactions, 0, new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
-        verify(transactionBatchService).updateTransactionBatchStatusAndStats(eq(batchId), eq(Optional.of(0)));
+        verify(transactionBatchService).updateTransactionBatchStatusAndStats(eq(batchId), eq(0), eq(Optional.empty()));
         verifyNoInteractions(accountingCoreTransactionRepository);
         verifyNoInteractions(transactionItemRepository);
     }

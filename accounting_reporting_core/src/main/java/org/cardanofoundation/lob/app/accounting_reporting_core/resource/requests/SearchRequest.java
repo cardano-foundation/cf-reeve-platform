@@ -26,4 +26,9 @@ public class SearchRequest extends BaseRequest {
     @ArraySchema(arraySchema = @Schema(example = "[\"CardRefund\",\"Journal\",\"ExpenseReport\"]", implementation = TransactionType.class))
     private List<TransactionType> transactionType = List.of();
 
+    @Schema(example = "0")
+    private Integer page = 0;
+    @Schema(example = "10")
+    private Integer size = 10;
+
 }

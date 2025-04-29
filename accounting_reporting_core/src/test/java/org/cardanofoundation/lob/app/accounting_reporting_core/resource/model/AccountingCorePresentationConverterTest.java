@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -27,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
@@ -50,6 +54,8 @@ class AccountingCorePresentationConverterTest {
 
     @Mock
     private TransactionBatchRepositoryGateway transactionBatchRepositoryGateway;
+    @Mock
+    private AccountingCoreTransactionRepository transactionRepository;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationConverter;
@@ -123,7 +129,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity2.setLedgerDispatchApproved(Boolean.TRUE);
         transactionEntity2.setOverallStatus(TransactionStatus.OK);
 
-        when(transactionRepositoryGateway.findAllByStatus(any(), any(), any())).thenReturn(List.of(transactionEntity, transactionEntity2, transactionEntity3));
+        when(transactionRepositoryGateway.findAllByStatus(any(), any(), any(), any())).thenReturn(List.of(transactionEntity, transactionEntity2, transactionEntity3));
 
         List<TransactionView> result = accountingCorePresentationConverter.allTransactions(searchRequest);
 
@@ -189,7 +195,7 @@ class AccountingCorePresentationConverterTest {
 
         String batchId = "batch-id";
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
-        BatchStatistics batchStatistics = BatchStatistics.builder().totalTransactionsCount(10).failedTransactionsCount(1).approvedTransactionsCount(8).approvedTransactionsDispatchCount(5).finalizedTransactionsCount(6).processedTransactionsCount(10).build();
+        BatchStatistics batchStatistics = BatchStatistics.builder().total(10).pendingTransactions(1).invalidTransactions(8).approvedTransactions(5).publishedTransactions(6).readyToApproveTransactions(10).build();
 
         TransactionEntity transaction1 = new TransactionEntity();
         transaction1.setId("tx-id1");
@@ -212,13 +218,16 @@ class AccountingCorePresentationConverterTest {
         transactions.add(transaction2);
         transactionBatchEntity.setTransactions(transactions);
         transactionBatchEntity.setStatus(TransactionBatchStatus.CREATED);
+        transactionBatchEntity.setBatchStatistics(BatchStatistics.builder()
+                .readyToApproveTransactions(2)
+                .total(2).build());
 
         transaction1.setBatchId(batchId);
         transaction2.setBatchId(batchId);
-
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionRepository.findAllByBatchId(batchId, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
-        Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId);
+        Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged());
 
         assertEquals(true, result.isPresent());
         assertEquals(batchId, result.get().getId());
@@ -256,7 +265,7 @@ class AccountingCorePresentationConverterTest {
         batchSearchRequest.setTransactionTypes(Set.of(TransactionType.CardCharge));
         FilteringParameters filteringParameters = new FilteringParameters("pros", List.of(TransactionType.CardCharge), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), Collections.singletonList("batch"));
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
-        BatchStatistics batchStatistics = BatchStatistics.builder().totalTransactionsCount(10).failedTransactionsCount(1).approvedTransactionsCount(9).finalizedTransactionsCount(10).build();
+        BatchStatistics batchStatistics = BatchStatistics.builder().total(10).invalidTransactions(1).pendingTransactions(9).publishedTransactions(10).build();
         transactionBatchEntity.setId("batch-id");
         transactionBatchEntity.setCreatedAt(LocalDateTime.now());
         transactionBatchEntity.setUpdatedAt(LocalDateTime.now());

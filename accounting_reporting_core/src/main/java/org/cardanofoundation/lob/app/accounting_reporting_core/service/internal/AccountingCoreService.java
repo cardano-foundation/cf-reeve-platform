@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
 import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 
@@ -21,6 +20,7 @@ import org.apache.commons.lang3.Range;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
@@ -119,8 +119,9 @@ public class AccountingCoreService {
                 // reprocess only the ones that have not been approved to dispatch yet, actually it is just a sanity check because it should never happen
                 // and we should never allow approving failed transactions
                 .filter(tx -> !tx.allApprovalsPassedForTransactionDispatch())
-                // we are interested only  in the ones that have LOB violations (conversion issues) or rejection issues
-                .filter(tx -> tx.getViolations().stream().anyMatch(v -> v.getSource() == LOB) || tx.getItems().stream().anyMatch(i -> i.getRejection().stream().anyMatch(rr -> rr.getRejectionReason().getSource().equals(LOB))))
+                // we are interested only  in the ones that have LOB violations (conversion issues) or rejection issues and additionally those who don't have any processing status, this shouldn't happen in normal environments.
+                // Should be only the case for dev data
+                .filter(tx -> tx.getProcessingStatus().map(status -> status.equals(TransactionProcessingStatus.PENDING)).orElse(true))
                 .collect(Collectors.toSet());
 
         if (txs.isEmpty()) {

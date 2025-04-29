@@ -4,6 +4,7 @@ import static java.util.stream.Collectors.toMap;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.WARN;
 
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -48,7 +49,7 @@ public class DbSynchronisationUseCaseService {
 
         if (transactions.isEmpty()) {
             log.info("No transactions to process, batchId: {}", batchId);
-            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, Optional.of(totalTransactionsCount));
+            transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.empty());
 
             return;
         }
@@ -56,19 +57,29 @@ public class DbSynchronisationUseCaseService {
         if (trigger == ProcessorFlags.Trigger.REPROCESSING) {
             // TODO should we check if we are NOT changing incomingTransactions which are already marked as dispatched?
             storeTransactions(batchId, incomingTransactions, flags);
+            Set<String> batchIdsToReprocess = transactions.stream()
+                    .flatMap(transactionEntity ->
+                            transactionBatchAssocRepository.findAllByTxId(transactionEntity.getId())
+                                    .stream()
+                                    .map(transactionBatchAssocEntity -> transactionBatchAssocEntity.getId().getTransactionBatchId())
+                    )
+                    .collect(Collectors.toSet());
+
+            batchIdsToReprocess.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.of(transactions)));
+
+
             return;
         }
 
         String organisationId = incomingTransactions.organisationId();
 
-        processTransactionsForTheFirstTime(batchId, organisationId, transactions, Optional.of(totalTransactionsCount), flags);
+        processTransactionsForTheFirstTime(batchId, organisationId, transactions, totalTransactionsCount, flags);
     }
 
-    @Transactional
     public void processTransactionsForTheFirstTime(String batchId,
                                                     String organisationId,
                                                     Set<TransactionEntity> incomingDetachedTransactions,
-                                                    Optional<Integer> totalTransactionsCount,
+                                                    int totalTransactionsCount,
                                                     ProcessorFlags flags) {
         LinkedHashSet<TransactionEntity> txsAlreadyStored = new LinkedHashSet<>();
 
@@ -81,7 +92,7 @@ public class DbSynchronisationUseCaseService {
                 .collect(toMap(TransactionEntity::getId, Function.identity()));
 
         LinkedHashSet<TransactionEntity> toProcessTransactions = new LinkedHashSet<>();
-
+        Set<String> batchesToBeUpdated = new HashSet<>();
         for (TransactionEntity incomingTx : incomingDetachedTransactions) {
             Optional<TransactionEntity> txM = Optional.ofNullable(databaseTransactionsMap.get(incomingTx.getId()));
 
@@ -98,7 +109,7 @@ public class DbSynchronisationUseCaseService {
             if (isChanged && !isDispatchMarked) {
                 if (txM.isPresent()) {
                     TransactionEntity attached = txM.orElseThrow();
-
+                    batchesToBeUpdated.add(attached.getBatchId());
                     transactionConverter.copyFields(attached, incomingTx);
                     attached.getAllItems().clear();
                     attached.getAllItems().addAll(incomingTx.getAllItems());
@@ -112,17 +123,18 @@ public class DbSynchronisationUseCaseService {
         raiseViolationForAlreadyProcessedTransactions(txsAlreadyStored);
 
         storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
-
-        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount);
+        // we don't need to pass in Transactions, since we just saved them and the status was updated
+        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.empty());
+        batchesToBeUpdated.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
     }
 
-    private void storeTransactions(String batchId,
+    private Set<TransactionEntity> storeTransactions(String batchId,
                                    OrganisationTransactions transactions,
                                    ProcessorFlags flags) {
         log.info("Updating transaction batch, batchId: {}", batchId);
         ProcessorFlags.Trigger trigger = flags.getTrigger();
         Set<TransactionEntity> txs = transactions.transactions();
-
+        Set<TransactionEntity> savedEntities = new HashSet<>();
         for (TransactionEntity tx : txs) {
             TransactionEntity saved = accountingCoreTransactionRepository.save(tx);
             saved.getAllItems().forEach(i -> i.setTransaction(saved));
@@ -136,6 +148,7 @@ public class DbSynchronisationUseCaseService {
             }
 
             transactionItemRepository.saveAll(tx.getAllItems());
+            savedEntities.add(saved);
         }
 
         Set<TransactionBatchAssocEntity> transactionBatchAssocEntities = txs
@@ -148,6 +161,7 @@ public class DbSynchronisationUseCaseService {
                 .collect(Collectors.toSet());
 
         transactionBatchAssocRepository.saveAll(transactionBatchAssocEntities);
+        return savedEntities;
     }
 
     private boolean isIncomingTransactionERPSame(TransactionEntity existingTx,

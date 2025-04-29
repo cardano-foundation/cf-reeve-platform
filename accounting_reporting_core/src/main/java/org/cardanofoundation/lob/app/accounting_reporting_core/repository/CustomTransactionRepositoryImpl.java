@@ -15,6 +15,8 @@ import jakarta.persistence.criteria.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.PageRequest;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
@@ -33,7 +35,8 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     @Override
     public List<TransactionEntity> findAllByStatus(String organisationId,
                                                    List<TxValidationStatus> validationStatuses,
-                                                   List<TransactionType> transactionTypes) {
+                                                   List<TransactionType> transactionTypes,
+                                                   PageRequest pageRequest) {
         // TODO what about order by entry date or transaction internal number, etc?
         CriteriaBuilder builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
@@ -49,7 +52,6 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
 
         criteriaQuery.select(rootEntry);
         criteriaQuery.where(pValidationStatuses, pOrganisationId, pTransactionType);
-
         return em.createQuery(criteriaQuery).getResultList();
     }
 

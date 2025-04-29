@@ -50,6 +50,7 @@ public class OrganisationChartOfAccount extends CommonEntity implements Persista
     private String parentCustomerCode;
 
     @Column(name = "active", nullable = false)
+    @Builder.Default
     private Boolean active = true;
 
     @ManyToOne(fetch = FetchType.LAZY)

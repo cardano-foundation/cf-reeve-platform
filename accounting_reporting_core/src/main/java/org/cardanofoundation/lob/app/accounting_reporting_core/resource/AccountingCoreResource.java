@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,6 +35,7 @@ import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
@@ -264,18 +267,40 @@ public class AccountingCoreResource {
 
     @Tag(name = "Batches", description = "Batches API")
     @GetMapping(value = "/batches/{batchId}", produces = APPLICATION_JSON_VALUE)
-    @Operation(description = "Batch detail",
+    @Operation(
+            description = "Returns the details of a batch, including a pageable list of transactions. " +
+                    "Optionally, transactions can be filtered by their processing status.",
+            parameters = {
+                    @Parameter(name = "page", description = "Page number (zero-based). Default is null, returning all transactions.", example = "0"),
+                    @Parameter(name = "size", description = "Page size (number of elements per page). Default is null, returning all transactions.", example = "10"),
+                    @Parameter(name = "txStatus", description = "Filter transactions by their processing statuses. Accepts multiple statuses.",
+                            array = @ArraySchema(schema = @Schema(implementation = TransactionProcessingStatus.class)))
+            },
             responses = {
                     @ApiResponse(content = {
                             @Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = BatchView.class))
                     }),
-                    @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(example = "{\"title\": \"BATCH_NOT_FOUND\",\"status\": 404,\"detail\": \"Batch with id: {batchId} could not be found\"" +
-                            "}"))})
+                    @ApiResponse(
+                            responseCode = "404",
+                            description = "Error: response status is 404",
+                            content = @Content(mediaType = APPLICATION_JSON_VALUE,
+                                    schema = @Schema(example = "{\"title\": \"BATCH_NOT_FOUND\",\"status\": 404,\"detail\": \"Batch with id: {batchId} could not be found\"}")
+                            )
+                    )
             }
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId) {
-        Optional<BatchView> txBatchM = accountingCorePresentationService.batchDetail(batchId);
+    public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
+                                           @RequestParam(name = "page", required = false) Optional<Integer> page,
+                                           @RequestParam(name = "size", required = false) Optional<Integer> size,
+                                           @RequestParam(name = "txStatus", required = false) List <TransactionProcessingStatus> txStatus) {
+        Pageable pageable;
+        if(page.isEmpty() || size.isEmpty()) {
+            pageable = Pageable.unpaged();
+        } else {
+            pageable = PageRequest.of(page.get(), size.get());
+        }
+        Optional<BatchView> txBatchM = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable);
         if (txBatchM.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("BATCH_NOT_FOUND")

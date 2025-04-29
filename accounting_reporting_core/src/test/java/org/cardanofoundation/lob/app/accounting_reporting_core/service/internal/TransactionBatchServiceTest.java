@@ -27,7 +27,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
-import org.cardanofoundation.lob.app.support.reactive.DebouncerManager;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionBatchServiceTest {
@@ -42,12 +41,6 @@ class TransactionBatchServiceTest {
     private TransactionBatchAssocRepository transactionBatchAssocRepository;
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
-    @Mock
-    private TxBatchStatusCalculator txBatchStatusCalculator;
-    @Mock
-    private TxBatchStatsCalculator txBatchStatsCalculator;
-    @Mock
-    private DebouncerManager debouncerManager;
 
     @InjectMocks
     private TransactionBatchService transactionBatchService;
@@ -87,7 +80,7 @@ class TransactionBatchServiceTest {
         transactionBatchEntity.setCreatedBy("system123");
 
         verify(transactionBatchRepository).findById("batchId");
-        verify(transactionBatchRepository).save(transactionBatchEntity);
+        verify(transactionBatchRepository).saveAndFlush(transactionBatchEntity);
         verify(transactionConverter).convertToDbDetached(any(SystemExtractionParameters.class), any(UserExtractionParameters.class));
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchCreatedEvent.class));
         verifyNoMoreInteractions(transactionBatchRepository);

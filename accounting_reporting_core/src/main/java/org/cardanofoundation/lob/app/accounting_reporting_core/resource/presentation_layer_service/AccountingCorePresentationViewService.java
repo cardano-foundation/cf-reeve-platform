@@ -15,6 +15,8 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -106,8 +108,8 @@ public class AccountingCorePresentationViewService {
         List<TransactionEntity> transactions = transactionRepositoryGateway.findAllByStatus(
                 body.getOrganisationId(),
                 body.getStatus(),
-                body.getTransactionType()
-        );
+                body.getTransactionType(),
+                PageRequest.of(body.getPage(), body.getSize()));
 
         return transactions.stream()
                 .map(this::getTransactionView)
@@ -121,10 +123,11 @@ public class AccountingCorePresentationViewService {
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Optional<BatchView> batchDetail(String batchId) {
+    public Optional<BatchView> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
         return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-                    BatchStatisticsView statistic = this.getBatchesStatistics(transactions);
+                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, page);
+
+                    BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
 
                     return new BatchView(
@@ -146,13 +149,12 @@ public class AccountingCorePresentationViewService {
 
     public BatchsDetailView listAllBatch(BatchSearchRequest body) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-
-        List<BatchView> batches = transactionBatchRepositoryGateway.findByFilter(body)
+        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body);
+        List<BatchView> batches = transactionBatchEntities
                 .stream()
                 .map(
                         transactionBatchEntity -> {
-                            Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity);
-                            BatchStatisticsView statistic = this.getBatchesStatistics(transactions);
+                            BatchStatisticsView statistic = BatchStatisticsView.from(transactionBatchEntity.getId(), transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                             return new BatchView(
                                     transactionBatchEntity.getId(),
                                     transactionBatchEntity.getCreatedAt().toString(),
@@ -249,29 +251,6 @@ public class AccountingCorePresentationViewService {
         return BatchReprocessView.createSuccess(batchId);
     }
 
-    private BatchStatisticsView getBatchesStatistics(Set<TransactionView> transactions) {
-        long invalid = transactions.stream().filter(transactionView -> INVALID == transactionView.getStatistic()).count();
-
-        long pending = transactions.stream().filter(transactionView -> PENDING == transactionView.getStatistic()).count();
-
-        long approve = transactions.stream().filter(transactionView -> APPROVE == transactionView.getStatistic()).count();
-
-        long publish = transactions.stream().filter(transactionView -> PUBLISH == transactionView.getStatistic()).count();
-
-        long published = transactions.stream().filter(transactionView -> PUBLISHED == transactionView.getStatistic()).count();
-
-        long total = transactions.size();
-
-        return new BatchStatisticsView(
-                (int) invalid,
-                (int) pending,
-                (int) approve,
-                (int) publish,
-                (int) published,
-                (int) total
-        );
-    }
-
     private FilteringParametersView getFilteringParameters(FilteringParameters filteringParameters) {
         return new FilteringParametersView(
                 filteringParameters.getTransactionTypes(),
@@ -283,8 +262,8 @@ public class AccountingCorePresentationViewService {
         );
     }
 
-    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity) {
-        return transactionBatchEntity.getTransactions().stream()
+    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable) {
+        return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status, pageable).stream()
                 .map(this::getTransactionView)
                 .sorted(Comparator.comparing(TransactionView::getAmountTotalLcy).reversed())
                 .collect(Collectors.toCollection(LinkedHashSet::new));

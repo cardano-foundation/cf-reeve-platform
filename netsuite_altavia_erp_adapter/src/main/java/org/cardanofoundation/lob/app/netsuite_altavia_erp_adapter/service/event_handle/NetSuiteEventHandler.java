@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
@@ -24,6 +25,7 @@ public class NetSuiteEventHandler {
     private final NetSuiteReconcilationService netSuiteReconcilationService;
 
     @EventListener
+    @Async
     public void handleScheduledIngestionEvent(ScheduledIngestionEvent event) {
         log.info("Handling handleScheduledIngestionEvent...");
 
@@ -37,6 +39,7 @@ public class NetSuiteEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleTransactionBatchCreatedEvent(TransactionBatchCreatedEvent transactionBatchCreatedEvent) {
         log.info("Handling handleTransactionBatchCreatedEvent...");
 
@@ -51,6 +54,7 @@ public class NetSuiteEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleScheduledReconciliationEvent(ScheduledReconcilationEvent scheduledReconcilationEvent) {
         log.info("Handling handleScheduledReconciliationEvent...");
 
@@ -65,6 +69,7 @@ public class NetSuiteEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleCreatedReconciliationEvent(ReconcilationCreatedEvent reconcilationCreatedEvent) {
         log.info("Handling handleCreatedReconciliationEvent...");
 

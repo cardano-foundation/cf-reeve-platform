@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class Debouncer {
 
@@ -16,17 +17,20 @@ public class Debouncer {
     private final Runnable task;
 
     private final long delay;
+    private final TransactionalTaskRunner transactionalTaskRunner;
 
-    public Debouncer(Runnable task, Duration duration) {
+    public Debouncer(Runnable task, Duration duration, TransactionalTaskRunner transactionalTaskRunner) {
         this.task = task;
         this.delay = duration.toMillis();
+        this.transactionalTaskRunner = transactionalTaskRunner;
     }
 
     public synchronized void call() {
         if (future != null && !future.isDone()) {
             future.cancel(false); // Cancel the previous task if it is pending.
         }
-        future = scheduler.schedule(task, delay, MILLISECONDS);
+        future = scheduler.schedule(() ->
+                transactionalTaskRunner.runInNewTransaction(task), delay, TimeUnit.MILLISECONDS);
     }
 
     public void shutdown() {
