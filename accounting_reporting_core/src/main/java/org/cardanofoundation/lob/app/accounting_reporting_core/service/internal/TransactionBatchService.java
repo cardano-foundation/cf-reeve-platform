@@ -55,7 +55,7 @@ public class TransactionBatchService {
     private final DebouncerManager debouncerManager;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
-    @Value("${batch.stats.debounce.duration:PT20S}")
+    @Value("${batch.stats.debounce.duration:PT10S}")
     private Duration batchStatsDebounceDuration;
 
     public Optional<TransactionBatchEntity> findById(String batchId) {

@@ -56,6 +56,7 @@ public class DbSynchronisationUseCaseService {
 
         if (trigger == ProcessorFlags.Trigger.REPROCESSING) {
             // TODO should we check if we are NOT changing incomingTransactions which are already marked as dispatched?
+            storeTransactions(batchId, incomingTransactions, flags);
             Set<String> batchIdsToReprocess = transactions.stream()
                     .flatMap(transactionEntity ->
                             transactionBatchAssocRepository.findAllByTxId(transactionEntity.getId())
@@ -65,7 +66,7 @@ public class DbSynchronisationUseCaseService {
                     .collect(Collectors.toSet());
 
             batchIdsToReprocess.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.of(transactions)));
-            storeTransactions(batchId, incomingTransactions, flags);
+
 
             return;
         }
