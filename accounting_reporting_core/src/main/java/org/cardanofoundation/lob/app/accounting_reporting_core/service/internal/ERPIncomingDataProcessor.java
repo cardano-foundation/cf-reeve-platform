@@ -53,7 +53,6 @@ public class ERPIncomingDataProcessor {
         log.info("Finished processing ERPIngestionStored event, event.");
     }
 
-    @Transactional
     public void continueIngestion(String organisationId,
                                   String batchId,
                                   int totalTransactionsCount,

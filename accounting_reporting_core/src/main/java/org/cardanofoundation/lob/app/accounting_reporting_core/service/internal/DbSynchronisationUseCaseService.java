@@ -39,7 +39,6 @@ public class DbSynchronisationUseCaseService {
     private final TransactionBatchAssocRepository transactionBatchAssocRepository;
     private final TransactionBatchService transactionBatchService;
 
-    @Transactional
     public void execute(String batchId,
                         OrganisationTransactions incomingTransactions,
                         int totalTransactionsCount,
@@ -76,7 +75,6 @@ public class DbSynchronisationUseCaseService {
         processTransactionsForTheFirstTime(batchId, organisationId, transactions, totalTransactionsCount, flags);
     }
 
-    @Transactional
     public void processTransactionsForTheFirstTime(String batchId,
                                                     String organisationId,
                                                     Set<TransactionEntity> incomingDetachedTransactions,
