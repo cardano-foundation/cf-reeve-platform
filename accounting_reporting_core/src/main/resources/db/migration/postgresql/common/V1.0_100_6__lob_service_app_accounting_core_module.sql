@@ -38,7 +38,8 @@ CREATE TYPE accounting_core_transaction_type AS ENUM (
     'CustomerPayment',
     'ExpenseReport',
     'VendorPayment',
-    'BillCredit'
+    'BillCredit',
+    'CustomerInvoice'
 );
 
 CREATE TYPE accounting_core_reconcilation_rejection_code_type AS ENUM (
