@@ -43,46 +43,46 @@ public class TransactionItemExtractionRepository {
 
         if (accountCode != null && !accountCode.isEmpty()) {
             jpql.append("""
-                        AND (
-                            ti.accountDebit.code IN :accountCodes
-                            OR ti.accountCredit.code IN :accountCodes
-                        )
+                    AND (
+                        ti.accountDebit.code IN :accountCodes
+                        OR ti.accountCredit.code IN :accountCodes
+                    )
                     """);
         }
 
         if (accountSubType != null && !accountSubType.isEmpty()) {
             jpql.append("""
-                        AND (
-                            ti.accountDebit.code IN (
-                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
-                                WHERE oc.subType.id IN :accountSubTypes
-                            )
-                            OR ti.accountCredit.code IN (
-                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
-                                WHERE oc.subType.id IN :accountSubTypes
-                            )
+                    AND (
+                        ti.accountDebit.code IN (
+                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            WHERE oc.subType.id IN :accountSubTypes
                         )
+                        OR ti.accountCredit.code IN (
+                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            WHERE oc.subType.id IN :accountSubTypes
+                        )
+                    )
                     """);
         }
 
         if (accountType != null && !accountType.isEmpty()) {
             jpql.append("""
-                        AND (
-                            ti.accountDebit.code IN (
-                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
-                                WHERE oc.subType.id IN (
-                                    SELECT st.id FROM OrganisationChartOfAccountSubType st
-                                    WHERE st.type.id IN :accountTypes
-                                )
-                            )
-                            OR ti.accountCredit.code IN (
-                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
-                                WHERE oc.subType.id IN (
-                                    SELECT st.id FROM OrganisationChartOfAccountSubType st
-                                    WHERE st.type.id IN :accountTypes
-                                )
+                    AND (
+                        ti.accountDebit.code IN (
+                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            WHERE oc.subType.id IN (
+                                SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                WHERE st.type.id IN :accountTypes
                             )
                         )
+                        OR ti.accountCredit.code IN (
+                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            WHERE oc.subType.id IN (
+                                SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                WHERE st.type.id IN :accountTypes
+                            )
+                        )
+                    )
                     """);
         }
 
@@ -93,7 +93,6 @@ public class TransactionItemExtractionRepository {
         if (project != null && !project.isEmpty()) {
             jpql.append(" AND ti.project.customerCode IN :projects");
         }
-
         TypedQuery<TransactionItemEntity> query = em.createQuery(jpql.toString(), TransactionItemEntity.class);
         query.setParameter("dateFrom", dateFrom);
         query.setParameter("dateTo", dateTo);
