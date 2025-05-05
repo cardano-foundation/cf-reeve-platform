@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,60 +27,96 @@ public class TransactionItemExtractionRepository {
 
     private final EntityManager em;
 
-    public List<TransactionItemEntity> findByItemAccount(LocalDate dateFrom, LocalDate dateTo, List<String> accountCode, List<String> costCenter, List<String> project, List<String> accountType, List<String> accountSubType) {
-        String jpql = STR."""
-                SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
-                """;
-        String where = STR."""
-                WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
-                AND ti.status = '\{TxItemValidationStatus.OK}'
-                """;
+    public List<TransactionItemEntity> findByItemAccount(LocalDate dateFrom, LocalDate dateTo,
+                                                         List<String> accountCode, List<String> costCenter,
+                                                         List<String> project, List<String> accountType,
+                                                         List<String> accountSubType) {
 
-        if (null != accountCode && 0 < accountCode.stream().count()) {
-            where += STR."""
-            AND (ti.accountDebit.code in (\{accountCode.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}) or ti.accountCredit.code in (\{accountCode.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}))
-            """;
-        }
-        if (null != accountSubType && 0 < accountSubType.stream().count()) {
-            where += STR."""
-            AND (
-            ti.accountDebit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id  in (\{accountSubType.stream().map(code -> "" + code + "").collect(Collectors.joining(","))})) or
-            ti.accountCredit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id in (\{accountSubType.stream().map(code -> "" + code + "").collect(Collectors.joining(","))}))
-            )
-            """;
-        }
+        StringBuilder jpql = new StringBuilder("""
+                    SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
+                    INNER JOIN ti.transaction te
+                    WHERE te.entryDate >= :dateFrom
+                      AND te.entryDate <= :dateTo
+                      AND ti.status = :status
+                      AND te.ledgerDispatchStatus = :ledgerStatus
+                """);
 
-        if (null != accountType && 0 < accountType.stream().count()) {
-            where += STR."""
-            AND (
-            ti.accountDebit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id  in (select id from OrganisationChartOfAccountSubType where type.id in (\{accountType.stream().map(code -> "" + code + "").collect(Collectors.joining(","))}))) or
-            ti.accountCredit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id in (select id from OrganisationChartOfAccountSubType where type.id in (\{accountType.stream().map(code -> "" + code + "").collect(Collectors.joining(","))})))
-            )
-            """;
+        if (accountCode != null && !accountCode.isEmpty()) {
+            jpql.append("""
+                        AND (
+                            ti.accountDebit.code IN :accountCodes
+                            OR ti.accountCredit.code IN :accountCodes
+                        )
+                    """);
         }
 
-        if (null != costCenter && 0 < costCenter.stream().count()) {
-            where += STR."""
-            AND ti.costCenter.customerCode in (\{costCenter.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))})
-            """;
+        if (accountSubType != null && !accountSubType.isEmpty()) {
+            jpql.append("""
+                        AND (
+                            ti.accountDebit.code IN (
+                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                                WHERE oc.subType.id IN :accountSubTypes
+                            )
+                            OR ti.accountCredit.code IN (
+                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                                WHERE oc.subType.id IN :accountSubTypes
+                            )
+                        )
+                    """);
         }
 
-        if (null != project && 0 < project.stream().count()) {
-            where += STR."""
-            AND ti.project.customerCode in (\{project.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))})
-            """;
+        if (accountType != null && !accountType.isEmpty()) {
+            jpql.append("""
+                        AND (
+                            ti.accountDebit.code IN (
+                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                                WHERE oc.subType.id IN (
+                                    SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                    WHERE st.type.id IN :accountTypes
+                                )
+                            )
+                            OR ti.accountCredit.code IN (
+                                SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                                WHERE oc.subType.id IN (
+                                    SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                    WHERE st.type.id IN :accountTypes
+                                )
+                            )
+                        )
+                    """);
         }
 
-        where += STR."""
-        AND te.ledgerDispatchStatus = '\{LedgerDispatchStatus.FINALIZED}'
-        """;
+        if (costCenter != null && !costCenter.isEmpty()) {
+            jpql.append(" AND ti.costCenter.customerCode IN :costCenters");
+        }
 
-        Query resultQuery = em.createQuery(jpql + where);
+        if (project != null && !project.isEmpty()) {
+            jpql.append(" AND ti.project.customerCode IN :projects");
+        }
 
-        resultQuery.setParameter("dateFrom", dateFrom);
-        resultQuery.setParameter("dateTo", dateTo);
+        TypedQuery<TransactionItemEntity> query = em.createQuery(jpql.toString(), TransactionItemEntity.class);
+        query.setParameter("dateFrom", dateFrom);
+        query.setParameter("dateTo", dateTo);
+        query.setParameter("status", TxItemValidationStatus.OK);
+        query.setParameter("ledgerStatus", LedgerDispatchStatus.FINALIZED);
 
-        return resultQuery.getResultList();
+        if (accountCode != null && !accountCode.isEmpty()) {
+            query.setParameter("accountCodes", accountCode);
+        }
+        if (accountSubType != null && !accountSubType.isEmpty()) {
+            query.setParameter("accountSubTypes", accountSubType);
+        }
+        if (accountType != null && !accountType.isEmpty()) {
+            query.setParameter("accountTypes", accountType);
+        }
+        if (costCenter != null && !costCenter.isEmpty()) {
+            query.setParameter("costCenters", costCenter);
+        }
+        if (project != null && !project.isEmpty()) {
+            query.setParameter("projects", project);
+        }
+
+        return query.getResultList();
     }
 
 
@@ -88,7 +125,7 @@ public class TransactionItemExtractionRepository {
         minAmount = Optional.ofNullable(minAmount).orElse(Optional.empty());
         maxAmount = Optional.ofNullable(maxAmount).orElse(Optional.empty());
 
-        String jpql = STR."""
+        String jpql = """
                 SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
                 """;
         String where = STR."""
