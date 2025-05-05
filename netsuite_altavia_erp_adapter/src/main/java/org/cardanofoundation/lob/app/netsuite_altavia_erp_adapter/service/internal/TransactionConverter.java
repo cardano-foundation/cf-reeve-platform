@@ -91,7 +91,7 @@ public class TransactionConverter {
         YearMonth accountingPeriod = financialPeriod(firstTxLine);
 
         LinkedHashSet<TransactionItem> txItems = new LinkedHashSet<>();
-
+        Set<Violation> violations = new HashSet<>();
         for (TxLine txLine : txLines) {
             Set<ConstraintViolation<TxLine>> validationIssues = validator.validate(txLine);
             boolean isValid = validationIssues.isEmpty();
@@ -99,8 +99,12 @@ public class TransactionConverter {
                 Map<String, Object> bag = Map.of("organisationId", organisationId, "txId", txId, "internalTransactionNumber", txLine.transactionNumber(), "validationIssues", humanReadable(validationIssues));
 
                 log.error("Validation failed for transaction: {}", bag);
-//
-//                return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", bag));
+                violations.add(Violation.create(Violation.Severity.ERROR,
+                        Source.ERP,
+                        txId,
+                        TransactionViolationCode.TX_TECHNICAL_FAILURE,
+                        this.getClass().getSimpleName(),
+                        bag));
             }
 
             Optional<String> accountCreditCodeM = accountCreditCode(organisationId, txLine.accountMain());
@@ -142,7 +146,7 @@ public class TransactionConverter {
             txItems.add(txItem);
         }
 
-        return Either.right(Optional.of(Transaction.builder().id(txId).internalTransactionNumber(internalTransactionNumber).entryDate(txDate).batchId(batchId).transactionType(transactionType).accountingPeriod(accountingPeriod).organisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation.builder().id(organisationId).build()).items(txItems).build()));
+        return Either.right(Optional.of(Transaction.builder().id(txId).violations(violations).internalTransactionNumber(internalTransactionNumber).entryDate(txDate).batchId(batchId).transactionType(transactionType).accountingPeriod(accountingPeriod).organisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation.builder().id(organisationId).build()).items(txItems).build()));
     }
 
     private static List<Map<String, Object>> humanReadable(Set<ConstraintViolation<TxLine>> validationIssues) {
