@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_TECHNICAL_FAILURE;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VALIDATION_ERROR;
 import static org.mockito.Mockito.*;
 
 import java.util.Collections;
@@ -68,7 +68,7 @@ class SanityCheckFieldsTaskItemTest {
         taskItem.run(transaction);
 
         assertThat(transaction.getViolations()).isNotEmpty();
-        assertThat(transaction.getViolations()).anyMatch(v -> v.getCode() == TX_TECHNICAL_FAILURE);
+        assertThat(transaction.getViolations()).anyMatch(v -> v.getCode() == TX_VALIDATION_ERROR);
     }
 
 }

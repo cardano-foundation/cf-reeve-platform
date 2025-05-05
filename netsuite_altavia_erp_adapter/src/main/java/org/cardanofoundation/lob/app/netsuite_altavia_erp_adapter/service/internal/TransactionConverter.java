@@ -102,7 +102,7 @@ public class TransactionConverter {
                 violations.add(Violation.create(Violation.Severity.ERROR,
                         Source.ERP,
                         txId,
-                        TransactionViolationCode.TX_TECHNICAL_FAILURE,
+                        TransactionViolationCode.TX_VALIDATION_ERROR,
                         this.getClass().getSimpleName(),
                         bag));
             }
