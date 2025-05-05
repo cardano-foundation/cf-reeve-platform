@@ -11,6 +11,6 @@ public enum TransactionType {
     CustomerPayment,
     ExpenseReport,
     VendorPayment,
-    BillCredit
-
+    BillCredit,
+    Unknown
 }

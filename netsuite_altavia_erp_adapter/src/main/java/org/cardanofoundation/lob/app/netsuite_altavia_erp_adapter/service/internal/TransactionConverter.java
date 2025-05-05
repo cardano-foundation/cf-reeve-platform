@@ -83,11 +83,7 @@ public class TransactionConverter {
         TxLine firstTxLine = txLines.getFirst();
         String txId = Transaction.id(organisationId, firstTxLine.transactionNumber());
 
-        Either<FatalError, TransactionType> transTypeE = transactionType(organisationId, txId, firstTxLine);
-        if (transTypeE.isEmpty()) {
-            return Either.left(transTypeE.getLeft());
-        }
-        TransactionType transactionType = transTypeE.get();
+        TransactionType transactionType = transactionType(organisationId, txId, firstTxLine);
 
         LocalDate txDate = firstTxLine.date();
         String internalTransactionNumber = firstTxLine.transactionNumber();
@@ -103,8 +99,8 @@ public class TransactionConverter {
                 Map<String, Object> bag = Map.of("organisationId", organisationId, "txId", txId, "internalTransactionNumber", txLine.transactionNumber(), "validationIssues", humanReadable(validationIssues));
 
                 log.error("Validation failed for transaction: {}", bag);
-
-                return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", bag));
+//
+//                return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", bag));
             }
 
             Optional<String> accountCreditCodeM = accountCreditCode(organisationId, txLine.accountMain());
@@ -170,16 +166,18 @@ public class TransactionConverter {
         };
     }
 
-    private Either<FatalError, TransactionType> transactionType(String organisationId, String txId, TxLine txLine) {
+    private TransactionType transactionType(String organisationId, String txId, TxLine txLine) {
         Optional<TransactionType> transactionTypeM = transactionTypeMapper.apply(txLine.type());
 
         if (transactionTypeM.isEmpty()) {
-            Map<String, Object> bag = Map.<String, Object>of("organisationId", organisationId, "internalTransactionNumber", txLine.transactionNumber(), "txId", txId, "type", txLine.type());
+            Map<String, Object> bag = Map.of("organisationId", organisationId, "txId", txId, "transactionType", txLine.type());
 
-            return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTION_TYPE_NOT_YET_KNOWN", bag));
+            log.error("Transaction type not found for transaction: {}", bag);
+
+            return TransactionType.Unknown;
         }
 
-        return Either.right(transactionTypeM.orElseThrow());
+        return transactionTypeM.orElseThrow();
     }
 
     private Optional<Document> convertDocument(String organisationId, TxLine txLine) {

@@ -9,6 +9,7 @@ public final class TransactionTypeMapper {
     public static Function<TransactionType, Integer> createTypeToNumber() {
         return type -> {
             return switch(type) {
+                case Unknown -> -1;
                 case CardCharge -> 1;
                 case VendorBill -> 2;
                 case CardRefund -> 4;

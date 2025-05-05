@@ -38,7 +38,8 @@ CREATE TYPE accounting_core_transaction_type AS ENUM (
     'CustomerPayment',
     'ExpenseReport',
     'VendorPayment',
-    'BillCredit'
+    'BillCredit',
+    'Unknown'
 );
 
 CREATE TYPE accounting_core_reconcilation_rejection_code_type AS ENUM (
@@ -75,7 +76,8 @@ CREATE TYPE accounting_core_transaction_violation_code_type AS ENUM (
     'EVENT_DATA_NOT_FOUND',
     'ORGANISATION_DATA_NOT_FOUND',
     'JOURNAL_DUMMY_ACCOUNT_MISSING',
-    'TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE'
+    'TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE',
+    'TRANSACTION_TYPE_UNKNOWN'
 );
 
 CREATE TYPE accounting_core_source_type AS ENUM (
