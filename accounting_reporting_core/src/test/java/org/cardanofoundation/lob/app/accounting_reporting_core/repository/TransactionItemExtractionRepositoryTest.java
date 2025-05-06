@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,13 +13,17 @@ import java.util.Set;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
+import jakarta.persistence.TypedQuery;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionItemExtractionRepositoryTest {
@@ -28,27 +33,10 @@ class TransactionItemExtractionRepositoryTest {
 
     @Test
     void findByItemAccountOnlyDates() {
-        String query = """
-                SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
-                WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
-                AND ti.status = 'OK'
-                AND (ti.accountDebit.code in ('AccountCode') or ti.accountCredit.code in ('AccountCode'))
-                AND (
-                ti.accountDebit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id  in (accountSubType)) or
-                ti.accountCredit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id in (accountSubType))
-                )
-                AND (
-                ti.accountDebit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id  in (select id from OrganisationChartOfAccountSubType where type.id in (accountType))) or
-                ti.accountCredit.code in (select Id.customerCode from OrganisationChartOfAccount where subType.id in (select id from OrganisationChartOfAccountSubType where type.id in (accountType)))
-                )
-                AND ti.costCenter.customerCode in ('CostCenterCode')
-                AND ti.project.customerCode in ('ProjectCode')
-                AND te.ledgerDispatchStatus = 'FINALIZED'
-                """;
-        jakarta.persistence.Query queryResult = Mockito.mock(Query.class);
+        TypedQuery queryResult = Mockito.mock(TypedQuery.class);
         TransactionItemExtractionRepository transactionItemExtractionRepository = new TransactionItemExtractionRepository(em);
 
-        Mockito.when(em.createQuery(anyString())).thenReturn(queryResult);
+        Mockito.when(em.createQuery(anyString(), eq(TransactionItemEntity.class))).thenReturn(queryResult);
         transactionItemExtractionRepository.findByItemAccount(
                 LocalDate.of(2023, Month.JANUARY, 1),
                 LocalDate.of(2023, Month.JANUARY, 31),
@@ -58,7 +46,52 @@ class TransactionItemExtractionRepositoryTest {
                 List.of("accountType"),
                 List.of("accountSubType")
         );
-        Mockito.verify(em, Mockito.times(1)).createQuery(query);
+        ArgumentCaptor<String> queryCaptor = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(em).createQuery(queryCaptor.capture(), eq(TransactionItemEntity.class));
+        String expectedQuery = """
+            SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
+            INNER JOIN ti.transaction te
+            WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
+            AND ti.status = :status AND te.ledgerDispatchStatus = :ledgerStatus
+            AND (
+                ti.accountDebit.code IN :accountCodes OR ti.accountCredit.code IN :accountCodes
+            )
+            AND (
+                ti.accountDebit.code IN (
+                    SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                    WHERE oc.subType.id IN :accountSubTypes
+                )
+                OR ti.accountCredit.code IN (
+                    SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                    WHERE oc.subType.id IN :accountSubTypes
+                )
+            )
+            AND (
+                ti.accountDebit.code IN (
+                    SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                    WHERE oc.subType.id IN (
+                        SELECT st.id FROM OrganisationChartOfAccountSubType st
+                        WHERE st.type.id IN :accountTypes
+                    )
+                )
+                OR ti.accountCredit.code IN (
+                    SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                    WHERE oc.subType.id IN (
+                        SELECT st.id FROM OrganisationChartOfAccountSubType st
+                        WHERE st.type.id IN :accountTypes
+                    )
+                )
+            )
+            AND ti.costCenter.customerCode IN :costCenters AND ti.project.customerCode IN :projects
+            """;
+
+        assertEquals(normalize(expectedQuery), normalize(queryCaptor.getValue()));
+    }
+
+    String normalize(String input) {
+        return input
+                .replaceAll("\\s+", " ") // replaces all kinds of whitespace (tabs, newlines) with single space
+                .trim();
     }
 
     @Test
