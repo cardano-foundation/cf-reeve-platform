@@ -6,8 +6,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 
-import lombok.val;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,8 +13,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-public class DiscardZeroBalanceTxItemsTaskItemTest {
+class DiscardZeroBalanceTxItemsTaskItemTest {
 
     private PipelineTaskItem taskItem;
 
@@ -26,33 +25,33 @@ public class DiscardZeroBalanceTxItemsTaskItemTest {
     }
 
     @Test
-    public void testNoDiscard() {
-        val txId = Transaction.id("1", "1");
+    void testNoDiscard() {
+        String txId = Transaction.id("1", "1");
 
-        val txItem1 = new TransactionItemEntity();
+        TransactionItemEntity txItem1 = new TransactionItemEntity();
         txItem1.setId(TransactionItem.id(txId, "0"));
         txItem1.setAmountLcy(BigDecimal.valueOf(0));
         txItem1.setAmountFcy(BigDecimal.valueOf(100));
         txItem1.setStatus(OK);
 
-        val txItem2 = new TransactionItemEntity();
+        TransactionItemEntity txItem2 = new TransactionItemEntity();
         txItem2.setId(TransactionItem.id(txId, "1"));
         txItem2.setAmountLcy(BigDecimal.valueOf(200));
         txItem2.setAmountFcy(BigDecimal.valueOf(0));
         txItem2.setStatus(OK);
 
-        val txItem3 = new TransactionItemEntity();
+        TransactionItemEntity txItem3 = new TransactionItemEntity();
         txItem3.setId(TransactionItem.id(txId, "2"));
         txItem3.setAmountLcy(BigDecimal.valueOf(300));
         txItem3.setAmountFcy(BigDecimal.valueOf(300));
         txItem3.setStatus(OK);
 
-        val txItems = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> txItems = new LinkedHashSet<TransactionItemEntity>();
         txItems.add(txItem1);
         txItems.add(txItem2);
         txItems.add(txItem3);
 
-        val tx = new TransactionEntity();
+        TransactionEntity tx = new TransactionEntity();
         tx.setId(txId);
         tx.setItems(txItems);
 
@@ -68,25 +67,25 @@ public class DiscardZeroBalanceTxItemsTaskItemTest {
 
     @Test
     public void testDiscardTxItemsWithZeroBalance() {
-        val txId = Transaction.id("1", "1");
+        String txId = Transaction.id("1", "1");
 
-        val txItem1 = new TransactionItemEntity();
+        TransactionItemEntity txItem1 = new TransactionItemEntity();
         txItem1.setId(TransactionItem.id(txId, "0"));
         txItem1.setAmountLcy(BigDecimal.valueOf(0));
         txItem1.setAmountFcy(BigDecimal.valueOf(0));
         txItem1.setStatus(OK);
 
-        val txItem2 = new TransactionItemEntity();
+        TransactionItemEntity txItem2 = new TransactionItemEntity();
         txItem2.setId(TransactionItem.id(txId, "1"));
         txItem2.setAmountLcy(BigDecimal.valueOf(200));
         txItem2.setAmountFcy(BigDecimal.valueOf(200));
         txItem2.setStatus(OK);
 
-        val txItems = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> txItems = new LinkedHashSet<TransactionItemEntity>();
         txItems.add(txItem1);
         txItems.add(txItem2);
 
-        val tx = new TransactionEntity();
+        TransactionEntity tx = new TransactionEntity();
         tx.setId(txId);
         tx.setItems(txItems);
 
@@ -100,25 +99,25 @@ public class DiscardZeroBalanceTxItemsTaskItemTest {
 
     @Test
     void testDiscardAllTxItemsWithZeroBalance() {
-        val txId = Transaction.id("2", "1");
+        String txId = Transaction.id("2", "1");
 
-        val txItem1 = new TransactionItemEntity();
+        TransactionItemEntity txItem1 = new TransactionItemEntity();
         txItem1.setId(TransactionItem.id(txId, "0"));
         txItem1.setAmountLcy(BigDecimal.ZERO);
         txItem1.setAmountFcy(BigDecimal.ZERO);
         txItem1.setStatus(OK);
 
-        val txItem2 = new TransactionItemEntity();
+        TransactionItemEntity txItem2 = new TransactionItemEntity();
         txItem2.setId(TransactionItem.id(txId, "1"));
         txItem2.setAmountLcy(BigDecimal.ZERO);
         txItem2.setAmountFcy(BigDecimal.ZERO);
         txItem2.setStatus(OK);
 
-        val txItems = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> txItems = new LinkedHashSet<TransactionItemEntity>();
         txItems.add(txItem1);
         txItems.add(txItem2);
 
-        val tx = new TransactionEntity();
+        TransactionEntity tx = new TransactionEntity();
         tx.setId(txId);
         tx.setItems(txItems);
 
@@ -130,13 +129,40 @@ public class DiscardZeroBalanceTxItemsTaskItemTest {
 
     @Test
     void testNoItemsToDiscard() {
-        val tx = new TransactionEntity();
+        TransactionEntity tx = new TransactionEntity();
         tx.setItems(new LinkedHashSet<>());
 
         taskItem.run(tx);
 
         // Ensure no errors occur and the item list remains empty
         assertThat(tx.getItems()).isEmpty();
+    }
+
+    @Test
+    void discardViolation() {
+        String txId = Transaction.id("3", "1");
+
+        TransactionItemEntity txItem1 = new TransactionItemEntity();
+        txItem1.setId(TransactionItem.id(txId, "0"));
+        txItem1.setAmountLcy(BigDecimal.ZERO);
+        txItem1.setAmountFcy(BigDecimal.ZERO);
+        txItem1.setStatus(OK);
+
+        LinkedHashSet<TransactionViolation> violations = new LinkedHashSet<TransactionViolation>();
+        violations.add(TransactionViolation.builder().txItemId(txItem1.getId()).build());
+
+        LinkedHashSet<TransactionItemEntity> txItems = new LinkedHashSet<TransactionItemEntity>();
+        txItems.add(txItem1);
+
+        TransactionEntity tx = new TransactionEntity();
+        tx.setId(txId);
+        tx.setItems(txItems);
+        tx.setViolations(violations);
+
+        taskItem.run(tx);
+
+        // Ensure the violation is removed
+        assertThat(tx.getViolations()).isEmpty();
     }
 
 }
