@@ -13,9 +13,8 @@ import java.util.Set;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
-
 import jakarta.persistence.TypedQuery;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -23,6 +22,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionItemExtractionRepositoryTest {
@@ -47,7 +48,7 @@ class TransactionItemExtractionRepositoryTest {
         );
         ArgumentCaptor<String> queryCaptor = ArgumentCaptor.forClass(String.class);
         Mockito.verify(em).createQuery(queryCaptor.capture(), eq(TransactionItemEntity.class));
-        String expectedQuery = """ 
+        String expectedQuery = """
             SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
             INNER JOIN ti.transaction te
             WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
