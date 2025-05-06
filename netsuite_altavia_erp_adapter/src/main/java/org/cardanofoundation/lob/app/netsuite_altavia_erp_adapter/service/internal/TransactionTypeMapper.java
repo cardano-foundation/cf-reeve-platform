@@ -22,6 +22,7 @@ public class TransactionTypeMapper implements Function<String, Optional<Transact
             case "ExpRept" -> Optional.of(TransactionType.ExpenseReport);
             case "VendPymt" -> Optional.of(TransactionType.VendorPayment);
             case "VendCred" -> Optional.of(TransactionType.BillCredit);
+            case "CustInvc" -> Optional.of(TransactionType.CustomerInvoice);
             default -> Optional.empty();
         };
     }
