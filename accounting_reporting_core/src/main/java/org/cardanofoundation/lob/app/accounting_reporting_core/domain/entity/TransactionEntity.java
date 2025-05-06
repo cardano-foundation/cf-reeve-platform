@@ -383,6 +383,4 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     public String toString() {
         return STR."TransactionEntity{id='\{id}\{'\''}, transactionInternalNumber='\{transactionInternalNumber}\{'\''}, batchId='\{batchId}'}";
     }
-
-
 }
