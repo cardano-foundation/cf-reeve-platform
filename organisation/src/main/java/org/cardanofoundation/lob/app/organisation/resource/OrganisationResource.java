@@ -260,7 +260,7 @@ public class OrganisationResource {
                     "    \"detail\": \"Unable to get the organisation\"\n" +
                     "}"))})
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     @GetMapping(value = "/organisation/validate/{orgId}", produces = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> validateOrganisation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String orgId) {
         if(keycloakSecurityHelper.canUserAccessOrg(orgId)) {
