@@ -39,6 +39,7 @@ CREATE TYPE accounting_core_transaction_type AS ENUM (
     'ExpenseReport',
     'VendorPayment',
     'BillCredit',
+    'CustomerInvoice',
     'Unknown'
 );
 
