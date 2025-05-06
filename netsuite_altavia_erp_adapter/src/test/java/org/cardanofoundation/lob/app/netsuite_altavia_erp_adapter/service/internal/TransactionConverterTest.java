@@ -74,11 +74,19 @@ class TransactionConverterTest {
         when(mockTxLine.transactionNumber()).thenReturn("transactionID");
         when(mockTxLine.type()).thenReturn("type");
         when(transactionTypeMapper.apply("type")).thenReturn(Optional.empty());
-
+        when(mockTxLine.date()).thenReturn(LocalDate.now());
+        when(mockTxLine.exchangeRate()).thenReturn(BigDecimal.ONE);
+        when(mockTxLine.accountMain()).thenReturn("accountMain");
+        when(validator.validate(mockTxLine)).thenReturn(Set.of());
+        when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
         Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
 
-        assertThat(org.isLeft()).isTrue();
-
+        assertThat(org.isRight()).isTrue();
+        Transactions transactions = org.get();
+        Assertions.assertEquals(1, transactions.transactions().size());
+        Transaction next = transactions.transactions().stream().iterator().next();
+        Assertions.assertEquals("transactionID", next.getInternalTransactionNumber());
+        Assertions.assertEquals(TransactionType.Unknown, next.getTransactionType());
     }
 
     @Test
@@ -101,7 +109,12 @@ class TransactionConverterTest {
 
         Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
 
-        assertThat(org.isLeft()).isTrue();
+        assertThat(org.isRight()).isTrue();
+        Transactions transactions = org.get();
+        Assertions.assertEquals(1, transactions.transactions().size());
+        Transaction next = transactions.transactions().stream().iterator().next();
+        Assertions.assertEquals("transactionID", next.getInternalTransactionNumber());
+        Assertions.assertEquals(TransactionType.Transfer, next.getTransactionType());
     }
 
     @Test

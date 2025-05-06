@@ -62,7 +62,8 @@ public class BusinessRulesConfig {
 
     private PipelineTask sanityCheckPipelineTask() {
         return new DefaultPipelineTask(List.of(
-                new SanityCheckFieldsTaskItem(validator)
+                new SanityCheckFieldsTaskItem(validator),
+                new TransactionTypeUnknownTaskItem()
         ));
     }
 

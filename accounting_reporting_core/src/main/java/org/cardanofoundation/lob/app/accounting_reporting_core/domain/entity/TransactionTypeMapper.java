@@ -20,6 +20,7 @@ public final class TransactionTypeMapper {
                 case VendorPayment -> 256;
                 case BillCredit -> 512;
                 case CustomerInvoice -> 1024;
+                case Unknown -> 2048;
             };
         };
     }
