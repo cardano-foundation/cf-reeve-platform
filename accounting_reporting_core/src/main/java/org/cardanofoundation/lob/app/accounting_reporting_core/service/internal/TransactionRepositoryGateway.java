@@ -10,7 +10,6 @@ import java.util.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
@@ -19,10 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rejection;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
@@ -58,13 +59,13 @@ public class TransactionRepositoryGateway {
     protected Either<IdentifiableProblem, TransactionEntity> approveTransaction(String transactionId) {
         log.info("Approving transaction: {}", transactionId);
 
-        val txM = accountingCoreTransactionRepository.findById(transactionId);
+        Optional<TransactionEntity> txM = accountingCoreTransactionRepository.findById(transactionId);
 
         if (txM.isEmpty()) {
             return transactionNotFoundResponse(transactionId);
         }
 
-        val tx = txM.orElseThrow();
+        TransactionEntity tx = txM.orElseThrow();
 
         if (tx.getAutomatedValidationStatus() == FAILED) {
             return transactionFailedResponse(transactionId);
@@ -75,7 +76,7 @@ public class TransactionRepositoryGateway {
 
         tx.setTransactionApproved(true);
 
-        val savedTx = accountingCoreTransactionRepository.save(tx);
+        TransactionEntity savedTx = accountingCoreTransactionRepository.save(tx);
 
         return Either.right(savedTx);
     }
@@ -85,13 +86,13 @@ public class TransactionRepositoryGateway {
     private Either<IdentifiableProblem, TransactionEntity> approveTransactionsDispatch(String transactionId) {
         log.info("Approving transaction to dispatch: {}", transactionId);
 
-        val txM = accountingCoreTransactionRepository.findById(transactionId);
+        Optional<TransactionEntity> txM = accountingCoreTransactionRepository.findById(transactionId);
 
         if (txM.isEmpty()) {
             return transactionNotFoundResponse(transactionId);
         }
 
-        val tx = txM.orElseThrow();
+        TransactionEntity tx = txM.orElseThrow();
 
         if (tx.getAutomatedValidationStatus() == FAILED) {
             return transactionFailedResponse(transactionId);
@@ -102,7 +103,7 @@ public class TransactionRepositoryGateway {
         }
 
         if (!tx.getTransactionApproved()) {
-            val problem = Problem.builder()
+            ThrowableProblem problem = Problem.builder()
                     .withTitle("TX_NOT_APPROVED")
                     .withDetail(STR."Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: \{transactionId}")
                     .withStatus(METHOD_NOT_ALLOWED)
@@ -114,20 +115,20 @@ public class TransactionRepositoryGateway {
 
         tx.setLedgerDispatchApproved(true);
 
-        val savedTx = accountingCoreTransactionRepository.save(tx);
+        TransactionEntity savedTx = accountingCoreTransactionRepository.save(tx);
 
         return Either.right(savedTx);
     }
 
     @Transactional
     public List<Either<IdentifiableProblem, TransactionEntity>> approveTransactions(TransactionsRequest transactionsRequest) {
-        val transactionIds = transactionsRequest.getTransactionIds();
+        Set<TransactionsRequest.TransactionId> transactionIds = transactionsRequest.getTransactionIds();
 
-        val transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
+        ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
         Set<String> batchIds = new HashSet<>();
-        for (val transactionId : transactionIds) {
+        for (TransactionsRequest.TransactionId transactionId : transactionIds) {
             try {
-                val transactionEntities = approveTransaction(transactionId.getId());
+                Either<IdentifiableProblem, TransactionEntity> transactionEntities = approveTransaction(transactionId.getId());
                 if(transactionEntities.isRight()) {
                     batchIds.add(transactionEntities.get().getBatchId());
                 }
@@ -135,7 +136,7 @@ public class TransactionRepositoryGateway {
             } catch (DataAccessException dae) {
                 log.error("Error approving transaction: {}", transactionId, dae);
 
-                val problem = FailureResponses.createTransactionDBError(transactionId.getId(), dae);
+                ThrowableProblem problem = FailureResponses.createTransactionDBError(transactionId.getId(), dae);
 
                 transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
             }
@@ -149,22 +150,27 @@ public class TransactionRepositoryGateway {
 
     @Transactional
     public List<Either<IdentifiableProblem, TransactionEntity>> approveTransactionsDispatch(TransactionsRequest transactionsRequest) {
-        val transactionIds = transactionsRequest.getTransactionIds();
+        Set<TransactionsRequest.TransactionId> transactionIds = transactionsRequest.getTransactionIds();
 
-        val transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
-        for (val transactionId : transactionIds) {
+        ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
+        for (TransactionsRequest.TransactionId transactionId : transactionIds) {
             try {
-                val transactionEntities = approveTransactionsDispatch(transactionId.getId());
+                Either<IdentifiableProblem, TransactionEntity> transactionEntities = approveTransactionsDispatch(transactionId.getId());
 
                 transactionsApprovalResponseListE.add(transactionEntities);
             } catch (DataAccessException dae) {
                 log.error("Error approving transaction publish / dispatch: {}", transactionId, dae);
 
-                val problem = createTransactionDBError(transactionId.getId(), dae);
+                ThrowableProblem problem = createTransactionDBError(transactionId.getId(), dae);
 
                 transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
             }
         }
+
+        transactionsApprovalResponseListE.stream().filter(Either::isRight).forEach(e -> {
+            TransactionEntity transaction = e.get();
+            transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(transaction.getBatchId(), Optional.empty(), Optional.empty());
+        });
 
         return transactionsApprovalResponseListE;
     }
@@ -173,20 +179,20 @@ public class TransactionRepositoryGateway {
     public List<Either<IdentifiableProblem, TransactionItemEntity>> rejectTransactionItems(TransactionEntity tx, Set<TxItemRejectionRequest> transactionItemsRejections) {
         log.info("Rejecting transaction items: {}", transactionItemsRejections);
 
-        val transactionItemEntitiesE = new ArrayList<Either<IdentifiableProblem, TransactionItemEntity>>();
+        ArrayList<Either<IdentifiableProblem, TransactionItemEntity>> transactionItemEntitiesE = new ArrayList<Either<IdentifiableProblem, TransactionItemEntity>>();
 
-        for (val txItemRejection : transactionItemsRejections) {
-            val txItemId = txItemRejection.getTxItemId();
-            val rejectionReason = txItemRejection.getRejectionReason();
+        for (TxItemRejectionRequest txItemRejection : transactionItemsRejections) {
+            String txItemId = txItemRejection.getTxItemId();
+            RejectionReason rejectionReason = txItemRejection.getRejectionReason();
 
-            val txItemM = transactionItemRepository.findByTxIdAndItemId(tx.getId(), txItemId);
+            Optional<TransactionItemEntity> txItemM = transactionItemRepository.findByTxIdAndItemId(tx.getId(), txItemId);
 
             if (txItemM.isEmpty()) {
                 transactionItemEntitiesE.add(transactionItemNotFoundResponse(tx.getId(), txItemId));
                 continue;
             }
 
-            val txItem = txItemM.orElseThrow();
+            TransactionItemEntity txItem = txItemM.orElseThrow();
             if (tx.getLedgerDispatchApproved()) {
                 transactionItemEntitiesE.add(transactionItemCannotRejectAlreadyApprovedForDispatchResponse(tx.getId(), txItemId));
                 continue;
@@ -194,7 +200,7 @@ public class TransactionRepositoryGateway {
 
             txItem.setRejection(Optional.of(new Rejection(rejectionReason)));
 
-            val savedTxItem = transactionItemRepository.save(txItem);
+            TransactionItemEntity savedTxItem = transactionItemRepository.save(txItem);
 
             transactionItemEntitiesE.add(Either.right(savedTxItem));
         }

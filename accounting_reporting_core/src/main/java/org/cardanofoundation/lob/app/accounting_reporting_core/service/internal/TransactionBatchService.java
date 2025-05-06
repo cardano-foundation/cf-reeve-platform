@@ -157,7 +157,7 @@ public class TransactionBatchService {
         TransactionBatchEntity txBatch = txBatchM.orElseThrow();
 
         BatchStatisticsView batchStatisticsView = new BatchStatisticsView();
-//        // Triggering to update the status of all changed transactions within this batch, to be sure to have the latest status
+        // Triggering to update the status of all changed transactions within this batch, to be sure to have the latest status
         transactionEntities.ifPresent(entities -> {
             entities.forEach(TransactionEntity::updateProcessingStatus);
             accountingCoreTransactionRepository.saveAll(entities);
