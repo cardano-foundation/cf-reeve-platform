@@ -120,7 +120,7 @@ public class OrganisationService {
 
     public OrganisationView getOrganisationView(Organisation organisation) {
         LocalDate today = LocalDate.now();
-        LocalDate monthsAgo = today.minusMonths(organisation.getAccountPeriodDays());
+        LocalDate monthsAgo = today.minusDays(organisation.getAccountPeriodDays());
         LocalDate yesterday = today.minusDays(1);
 
         return new OrganisationView(
