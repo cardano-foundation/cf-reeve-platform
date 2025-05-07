@@ -168,7 +168,7 @@ class WatchDogServiceTest {
                 .finalityScore(FinalityScore.FINAL)
                 .publishStatus(BlockchainPublishStatus.FINALIZED)
                 .build()));
-        verify(transactionEntityRepositoryGateway).storeTransaction(txEntity);
+        verify(transactionEntityRepositoryGateway).storeTransactions(Set.of(txEntity));
 
         verifyNoMoreInteractions(organisationPublicApiIF);
         verifyNoMoreInteractions(blockchainPublishStatusMapper);
@@ -209,7 +209,7 @@ class WatchDogServiceTest {
                 .finalityScore(null)
                 .publishStatus(BlockchainPublishStatus.ROLLBACKED)
                 .build()));
-        verify(transactionEntityRepositoryGateway).storeTransaction(txEntity);
+        verify(transactionEntityRepositoryGateway).storeTransactions(Set.of(txEntity));
 
         verifyNoMoreInteractions(organisationPublicApiIF);
         verifyNoInteractions(blockchainPublishStatusMapper);
@@ -250,7 +250,7 @@ class WatchDogServiceTest {
                 .finalityScore(FinalityScore.VERY_LOW)
                 .publishStatus(BlockchainPublishStatus.SUBMITTED)
                 .build()));
-        verify(transactionEntityRepositoryGateway).storeTransaction(txEntity);
+        verify(transactionEntityRepositoryGateway).storeTransactions(Set.of(txEntity));
 
         verifyNoMoreInteractions(organisationPublicApiIF);
         verifyNoInteractions(blockchainPublishStatusMapper);
