@@ -104,7 +104,6 @@ public class TransactionEntityRepositoryGateway {
         return newTxs;
     }
 
-    @Transactional
     public void storeTransaction(TransactionEntity transactionEntity) {
         transactionEntityRepository.save(transactionEntity);
     }
