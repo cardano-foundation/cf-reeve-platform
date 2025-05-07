@@ -654,7 +654,7 @@ public class ReportService {
             // adding Opening Balance if the startDate is before the OpeningBalance Date
             totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
                     BigDecimal.ZERO :
-                    organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ? organisationChartOfAccount.getOpeningBalance().getBalanceLCY() : BigDecimal.ZERO)
+                    organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ? Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO) : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add));
 
             List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
