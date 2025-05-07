@@ -153,8 +153,8 @@ class TxsLedgerUpdatedEventPublisherTest {
         transactionEntity.setId(UUID.randomUUID().toString());
 
         L1SubmissionData submissionData = new L1SubmissionData();
-        submissionData.setPublishStatus(Optional.ofNullable(publishStatus));
-        submissionData.setFinalityScore(Optional.ofNullable(finalityScore));
+        submissionData.setPublishStatus(publishStatus);
+        submissionData.setFinalityScore(finalityScore);
 
         transactionEntity.setL1SubmissionData(Optional.of(submissionData));
 

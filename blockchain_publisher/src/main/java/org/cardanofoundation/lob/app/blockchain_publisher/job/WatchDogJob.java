@@ -30,7 +30,7 @@ public class WatchDogJob {
 
     @Scheduled(
             fixedDelayString = "${lob.blockchain_publisher.watchdog.transaction.fixed_delay:PT1M}",
-            initialDelayString = "${lob.blockchain_publisher.watchdog.transaction.initial_delay:PT1M}"
+            initialDelayString = "${lob.blockchain_publisher.watchdog.transaction.initial_delay:PT1S}"
     )
     public void executeTransactionStatusCheck() {
         log.info("Inspecting all organisations for on chain transaction status changes...");
