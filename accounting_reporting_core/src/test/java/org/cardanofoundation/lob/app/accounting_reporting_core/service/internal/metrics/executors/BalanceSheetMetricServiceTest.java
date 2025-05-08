@@ -6,9 +6,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -22,19 +22,19 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.metri
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 
 @ExtendWith(MockitoExtension.class)
 class BalanceSheetMetricServiceTest {
 
     @Mock
-    ReportRepository reportRepository;
+    ReportService reportService;
 
     BalanceSheetMetricService balanceSheetMetricService;
 
     @BeforeEach
     void setup() {
-        balanceSheetMetricService = new BalanceSheetMetricService(reportRepository);
+        balanceSheetMetricService = new BalanceSheetMetricService(reportService);
         balanceSheetMetricService.init();
     }
 
@@ -44,8 +44,8 @@ class BalanceSheetMetricServiceTest {
         reportEntity.setType(ReportType.BALANCE_SHEET);
         reportEntity.setBalanceSheetReportData(Optional.of(getTestBalanceSheetData()));
 
-        when(reportRepository.getNewestReportsInRange(anyString(), any(), any()))
-                .thenReturn(List.of(reportEntity));
+        when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
+                .thenReturn(Set.of(reportEntity));
 
         BigDecimal totalLiabilities = (BigDecimal) balanceSheetMetricService.getData(MetricEnum.SubMetric.TOTAL_LIABILITIES, "organisationId", Optional.empty(), Optional.empty());
         assertThat(totalLiabilities).isEqualTo(BigDecimal.valueOf(40));
@@ -57,8 +57,8 @@ class BalanceSheetMetricServiceTest {
         reportEntity.setType(ReportType.BALANCE_SHEET);
         reportEntity.setBalanceSheetReportData(Optional.of(getTestBalanceSheetData()));
 
-        when(reportRepository.getNewestReportsInRange(anyString(), any(), any()))
-                .thenReturn(List.of(reportEntity));
+        when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
+                .thenReturn(Set.of(reportEntity));
 
         BigDecimal totelAssets = (BigDecimal) balanceSheetMetricService.getData(MetricEnum.SubMetric.TOTAL_ASSETS, "organisationId", Optional.empty(), Optional.empty());
         assertThat(totelAssets).isEqualTo(BigDecimal.valueOf(80));
@@ -70,8 +70,8 @@ class BalanceSheetMetricServiceTest {
         reportEntity.setType(ReportType.BALANCE_SHEET);
         reportEntity.setBalanceSheetReportData(Optional.of(getTestBalanceSheetData()));
 
-        when(reportRepository.getNewestReportsInRange(anyString(), any(), any()))
-                .thenReturn(List.of(reportEntity));
+        when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
+                .thenReturn(Set.of(reportEntity));
 
         Map<BalanceSheetCategories, Integer> assetCategories = (Map<BalanceSheetCategories, Integer>) balanceSheetMetricService.getData(MetricEnum.SubMetric.ASSET_CATEGORIES, "organisationId", Optional.empty(), Optional.empty());
 
@@ -86,8 +86,8 @@ class BalanceSheetMetricServiceTest {
         reportEntity.setType(ReportType.BALANCE_SHEET);
         reportEntity.setBalanceSheetReportData(Optional.of(getTestBalanceSheetData()));
 
-        when(reportRepository.getNewestReportsInRange(anyString(), any(), any()))
-                .thenReturn(List.of(reportEntity));
+        when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
+                .thenReturn(Set.of(reportEntity));
 
         Map<BalanceSheetCategories, Map<BalanceSheetCategories, Integer>> balanceSheetOverview = (Map<BalanceSheetCategories, Map<BalanceSheetCategories, Integer>>) balanceSheetMetricService.getData(MetricEnum.SubMetric.BALANCE_SHEET_OVERVIEW, "organisationId", Optional.empty(), Optional.empty());
 

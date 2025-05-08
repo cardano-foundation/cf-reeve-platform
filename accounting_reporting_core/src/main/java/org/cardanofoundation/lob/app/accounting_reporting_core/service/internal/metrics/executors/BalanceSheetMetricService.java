@@ -6,9 +6,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import jakarta.annotation.PostConstruct;
 
@@ -18,16 +18,17 @@ import org.springframework.stereotype.Component;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.metric.BalanceSheetCategories;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.metric.MetricEnum;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.metrics.MetricExecutor;
 
 @Component
 @RequiredArgsConstructor
 public class BalanceSheetMetricService extends MetricExecutor {
 
-    private final ReportRepository reportRepository;
+    private final ReportService reportService;
 
     @PostConstruct
     public void init() {
@@ -41,9 +42,8 @@ public class BalanceSheetMetricService extends MetricExecutor {
     }
 
     private Object getTotalLiabilities(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
-        List<ReportEntity> reportEntities = reportRepository.getNewestReportsInRange(organisationID,
-                startDate.orElse(null),
-                endDate.orElse(null));
+        Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.BALANCE_SHEET, startDate, endDate);
+
         final BigDecimal[] totalLiabilities = {BigDecimal.ZERO};
         reportEntities.forEach(reportEntity -> reportEntity.getBalanceSheetReportData().flatMap(BalanceSheetData::getLiabilities).ifPresent(liabilities -> {
             liabilities.getCurrentLiabilities().ifPresent(currentLiabilities -> {
@@ -57,9 +57,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
     }
 
     private Object getTotalAssets(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
-        List<ReportEntity> reportEntities = reportRepository.getNewestReportsInRange(organisationID,
-                startDate.orElse(null),
-                endDate.orElse(null));
+        Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.BALANCE_SHEET, startDate, endDate);
 
         final BigDecimal[] totalAssets = {BigDecimal.ZERO};
         reportEntities.forEach(reportEntity -> reportEntity.getBalanceSheetReportData().flatMap(BalanceSheetData::getAssets).ifPresent(assets -> {
@@ -80,9 +78,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
     }
 
     private Map<BalanceSheetCategories, Integer> getAssetCategories(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
-        List<ReportEntity> reportEntities = reportRepository.getNewestReportsInRange(organisationID,
-                startDate.orElse(null),
-                endDate.orElse(null));
+        Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.BALANCE_SHEET, startDate, endDate);
 
         Map<BalanceSheetCategories, Integer> assetCategories = new EnumMap<>(BalanceSheetCategories.class);
 
@@ -115,9 +111,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
     }
 
     private Map<BalanceSheetCategories, Map<BalanceSheetCategories, Integer>> getBalanceSheetOverview(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
-        List<ReportEntity> reportEntities = reportRepository.getNewestReportsInRange(organisationID,
-                startDate.orElse(null),
-                endDate.orElse(null));
+        Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.BALANCE_SHEET, startDate, endDate);
 
         Map<BalanceSheetCategories, Map<BalanceSheetCategories, Integer>> balanceSheetOverview = new EnumMap<>(BalanceSheetCategories.class);
 

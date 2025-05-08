@@ -3,9 +3,9 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -17,16 +17,17 @@ import org.springframework.stereotype.Component;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.metric.IncomeStatemenCategories;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.metric.MetricEnum;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.metrics.MetricExecutor;
 
 @Component
 @RequiredArgsConstructor
 public class IncomeStatementMetricService extends MetricExecutor {
 
-    private final ReportRepository reportRepository;
+    private final ReportService reportService;
 
     @PostConstruct
     public void init() {
@@ -39,9 +40,7 @@ public class IncomeStatementMetricService extends MetricExecutor {
     }
 
     private Map<Short, Long> getProfitOfTheYear(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
-        List<ReportEntity> reportEntities = reportRepository.getNewestReportsInRange(organisationID,
-                startDate.orElse(null),
-                endDate.orElse(null));
+        Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.INCOME_STATEMENT, startDate, endDate);
 
         return reportEntities.stream()
                 .collect(Collectors.groupingBy(ReportEntity::getYear,
@@ -51,9 +50,8 @@ public class IncomeStatementMetricService extends MetricExecutor {
     }
 
     private Map<IncomeStatemenCategories, Integer> getTotalExpenses(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
-        List<ReportEntity> reportEntities = reportRepository.getNewestReportsInRange(organisationID,
-                startDate.orElse(null),
-                endDate.orElse(null));
+        Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.INCOME_STATEMENT, startDate, endDate);
+
         Map<IncomeStatemenCategories, Integer> totalExpenses = new EnumMap<>(IncomeStatemenCategories.class);
 
         reportEntities.forEach(reportEntity -> {
@@ -79,9 +77,8 @@ public class IncomeStatementMetricService extends MetricExecutor {
     }
 
     private Map<IncomeStatemenCategories, Integer> getIncomeStream(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
-        List<ReportEntity> reportEntities = reportRepository.getNewestReportsInRange(organisationID,
-                startDate.orElse(null),
-                endDate.orElse(null));
+        Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.INCOME_STATEMENT, startDate, endDate);
+
         Map<IncomeStatemenCategories, Integer> incomeStream = new EnumMap<>(IncomeStatemenCategories.class);
 
 
