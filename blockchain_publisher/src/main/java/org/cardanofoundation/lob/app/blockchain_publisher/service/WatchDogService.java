@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
@@ -63,6 +64,7 @@ public class WatchDogService {
         });
     }
 
+    @Transactional
     public void checkTransactionStatusForOrganisations(int txStatusInspectionLimitPerOrgPullSize) {
         organisationPublicApiIF.listAll().forEach(org -> {
             log.info("Checking transaction statuses for organisation: {}", org.getName());
@@ -105,9 +107,10 @@ public class WatchDogService {
             L1SubmissionData l1SubmissionData1 = tx.getL1SubmissionData().orElseThrow(() -> new RuntimeException("Failed to get L1 submission data"));
             tx.setL1SubmissionData(Optional.of(updateL1SubmissionData(l1SubmissionData1, chainTip)));
 
-            transactionEntityRepositoryGateway.storeTransaction(tx);
-            log.info("Status updated for transaction: {}", tx.getId());
         });
+        transactionEntityRepositoryGateway.storeTransactions(successfullyUpdatedTxEntities);
+
+        log.info("Status updated for {} transactions", successfullyUpdatedTxEntities.size());
         // notify accounting core about updated transactions
         ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(org.getId(), successfullyUpdatedTxEntities);
 
@@ -143,14 +146,14 @@ public class WatchDogService {
         OnChainStatus onChainStatus = getOnChainStatus(onChainTxDetails, txCreationSlot, chainTip);
 
         if (onChainStatus.status().equals(BlockchainPublishStatus.ROLLBACKED)) {
-            submissionData.setPublishStatus(Optional.of(BlockchainPublishStatus.ROLLBACKED));
-            submissionData.setCreationSlot(Optional.empty());
-            submissionData.setAbsoluteSlot(Optional.empty());
-            submissionData.setTransactionHash(Optional.empty());
-            submissionData.setFinalityScore(Optional.empty());
+            submissionData.setPublishStatus(BlockchainPublishStatus.ROLLBACKED);
+            submissionData.setCreationSlot(null);
+            submissionData.setAbsoluteSlot(null);
+            submissionData.setTransactionHash(null);
+            submissionData.setFinalityScore(null);
         } else {
-            submissionData.setFinalityScore(onChainStatus.finalityScore());
-            submissionData.setPublishStatus(Optional.of(onChainStatus.status()));
+            submissionData.setFinalityScore(onChainStatus.finalityScore().get());
+            submissionData.setPublishStatus(onChainStatus.status());
         }
         return submissionData;
     }

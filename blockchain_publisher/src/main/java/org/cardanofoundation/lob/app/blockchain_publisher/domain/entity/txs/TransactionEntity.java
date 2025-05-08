@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockable
 @NoArgsConstructor
 @AllArgsConstructor
 @EntityListeners({ AuditingEntityListener.class })
+@Access(AccessType.FIELD)
 public class TransactionEntity extends CommonDateOnlyLockableEntity implements Persistable<String> {
 
     @Id
