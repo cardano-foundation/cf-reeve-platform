@@ -51,6 +51,144 @@ public class ChartOfAccountsService {
     }
 
     @Transactional
+    public OrganisationChartOfAccountView updateChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+
+        Optional<Organisation> organisationChe = organisationService.findById(orgId);
+        if (organisationChe.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
+        if (referenceCode.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getEventRefCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        Optional<OrganisationChartOfAccountSubType> subType = organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType());
+
+        if (subType.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("SUBTYPE_NOT_FOUND")
+                    .withDetail(STR."Unable to find subtype code :\{chartOfAccountUpdate.getSubType()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
+            Optional<OrganisationChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
+            if (parentChartOfAccount.isEmpty()) {
+                return OrganisationChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("PARENT_ACCOUNT_NOT_FOUND")
+                        .withDetail(STR."Unable to find the parent chart of account with code :\{chartOfAccountUpdate.getParentCustomerCode()}")
+                        .withStatus(Status.NOT_FOUND)
+                        .build());
+            }
+        }
+
+        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
+        if (chartOfAccountOpt.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("CHART_OF_ACCOUNT_NOT_FOUND")
+                    .withDetail(STR."Unable to find the chart of account with code :\{chartOfAccountUpdate.getCustomerCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        OrganisationChartOfAccount chartOfAccount = chartOfAccountOpt.get();
+        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
+        chartOfAccount.setName(chartOfAccountUpdate.getName());
+        chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
+        chartOfAccount.setSubType(subType.get());
+        chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode() == null || chartOfAccountUpdate.getParentCustomerCode().isEmpty() ? null : chartOfAccountUpdate.getParentCustomerCode());
+        chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
+        chartOfAccount.setCounterParty(chartOfAccountUpdate.getCounterParty());
+        chartOfAccount.setActive(chartOfAccountUpdate.getActive());
+        chartOfAccount.setOpeningBalance(chartOfAccountUpdate.getOpeningBalance());
+
+        OrganisationChartOfAccount chartOfAccountResult = chartOfAccountRepository.save(chartOfAccount);
+        return OrganisationChartOfAccountView.createSuccess(chartOfAccountResult);
+
+    }
+
+    @Transactional
+    public OrganisationChartOfAccountView insertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+
+        Optional<Organisation> organisationChe = organisationService.findById(orgId);
+        if (organisationChe.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
+        if (referenceCode.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getEventRefCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        Optional<OrganisationChartOfAccountSubType> subType = organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType());
+
+        if (subType.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("SUBTYPE_NOT_FOUND")
+                    .withDetail(STR."Unable to find subtype code :\{chartOfAccountUpdate.getSubType()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
+            Optional<OrganisationChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
+            if (parentChartOfAccount.isEmpty()) {
+                return OrganisationChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("PARENT_ACCOUNT_NOT_FOUND")
+                        .withDetail(STR."Unable to find the parent chart of account with code :\{chartOfAccountUpdate.getParentCustomerCode()}")
+                        .withStatus(Status.NOT_FOUND)
+                        .build());
+            }
+        }
+
+        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
+        if (chartOfAccountOpt.isPresent()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
+                    .withDetail(STR."The chart of account with code :\{chartOfAccountUpdate.getCustomerCode()} already exists")
+                    .withStatus(Status.CONFLICT)
+                    .build());
+        }
+
+        OrganisationChartOfAccount chartOfAccount = OrganisationChartOfAccount.builder()
+                .id(new OrganisationChartOfAccount.Id(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .build();
+
+        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
+        chartOfAccount.setName(chartOfAccountUpdate.getName());
+        chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
+        chartOfAccount.setSubType(subType.get());
+        chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode() == null || chartOfAccountUpdate.getParentCustomerCode().isEmpty() ? null : chartOfAccountUpdate.getParentCustomerCode());
+        chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
+        chartOfAccount.setCounterParty(chartOfAccountUpdate.getCounterParty());
+        chartOfAccount.setActive(chartOfAccountUpdate.getActive());
+        chartOfAccount.setOpeningBalance(chartOfAccountUpdate.getOpeningBalance());
+
+        OrganisationChartOfAccount chartOfAccountResult = chartOfAccountRepository.save(chartOfAccount);
+        return OrganisationChartOfAccountView.createSuccess(chartOfAccountResult);
+
+    }
+
+    @Deprecated
+    @Transactional
     public OrganisationChartOfAccountView upsertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
 
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
@@ -113,5 +251,4 @@ public class ChartOfAccountsService {
         return OrganisationChartOfAccountView.createSuccess(chartOfAccountResult);
 
     }
-
 }
