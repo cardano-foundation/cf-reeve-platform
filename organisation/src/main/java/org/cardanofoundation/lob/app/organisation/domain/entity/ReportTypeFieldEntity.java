@@ -63,8 +63,17 @@ public class ReportTypeFieldEntity extends CommonEntity {
     @Builder.Default
     private List<OrganisationChartOfAccountSubType> mappingTypes = new ArrayList<>();
 
+    @ManyToMany
+    @JoinTable(
+            name = "organisation_report_setup_field_report_field_mapping",
+            joinColumns = @JoinColumn(name = "field_id"),
+            inverseJoinColumns = @JoinColumn(name = "report_field_id")
+    )
+    private List<ReportTypeFieldEntity> mappingReportTypes = new ArrayList<>();
+
     private boolean accumulated; // Accumulated at all or is it checked period by period
     private boolean accumulatedYearly; // Is it accumulated Yearly and only taking care of the current year
+    private boolean accumulatedPreviousYear; // Is it accumulated Yearly and only taking care of the previous year
 
     @ManyToOne
     @JoinColumn(name = "report_id", nullable = false)

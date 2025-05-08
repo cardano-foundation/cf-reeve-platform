@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -632,14 +633,19 @@ public class ReportService {
         });
     }
 
+    /**
+     * This method fills the report data object recursively based on the provided field and date range.
+     * It will check if the field has child fields and if so, it will create a nested object for each child field.
+     * If the field has no child fields, it will calculate the total amount based on the mapping types and set the value in the report data object.
+     * NOTE: Currently it is only possible to have a value at the bottom level (No children) of the report data object.
+     */
     private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate) {
         if (field.getChildFields().isEmpty()) {
-            if (field.getMappingTypes().isEmpty()) {
+            if (field.getMappingTypes().isEmpty() && field.getMappingReportTypes().isEmpty()) {
                 log.debug(STR."Field \{field.getName()} has no mapping type, skipping...");
                 return;
             }
-            // Set value
-            Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(OrganisationChartOfAccountSubType::getId).toList());
+
             Optional<LocalDate> startSearchDate;
             BigDecimal totalAmount = BigDecimal.ZERO;
 
@@ -648,46 +654,147 @@ public class ReportService {
             } else if (field.isAccumulated()) {
                 // TODO this calculation can be optimized by using already published reports
                 startSearchDate = Optional.of(LocalDate.EPOCH);
-            } else {
+            } else if (field.isAccumulatedPreviousYear()) {
+                startSearchDate = Optional.of(LocalDate.of(startDate.getYear() - 1, 1, 1));
+                endDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
+            }else {
                 startSearchDate = Optional.of(startDate);
             }
-            // adding Opening Balance if the startDate is before the OpeningBalance Date
-            totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
-                    BigDecimal.ZERO :
-                    organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ? Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO) : BigDecimal.ZERO)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add));
 
-            List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
-                    allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
-                    startSearchDate.orElse(LocalDate.EPOCH), endDate);
-            Map<String, OrganisationChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
+            totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate);
+            totalAmount = addValuesFromReportFields(field, endDate, totalAmount, startSearchDate);
 
-            // Set value
-            totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity -> {
-                        // Skipping invalid transaction Items
-                        if (transactionItemEntity.getStatus() != TxItemValidationStatus.OK) {
-                            return BigDecimal.ZERO;
-                        }
-                        BigDecimal amount = BigDecimal.ZERO;
-                        if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
-                            amount = amount.add(transactionItemEntity.getAmountLcy());
-                        }
-                        if (transactionItemEntity.getAccountCredit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
-                            amount = amount.add(transactionItemEntity.getAmountLcy().negate());
-                        }
-                        return amount.stripTrailingZeros();
-                    }
-            ).reduce(BigDecimal.ZERO, BigDecimal::add));
             // Set value dynamically in reportData
             setFieldValue(reportData, field.getName(), totalAmount.abs());
         } else {
+            LocalDate finalEndDate = endDate;
             field.getChildFields().forEach(subField -> {
                 Object subFieldObject = getOrCreateNestedObject(reportData, field.getName());
-                fillObjectRecursively(subFieldObject, subField, startDate, endDate);
+                fillObjectRecursively(subFieldObject, subField, startDate, finalEndDate);
             });
         }
     }
 
+    private BigDecimal addValuesFromReportFields(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate) {
+        List<ReportTypeFieldEntity> mappingReportTypes = field.getMappingReportTypes();
+        for(ReportTypeFieldEntity mappedTypeField : mappingReportTypes) {
+
+            // getting all reports for the selected years and filtering them to see if the interval is within the selected date range
+            // I'm doing it in code currently to keep it as simple as possible, since the logic is already complex
+            ReportType reportType = ReportType.valueOf(mappedTypeField.getReport().getName());
+            Set<ReportEntity> reportEntities = reportRepository.findByTypeAndWithinYearRange(mappedTypeField.getReport().getOrganisationId(), reportType, startSearchDate.orElse(LocalDate.EPOCH).getYear(), endDate.getYear());
+            reportEntities = reportEntities.stream().filter(reportEntity -> {
+                LocalDate reportStartDate = getStartDate(reportEntity.getIntervalType(), reportEntity.getPeriod().orElse((short) 0), reportEntity.getYear());
+                LocalDate reportEndDate = getEndDate(reportEntity.getIntervalType(), reportStartDate);
+                return reportStartDate.isBefore(endDate) && reportEndDate.isAfter(startSearchDate.orElse(LocalDate.EPOCH));
+            }).collect(Collectors.toSet());
+
+            // getting the report data from the report entity
+            for(ReportEntity reportEntity : reportEntities) {
+                // Currently this is only non-generic part in this method
+                if (reportEntity.getType() == INCOME_STATEMENT) {
+                    IncomeStatementData incomeStatementData = reportEntity.getIncomeStatementReportData().orElseThrow();
+                    totalAmount = totalAmount.add(getFieldValueFromReportData(incomeStatementData, mappedTypeField));
+                } else if (reportEntity.getType() == BALANCE_SHEET) {
+                    BalanceSheetData balanceSheetData = reportEntity.getBalanceSheetReportData().orElseThrow();
+                    totalAmount = totalAmount.add(getFieldValueFromReportData(balanceSheetData, mappedTypeField));
+                }
+            }
+        }
+        return totalAmount;
+    }
+
+    /**
+     * This function is retrieving the data from the object report data based on the mappedTypeField
+     * It could be the case that the mappedTypeField has a parent, so we are going to iterate through the parents
+     * and get the field value from the report data object
+     */
+    private BigDecimal getFieldValueFromReportData(Object reportData, ReportTypeFieldEntity mappedTypeField) {
+        List<String> fields = new ArrayList<>();
+        fields.addFirst(mappedTypeField.getName());
+        while(mappedTypeField.getParent() != null) {
+            mappedTypeField = mappedTypeField.getParent();
+            fields.addFirst(mappedTypeField.getName());
+        }
+        // get the field value from the report data object
+        Object currentObject = reportData;
+        for (int i = 0; i < fields.size(); i++) {
+            String fieldName = fields.get(i);
+            try {
+                Field field = currentObject.getClass().getDeclaredField(toCamelCase(fieldName));
+                field.setAccessible(true);
+                currentObject = field.get(currentObject);
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                log.error(STR."Field \{fieldName} not found in object \{currentObject.getClass().getName()}");
+                currentObject = null;
+                break;
+            }
+        }
+        // check if object is null
+        if (currentObject == null) {
+            return BigDecimal.ZERO;
+        } else if (currentObject instanceof BigDecimal) {
+            return (BigDecimal) currentObject;
+        } else if (currentObject instanceof Number) {
+            return BigDecimal.valueOf(((Number) currentObject).doubleValue());
+        } else if (currentObject instanceof String) {
+            return new BigDecimal((String) currentObject);
+        } else {
+            log.error(STR."Field \{mappedTypeField.getName()} is not a number, returning 0");
+            return BigDecimal.ZERO;
+        }
+    }
+
+    /**
+     * This method adds values from transaction items to the total amount based on the provided field and date range.
+     * It will find all ChartOfAccounts, that are mapped to the specific field via the subtypes from the chartOfAccount.
+     * Then it will find all transaction items that are related to these ChartOfAccounts and fall within the specified date range.
+     * Sum them up and return these.
+     */
+    private BigDecimal addValuesFromTransactionItems(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate) {
+        // Finding all ChartOfAccounts that are mapped to the specific field via the subtypes from the chartOfAccount
+        Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(OrganisationChartOfAccountSubType::getId).toList());
+
+        // adding Opening Balance if the startDate is before the OpeningBalance Date
+        totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
+                BigDecimal.ZERO :
+                organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ? Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO) : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+
+        // Finding all transaction items that are related to these ChartOfAccounts and fall within the specified date range
+        List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
+                startSearchDate.orElse(LocalDate.EPOCH), endDate);
+        Map<String, OrganisationChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
+
+        // Summing up the amounts
+        totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity -> {
+                    // Skipping invalid transaction Items
+                    if (transactionItemEntity.getStatus() != TxItemValidationStatus.OK) {
+                        return BigDecimal.ZERO;
+                    }
+                    BigDecimal amount = BigDecimal.ZERO;
+                    // adding the value if it's debit and subtracting it if it's Credit
+                    if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
+                        amount = amount.add(transactionItemEntity.getAmountLcy());
+                    }
+                    if (transactionItemEntity.getAccountCredit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
+                        amount = amount.add(transactionItemEntity.getAmountLcy().negate());
+                    }
+                    return amount.stripTrailingZeros();
+                }
+        ).reduce(BigDecimal.ZERO, BigDecimal::add));
+        return totalAmount;
+    }
+
+    /**
+     * This method retrieves or creates a nested object within the given object based on the field name.
+     * It uses reflection to access the field and instantiate it if it's null.
+     *
+     * @param object    The parent object containing the field.
+     * @param fieldName The name of the field to retrieve or create.
+     * @return The nested object.
+     */
     private Object getOrCreateNestedObject(Object object, String fieldName) {
         try {
             Field field = object.getClass().getDeclaredField(toCamelCase(fieldName));
@@ -706,6 +813,13 @@ public class ReportService {
         }
     }
 
+    /**
+     * This method sets the value of a field in the given object using reflection.
+     *
+     * @param object    The object containing the field.
+     * @param fieldName The name of the field to set.
+     * @param value     The value to set in the field.
+     */
     private void setFieldValue(Object object, String fieldName, Object value) {
         try {
             Field field = object.getClass().getDeclaredField(toCamelCase(fieldName));
@@ -716,6 +830,14 @@ public class ReportService {
         }
     }
 
+    /**
+     * This method retrieves the start date based on the interval type, period, and year.
+     *
+     * @param intervalType The interval type (MONTH, QUARTER, YEAR).
+     * @param period       The period (month or quarter).
+     * @param year         The year.
+     * @return The start date.
+     */
     private LocalDate getStartDate(IntervalType intervalType, int period, short year) {
         switch (intervalType) {
             case MONTH:
@@ -730,6 +852,13 @@ public class ReportService {
         }
     }
 
+    /**
+     * This method retrieves the end date based on the interval type and start date.
+     *
+     * @param intervalType The interval type (MONTH, QUARTER, YEAR).
+     * @param startDate    The start date.
+     * @return The end date.
+     */
     private LocalDate getEndDate(IntervalType intervalType, LocalDate startDate) {
         switch (intervalType) {
             case MONTH:
@@ -743,6 +872,12 @@ public class ReportService {
         }
     }
 
+    /**
+     * This method converts a string to camel case format.
+     *
+     * @param input The input string to convert.
+     * @return The camel case formatted string.
+     */
     private String toCamelCase(String input) {
         String[] parts = input.toLowerCase().split("_");
         StringBuilder camelCaseString = new StringBuilder(parts[0]); // Keep the first word lowercase

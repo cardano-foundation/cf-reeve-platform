@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 
 public interface ReportRepository extends JpaRepository<ReportEntity, String> {
@@ -66,4 +67,13 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
                                                @Param("endDate") LocalDate endDate);
 
 
+    @Query("""
+            SELECT r FROM accounting_reporting_core.report.ReportEntity r
+             WHERE r.organisation.id = :organisationId
+             AND r.type = :reportType
+             AND r.year >= :startYear
+             AND r.year <= :endYear
+             AND r.ledgerDispatchStatus = 'FINALIZED'
+            """)
+    Set<ReportEntity> findByTypeAndWithinYearRange(@Param("organisationId") String organisationId, @Param("reportType") ReportType reportType, @Param("startYear") int startYear, @Param("endYear") int endYear);
 }
