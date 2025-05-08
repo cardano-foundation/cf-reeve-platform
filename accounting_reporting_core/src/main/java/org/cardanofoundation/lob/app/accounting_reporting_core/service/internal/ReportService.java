@@ -689,7 +689,7 @@ public class ReportService {
             reportEntities = reportEntities.stream().filter(reportEntity -> {
                 LocalDate reportStartDate = getStartDate(reportEntity.getIntervalType(), reportEntity.getPeriod().orElse((short) 0), reportEntity.getYear());
                 LocalDate reportEndDate = getEndDate(reportEntity.getIntervalType(), reportStartDate);
-                return reportStartDate.isAfter(startSearchDate.orElse(LocalDate.EPOCH)) && reportEndDate.isBefore(endDate);
+                return reportStartDate.plusDays(1).isAfter(startSearchDate.orElse(LocalDate.EPOCH)) && reportEndDate.minusDays(1).isBefore(endDate);
             }).collect(Collectors.toSet());
             // filtering if there is bigger interval already included means if this report is for jan'24 and there is a report for Q1'24, we don't need the january one
             Set<ReportEntity> finalReportEntities = reportEntities;
