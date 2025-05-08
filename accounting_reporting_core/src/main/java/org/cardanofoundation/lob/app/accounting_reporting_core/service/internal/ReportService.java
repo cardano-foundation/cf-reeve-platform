@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType.MONTH;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType.QUARTER;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType.YEAR;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode.USER;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.BALANCE_SHEET;
@@ -683,10 +684,26 @@ public class ReportService {
             // I'm doing it in code currently to keep it as simple as possible, since the logic is already complex
             ReportType reportType = ReportType.valueOf(mappedTypeField.getReport().getName());
             Set<ReportEntity> reportEntities = reportRepository.findByTypeAndWithinYearRange(mappedTypeField.getReport().getOrganisationId(), reportType, startSearchDate.orElse(LocalDate.EPOCH).getYear(), endDate.getYear());
+
+            // filtering by dates
             reportEntities = reportEntities.stream().filter(reportEntity -> {
                 LocalDate reportStartDate = getStartDate(reportEntity.getIntervalType(), reportEntity.getPeriod().orElse((short) 0), reportEntity.getYear());
                 LocalDate reportEndDate = getEndDate(reportEntity.getIntervalType(), reportStartDate);
-                return reportStartDate.isBefore(endDate) && reportEndDate.isAfter(startSearchDate.orElse(LocalDate.EPOCH));
+                return reportStartDate.isAfter(startSearchDate.orElse(LocalDate.EPOCH)) && reportEndDate.isBefore(endDate);
+            }).collect(Collectors.toSet());
+            // filtering if there is bigger interval already included means if this report is for jan'24 and there is a report for Q1'24, we don't need the january one
+            Set<ReportEntity> finalReportEntities = reportEntities;
+            reportEntities = reportEntities.stream().filter(reportEntity -> {
+               if(reportEntity.getIntervalType() == MONTH) {
+                   if(reportEntity.getPeriod().isEmpty()) {
+                       return false;
+                   }
+                   int quarter = (reportEntity.getPeriod().get() - 1) / 3 + 1;
+                   return finalReportEntities.stream().filter(r -> r.getIntervalType() == QUARTER && r.getPeriod().isPresent() && r.getPeriod().get() == quarter).findAny().isEmpty();
+               } else if (reportEntity.getIntervalType() == QUARTER) {
+                   return finalReportEntities.stream().filter(r -> r.getIntervalType() == YEAR && Objects.equals(r.getYear(), reportEntity.getYear())).findAny().isEmpty();
+               }
+               return true;
             }).collect(Collectors.toSet());
 
             // getting the report data from the report entity
