@@ -102,6 +102,7 @@ public class DbSynchronisationUseCaseService {
 
         LinkedHashSet<TransactionEntity> toProcessTransactions = new LinkedHashSet<>();
         Set<String> batchesToBeUpdated = new HashSet<>();
+        int alreadyStoredCount = 0;
         for (TransactionEntity incomingTx : incomingDetachedTransactions) {
             Optional<TransactionEntity> txM = Optional.ofNullable(databaseTransactionsMap.get(incomingTx.getId()));
 
@@ -126,6 +127,8 @@ public class DbSynchronisationUseCaseService {
                 } else {
                     toProcessTransactions.add(incomingTx);
                 }
+            } else {
+                alreadyStoredCount++;
             }
         }
 
