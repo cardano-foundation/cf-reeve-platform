@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -18,9 +19,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchAssocEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
@@ -38,6 +43,10 @@ public class DbSynchronisationUseCaseService {
     private final TransactionItemRepository transactionItemRepository;
     private final TransactionBatchAssocRepository transactionBatchAssocRepository;
     private final TransactionBatchService transactionBatchService;
+    private final Cache<String, Integer> batchTransactionCountCache = CacheBuilder.newBuilder()
+            .expireAfterWrite(1, TimeUnit.MINUTES)
+                .expireAfterAccess(10, TimeUnit.MINUTES)
+                .build();
 
     @Transactional
     public void execute(String batchId,
@@ -109,7 +118,7 @@ public class DbSynchronisationUseCaseService {
             if (isChanged && !isDispatchMarked) {
                 if (txM.isPresent()) {
                     TransactionEntity attached = txM.orElseThrow();
-                    batchesToBeUpdated.add(attached.getBatchId());
+                    batchesToBeUpdated.addAll(attached.getBatches().stream().map(TransactionBatchEntity::getId).collect(Collectors.toSet()));
                     transactionConverter.copyFields(attached, incomingTx);
                     attached.getAllItems().clear();
                     attached.getAllItems().addAll(incomingTx.getAllItems());
@@ -123,8 +132,14 @@ public class DbSynchronisationUseCaseService {
         raiseViolationForAlreadyProcessedTransactions(txsAlreadyStored);
 
         storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
+        // Atomically read, compute and write the transaction count for the batch
+        Integer totalProcessTx = batchTransactionCountCache.asMap().compute(batchId, (key, oldVal) -> {
+            int current = (oldVal == null) ? 0 : oldVal;
+            return current + toProcessTransactions.size();
+        });
+        log.info("Batch transaction count for batchId: {}, totalProcessTx: {}", batchId, totalProcessTx);
         // we don't need to pass in Transactions, since we just saved them and the status was updated
-        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalTransactionsCount, Optional.empty());
+        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalProcessTx, Optional.empty());
         batchesToBeUpdated.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
     }
 

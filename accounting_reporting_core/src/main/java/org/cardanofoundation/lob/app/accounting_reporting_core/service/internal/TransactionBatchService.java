@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -24,6 +23,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Fatal
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.BatchStatistics;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Details;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.FilteringParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchAssocEntity;
@@ -36,7 +36,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
-import org.cardanofoundation.lob.app.support.reactive.Debouncer;
 import org.cardanofoundation.lob.app.support.reactive.DebouncerManager;
 import org.cardanofoundation.lob.app.support.spring_audit.internal.AuditorContext;
 
@@ -55,7 +54,7 @@ public class TransactionBatchService {
     private final DebouncerManager debouncerManager;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
-    @Value("${batch.stats.debounce.duration:PT10S}")
+    @Value("${batch.stats.debounce.duration:PT5S}")
     private Duration batchStatsDebounceDuration;
 
     public Optional<TransactionBatchEntity> findById(String batchId) {
@@ -102,15 +101,7 @@ public class TransactionBatchService {
     public void updateTransactionBatchStatusAndStats(String batchId,
                                                      @Nullable Integer totalTransactionsCount,
                                                      Optional<Set<TransactionEntity>> entities) {
-        try {
-            Debouncer debouncer = debouncerManager.getDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.ofNullable(totalTransactionsCount), entities), batchStatsDebounceDuration);
-
-            debouncer.call();
-        } catch (ExecutionException e) {
-            log.warn("Error while getting debouncer for batchId: {}", batchId, e);
-
-            invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.ofNullable(totalTransactionsCount), entities);
-        }
+        debouncerManager.callInNewDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.ofNullable(totalTransactionsCount), entities), batchStatsDebounceDuration);
     }
 
     @Transactional(propagation = SUPPORTS)
@@ -172,6 +163,21 @@ public class TransactionBatchService {
         int totalTransactionsCount = totalTransactionsCountO.orElse(batchStatisticsView.getTotal());
         txBatch.setBatchStatistics(batchStatisticsView.toBatchStatistics(totalTransactionsCount));
         txBatch.setStatus(txBatchStatusCalculator.reCalcStatus(batchStatisticsView, totalTransactionsCount));
+
+        // If the status is Finalized, this means we processed all transactions from ERP
+        // In case we dropped duplicate transactions, we will normalize the total transaction count
+        if(txBatch.getStatus() == FINALIZED) {
+            Optional<BatchStatistics> statistics = txBatch.getBatchStatistics();
+            statistics.ifPresent(batchStatistics -> {
+                int total = batchStatistics.getInvalidTransactions()
+                        + batchStatistics.getApprovedTransactions()
+                        + batchStatistics.getPendingTransactions()
+                        + batchStatistics.getReadyToApproveTransactions();
+                batchStatistics.setTotal(total);
+                batchStatistics.setProcessedTransactions(total);
+                txBatch.setBatchStatistics(batchStatistics);
+            });
+        }
         transactionBatchRepository.save(txBatch);
 
 

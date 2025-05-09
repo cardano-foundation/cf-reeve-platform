@@ -59,7 +59,8 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
 
     @Query("""
     SELECT t FROM accounting_reporting_core.TransactionEntity t
-    WHERE t.batchId = :batchId
+    JOIN t.batches b
+    WHERE b.id = :batchId
     AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
     """)
     Page<TransactionEntity> findAllByBatchId(
