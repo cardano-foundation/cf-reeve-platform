@@ -695,7 +695,7 @@ public class ReportService {
 
             totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate);
             totalAmount = addValuesFromReportFields(field, endDate, totalAmount, startSearchDate);
-            if(field.getReport().getName().equals("INCOME_STATEMENT")) {
+            if (field.isNegate()) {
                 totalAmount = totalAmount.negate();
             }
             // Set value dynamically in reportData
@@ -788,7 +788,9 @@ public class ReportService {
         // adding Opening Balance if the startDate is before the OpeningBalance Date
         totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
                 BigDecimal.ZERO :
-                organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ?
+                // adding one day since we want to have a isAfter or Equal to the start date
+                organisationChartOfAccount.getOpeningBalance().getDate().plusDays(1).isAfter(startSearchDate.get())
+                        && organisationChartOfAccount.getOpeningBalance().getDate().minusDays(1).isBefore(endDate) ?
                         Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceType()).orElse(OperationType.DEBIT) == OperationType.DEBIT ?
                                 Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO) :
                                 Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO).negate()

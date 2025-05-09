@@ -74,6 +74,7 @@ public class ReportTypeFieldEntity extends CommonEntity {
     private boolean accumulated; // Accumulated at all or is it checked period by period
     private boolean accumulatedYearly; // Is it accumulated Yearly and only taking care of the current year
     private boolean accumulatedPreviousYear; // Is it accumulated Yearly and only taking care of the previous year
+    private boolean negate; // Negate the value
 
     @ManyToOne
     @JoinColumn(name = "report_id", nullable = false)
