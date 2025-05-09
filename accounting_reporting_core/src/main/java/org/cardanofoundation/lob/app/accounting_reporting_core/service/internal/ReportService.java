@@ -28,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
+import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -785,7 +786,11 @@ public class ReportService {
         // adding Opening Balance if the startDate is before the OpeningBalance Date
         totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
                 BigDecimal.ZERO :
-                organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ? Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO) : BigDecimal.ZERO)
+                organisationChartOfAccount.getOpeningBalance().getDate().isAfter(startSearchDate.get()) ?
+                        Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceType()).orElse(OperationType.DEBIT) == OperationType.DEBIT ?
+                                Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO) :
+                                Optional.ofNullable(organisationChartOfAccount.getOpeningBalance().getBalanceLCY()).orElse(BigDecimal.ZERO).negate()
+                        : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
 
         // Finding all transaction items that are related to these ChartOfAccounts and fall within the specified date range
