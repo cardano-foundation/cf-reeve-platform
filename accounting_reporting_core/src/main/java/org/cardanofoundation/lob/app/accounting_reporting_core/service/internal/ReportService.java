@@ -28,7 +28,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
-import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +51,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
