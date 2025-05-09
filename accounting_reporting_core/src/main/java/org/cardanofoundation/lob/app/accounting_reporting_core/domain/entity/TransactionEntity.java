@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 
 import javax.annotation.Nullable;
 
@@ -53,6 +54,15 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Getter
     @Setter
     private String transactionInternalNumber;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "accounting_core_transaction_batch_assoc",
+            joinColumns = @JoinColumn(name = "transaction_id"),
+            inverseJoinColumns = @JoinColumn(name = "transaction_batch_id"))
+    @NotNull
+    @Getter
+    private Set<TransactionBatchEntity> batches = new LinkedHashSet<>();
 
     @Column(name = "batch_id", nullable = false)
     @DiffIgnore

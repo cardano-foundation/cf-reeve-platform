@@ -38,4 +38,14 @@ public class DebouncerManager {
         debouncerCache.cleanUp();
     }
 
+    public void callInNewDebouncer(String id, Runnable task, Duration delay) {
+        debouncerCache.asMap().compute(id, (key, existing) -> {
+            if (existing != null) {
+                existing.shutdown(); // Cancel existing task
+            }
+            Debouncer newDebouncer = new Debouncer(task, delay, transactionalTaskRunner);
+            newDebouncer.call(); // Schedule the new task
+            return newDebouncer;
+        });
+    }
 }

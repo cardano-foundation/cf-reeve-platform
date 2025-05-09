@@ -571,6 +571,36 @@ public class ReportService {
         return Either.right(true);
     }
 
+    public Set<ReportEntity> findReportsInDateRange(String organisationId,
+                                                   ReportType reportType,
+                                                    Optional<LocalDate> startDateO, Optional<LocalDate> endDateO) {
+        LocalDate startDate = startDateO.orElse(LocalDate.EPOCH);
+        LocalDate endDate = endDateO.orElse(LocalDate.now(clock));
+        Set<ReportEntity> reportEntities = reportRepository.findByTypeAndWithinYearRange(organisationId, reportType, startDate.getYear(), endDate.getYear());
+
+        // filtering by dates
+        reportEntities = reportEntities.stream().filter(reportEntity -> {
+            LocalDate reportStartDate = getStartDate(reportEntity.getIntervalType(), reportEntity.getPeriod().orElse((short) 0), reportEntity.getYear());
+            LocalDate reportEndDate = getEndDate(reportEntity.getIntervalType(), reportStartDate);
+            return reportStartDate.plusDays(1).isAfter(startDate) && reportEndDate.minusDays(1).isBefore(endDate);
+        }).collect(Collectors.toSet());
+        // filtering if there is bigger interval already included means if this report is for jan'24 and there is a report for Q1'24, we don't need the january one
+        Set<ReportEntity> finalReportEntities = reportEntities;
+        reportEntities = reportEntities.stream().filter(reportEntity -> {
+            if(reportEntity.getIntervalType() == MONTH) {
+                if(reportEntity.getPeriod().isEmpty()) {
+                    return false;
+                }
+                int quarter = (reportEntity.getPeriod().get() - 1) / 3 + 1;
+                return finalReportEntities.stream().filter(r -> r.getIntervalType() == QUARTER && r.getPeriod().isPresent() && r.getPeriod().get() == quarter).findAny().isEmpty();
+            } else if (reportEntity.getIntervalType() == QUARTER) {
+                return finalReportEntities.stream().filter(r -> r.getIntervalType() == YEAR && Objects.equals(r.getYear(), reportEntity.getYear())).findAny().isEmpty();
+            }
+            return true;
+        }).collect(Collectors.toSet());
+        return reportEntities;
+    }
+
     private ReportEntity newReport() {
         ReportEntity report = new ReportEntity();
         report.setVer(clock.millis());
