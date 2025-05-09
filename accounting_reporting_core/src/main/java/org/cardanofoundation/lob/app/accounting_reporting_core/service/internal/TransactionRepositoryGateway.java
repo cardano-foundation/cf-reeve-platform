@@ -7,6 +7,7 @@ import static org.zalando.problem.Status.METHOD_NOT_ALLOWED;
 
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rejection;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
@@ -130,7 +132,7 @@ public class TransactionRepositoryGateway {
             try {
                 Either<IdentifiableProblem, TransactionEntity> transactionEntities = approveTransaction(transactionId.getId());
                 if(transactionEntities.isRight()) {
-                    batchIds.add(transactionEntities.get().getBatchId());
+                    batchIds.addAll(transactionEntities.get().getBatches().stream().map(TransactionBatchEntity::getId).collect(Collectors.toSet()));
                 }
                 transactionsApprovalResponseListE.add(transactionEntities);
             } catch (DataAccessException dae) {
@@ -153,6 +155,7 @@ public class TransactionRepositoryGateway {
         Set<TransactionsRequest.TransactionId> transactionIds = transactionsRequest.getTransactionIds();
 
         ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
+
         for (TransactionsRequest.TransactionId transactionId : transactionIds) {
             try {
                 Either<IdentifiableProblem, TransactionEntity> transactionEntities = approveTransactionsDispatch(transactionId.getId());
@@ -166,11 +169,10 @@ public class TransactionRepositoryGateway {
                 transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
             }
         }
-
-        transactionsApprovalResponseListE.stream().filter(Either::isRight).forEach(e -> {
-            TransactionEntity transaction = e.get();
-            transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(transaction.getBatchId(), Optional.empty(), Optional.empty());
-        });
+        // updating all batches
+        transactionsApprovalResponseListE.stream().filter(Either::isRight)
+                .flatMap(txEntity -> txEntity.get().getBatches().stream().map(TransactionBatchEntity::getId)).collect(Collectors.toSet())
+                .forEach(batchId -> transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
 
         return transactionsApprovalResponseListE;
     }
@@ -207,7 +209,9 @@ public class TransactionRepositoryGateway {
         // Updating the transaction batch status and stats
         tx.updateProcessingStatus();
         accountingCoreTransactionRepository.save(tx);
-        transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(tx.getBatchId(), Optional.empty(), Optional.empty());
+        tx.getBatches().forEach(batch -> {
+            transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(batch.getId(), Optional.empty(), Optional.empty());
+        });
 
         return transactionItemEntitiesE;
     }
