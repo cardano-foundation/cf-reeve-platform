@@ -27,6 +27,7 @@ import com.google.common.cache.CacheBuilder;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchAssocEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
@@ -124,7 +125,7 @@ public class DbSynchronisationUseCaseService {
             if (isChanged && !isDispatchMarked) {
                 if (txM.isPresent()) {
                     TransactionEntity attached = txM.orElseThrow();
-                    batchesToBeUpdated.add(attached.getBatchId());
+                    batchesToBeUpdated.addAll(attached.getBatches().stream().map(TransactionBatchEntity::getId).collect(Collectors.toSet()));
                     transactionConverter.copyFields(attached, incomingTx);
                     attached.getAllItems().clear();
                     attached.getAllItems().addAll(incomingTx.getAllItems());
