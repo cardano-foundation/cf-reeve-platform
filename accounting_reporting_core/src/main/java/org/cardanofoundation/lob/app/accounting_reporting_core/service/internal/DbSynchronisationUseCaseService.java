@@ -13,8 +13,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import jakarta.annotation.PostConstruct;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -45,15 +43,10 @@ public class DbSynchronisationUseCaseService {
     private final TransactionItemRepository transactionItemRepository;
     private final TransactionBatchAssocRepository transactionBatchAssocRepository;
     private final TransactionBatchService transactionBatchService;
-    private Cache<String, Integer> batchTransactionCountCache;
-
-    @PostConstruct
-    public void init() {
-        batchTransactionCountCache = CacheBuilder.newBuilder()
-                .expireAfterWrite(1, TimeUnit.MINUTES)
+    private final Cache<String, Integer> batchTransactionCountCache = CacheBuilder.newBuilder()
+            .expireAfterWrite(1, TimeUnit.MINUTES)
                 .expireAfterAccess(10, TimeUnit.MINUTES)
                 .build();
-    }
 
     @Transactional
     public void execute(String batchId,
