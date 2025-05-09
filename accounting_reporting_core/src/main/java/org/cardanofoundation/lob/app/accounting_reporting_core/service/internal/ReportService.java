@@ -695,9 +695,11 @@ public class ReportService {
 
             totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate);
             totalAmount = addValuesFromReportFields(field, endDate, totalAmount, startSearchDate);
-
+            if(field.getReport().getName().equals("INCOME_STATEMENT")) {
+                totalAmount = totalAmount.negate();
+            }
             // Set value dynamically in reportData
-            setFieldValue(reportData, field.getName(), totalAmount.abs());
+            setFieldValue(reportData, field.getName(), totalAmount);
         } else {
             LocalDate finalEndDate = endDate;
             field.getChildFields().forEach(subField -> {
