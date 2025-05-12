@@ -38,14 +38,17 @@ jobs:
       - name: SonarCloud Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
+          SONAR_PR_KEY: ${{ github.event.pull_request.number }}
+          SONAR_PR_BRANCH: ${{ github.head_ref }}
+          SONAR_PR_BASE: ${{ github.base_ref }}
         run: |
           ./gradlew sonar \
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.organization=cardano-foundation \
           -Dsonar.projectKey=cardano-foundation_cf-lob-platform \
-          -Dsonar.pullrequest.key=${{github.event.pull_request.number}} \
-          -Dsonar.pullrequest.branch=${{github.head_ref}} \
-          -Dsonar.pullrequest.base=${{ github.base_ref }} \
+          -Dsonar.pullrequest.key=$SONAR_PR_KEY \
+          -Dsonar.pullrequest.branch=$SONAR_PR_BRANCH \
+          -Dsonar.pullrequest.base=$SONAR_PR_BASE
   mutation-test-organisation:
     needs: test
     runs-on: ubuntu-latest
