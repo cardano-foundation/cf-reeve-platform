@@ -44,7 +44,9 @@ jobs:
           -Dsonar.host.url=https://sonarcloud.io \
           -Dsonar.organization=cardano-foundation \
           -Dsonar.projectKey=cardano-foundation_cf-lob-platform \
-          -Dsonar.branch.name=${{ github.head_ref }}
+          -Dsonar.pullrequest.key=${{github.event.pull_request.number}} \
+          -Dsonar.pullrequest.branch=${{github.head_ref}} \
+          -Dsonar.pullrequest.base=${{github.base_ref}} \
   mutation-test-organisation:
     needs: test
     runs-on: ubuntu-latest
