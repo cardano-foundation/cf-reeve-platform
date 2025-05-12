@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -46,7 +47,7 @@ public class AccountEventController {
             ),
     })
     @GetMapping(value = "/{orgId}/event-codes", produces = "application/json")
-    public ResponseEntity<?> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<List<AccountEventView>> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(eventCodeService.getAllAccountEvent(orgId));
 
     }
