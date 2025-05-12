@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -55,9 +56,9 @@ class OrganisationResourceTest {
 
         ResponseEntity<List<OrganisationView>> listResponseEntity =
                 organisationResource.organisationList(Optional.of(new String[]{"123"}));
-        assertEquals(200, listResponseEntity.getStatusCodeValue());
-        assertEquals(1, listResponseEntity.getBody().size());
-        assertEquals(view, listResponseEntity.getBody().get(0));
+        assertEquals(200, listResponseEntity.getStatusCode().value());
+        assertEquals(1, Objects.requireNonNull(listResponseEntity.getBody()).size());
+        assertEquals(view, listResponseEntity.getBody().getFirst());
 
     }
 
@@ -67,7 +68,7 @@ class OrganisationResourceTest {
 
         ResponseEntity<?> responseEntity = organisationResource.organisationDetailSpecific("123");
 
-        assertEquals(404, responseEntity.getStatusCodeValue());
+        assertEquals(404, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -79,7 +80,7 @@ class OrganisationResourceTest {
 
         ResponseEntity<?> responseEntity = organisationResource.organisationDetailSpecific("123");
 
-        assertEquals(200, responseEntity.getStatusCodeValue());
+        assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(Optional.of(view), responseEntity.getBody());
     }
 
@@ -93,8 +94,8 @@ class OrganisationResourceTest {
             mock.when(() -> OrganisationCostCenterView.fromEntity(costCenter)).thenReturn(view);
             ResponseEntity<Set<OrganisationCostCenterView>> responseEntity = organisationResource.organisationCostCenter("123");
 
-            assertEquals(200, responseEntity.getStatusCodeValue());
-            assertEquals(1, responseEntity.getBody().size());
+            assertEquals(200, responseEntity.getStatusCode().value());
+            assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
             assertEquals(view, responseEntity.getBody().iterator().next());
         }
     }
@@ -109,8 +110,8 @@ class OrganisationResourceTest {
             mock.when(() -> OrganisationProjectView.fromEntity(project)).thenReturn(view);
             ResponseEntity<Set<OrganisationProjectView>> responseEntity = organisationResource.organisationProject("123");
 
-            assertEquals(200, responseEntity.getStatusCodeValue());
-            assertEquals(1, responseEntity.getBody().size());
+            assertEquals(200, responseEntity.getStatusCode().value());
+            assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
             assertEquals(view, responseEntity.getBody().iterator().next());
         }
     }
@@ -123,9 +124,9 @@ class OrganisationResourceTest {
                         .customerCode("Test Code")
                 .build()));
         ResponseEntity<List<OrganisationEventView>> responseEntity = organisationResource.organisationEvent("123");
-        assertEquals(200, responseEntity.getStatusCodeValue());
-        assertEquals(1, responseEntity.getBody().size());
-        assertEquals("Test Event", responseEntity.getBody().get(0).getName());
+        assertEquals(200, responseEntity.getStatusCode().value());
+        assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
+        assertEquals("Test Event", responseEntity.getBody().getFirst().getName());
 
     }
 
@@ -135,8 +136,8 @@ class OrganisationResourceTest {
                 Set.of(new OrganisationCurrency(new OrganisationCurrency.Id("123", "456"), "Test Currency")));
         ResponseEntity<Set<OrganisationCurrencyView>> responseEntity = organisationResource.organisationCurrencies("123");
 
-        assertEquals(200, responseEntity.getStatusCodeValue());
-        assertEquals(1, responseEntity.getBody().size());
+        assertEquals(200, responseEntity.getStatusCode().value());
+        assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
         assertEquals("456", responseEntity.getBody().iterator().next().getCustomerCode());
     }
 
@@ -149,7 +150,7 @@ class OrganisationResourceTest {
         when(organisationService.findById("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9")).thenReturn(Optional.of(org));
 
         ResponseEntity<?> responseEntity = organisationResource.organisationCreate(request);
-        assertEquals(404, responseEntity.getStatusCodeValue());
+        assertEquals(404, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -160,7 +161,7 @@ class OrganisationResourceTest {
         when(organisationService.createOrganisation(request)).thenReturn(Optional.empty());
         when(organisationService.findById("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9")).thenReturn(Optional.empty());
         ResponseEntity<?> responseEntity = organisationResource.organisationCreate(request);
-        assertEquals(404, responseEntity.getStatusCodeValue());
+        assertEquals(404, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -175,7 +176,7 @@ class OrganisationResourceTest {
         when(organisationService.getOrganisationView(organisation)).thenReturn(view);
 
         ResponseEntity<?> responseEntity = organisationResource.organisationCreate(request);
-        assertEquals(200, responseEntity.getStatusCodeValue());
+        assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(view, responseEntity.getBody());
     }
 
@@ -186,7 +187,7 @@ class OrganisationResourceTest {
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
-        assertEquals(404, responseEntity.getStatusCodeValue());
+        assertEquals(404, responseEntity.getStatusCode().value());
 
     }
 
@@ -198,7 +199,7 @@ class OrganisationResourceTest {
         when(organisationService.upsertOrganisation(org, request)).thenReturn(Optional.empty());
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
-        assertEquals(404, responseEntity.getStatusCodeValue());
+        assertEquals(404, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -211,7 +212,7 @@ class OrganisationResourceTest {
         when(organisationService.getOrganisationView(org)).thenReturn(view);
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
-        assertEquals(200, responseEntity.getStatusCodeValue());
+        assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(view, responseEntity.getBody());
     }
 
@@ -220,7 +221,7 @@ class OrganisationResourceTest {
         when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
 
         ResponseEntity<?> responseEntity = organisationResource.validateOrganisation("123");
-        assertEquals(403, responseEntity.getStatusCodeValue());
+        assertEquals(403, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -229,7 +230,7 @@ class OrganisationResourceTest {
         when(organisationService.findById("123")).thenReturn(Optional.empty());
 
         ResponseEntity<?> responseEntity = organisationResource.validateOrganisation("123");
-        assertEquals(404, responseEntity.getStatusCodeValue());
+        assertEquals(404, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -240,7 +241,7 @@ class OrganisationResourceTest {
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.validateOrganisation(org)).thenReturn(validationView);
         ResponseEntity<?> responseEntity = organisationResource.validateOrganisation("123");
-        assertEquals(200, responseEntity.getStatusCodeValue());
+        assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(validationView, responseEntity.getBody());
     }
 
