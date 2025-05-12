@@ -745,6 +745,7 @@ public class ReportService {
     private BigDecimal addValuesFromReportFields(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate) {
         List<ReportTypeFieldEntity> mappingReportTypes = field.getMappingReportTypes();
         for(ReportTypeFieldEntity mappedTypeField : mappingReportTypes) {
+            log.info("test123");
 
             // getting all reports for the selected years and filtering them to see if the interval is within the selected date range
             // I'm doing it in code currently to keep it as simple as possible, since the logic is already complex
