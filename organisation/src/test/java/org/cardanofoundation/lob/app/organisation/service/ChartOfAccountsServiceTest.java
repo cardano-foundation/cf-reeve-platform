@@ -361,8 +361,6 @@ class ChartOfAccountsServiceTest {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
-        when(organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
-                .thenReturn(Optional.of(subType));
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode()))
                 .thenReturn(Optional.empty());
 
