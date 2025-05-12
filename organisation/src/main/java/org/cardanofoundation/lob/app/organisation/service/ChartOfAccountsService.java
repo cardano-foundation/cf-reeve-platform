@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
@@ -50,23 +51,51 @@ public class ChartOfAccountsService {
         return chartOfAccountRepository.findAllByOrganisationId(organisationId).stream().map(OrganisationChartOfAccountView::createSuccess).collect(Collectors.toSet());
     }
 
-    @Transactional
-    public OrganisationChartOfAccountView updateChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
-
+    private Either<OrganisationChartOfAccountView, Void> validateOrganisationAndEvent(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
-            return OrganisationChartOfAccountView.createFail(Problem.builder()
+            return Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build()));
         }
 
         Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
         if (referenceCode.isEmpty()) {
-            return OrganisationChartOfAccountView.createFail(Problem.builder()
+            return Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getEventRefCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build()));
+        }
+
+        if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
+            Optional<OrganisationChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
+            if (parentChartOfAccount.isEmpty()) {
+                return Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("PARENT_ACCOUNT_NOT_FOUND")
+                        .withDetail(STR."Unable to find the parent chart of account with code :\{chartOfAccountUpdate.getParentCustomerCode()}")
+                        .withStatus(Status.NOT_FOUND)
+                        .build()));
+            }
+        }
+        return Either.right(null);
+    }
+
+    @Transactional
+    public OrganisationChartOfAccountView updateChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+
+        Either<OrganisationChartOfAccountView, Void> voids = validateOrganisationAndEvent(orgId, chartOfAccountUpdate);
+        if(voids.isLeft()) {
+            return voids.getLeft();
+        }
+
+        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
+        if (chartOfAccountOpt.isEmpty()) {
+            return OrganisationChartOfAccountView.createFail(Problem.builder()
+                    .withTitle("CHART_OF_ACCOUNT_NOT_FOUND")
+                    .withDetail(STR."Unable to find the chart of account with code :\{chartOfAccountUpdate.getCustomerCode()}")
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -77,26 +106,6 @@ public class ChartOfAccountsService {
             return OrganisationChartOfAccountView.createFail(Problem.builder()
                     .withTitle("SUBTYPE_NOT_FOUND")
                     .withDetail(STR."Unable to find subtype code :\{chartOfAccountUpdate.getSubType()}")
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
-        }
-
-        if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
-            Optional<OrganisationChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
-            if (parentChartOfAccount.isEmpty()) {
-                return OrganisationChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("PARENT_ACCOUNT_NOT_FOUND")
-                        .withDetail(STR."Unable to find the parent chart of account with code :\{chartOfAccountUpdate.getParentCustomerCode()}")
-                        .withStatus(Status.NOT_FOUND)
-                        .build());
-            }
-        }
-
-        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
-        if (chartOfAccountOpt.isEmpty()) {
-            return OrganisationChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("CHART_OF_ACCOUNT_NOT_FOUND")
-                    .withDetail(STR."Unable to find the chart of account with code :\{chartOfAccountUpdate.getCustomerCode()}")
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -120,21 +129,17 @@ public class ChartOfAccountsService {
     @Transactional
     public OrganisationChartOfAccountView insertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
 
-        Optional<Organisation> organisationChe = organisationService.findById(orgId);
-        if (organisationChe.isEmpty()) {
-            return OrganisationChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+        Either<OrganisationChartOfAccountView, Void> voids = validateOrganisationAndEvent(orgId, chartOfAccountUpdate);
+        if(voids.isLeft()) {
+            return voids.getLeft();
         }
 
-        Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
-        if (referenceCode.isEmpty()) {
+        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
+        if (chartOfAccountOpt.isPresent()) {
             return OrganisationChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getEventRefCode()}")
-                    .withStatus(Status.NOT_FOUND)
+                    .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
+                    .withDetail(STR."The chart of account with code :\{chartOfAccountUpdate.getCustomerCode()} already exists")
+                    .withStatus(Status.CONFLICT)
                     .build());
         }
 
@@ -145,26 +150,6 @@ public class ChartOfAccountsService {
                     .withTitle("SUBTYPE_NOT_FOUND")
                     .withDetail(STR."Unable to find subtype code :\{chartOfAccountUpdate.getSubType()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
-        }
-
-        if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
-            Optional<OrganisationChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
-            if (parentChartOfAccount.isEmpty()) {
-                return OrganisationChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("PARENT_ACCOUNT_NOT_FOUND")
-                        .withDetail(STR."Unable to find the parent chart of account with code :\{chartOfAccountUpdate.getParentCustomerCode()}")
-                        .withStatus(Status.NOT_FOUND)
-                        .build());
-            }
-        }
-
-        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
-        if (chartOfAccountOpt.isPresent()) {
-            return OrganisationChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
-                    .withDetail(STR."The chart of account with code :\{chartOfAccountUpdate.getCustomerCode()} already exists")
-                    .withStatus(Status.CONFLICT)
                     .build());
         }
 
