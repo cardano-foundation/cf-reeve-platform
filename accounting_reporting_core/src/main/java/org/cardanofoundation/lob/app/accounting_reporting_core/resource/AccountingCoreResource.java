@@ -7,12 +7,16 @@ import static org.zalando.problem.Status.OK;
 import java.util.List;
 import java.util.Optional;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.vavr.control.Either;
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -78,7 +82,7 @@ public class AccountingCoreResource {
     public ResponseEntity<?> transactionDetailSpecific(@Valid @PathVariable("id") @Parameter(example = "7e9e8bcbb38a283b41eab57add98278561ab51d23a16f3e3baf3daa461b84ab4") String id) {
         Optional<TransactionView> transactionEntity = accountingCorePresentationService.transactionDetailSpecific(id);
         if (transactionEntity.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("TX_NOT_FOUND")
                     .withDetail(STR."Transaction with id: {\{id}} could not be found")
                     .withStatus(NOT_FOUND)
@@ -98,10 +102,10 @@ public class AccountingCoreResource {
     })
     @GetMapping(value = "/transaction-types", produces = APPLICATION_JSON_VALUE, name = "Transaction types")
     public ResponseEntity<String> transactionType() throws JsonProcessingException {
-        val jsonArray = objectMapper.createArrayNode();
+        ArrayNode jsonArray = objectMapper.createArrayNode();
 
-        for (val transactionType : TransactionType.values()) {
-            val jsonObject = objectMapper.createObjectNode();
+        for (TransactionType transactionType : TransactionType.values()) {
+            ObjectNode jsonObject = objectMapper.createObjectNode();
             jsonObject.put("id", transactionType.name());
             jsonObject.put("title", transactionType.name().replaceAll("(\\p{Lower})(\\p{Upper})", "$1 $2"));
 
@@ -133,10 +137,10 @@ public class AccountingCoreResource {
     })
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> extractionTrigger(@Valid @RequestBody ExtractionRequest body) {
-        val orgM = organisationPublicApi.findByOrganisationId(body.getOrganisationId());
+        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(body.getOrganisationId());
 
         if (orgM.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{body.getOrganisationId()}")
                     .withStatus(NOT_FOUND)
@@ -145,9 +149,9 @@ public class AccountingCoreResource {
             return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
         }
 
-        val org = orgM.orElseThrow();
+        Organisation org = orgM.orElseThrow();
 
-        val extractionResultE = accountingCorePresentationService.extractionTrigger(body);
+        Either<Problem, Void> extractionResultE = accountingCorePresentationService.extractionTrigger(body);
 
         return extractionResultE.fold(
                 problem -> {
@@ -158,7 +162,7 @@ public class AccountingCoreResource {
                 success -> {
                     log.info("Extraction triggered successfully for organisation: {}", org.getId());
 
-                    val response = objectMapper.createObjectNode();
+                    ObjectNode response = objectMapper.createObjectNode();
 
                     response.put("event", "EXTRACTION");
                     response.put("message", "We have received your extraction request now. Please review imported transactions from the batch list.");
@@ -181,7 +185,7 @@ public class AccountingCoreResource {
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<TransactionProcessView>> approveTransactions(@Valid @RequestBody TransactionsRequest transactionsRequest) {
-        val transactionProcessViews = accountingCorePresentationService.approveTransactions(transactionsRequest);
+        List<TransactionProcessView> transactionProcessViews = accountingCorePresentationService.approveTransactions(transactionsRequest);
 
         return ResponseEntity
                 .status(HttpStatusCode.valueOf(OK.getStatusCode()))
@@ -199,7 +203,7 @@ public class AccountingCoreResource {
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
     public ResponseEntity<List<TransactionProcessView>> approveTransactionsPublish(@Valid @RequestBody TransactionsRequest transactionsRequest) {
-        val transactionProcessViewList = accountingCorePresentationService.approveTransactionsPublish(transactionsRequest);
+        List<TransactionProcessView> transactionProcessViewList = accountingCorePresentationService.approveTransactionsPublish(transactionsRequest);
 
         return ResponseEntity
                 .status(HttpStatusCode.valueOf(OK.getStatusCode()))
