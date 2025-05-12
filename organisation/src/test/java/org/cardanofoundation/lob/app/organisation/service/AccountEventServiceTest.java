@@ -170,6 +170,59 @@ class AccountEventServiceTest {
         verify(accountEventRepository, never()).save(any());
     }
 
+    // tests for upsert
+    @Test
+    void testUpsertReferenceCode_Successful() {
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.of(mockDebitReference));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.of(mockCreditReference));
+        when(accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE))
+                .thenReturn(Optional.of(mockAccountEvent));
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+        when(accountEventRepository.save(any(AccountEvent.class))).thenReturn(mockAccountEvent);
+
+
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Updated Name", result.getDescription());
+        verify(accountEventRepository).save(any(AccountEvent.class));
+    }
+
+    @Test
+    void testUpsertReferenceCode_FailsWhenDebitReferenceMissing() {
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("REFERENCE_CODE_NOT_FOUND", result.getError().get().getTitle());
+        verify(accountEventRepository, never()).save(any());
+    }
+
+    @Test
+    void testUpsertReferenceCode_FailsWhenCreditReferenceMissing() {
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.of(mockDebitReference));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.empty());
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("REFERENCE_CODE_NOT_FOUND", result.getError().get().getTitle());
+        verify(accountEventRepository, never()).save(any());
+    }
+
+    @Test
+    void testUpdsertReferenceCode_FailsWhenOrganisationMissing() {
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.empty());
+
+        AccountEventView result = accountEventService.upsertAccountEvent(ORG_ID, mockEventCodeUpdate);
+
+        assertTrue(result.getError().isPresent());
+        verify(accountEventRepository, never()).save(any());
+    }
+
     //new
 
     @Test
