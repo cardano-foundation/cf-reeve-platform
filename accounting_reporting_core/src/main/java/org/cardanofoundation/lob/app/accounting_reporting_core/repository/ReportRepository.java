@@ -75,6 +75,4 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
              AND r.ledgerDispatchStatus = 'FINALIZED'
             """)
     Set<ReportEntity> findByTypeAndWithinYearRange(@Param("organisationId") String organisationId, @Param("reportType") ReportType reportType, @Param("startYear") int startYear, @Param("endYear") int endYear);
-
-
 }

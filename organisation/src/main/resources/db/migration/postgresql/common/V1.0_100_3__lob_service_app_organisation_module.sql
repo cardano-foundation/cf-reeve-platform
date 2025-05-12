@@ -464,6 +464,8 @@ CREATE TABLE organisation_report_setup_field (
     name VARCHAR(255) NOT NULL,
     accumulated BOOLEAN NOT NULL,
     accumulated_yearly BOOLEAN NOT NULL,
+    accumulated_previous_year BOOLEAN NOT NULL,
+    negate BOOLEAN NOT NULL,
     report_id BIGINT,
     parent_id BIGINT,
     created_by VARCHAR(255),
@@ -480,6 +482,8 @@ CREATE TABLE organisation_report_setup_field_aud (
     name VARCHAR(255) NOT NULL,
     accumulated BOOLEAN NOT NULL,
     accumulated_yearly BOOLEAN NOT NULL,
+    accumulated_previous_year BOOLEAN NOT NULL,
+    negate BOOLEAN NOT NULL,
     report_id BIGINT,
     parent_id BIGINT,
     created_by VARCHAR(255),
@@ -517,4 +521,26 @@ CREATE TABLE organisation_report_setup_field_subtype_mapping_aud (
 
     -- Primary Key for the audit table
     CONSTRAINT pk_organisation_setup_field_subtype_mapping_aud PRIMARY KEY (field_id, sub_type_id)
+);
+
+CREATE  TABLE organisation_report_setup_field_report_field_mapping (
+    field_id BIGINT NOT NULL,
+    report_field_id BIGINT NOT NULL,
+    PRIMARY KEY (field_id, report_field_id),
+    FOREIGN KEY (field_id) REFERENCES organisation_report_setup_field(id) ON DELETE CASCADE,
+    FOREIGN KEY (report_field_id) REFERENCES organisation_report_setup_field(id) ON DELETE CASCADE
+);
+
+CREATE  TABLE organisation_report_setup_field_report_field_mapping_aud (
+    field_id BIGINT NOT NULL,
+    report_field_id BIGINT NOT NULL,
+    FOREIGN KEY (field_id) REFERENCES organisation_report_setup_field(id) ON DELETE CASCADE,
+    FOREIGN KEY (report_field_id) REFERENCES organisation_report_setup_field(id) ON DELETE CASCADE,
+
+    -- Special columns for audit tables
+    rev INTEGER NOT NULL,
+    revtype SMALLINT,
+
+    -- Primary Key for the audit table
+    CONSTRAINT pk_organisation_setup_field_report_field_mapping_aud PRIMARY KEY (field_id, report_field_id)
 );
