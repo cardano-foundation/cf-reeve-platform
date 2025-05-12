@@ -1,22 +1,24 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
-import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.util.List;
 import java.util.Optional;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.springframework.http.ResponseEntity;
+
+import org.mockito.*;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.*;
-import org.springframework.http.ResponseEntity;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 class AccountEventControllerTest {
 

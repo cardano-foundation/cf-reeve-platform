@@ -1,22 +1,22 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
-import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.*;
-import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
-import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
-import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.*;
-import org.springframework.http.ResponseEntity;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
 
 import java.util.*;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import org.springframework.http.ResponseEntity;
+
+import org.mockito.*;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
+import org.cardanofoundation.lob.app.organisation.domain.view.*;
+import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
 
 class ChartOfAccountControllerTest {
 
