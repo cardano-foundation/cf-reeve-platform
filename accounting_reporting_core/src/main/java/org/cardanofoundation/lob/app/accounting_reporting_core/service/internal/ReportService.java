@@ -585,21 +585,54 @@ public class ReportService {
             LocalDate reportEndDate = getEndDate(reportEntity.getIntervalType(), reportStartDate);
             return reportStartDate.plusDays(1).isAfter(startDate) && reportEndDate.minusDays(1).isBefore(endDate);
         }).collect(Collectors.toSet());
+        // sorting by Year, Quarter, Month
+        List<ReportEntity> sortedEntities = reportEntities.stream().sorted((o1, o2) -> {
+            if (!Objects.equals(o1.getYear(), o2.getYear())) {
+                return Integer.compare(o1.getYear(), o2.getYear());
+            }
+            if (o1.getIntervalType() != o2.getIntervalType()) {
+                return Integer.compare(o1.getIntervalType().ordinal(), o2.getIntervalType().ordinal());
+            }
+            return Integer.compare(o1.getPeriod().orElse((short) 1), o2.getPeriod().orElse((short) 1));
+        }).toList();
+
         // filtering if there is bigger interval already included means if this report is for jan'24 and there is a report for Q1'24, we don't need the january one
-        Set<ReportEntity> finalReportEntities = reportEntities;
-        reportEntities = reportEntities.stream().filter(reportEntity -> {
+        return sortedEntities.stream().filter(reportEntity -> {
+            // if the report is already a year, we don't need to check anything we just need to check if there is already a report for the same year with a higher version
+            if(reportEntity.getIntervalType() == YEAR) {
+                return sortedEntities.stream().filter(r -> r.getYear().equals(reportEntity.getYear()) && r.getVer() > reportEntity.getVer()).findAny().isEmpty();
+            }
+            // for quarters we need to check if there is a report for the same year or quarter with a higher version
+            if(reportEntity.getIntervalType() == QUARTER) {
+                if(reportEntity.getPeriod().isEmpty()) {
+                    return false;
+                }
+                return sortedEntities.stream().filter(r -> r.getIntervalType() == YEAR && r.getYear().equals(reportEntity.getYear())).findAny().isEmpty()
+                        && sortedEntities.stream().filter(r ->
+                                r.getIntervalType() == QUARTER
+                                && r.getPeriod().isPresent()
+                                && r.getPeriod().get().equals(reportEntity.getPeriod().get())
+                                && r.getVer() > reportEntity.getVer()).findAny().isEmpty();
+            }
+            // For months we need to check if there is a report for the same year or quarter or a month report with a higer version
             if(reportEntity.getIntervalType() == MONTH) {
                 if(reportEntity.getPeriod().isEmpty()) {
                     return false;
                 }
                 int quarter = (reportEntity.getPeriod().get() - 1) / 3 + 1;
-                return finalReportEntities.stream().filter(r -> r.getIntervalType() == QUARTER && r.getPeriod().isPresent() && r.getPeriod().get() == quarter).findAny().isEmpty();
-            } else if (reportEntity.getIntervalType() == QUARTER) {
-                return finalReportEntities.stream().filter(r -> r.getIntervalType() == YEAR && Objects.equals(r.getYear(), reportEntity.getYear())).findAny().isEmpty();
+                return sortedEntities.stream().filter(r -> r.getIntervalType() == YEAR && r.getYear().equals(reportEntity.getYear())).findAny().isEmpty()
+                        && sortedEntities.stream().filter(r ->
+                                        r.getIntervalType() == QUARTER
+                                        && r.getPeriod().isPresent()
+                                        && r.getPeriod().get() == quarter).findAny().isEmpty() &&
+                        sortedEntities.stream().filter(r ->
+                                        r.getIntervalType() == MONTH
+                                        && r.getPeriod().isPresent()
+                                        && r.getPeriod().get().equals(reportEntity.getPeriod().get())
+                                        && r.getVer() > reportEntity.getVer()).findAny().isEmpty();
             }
             return true;
         }).collect(Collectors.toSet());
-        return reportEntities;
     }
 
     private ReportEntity newReport() {
