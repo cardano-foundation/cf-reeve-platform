@@ -569,7 +569,7 @@ public class ReportService {
             }
         }
         // validate against generated report
-        ReportGenerateRequest reportGenerateRequest = new ReportGenerateRequest(reportEntity.getType(), reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod().orElse(null));
+        ReportGenerateRequest reportGenerateRequest = new ReportGenerateRequest(reportEntity.getType(), reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod().orElse((short)1));
         reportGenerateRequest.setOrganisationId(reportEntity.getOrganisation().getId());
         Either<Problem, ReportEntity> generatedReportE = reportGenerate(reportGenerateRequest);
         if (generatedReportE.isRight()) {
