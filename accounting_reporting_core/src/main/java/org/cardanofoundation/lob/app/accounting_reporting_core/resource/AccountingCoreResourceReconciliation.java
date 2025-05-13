@@ -60,11 +60,15 @@ public class AccountingCoreResourceReconciliation {
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @PostMapping(value = "/transactions-reconcile", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ReconciliationResponseView> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
+    public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @RequestParam(name = "page", defaultValue = "0") int page,
                                             @RequestParam(name = "limit", defaultValue = "10") int limit) {
         body.setLimit(limit);
         body.setPage(page);
+
+        if(body.getDateFrom().isPresent() && body.getDateTo().isPresent() && body.getDateFrom().get().isAfter(body.getDateTo().get())) {
+            return ResponseEntity.badRequest().body("The dateFrom must be before the dateTo");
+        }
 
         ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body);
 
