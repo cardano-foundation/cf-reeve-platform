@@ -3,6 +3,8 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.BALANCE_SHEET;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.INCOME_STATEMENT;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -10,6 +12,8 @@ import static org.mockito.Mockito.*;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.Month;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -20,6 +24,7 @@ import io.vavr.control.Either;
 import org.mockito.*;
 import org.zalando.problem.Problem;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -1269,6 +1274,192 @@ class ReportServiceTest {
         BalanceSheetData balanceSheetData = balanceSheetReportData.get();
         BigDecimal profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
         assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
+
+    }
+
+    @Test
+    void reportGenerate_generateNoChilds() {
+        String organisationId = "org-123";
+        ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        request.setOrganisationId(organisationId);
+        ReportTypeFieldEntity field = mock(ReportTypeFieldEntity.class);
+
+        when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.of(reportTypeEntity));
+        when(reportTypeEntity.getFields()).thenReturn(List.of(field));
+        when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.of(reportTypeEntity));
+        when(field.getParent()).thenReturn(null);
+
+
+        Either<Problem, ReportEntity> reportEntityE = reportService.reportGenerate(request);
+
+
+        assertTrue(reportEntityE.isRight());
+        ReportEntity reportEntity = reportEntityE.get();
+        assertEquals(Optional.empty(), reportEntity.getIncomeStatementReportData());
+        assertNotNull(reportEntity.getBalanceSheetReportData());
+        reportEntity.getBalanceSheetReportData().ifPresent(balanceSheetData -> {
+            assertEquals(Optional.empty(), balanceSheetData.getAssets());
+            assertEquals(Optional.empty(), balanceSheetData.getLiabilities());
+            assertEquals(Optional.empty(), balanceSheetData.getCapital());
+        });
+    }
+
+    @Test
+    void findReportInRange_emptySet() {
+
+        when(reportRepository.findByTypeAndWithinYearRange("org-123", INCOME_STATEMENT, (short) 2025, (short) 2025))
+                .thenReturn(Collections.emptySet());
+
+        Set<ReportEntity> reportsInDateRange = reportService.findReportsInDateRange("org-123", INCOME_STATEMENT, Optional.of(LocalDate.now()), Optional.of(LocalDate.now()));
+
+        assertTrue(reportsInDateRange.isEmpty());
+    }
+
+    @Test
+    void findReportInRange_filterRemove() {
+        ReportEntity mockEntity = mock(ReportEntity.class);
+        when(mockEntity.getReportId()).thenReturn("reportId");
+        when(mockEntity.getType()).thenReturn(INCOME_STATEMENT);
+        when(mockEntity.getYear()).thenReturn((short) 2025);
+        when(mockEntity.getIntervalType()).thenReturn(IntervalType.YEAR);
+        when(mockEntity.getPeriod()).thenReturn(Optional.of((short) 1));
+        when(reportRepository.findByTypeAndWithinYearRange("org-123", INCOME_STATEMENT, (short) 2025, (short) 2025))
+                .thenReturn(Set.of(mockEntity));
+
+        Set<ReportEntity> reportsInDateRange = reportService.findReportsInDateRange("org-123", INCOME_STATEMENT,
+                Optional.of(LocalDate.of(2025, Month.JANUARY, 1)),
+                Optional.of(LocalDate.of(2025, Month.JANUARY, 31)));
+
+        assertTrue(reportsInDateRange.isEmpty());
+    }
+
+    @Test
+    void findReportInRange_filterMonthAdd() {
+        ReportEntity mockEntity = mock(ReportEntity.class);
+        when(mockEntity.getReportId()).thenReturn("reportId");
+        when(mockEntity.getType()).thenReturn(INCOME_STATEMENT);
+        when(mockEntity.getYear()).thenReturn((short) 2025);
+        when(mockEntity.getIntervalType()).thenReturn(IntervalType.MONTH);
+        when(mockEntity.getPeriod()).thenReturn(Optional.of((short) 1));
+        when(reportRepository.findByTypeAndWithinYearRange("org-123", INCOME_STATEMENT, (short) 2025, (short) 2025))
+                .thenReturn(Set.of(mockEntity));
+
+        Set<ReportEntity> reportsInDateRange = reportService.findReportsInDateRange("org-123", INCOME_STATEMENT,
+                Optional.of(LocalDate.of(2025, Month.JANUARY, 1)),
+                Optional.of(LocalDate.of(2025, Month.JANUARY, 31)));
+
+        Assertions.assertEquals(1, reportsInDateRange.size());
+    }
+
+    @Test
+    void findReportInRange_filterMonthAddAndFilter() {
+        ReportEntity mockJan1 = mock(ReportEntity.class);
+        when(mockJan1.getReportId()).thenReturn("reportId");
+        when(mockJan1.getType()).thenReturn(INCOME_STATEMENT);
+        when(mockJan1.getYear()).thenReturn((short) 2025);
+        when(mockJan1.getIntervalType()).thenReturn(IntervalType.MONTH);
+        when(mockJan1.getPeriod()).thenReturn(Optional.of((short) 1));
+        when(mockJan1.getVer()).thenReturn(1L);
+
+        ReportEntity mockJan2 = mock(ReportEntity.class);
+        when(mockJan2.getReportId()).thenReturn("reportId");
+        when(mockJan2.getType()).thenReturn(INCOME_STATEMENT);
+        when(mockJan2.getYear()).thenReturn((short) 2025);
+        when(mockJan2.getIntervalType()).thenReturn(IntervalType.MONTH);
+        when(mockJan2.getPeriod()).thenReturn(Optional.of((short) 1));
+        when(mockJan2.getVer()).thenReturn(2L);
+
+        when(reportRepository.findByTypeAndWithinYearRange("org-123", INCOME_STATEMENT, (short) 2025, (short) 2025))
+                .thenReturn(Set.of(mockJan1, mockJan2));
+
+        Set<ReportEntity> reportsInDateRange = reportService.findReportsInDateRange("org-123", INCOME_STATEMENT,
+                Optional.of(LocalDate.of(2025, Month.JANUARY, 1)),
+                Optional.of(LocalDate.of(2025, Month.DECEMBER, 31)));
+
+        Assertions.assertEquals(1, reportsInDateRange.size());
+        Assertions.assertTrue(reportsInDateRange.contains(mockJan2));
+    }
+
+    @Test
+    void findReportInRange_filterQuarterAndYear() {
+        ReportEntity mockQ1 = mock(ReportEntity.class);
+        when(mockQ1.getReportId()).thenReturn("reportId");
+        when(mockQ1.getType()).thenReturn(INCOME_STATEMENT);
+        when(mockQ1.getYear()).thenReturn((short) 2025);
+        when(mockQ1.getIntervalType()).thenReturn(IntervalType.QUARTER);
+        when(mockQ1.getPeriod()).thenReturn(Optional.of((short) 1));
+        when(mockQ1.getVer()).thenReturn(1L);
+
+        ReportEntity mockYear = mock(ReportEntity.class);
+        when(mockYear.getReportId()).thenReturn("reportId");
+        when(mockYear.getType()).thenReturn(INCOME_STATEMENT);
+        when(mockYear.getYear()).thenReturn((short) 2025);
+        when(mockYear.getIntervalType()).thenReturn(IntervalType.YEAR);
+        when(mockYear.getPeriod()).thenReturn(Optional.of((short) 1));
+        when(mockYear.getVer()).thenReturn(2L);
+
+        when(reportRepository.findByTypeAndWithinYearRange("org-123", INCOME_STATEMENT, (short) 2025, (short) 2025))
+                .thenReturn(Set.of(mockQ1, mockYear));
+
+        Set<ReportEntity> reportsInDateRange = reportService.findReportsInDateRange("org-123", INCOME_STATEMENT,
+                Optional.of(LocalDate.of(2025, Month.JANUARY, 1)),
+                Optional.of(LocalDate.of(2025, Month.DECEMBER, 31)));
+
+        Assertions.assertEquals(1, reportsInDateRange.size());
+        Assertions.assertTrue(reportsInDateRange.contains(mockYear));
+    }
+
+    @Test
+    void reportGenerate_generateFromOtherReport() {
+        String organisationId = "org-123";
+        ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        request.setOrganisationId(organisationId);
+        ReportTypeFieldEntity field = mock(ReportTypeFieldEntity.class);
+        ReportTypeFieldEntity parentField = mock(ReportTypeFieldEntity.class);
+        ReportTypeFieldEntity mappedType = mock(ReportTypeFieldEntity.class);
+        ReportTypeEntity mockReportTypeEntity = mock(ReportTypeEntity.class);
+
+        ReportEntity mockQ1 = mock(ReportEntity.class);
+        IncomeStatementData incomeStatementReportData = new IncomeStatementData(null, null, null, null, null, null, BigDecimal.TEN);
+
+        when(mockQ1.getReportId()).thenReturn("reportId");
+        when(mockQ1.getType()).thenReturn(INCOME_STATEMENT);
+        when(mockQ1.getYear()).thenReturn((short) 2025);
+        when(mockQ1.getIntervalType()).thenReturn(IntervalType.QUARTER);
+        when(mockQ1.getPeriod()).thenReturn(Optional.of((short) 1));
+        when(mockQ1.getVer()).thenReturn(1L);
+        when(mockQ1.getIncomeStatementReportData()).thenReturn(Optional.of(incomeStatementReportData));
+        when(mappedType.getReport()).thenReturn(mockReportTypeEntity);
+        when(mappedType.getName()).thenReturn("PROFIT_FOR_THE_YEAR");
+        when(parentField.getName()).thenReturn("CAPITAL");
+        when(parentField.getParent()).thenReturn(null);
+        when(parentField.getChildFields()).thenReturn(List.of(field));
+        when(field.getParent()).thenReturn(parentField);
+        when(field.getName()).thenReturn("PROFIT_FOR_THE_YEAR");
+        when(mockReportTypeEntity.getName()).thenReturn("INCOME_STATEMENT");
+        when(mockReportTypeEntity.getOrganisationId()).thenReturn("org-123");
+
+
+        when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.of(reportTypeEntity));
+        when(reportTypeEntity.getFields()).thenReturn(List.of(field, parentField));
+        when(field.getMappingReportTypes()).thenReturn(List.of(mappedType));
+        when(mappedType.getName()).thenReturn("PROFIT_FOR_THE_YEAR");
+
+        when(reportRepository.findByTypeAndWithinYearRange("org-123", INCOME_STATEMENT, (short) 2025, (short) 2025))
+                .thenReturn(Set.of(mockQ1));
+
+
+        Either<Problem, ReportEntity> reportEntityE = reportService.reportGenerate(request);
+
+
+        Assertions.assertTrue(reportEntityE.isRight());
+        ReportEntity reportEntity = reportEntityE.get();
+        Assertions.assertTrue(reportEntity.getBalanceSheetReportData().isPresent());
+        BalanceSheetData balanceSheetData = reportEntity.getBalanceSheetReportData().get();
+        Assertions.assertTrue(balanceSheetData.getCapital().isPresent());
+        Assertions.assertEquals(Optional.of(BigDecimal.TEN), balanceSheetData.getCapital().get().getProfitForTheYear());
 
     }
 

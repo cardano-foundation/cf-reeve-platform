@@ -3,11 +3,13 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.business
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.ERASED_SELF_PAYMENT;
 
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.support.collections.Optionals;
 
 @Slf4j
@@ -21,7 +23,13 @@ public class DiscardSameAccountCodeTaskItem implements PipelineTaskItem {
 
             return Optionals.zip(accountDebit, accountCredit, (debit, credit) -> debit.getCode().equals(credit.getCode()))
                     .orElse(false);
-        }).forEach(txItem -> txItem.setStatus(ERASED_SELF_PAYMENT));
+        }).forEach(txItem -> {
+            txItem.setStatus(ERASED_SELF_PAYMENT);
+            // Removing violations related to this txItem, since it is discarded anyway
+            Set<TransactionViolation> violations = tx.getViolations();
+            violations.removeIf(violation -> violation.getTxItemId().orElse("").equals(txItem.getId()));
+            tx.setViolations(violations);
+        });
     }
 
 }

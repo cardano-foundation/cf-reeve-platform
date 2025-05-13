@@ -65,24 +65,24 @@ public class L1SubmissionData {
         return Optional.ofNullable(publishStatus);
     }
 
-    public void setFinalityScore(Optional<FinalityScore> assuranceLevel) {
-        this.finalityScore = assuranceLevel.orElse(null);
+    public void setFinalityScore(FinalityScore assuranceLevel) {
+        this.finalityScore = assuranceLevel;
     }
 
-    public void setPublishStatus(Optional<BlockchainPublishStatus> publishStatus) {
-        this.publishStatus = publishStatus.orElse(null);
+    public void setPublishStatus(BlockchainPublishStatus publishStatus) {
+        this.publishStatus = publishStatus;
     }
 
-    public void setAbsoluteSlot(Optional<Long> absoluteSlot) {
-        this.absoluteSlot = absoluteSlot.orElse(null);
+    public void setAbsoluteSlot(Long absoluteSlot) {
+        this.absoluteSlot = absoluteSlot;
     }
 
-    public void setCreationSlot(Optional<Long> creationSlot) {
-        this.creationSlot = creationSlot.orElse(null);
+    public void setCreationSlot(Long creationSlot) {
+        this.creationSlot = creationSlot;
     }
 
-    public void setTransactionHash(Optional<String> transactionHash) {
-        this.transactionHash = transactionHash.orElse(null);
+    public void setTransactionHash(String transactionHash) {
+        this.transactionHash = transactionHash;
     }
 
     public boolean isFinalized() {

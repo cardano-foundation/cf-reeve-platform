@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_TECHNICAL_FAILURE;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VALIDATION_ERROR;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR;
 
@@ -30,7 +30,7 @@ public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
 
         if (!errors.isEmpty()) {
             val v = TransactionViolation.builder()
-                    .code(TX_TECHNICAL_FAILURE)
+                    .code(TX_VALIDATION_ERROR)
                     .severity(ERROR)
                     .source(LOB)
                     .processorModule(this.getClass().getSimpleName())

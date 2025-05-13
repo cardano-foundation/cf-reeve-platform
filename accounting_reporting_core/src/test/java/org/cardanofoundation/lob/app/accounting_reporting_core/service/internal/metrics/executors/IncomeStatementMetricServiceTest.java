@@ -6,9 +6,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -22,18 +22,18 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.metri
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 
 @ExtendWith(MockitoExtension.class)
 class IncomeStatementMetricServiceTest {
 
     @Mock
-    private ReportRepository reportRepository;
+    private ReportService reportService;
     private IncomeStatementMetricService incomeStatementMetricService;
 
     @BeforeEach
     void setup() {
-        incomeStatementMetricService = new IncomeStatementMetricService(reportRepository);
+        incomeStatementMetricService = new IncomeStatementMetricService(reportService);
         incomeStatementMetricService.init();
     }
 
@@ -44,8 +44,8 @@ class IncomeStatementMetricServiceTest {
         reportEntity.setYear((short) 2024);
         reportEntity.setIncomeStatementReportData(Optional.of(getTestIncomeStatementData()));
 
-        when(reportRepository.getNewestReportsInRange(anyString(), any(), any()))
-                .thenReturn(List.of(reportEntity));
+        when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
+                .thenReturn(Set.of(reportEntity));
 
         Map<Short, Long> profitOfTheYear = (Map<Short, Long>) incomeStatementMetricService.getData(MetricEnum.SubMetric.PROFIT_OF_THE_YEAR, "organisationId", Optional.empty(), Optional.empty());
 
@@ -59,8 +59,8 @@ class IncomeStatementMetricServiceTest {
         reportEntity.setType(ReportType.INCOME_STATEMENT);
         reportEntity.setIncomeStatementReportData(Optional.of(getTestIncomeStatementData()));
 
-        when(reportRepository.getNewestReportsInRange(anyString(), any(), any()))
-                .thenReturn(List.of(reportEntity));
+        when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
+                .thenReturn(Set.of(reportEntity));
 
         Map<IncomeStatemenCategories, Integer> totalExpenses = (Map<IncomeStatemenCategories, Integer>) incomeStatementMetricService.getData(MetricEnum.SubMetric.TOTAL_EXPENSES, "organisationId", Optional.empty(), Optional.empty());
 
@@ -78,8 +78,8 @@ class IncomeStatementMetricServiceTest {
         reportEntity.setType(ReportType.INCOME_STATEMENT);
         reportEntity.setIncomeStatementReportData(Optional.of(getTestIncomeStatementData()));
 
-        when(reportRepository.getNewestReportsInRange(anyString(), any(), any()))
-                .thenReturn(List.of(reportEntity));
+        when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
+                .thenReturn(Set.of(reportEntity));
 
         Map<IncomeStatemenCategories, Integer> incomeStream = (Map<IncomeStatemenCategories, Integer>) incomeStatementMetricService.getData(MetricEnum.SubMetric.INCOME_STREAMS, "organisationId", Optional.empty(), Optional.empty());
 

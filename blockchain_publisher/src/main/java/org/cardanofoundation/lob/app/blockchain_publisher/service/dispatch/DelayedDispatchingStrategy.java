@@ -18,13 +18,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
+import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyEntity;
+
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "lob.dispatching_strategy", name = "type", havingValue = "DELAYED", matchIfMissing = true)
-public class DelayedDispatchingStrategy<T extends CommonEntity> implements DispatchingStrategy<T> {
+public class DelayedDispatchingStrategy<T extends CommonDateOnlyEntity> implements DispatchingStrategy<T> {
 
     @Value("${lob.blockchain_publisher.minTransactions:30}")
     private int minTxCount = 30;

@@ -326,7 +326,6 @@ public class TransactionReconcilationService {
         val fromDate = reconcilationEntity.getFrom().orElseThrow();
         val toDate = reconcilationEntity.getTo().orElseThrow();
 
-        // AQUI
         val missingTxs = transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate);
         // we have some txs which are in LOB (db) but are missing in the ERP (likely some technical defect)
 

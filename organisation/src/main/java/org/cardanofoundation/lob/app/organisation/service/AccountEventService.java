@@ -42,6 +42,109 @@ public class AccountEventService {
     }
 
     @Transactional
+    public AccountEventView insertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
+
+        Optional<Organisation> organisationChe = organisationService.findById(orgId);
+        if (organisationChe.isEmpty()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+
+        }
+
+        Optional<ReferenceCode> debitReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode());
+        if (debitReference.isEmpty()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
+        if (creditReference.isEmpty()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        ReferenceCode debitReferenceG = debitReference.get();
+        ReferenceCode creditReferenceG = creditReference.get();
+        Optional<AccountEvent> accountEventOpt = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+
+        if (accountEventOpt.isPresent()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("ACCOUNT_EVENT_ALREADY_EXISTS")
+                    .withDetail(STR."Account event already exists for debit reference code: \{eventCodeUpdate.getDebitReferenceCode()} and credit reference code: \{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.CONFLICT)
+                    .build());
+        }
+
+        AccountEvent accountEvent = AccountEvent.builder()
+                .id(new AccountEvent.Id(orgId, debitReferenceG.getId().getReferenceCode(), creditReferenceG.getId().getReferenceCode()))
+                .customerCode(debitReferenceG.getId().getReferenceCode() + creditReferenceG.getId().getReferenceCode())
+                .build();
+
+        accountEvent.setName(eventCodeUpdate.getName());
+        accountEvent.setActive(eventCodeUpdate.getActive());
+
+        return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
+    }
+
+    @Transactional
+    public AccountEventView updateAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
+
+        Optional<Organisation> organisationChe = organisationService.findById(orgId);
+        if (organisationChe.isEmpty()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+
+        }
+
+        Optional<ReferenceCode> debitReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode());
+        if (debitReference.isEmpty()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
+        if (creditReference.isEmpty()) {
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        ReferenceCode debitReferenceG = debitReference.get();
+        ReferenceCode creditReferenceG = creditReference.get();
+        Optional<AccountEvent> accountEventOpt = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+        if (accountEventOpt.isEmpty()){
+            return AccountEventView.createFail(Problem.builder()
+                    .withTitle("ACCOUNT_EVENT_NOT_FOUND")
+                    .withDetail(STR."Account event not found for debit reference code: \{eventCodeUpdate.getDebitReferenceCode()} and credit reference code: \{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+        AccountEvent accountEvent = accountEventOpt.get();
+        accountEvent.setName(eventCodeUpdate.getName());
+        accountEvent.setActive(eventCodeUpdate.getActive());
+
+        return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
+    }
+
+    @Deprecated
+    @Transactional
     public AccountEventView upsertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
 
         Optional<Organisation> organisationChe = organisationService.findById(orgId);

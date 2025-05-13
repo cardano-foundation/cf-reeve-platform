@@ -61,8 +61,8 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
 
         Query reconciliationQuery = em.createQuery(jpql);
 
-        getDateFrom.ifPresent(value -> reconciliationQuery.setParameter("startDate", value.atStartOfDay()));
-        getDateTo.ifPresent(value -> reconciliationQuery.setParameter("endDate", value.atTime(23, 59, 59)));
+        getDateFrom.ifPresent(value -> reconciliationQuery.setParameter("startDate", value));
+        getDateTo.ifPresent(value -> reconciliationQuery.setParameter("endDate", value));
 
         reconciliationQuery.setMaxResults(limit);
 
@@ -110,18 +110,18 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         }
 
         if (getDateFrom.isPresent()) {
-            where += " AND r.createdAt > :startDate ";
+            where += " AND tr.entryDate > :startDate ";
         }
         if (getDateTo.isPresent()) {
-            where += " AND r.createdAt < :endDate ";
+            where += " AND tr.entryDate < :endDate ";
         }
 
         where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ";
 
         Query resultQuery = em.createQuery(jpql + where);
 
-        getDateFrom.ifPresent(value -> resultQuery.setParameter("startDate", value.atStartOfDay()));
-        getDateTo.ifPresent(value -> resultQuery.setParameter("endDate", value.atTime(23, 59, 59)));
+        getDateFrom.ifPresent(value -> resultQuery.setParameter("startDate", value));
+        getDateTo.ifPresent(value -> resultQuery.setParameter("endDate", value));
 
         return resultQuery.getResultList();
     }
@@ -313,10 +313,10 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         }
 
         if (getDateFrom.isPresent()) {
-            where += " AND r.createdAt > :startDate ";
+            where += " AND tr.entryDate > :startDate ";
         }
         if (getDateTo.isPresent()) {
-            where += " AND r.createdAt < :endDate ";
+            where += " AND tr.entryDate < :endDate ";
         }
         where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.rejectionCode, rv.sourceDiff, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ORDER BY rv.transactionEntryDate ";
 

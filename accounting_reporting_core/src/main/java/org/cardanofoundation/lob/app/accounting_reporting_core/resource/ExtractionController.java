@@ -35,7 +35,7 @@ public class ExtractionController {
 
     @Tag(name = "Extraction", description = "Extraction search")
     @PostMapping(value = "/extraction/search", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @Operation(description = "Search transactions items published",
+    @Operation(description = "Search for published transaction items",
             responses = {
                     @ApiResponse(content = {
                             @Content(mediaType = APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = ExtractionTransactionItemView.class)))
@@ -44,11 +44,14 @@ public class ExtractionController {
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ExtractionTransactionView> transactionSearch(@Valid @RequestBody ExtractionTransactionsRequest transactionsRequest) {
-        return ResponseEntity
-                .ok()
-                .body(extractionItemService.findTransactionItems(transactionsRequest.getDateFrom(), transactionsRequest.getDateTo(), transactionsRequest.getAccountCode(), transactionsRequest.getCostCenter(), transactionsRequest.getProject(),transactionsRequest.getAccountType(),transactionsRequest.getAccountSubType()));
+        try {
+            return ResponseEntity
+                    .ok()
+                    .body(extractionItemService.findTransactionItems(transactionsRequest.getDateFrom(), transactionsRequest.getDateTo(), transactionsRequest.getAccountCode(), transactionsRequest.getCostCenter(), transactionsRequest.getProject(), transactionsRequest.getAccountType(), transactionsRequest.getAccountSubType()));
+        } catch (Exception e) {
+            log.error("Error occurred while searching transactions");
+            return ResponseEntity.status(500).body(null);
+        }
     }
-
-
 
 }

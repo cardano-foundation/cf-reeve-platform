@@ -110,21 +110,21 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisation/{orgId}/cost-center", produces = "application/json")
-    public ResponseEntity<?> organisationCostCenter(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<Set<OrganisationCostCenterView>> organisationCostCenter(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
-                organisationService.getAllCostCenter(orgId).stream().map(OrganisationCostCenterView::fromEntity).toList());
+                organisationService.getAllCostCenter(orgId).stream().map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()));
 
     }
 
-    @Operation(description = "Organisation cost center", responses = {
+    @Operation(description = "Organisation project", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
             ),
     })
     @GetMapping(value = "/organisation/{orgId}/project", produces = "application/json")
-    public ResponseEntity<?> organisationProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<Set<OrganisationProjectView>> organisationProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
-                organisationService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).toList());
+                organisationService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()));
     }
 
     @Operation(description = "Organisation Events", responses = {
@@ -260,7 +260,7 @@ public class OrganisationResource {
                     "    \"detail\": \"Unable to get the organisation\"\n" +
                     "}"))})
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     @GetMapping(value = "/organisation/validate/{orgId}", produces = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> validateOrganisation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String orgId) {
         if(keycloakSecurityHelper.canUserAccessOrg(orgId)) {

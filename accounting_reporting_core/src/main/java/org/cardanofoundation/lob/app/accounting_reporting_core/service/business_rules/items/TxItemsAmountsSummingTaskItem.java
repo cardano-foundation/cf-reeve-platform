@@ -5,16 +5,20 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.OK;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
 /**
  * Task item that collapses transaction items with the same key by summing their amounts.
@@ -29,7 +33,7 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
         }
 
         // Group items by key
-        val itemsPerKeyMap = tx.getItems()
+        Map<TransactionItemKey, List<TransactionItemEntity>> itemsPerKeyMap = tx.getItems()
                 .stream()
                 .collect(groupingBy(txItem -> TransactionItemKey.builder()
                         .costCenterCustomerCode(txItem.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode))
@@ -45,7 +49,7 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
         tx.getItems().forEach(item -> item.setStatus(ERASED_SUM_APPLIED));
 
         // Collapsing logic: combine the amounts for items with the same key
-        val collapsedItems = itemsPerKeyMap.values().stream()
+        Set<TransactionItemEntity> collapsedItems = itemsPerKeyMap.values().stream()
                 .map(items -> items.stream()
                         .reduce((txItem1, txItem2) -> {
                             txItem1.setAmountFcy(txItem1.getAmountFcy().add(txItem2.getAmountFcy()));
@@ -60,6 +64,12 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
 
         // Retain the collapsed valid items in the transaction
         tx.getItems().addAll(collapsedItems); // Add collapsed items back
+
+        // Removing violations of these erased items
+        Set<TransactionViolation> violations = tx.getViolations();
+        tx.getItems().stream().filter(item -> item.getStatus() == ERASED_SUM_APPLIED)
+                .forEach(item -> violations.removeIf(violation -> violation.getTxItemId().orElse("").equals(item.getId())));
+        tx.setViolations(violations);
     }
 
     @EqualsAndHashCode

@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import org.hibernate.envers.Audited;
 
@@ -18,7 +19,9 @@ import org.hibernate.envers.Audited;
 @Audited
 public class BatchStatistics {
 
+    @Setter
     private int total;
+    @Setter
     private int processedTransactions;
     private int readyToApproveTransactions;
     private int pendingTransactions;
