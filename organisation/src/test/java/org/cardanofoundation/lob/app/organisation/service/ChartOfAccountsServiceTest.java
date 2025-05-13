@@ -148,10 +148,38 @@ class ChartOfAccountsServiceTest {
     }
 
     @Test
+    void testUpsertChartOfAccount_Success() {
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .thenReturn(Optional.of(chartOfAccount));
+        when(chartOfAccountRepository.save(any(OrganisationChartOfAccount.class))).thenReturn(chartOfAccount);
+
+        OrganisationChartOfAccountView response = chartOfAccountsService.upsertChartOfAccount(orgId, chartOfAccountUpdate);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isEmpty());
+    }
+
+    @Test
     void testUpdateChartOfAccount_OrganisationNotFound() {
         when(organisationService.findById(orgId)).thenReturn(Optional.empty());
 
         OrganisationChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
+
+        assertNotNull(response);
+        assertFalse(response.getError().isEmpty());
+        assertEquals("ORGANISATION_NOT_FOUND", response.getError().get().getTitle());
+    }
+
+    @Test
+    void testUpsertChartOfAccount_OrganisationNotFound() {
+        when(organisationService.findById(orgId)).thenReturn(Optional.empty());
+
+        OrganisationChartOfAccountView response = chartOfAccountsService.upsertChartOfAccount(orgId, chartOfAccountUpdate);
 
         assertNotNull(response);
         assertFalse(response.getError().isEmpty());
@@ -172,6 +200,19 @@ class ChartOfAccountsServiceTest {
     }
 
     @Test
+    void testUpsertChartOfAccount_ReferenceCodeNotFound() {
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.empty());
+
+        OrganisationChartOfAccountView response = chartOfAccountsService.upsertChartOfAccount(orgId, chartOfAccountUpdate);
+
+        assertNotNull(response);
+        assertFalse(response.getError().isEmpty());
+        assertEquals("REFERENCE_CODE_NOT_FOUND", response.getError().get().getTitle());
+    }
+
+    @Test
     void testUpdateChartOfAccount_SubTypeNotFound() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
@@ -180,6 +221,21 @@ class ChartOfAccountsServiceTest {
                 .thenReturn(Optional.empty());
 
         OrganisationChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
+
+        assertNotNull(response);
+        assertFalse(response.getError().isEmpty());
+        assertEquals("SUBTYPE_NOT_FOUND", response.getError().get().getTitle());
+    }
+
+    @Test
+    void testUpsertChartOfAccount_SubTypeNotFound() {
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.empty());
+
+        OrganisationChartOfAccountView response = chartOfAccountsService.upsertChartOfAccount(orgId, chartOfAccountUpdate);
 
         assertNotNull(response);
         assertFalse(response.getError().isEmpty());
@@ -305,8 +361,6 @@ class ChartOfAccountsServiceTest {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
-        when(organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
-                .thenReturn(Optional.of(subType));
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode()))
                 .thenReturn(Optional.empty());
 
