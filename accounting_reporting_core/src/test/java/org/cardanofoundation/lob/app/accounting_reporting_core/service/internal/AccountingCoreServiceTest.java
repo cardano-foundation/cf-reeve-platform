@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
@@ -75,7 +76,7 @@ class AccountingCoreServiceTest {
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(userExtractionParameters);
+        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isRight()).isTrue();
@@ -98,7 +99,7 @@ class AccountingCoreServiceTest {
                 .build();
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters);
+        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
@@ -120,7 +121,7 @@ class AccountingCoreServiceTest {
                 .build();
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters);
+        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
@@ -140,7 +141,7 @@ class AccountingCoreServiceTest {
                 .build();
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters);
+        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
@@ -158,7 +159,7 @@ class AccountingCoreServiceTest {
         given(organisationPublicApi.findByOrganisationId(eq(organisationId))).willReturn(Optional.of(mock(Organisation.class)));
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate);
+        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isRight()).isTrue();
@@ -179,7 +180,7 @@ class AccountingCoreServiceTest {
         LocalDate toDate = LocalDate.of(2023, 1, 1);
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate);
+        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isLeft()).isTrue();

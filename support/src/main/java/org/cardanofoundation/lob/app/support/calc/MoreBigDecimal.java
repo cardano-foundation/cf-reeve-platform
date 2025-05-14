@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util;
+package org.cardanofoundation.lob.app.support.calc;
 
 import java.math.BigDecimal;
 

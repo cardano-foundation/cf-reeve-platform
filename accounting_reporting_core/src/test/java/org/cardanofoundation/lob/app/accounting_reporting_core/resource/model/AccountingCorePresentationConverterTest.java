@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.model;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.CORE_CURRENCY_NOT_FOUND;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -297,7 +298,7 @@ class AccountingCorePresentationConverterTest {
         extractionRequest.setTransactionNumbers(List.of("num1", "num2"));
 
         accountingCorePresentationConverter.extractionTrigger(extractionRequest);
-        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleIngestion(Mockito.any(UserExtractionParameters.class));
+        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleIngestion(Mockito.any(UserExtractionParameters.class), eq(ExtractorType.NETSUITE), eq(null), eq(Map.of()));
 
     }
 
