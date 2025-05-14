@@ -238,7 +238,6 @@ class CsvExtractionServiceTest {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
-        Transaction transaction = mock(Transaction.class);
 
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
@@ -345,7 +344,6 @@ class CsvExtractionServiceTest {
     @Test
     void continueERPReconcilation_transactionConversionError() throws IOException {
         ExtractionData extractionData = mock(ExtractionData.class);
-        Transaction transaction = mock(Transaction.class);
 
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
@@ -399,7 +397,6 @@ class CsvExtractionServiceTest {
     @Test
     void continueERPReconcilation_emptyLines() throws Exception {
         ExtractionData extractionData = mock(ExtractionData.class);
-        Transaction transaction = mock(Transaction.class);
 
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");

@@ -35,7 +35,7 @@ import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
 import org.cardanofoundation.lob.app.support.calc.MoreBigDecimal;
 import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
-@Service("CSVTransactionConverter")
+@Service("CsvTransactionConverter")
 @Slf4j
 @RequiredArgsConstructor
 public class TransactionConverter {

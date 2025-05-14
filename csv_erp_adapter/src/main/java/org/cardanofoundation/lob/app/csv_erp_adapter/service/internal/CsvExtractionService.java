@@ -7,6 +7,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.time.LocalDate;
@@ -23,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -58,11 +60,11 @@ public class CsvExtractionService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final Cache<String, ExtractionData> temporaryFileCache;
     private final SystemExtractionParametersFactory systemExtractionParametersFactory;
-    @Qualifier("CSVTransactionConverter")
+    @Qualifier("CsvTransactionConverter")
     private final TransactionConverter transactionConverter;
-
+    @Value("${lob.csv.delimiter:;}")
     private final String delimiter = ";";
-    //    @Value("${lob.csv.send-batch-size:100}")
+    @Value("${lob.csv.send-batch-size:100}")
     private final int sendBatchSize = 100;
 
     public void startNewExtraction(@NotNull String organisationId, String user, @NotNull UserExtractionParameters userExtractionParameters, byte[] file) {
@@ -92,7 +94,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.EMPTY_FILE, Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.EMPTY_FILE, Map.of(Constants.BATCH_ID, batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -109,7 +111,7 @@ public class CsvExtractionService {
         );
 
         temporaryFileCache.put(batchId, extractionData);
-        log.info("Temporary file cache size: {}", temporaryFileCache.size());
+        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
         applicationEventPublisher.publishEvent(TransactionBatchStartedEvent.builder()
                 .metadata(EventMetadata.create(TransactionBatchStartedEvent.VERSION, user))
                 .batchId(batchId)
@@ -131,7 +133,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.BATCH_NOT_FOUND, Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.BATCH_NOT_FOUND, Map.of(Constants.BATCH_ID, batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -139,7 +141,7 @@ public class CsvExtractionService {
         }
         // invalidating cache to avoid memory leak
         temporaryFileCache.invalidate(batchId);
-        log.info("Temporary file cache size: {}", temporaryFileCache.size());
+        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
 
         if (!extractionData.organisationId().equals(organisationId)) {
             log.error("BatchId {} not found in temporary file cache for organisationId {}", batchId, organisationId);
@@ -148,7 +150,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH, Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH, Map.of(Constants.BATCH_ID, batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -166,7 +168,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, Map.of(Constants.BATCH_ID, batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -180,7 +182,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, Map.of(Constants.BATCH_ID, batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -195,7 +197,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, Map.of(Constants.BATCH_ID, batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -230,7 +232,11 @@ public class CsvExtractionService {
         log.info("NetSuite ingestion fully completed.");
     }
 
-    private List<TransactionLine> parseCsv(byte[] file) throws Exception {
+    private List<TransactionLine> parseCsv(byte[] file) throws IOException {
+        if(Objects.isNull(file)) {
+            log.error("File is null");
+            throw new IOException("File is null");
+        }
         try (Reader reader = new InputStreamReader(new ByteArrayInputStream(file))) {
             CsvToBean<TransactionLine> csvToBean = new CsvToBeanBuilder<TransactionLine>(reader)
                     .withType(TransactionLine.class)
@@ -256,7 +262,7 @@ public class CsvExtractionService {
                 file
         );
         temporaryFileCache.put(reconcilationRequestId, extractionData);
-        log.info("Temporary file cache size: {}", temporaryFileCache.size());
+        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
         applicationEventPublisher.publishEvent(ReconcilationStartedEvent.builder()
                 .metadata(EventMetadata.create(ReconcilationStartedEvent.VERSION, user))
                 .reconciliationId(reconcilationRequestId)
@@ -285,7 +291,7 @@ public class CsvExtractionService {
         }
         // invalidating cache to avoid memory leak
         temporaryFileCache.invalidate(reconcilationId);
-        log.info("Temporary file cache size: {}", temporaryFileCache.size());
+        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
 
         if (!extractionData.organisationId().equals(organisationId)) {
             log.error("Reconcilation {} not found in temporary file cache for organisationId {}", reconcilationId, organisationId);
@@ -303,7 +309,7 @@ public class CsvExtractionService {
         List<TransactionLine> transactionLines;
         try {
             transactionLines = parseCsv(extractionData.file());
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error("Error parsing CSV file", e);
             ReconcilationFailedEvent batchFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))

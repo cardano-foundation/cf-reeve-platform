@@ -8,6 +8,11 @@ import java.util.List;
 
 public class FlexibleDateParser {
 
+    private FlexibleDateParser() {
+        // Private constructor to prevent instantiation
+    }
+
+
     private static final List<DateTimeFormatter> FORMATTERS = List.of(
             DateTimeFormatter.ofPattern("dd/MM/yyyy"),
             DateTimeFormatter.ofPattern("MM-dd-yyyy"),
@@ -19,7 +24,9 @@ public class FlexibleDateParser {
         for (DateTimeFormatter formatter : FORMATTERS) {
             try {
                 return LocalDate.parse(input, formatter);
-            } catch (DateTimeParseException ignored) {}
+            } catch (DateTimeParseException ignored) {
+                // Ignore the exception and try the next formatter
+            }
         }
         throw new IllegalArgumentException("Unsupported date format: " + input);
     }

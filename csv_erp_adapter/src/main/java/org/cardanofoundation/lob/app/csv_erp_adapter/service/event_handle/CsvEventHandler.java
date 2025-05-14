@@ -13,6 +13,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
+import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
 import org.cardanofoundation.lob.app.csv_erp_adapter.service.internal.CsvExtractionService;
 
 @Slf4j
@@ -29,7 +30,7 @@ public class CsvEventHandler implements ReeveErpAdapter {
     public void handleScheduledIngestionEvent(ScheduledIngestionEvent event) {
         log.info("Handling handleScheduledIngestionEvent...");
         if (event.getExtractorType() != ExtractorType.CSV) {
-            log.info("Ignoring event for extractor type: {}", event.getExtractorType());
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE, event.getExtractorType());
             return;
         }
         csvExtractionService.startNewExtraction(
@@ -46,7 +47,7 @@ public class CsvEventHandler implements ReeveErpAdapter {
     @EventListener
     public void handleTransactionBatchCreatedEvent(TransactionBatchCreatedEvent transactionBatchCreatedEvent) {
         if (transactionBatchCreatedEvent.getExtractorType() != ExtractorType.CSV) {
-            log.info("Ignoring event for extractor type: {}", transactionBatchCreatedEvent.getExtractorType());
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE, transactionBatchCreatedEvent.getExtractorType());
             return;
         }
         log.info("Handling handleTransactionBatchCreatedEvent...");
@@ -65,7 +66,7 @@ public class CsvEventHandler implements ReeveErpAdapter {
     public void handleScheduledReconciliationEvent(ScheduledReconcilationEvent scheduledReconcilationEvent) {
         log.info("Handling handleScheduledReconciliationEvent...");
         if (scheduledReconcilationEvent.getExtractorType() != ExtractorType.CSV) {
-            log.info("Ignoring event for extractor type: {}", scheduledReconcilationEvent.getExtractorType());
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE, scheduledReconcilationEvent.getExtractorType());
             return;
         }
         csvExtractionService.startNewReconciliation(
@@ -84,7 +85,7 @@ public class CsvEventHandler implements ReeveErpAdapter {
     public void handleCreatedReconciliationEvent(ReconcilationCreatedEvent reconcilationCreatedEvent) {
         log.info("Handling handleCreatedReconciliationEvent...");
         if (reconcilationCreatedEvent.getExtractorType() != ExtractorType.CSV) {
-            log.info("Ignoring event for extractor type: {}", reconcilationCreatedEvent.getExtractorType());
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE, reconcilationCreatedEvent.getExtractorType());
             return;
         }
         csvExtractionService.continueERPReconciliation(
