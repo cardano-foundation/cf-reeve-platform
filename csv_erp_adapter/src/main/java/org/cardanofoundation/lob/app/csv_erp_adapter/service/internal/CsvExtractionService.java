@@ -43,6 +43,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reco
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
+import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.ExtractionData;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
@@ -68,7 +69,6 @@ public class CsvExtractionService {
         Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
 
         if (systemExtractionParametersE.isLeft()) {
-            String subCode = "NO_SYSTEM_PARAMETERS";
             Map<String, Object> bag = Map.of("organisationId", organisationId);
 
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
@@ -76,7 +76,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, subCode, bag))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_SYSTEM_PARAMETERS, bag))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -116,7 +116,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, "BATCH_NOT_FOUND", Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.BATCH_NOT_FOUND, Map.of("batchId", batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -133,7 +133,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, "ORGANISATION_MISMATCH", Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH, Map.of("batchId", batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -151,7 +151,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, "CSV_PARSING_ERROR", Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, Map.of("batchId", batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -165,7 +165,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, "NO_TRANSACTION_LINES", Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, Map.of("batchId", batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -180,7 +180,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, "TRANSACTION_CONVERSION_ERROR", Map.of("batchId", batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, Map.of("batchId", batchId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -195,12 +195,12 @@ public class CsvExtractionService {
                 .totalTransactionsCount(transactionList.size());
         Partitions.partition(transactionList, sendBatchSize).forEach(txPartition -> {
             batchChunkEventBuilder.transactions(txPartition.asSet());
+            batchChunkEventBuilder.status(PROCESSING);
             if (txPartition.isFirst()) {
                 batchChunkEventBuilder.status(STARTED);
-            } else if (txPartition.isLast()) {
+            }
+            if (txPartition.isLast()) {
                 batchChunkEventBuilder.status(FINISHED);
-            } else {
-                batchChunkEventBuilder.status(PROCESSING);
             }
 
             applicationEventPublisher.publishEvent(batchChunkEventBuilder.build());
@@ -253,7 +253,7 @@ public class CsvExtractionService {
         );
     }
 
-    public void continueERPReconciliation(@NotBlank String reconcilationId, @NotBlank String organisationId, LocalDate from, LocalDate to) {
+    public void continueERPReconciliation(@NotBlank String reconcilationId, @NotBlank String organisationId) {
         ExtractionData extractionData = temporaryFileCache.getIfPresent(reconcilationId);
         log.info("Continue reconcilation..., reconcilationId: {}", reconcilationId);
         if (extractionData == null) {
@@ -262,7 +262,7 @@ public class CsvExtractionService {
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, "RECONCILATION_NOT_FOUND", Map.of("reconcilationId", reconcilationId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.RECONCILATION_NOT_FOUND, Map.of(Constants.RECONCILATION_ID, reconcilationId)))
                     .build();
 
             applicationEventPublisher.publishEvent(reconcilationFailedEvent);
@@ -278,7 +278,7 @@ public class CsvExtractionService {
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, "ORGANISATION_MISMATCH", Map.of("reconcilationId", reconcilationId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH, Map.of(Constants.RECONCILATION_ID, reconcilationId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -294,7 +294,7 @@ public class CsvExtractionService {
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, "CSV_PARSING_ERROR", Map.of("reconcilationId", reconcilationId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, Map.of(Constants.RECONCILATION_ID, reconcilationId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -307,7 +307,7 @@ public class CsvExtractionService {
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, "NO_TRANSACTION_LINES", Map.of("reconcilationId", reconcilationId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, Map.of(Constants.RECONCILATION_ID, reconcilationId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -321,7 +321,7 @@ public class CsvExtractionService {
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, "TRANSACTION_CONVERSION_ERROR", Map.of("reconcilationId", reconcilationId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, Map.of(Constants.RECONCILATION_ID, reconcilationId)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
