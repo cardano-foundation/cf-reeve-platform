@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
@@ -83,6 +84,20 @@ public class CsvExtractionService {
             return;
         }
         SystemExtractionParameters systemExtractionParameters = systemExtractionParametersE.get();
+
+        if(Objects.isNull(file) || file.length == 0) {
+            log.error("File is empty");
+            TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
+                    .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION, user))
+                    .batchId(batchId)
+                    .organisationId(organisationId)
+                    .userExtractionParameters(userExtractionParameters)
+                    .error(new FatalError(ADAPTER_ERROR, Constants.EMPTY_FILE, Map.of("batchId", batchId)))
+                    .build();
+
+            applicationEventPublisher.publishEvent(batchFailedEvent);
+            return;
+        }
 
         ExtractionData extractionData = new ExtractionData(
                 batchId,

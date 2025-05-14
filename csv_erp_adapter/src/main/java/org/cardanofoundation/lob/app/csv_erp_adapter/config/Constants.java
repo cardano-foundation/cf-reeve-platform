@@ -9,4 +9,5 @@ public class Constants {
     public static final String ORGANISATION_MISMATCH = "ORGANISATION_MISMATCH";
     public static final String BATCH_NOT_FOUND = "BATCH_NOT_FOUND";
     public static final String NO_SYSTEM_PARAMETERS = "NO_SYSTEM_PARAMETERS";
+    public static final String EMPTY_FILE = "EMPTY_FILE";
 }

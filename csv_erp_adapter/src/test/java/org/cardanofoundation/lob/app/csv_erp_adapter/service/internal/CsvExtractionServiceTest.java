@@ -69,13 +69,29 @@ class CsvExtractionServiceTest {
     }
 
     @Test
-    void startNewExtraction_success() {
+    void startNewExtraction_emptyFile() {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
 
         when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.right(systemExtractionParameters));
 
         csvExtractionService.startNewExtraction("orgId", "userId", userExtractionParameters, null);
+
+        ArgumentCaptor<TransactionBatchFailedEvent> captor = ArgumentCaptor.forClass(TransactionBatchFailedEvent.class);
+        verify(applicationEventPublisher).publishEvent(captor.capture());
+        TransactionBatchFailedEvent value = captor.getValue();
+        assertEquals("orgId", value.getOrganisationId());
+        assertEquals(Constants.EMPTY_FILE, value.getError().getSubCode());
+    }
+
+    @Test
+    void startNewExtraction_success() {
+        UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
+        SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
+
+        when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.right(systemExtractionParameters));
+
+        csvExtractionService.startNewExtraction("orgId", "userId", userExtractionParameters, new byte[2]);
 
         verify(temporaryFileCache).put(anyString(), any(ExtractionData.class));
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchStartedEvent.class));

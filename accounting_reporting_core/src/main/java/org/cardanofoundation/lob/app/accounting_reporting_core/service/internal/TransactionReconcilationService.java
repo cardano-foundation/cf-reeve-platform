@@ -286,7 +286,7 @@ public class TransactionReconcilationService {
     }
 
     private static ReconcilationCode getSinkReconcilationStatus(TransactionEntity attachedTx, Map<String, Boolean> isOnChainMap) {
-        Boolean isLOBTxOnChain = Optional.ofNullable(isOnChainMap.get(attachedTx.getId())).orElse(false);
+        boolean isLOBTxOnChain = Optional.ofNullable(isOnChainMap.get(attachedTx.getId())).orElse(false);
 
         ReconcilationCode sinkReconcilationStatus = ReconcilationCode.NOK;
         if (isLOBTxOnChain && attachedTx.getLedgerDispatchStatus() == FINALIZED) {
