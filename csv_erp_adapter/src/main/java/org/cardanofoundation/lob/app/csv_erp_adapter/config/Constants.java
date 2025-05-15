@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.csv_erp_adapter.config;
 
 public class Constants {
 
+    public static final String FILE_IS_NULL = "File is null";
+
     private Constants() {
         // Prevent instantiation
     }

@@ -7,7 +7,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.time.LocalDate;
@@ -158,11 +157,9 @@ public class CsvExtractionService {
         }
         // TODO evaluate other parameters to see if they match
 
-        List<TransactionLine> transactionLines;
-        try {
-            transactionLines = parseCsv(extractionData.file());
-        } catch (Exception e) {
-            log.error("Error parsing CSV file", e);
+
+        Either<Problem, List<TransactionLine>> lists = parseCsv(extractionData.file());
+        if(lists.isLeft()) {
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
                     .batchId(batchId)
@@ -174,6 +171,7 @@ public class CsvExtractionService {
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
+        List<TransactionLine> transactionLines = lists.get();
 
         if (transactionLines.isEmpty()) {
             log.error("No transaction lines found in CSV file");
@@ -232,19 +230,29 @@ public class CsvExtractionService {
         log.info("NetSuite ingestion fully completed.");
     }
 
-    private List<TransactionLine> parseCsv(byte[] file) throws IOException {
+    private Either<Problem, List<TransactionLine>> parseCsv(byte[] file){
         if(Objects.isNull(file)) {
-            log.error("File is null");
-            throw new IOException("File is null");
+            log.error(Constants.FILE_IS_NULL);
+            return Either.left(Problem.builder()
+                    .withTitle(Constants.FILE_IS_NULL)
+                    .withDetail(Constants.FILE_IS_NULL)
+                    .build());
         }
-        try (Reader reader = new InputStreamReader(new ByteArrayInputStream(file))) {
+        try {
+            Reader reader = new InputStreamReader(new ByteArrayInputStream(file));
             CsvToBean<TransactionLine> csvToBean = new CsvToBeanBuilder<TransactionLine>(reader)
                     .withType(TransactionLine.class)
                     .withIgnoreLeadingWhiteSpace(true)
                     .withSeparator(delimiter.charAt(0))
                     .withIgnoreEmptyLine(true)
                     .build();
-            return csvToBean.parse();
+            return Either.right(csvToBean.parse());
+        } catch (Exception e) {
+            log.info("Error parsing CSV file");
+            return Either.left(Problem.builder()
+                    .withTitle(Constants.CSV_PARSING_ERROR)
+                    .withDetail(e.getMessage())
+                    .build());
         }
     }
 
@@ -306,13 +314,10 @@ public class CsvExtractionService {
             return;
         }
 
-        List<TransactionLine> transactionLines;
-        try {
-            transactionLines = parseCsv(extractionData.file());
-        } catch (IOException e) {
-            log.error("Error parsing CSV file", e);
+        Either<Problem, List<TransactionLine>> lists = parseCsv(extractionData.file());
+        if(lists.isLeft()) {
             ReconcilationFailedEvent batchFailedEvent = ReconcilationFailedEvent.builder()
-                    .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
+                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
                     .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, Map.of(Constants.RECONCILATION_ID, reconcilationId)))
@@ -321,6 +326,7 @@ public class CsvExtractionService {
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
+        List<TransactionLine> transactionLines = lists.get();
 
         if (transactionLines.isEmpty()) {
             log.error("No transaction lines found in CSV file");

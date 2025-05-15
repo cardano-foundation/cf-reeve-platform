@@ -10,19 +10,19 @@ import com.opencsv.bean.CsvBindByName;
 @Data
 public class TransactionLine {
 
-    @CsvBindByName(column = "Transaction Number")
+    @CsvBindByName(column = "Transaction Number", required = true)
     @NotNull
     @NotBlank
     private String txNumber;
-    @CsvBindByName(column = "Transaction Date")
+    @CsvBindByName(column = "Transaction Date", required = true)
     @NotNull
     @NotBlank
     private String date;
-    @CsvBindByName(column = "Transaction Type")
+    @CsvBindByName(column = "Transaction Type", required = true)
     @NotNull
     @NotBlank
     private String type;
-    @CsvBindByName(column = "Fx Rate")
+    @CsvBindByName(column = "Fx Rate", required = true)
     @NotNull
     @NotBlank
     private String fxRate;
@@ -48,7 +48,7 @@ public class TransactionLine {
 
     @CsvBindByName(column = "Document Name")
     private String documentNumber;
-    @CsvBindByName(column = "Currency")
+    @CsvBindByName(column = "Currency", required = true)
     @NotNull
     @NotBlank
     private String currency;

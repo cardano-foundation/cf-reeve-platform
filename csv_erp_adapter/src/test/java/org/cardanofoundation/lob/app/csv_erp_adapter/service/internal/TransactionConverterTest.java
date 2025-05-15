@@ -7,9 +7,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
-import io.vavr.control.Either;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
