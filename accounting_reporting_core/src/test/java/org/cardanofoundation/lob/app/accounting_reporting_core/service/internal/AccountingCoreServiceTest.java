@@ -6,13 +6,17 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import lombok.val;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.apache.commons.lang3.Range;
@@ -67,6 +71,64 @@ class AccountingCoreServiceTest {
                 .from(LocalDate.of(2023, 1, 1))
                 .to(LocalDate.of(2023, 12, 31))
                 .build();
+    }
+
+    @Test
+    void scheduleIngestion_toManyTransaction() {
+        List<String> mockList = mock(List.class);
+        Organisation organisation = mock(Organisation.class);
+
+        when(mockList.size()).thenReturn(1000);
+        when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
+        when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
+
+        UserExtractionParameters userExtractionParameters = UserExtractionParameters.builder()
+                .organisationId("org-123")
+                .from(LocalDate.of(2023, 1, 1))
+                .to(LocalDate.of(2023, 12, 31))
+                .transactionNumbers(mockList)
+                .build();
+        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, null, null);
+        assertThat(voids.isLeft()).isTrue();
+        assertThat(voids.getLeft().getTitle()).isEqualTo("TOO_MANY_TRANSACTIONS");
+    }
+
+    @Test
+    void scheduleIngestion_FileReadError() throws IOException {
+        List<String> mockList = mock(List.class);
+        Organisation organisation = mock(Organisation.class);
+        MultipartFile file = mock(MultipartFile.class);
+
+
+        when(mockList.size()).thenReturn(600);
+        when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
+        when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
+        when(file.getBytes()).thenThrow(new IOException());
+
+        UserExtractionParameters userExtractionParameters = UserExtractionParameters.builder()
+                .organisationId("org-123")
+                .from(LocalDate.of(2023, 1, 1))
+                .to(LocalDate.of(2023, 12, 31))
+                .transactionNumbers(mockList)
+                .build();
+        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, file, null);
+        assertThat(voids.isLeft()).isTrue();
+        assertThat(voids.getLeft().getTitle()).isEqualTo("FILE_READ_ERROR");
+    }
+
+    @Test
+    void scheduleReconcilation_FileReadError() throws IOException {
+        Organisation organisation = mock(Organisation.class);
+        MultipartFile file = mock(MultipartFile.class);
+
+
+        when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
+        when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
+        when(file.getBytes()).thenThrow(new IOException());
+
+        Either<Problem, Void> voids = accountingCoreService.scheduleReconcilation("org-123", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31), ExtractorType.NETSUITE, file, null);
+        assertThat(voids.isLeft()).isTrue();
+        assertThat(voids.getLeft().getTitle()).isEqualTo("FILE_READ_ERROR");
     }
 
     @Test
