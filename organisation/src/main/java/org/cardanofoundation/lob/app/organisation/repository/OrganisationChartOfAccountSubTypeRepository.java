@@ -19,4 +19,6 @@ public interface OrganisationChartOfAccountSubTypeRepository extends JpaReposito
             "WHERE st.organisationId = :organisationId AND st.id = :subTypeId ")
     Optional<OrganisationChartOfAccountSubType> findAllByOrganisationIdAndSubTypeId(@Param("organisationId") String organisationId, @Param("subTypeId") String subTypeId);
 
+    Optional<OrganisationChartOfAccountSubType> findFirstByName(String name);
+
 }

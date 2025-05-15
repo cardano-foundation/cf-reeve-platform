@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -21,6 +22,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.vavr.control.Either;
+import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
@@ -79,7 +82,7 @@ public class ChartOfAccountController {
         return ResponseEntity.ok().body(chartOfAccountsService.getAllChartOfAccount(orgId));
     }
 
-    @Operation(description = "Reference Code insert", responses = {
+    @Operation(description = "Chart Of Account insert", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountView.class)))}
             ),
@@ -95,6 +98,23 @@ public class ChartOfAccountController {
         }
 
         return ResponseEntity.ok(referenceCode);
+    }
+
+    @Operation(description = "Chart Of Account insert by csv", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountView.class)))}
+            ),
+    })
+    @PostMapping(value = "/{orgId}/chart-of-accounts/insert-csv", consumes = "multipart/form-data")
+//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> insertChartOfAccountByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                        @RequestParam(value = "file") MultipartFile file) {
+
+        Either<Set<Problem>, Set<OrganisationChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        if (chartOfAccountE.isEmpty()) {
+            return ResponseEntity.status(500).body(chartOfAccountE.getLeft());
+        }
+        return ResponseEntity.ok(chartOfAccountE.get());
     }
 
 

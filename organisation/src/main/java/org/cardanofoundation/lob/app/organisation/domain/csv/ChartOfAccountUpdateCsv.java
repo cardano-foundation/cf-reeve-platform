@@ -1,29 +1,22 @@
-package org.cardanofoundation.lob.app.organisation.domain.entity;
-
-
+package org.cardanofoundation.lob.app.organisation.domain.csv;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
-import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-
-import lombok.*;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.opencsv.bean.CsvBindByName;
 
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OpeningBalance;
+import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
+import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
-
-@Embeddable
-@NoArgsConstructor
-@AllArgsConstructor
-@Getter
-@Builder(toBuilder = true)
-@EqualsAndHashCode
-public class OpeningBalance {
+/**
+ * We need a flat map for the CSV file, so we need to create a new class
+ */
+public class ChartOfAccountUpdateCsv extends ChartOfAccountUpdate {
 
     @CsvBindByName(column = "Balance FCY")
     private BigDecimal balanceFCY;
@@ -43,5 +36,16 @@ public class OpeningBalance {
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     @CsvBindByName(column = "Balance Date")
-    private LocalDate date;
+    private String date;
+
+    public void fillOpeningBalance() throws IllegalArgumentException{
+        this.setOpeningBalance(new OpeningBalance(
+                this.balanceFCY,
+                this.balanceLCY,
+                this.originalCurrencyIdFCY,
+                this.originalCurrencyIdLCY,
+                this.balanceType,
+                FlexibleDateParser.parse(this.date)
+        ));
+    }
 }

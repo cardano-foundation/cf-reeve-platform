@@ -1,14 +1,18 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
@@ -17,6 +21,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @Service
 @Slf4j
@@ -26,6 +31,7 @@ public class ReferenceCodeService {
 
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
+    private final CsvParser<ReferenceCodeUpdate> csvParser;
 
     public List<ReferenceCodeView> getAllReferenceCodes(String orgId) {
         return referenceCodeRepository.findAllByOrgId(orgId).stream()
@@ -160,5 +166,29 @@ public class ReferenceCodeService {
         referenceCode.setActive(referenceCodeUpdate.isActive());
         // The reference code returning is not the latest version after save
         return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
+    }
+
+    public Either<Set<Problem>, Set<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
+        Either<Problem, List<ReferenceCodeUpdate>> parsedCsv = csvParser.parseCsv(file, ReferenceCodeUpdate.class);
+        if (parsedCsv.isLeft()) {
+            return Either.left(Set.of(parsedCsv.getLeft()));
+        }
+
+        List<ReferenceCodeUpdate> refCodeUpdates = parsedCsv.get();
+        Set<ReferenceCodeView> refCodeViews = new HashSet<>();
+        Set<Problem> errors = new HashSet<>();
+        for(ReferenceCodeUpdate referenceCodeUpdate : refCodeUpdates) {
+            ReferenceCodeView refCodeView = insertReferenceCode(orgId, referenceCodeUpdate);
+            if(refCodeView.getError().isPresent()){
+                errors.add(refCodeView.getError().get());
+            } else {
+                refCodeViews.add(refCodeView);
+            }
+        }
+        if (errors.isEmpty()) {
+            return Either.right(refCodeViews);
+        } else {
+            return Either.left(errors);
+        }
     }
 }

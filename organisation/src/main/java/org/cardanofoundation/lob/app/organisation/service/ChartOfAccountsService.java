@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -9,11 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
+import org.cardanofoundation.lob.app.organisation.domain.csv.ChartOfAccountUpdateCsv;
 import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationChartOfAccountView;
@@ -21,6 +25,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepos
 import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -33,6 +38,7 @@ public class ChartOfAccountsService {
     private final OrganisationChartOfAccountSubTypeRepository organisationChartOfAccountSubTypeRepository;
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
+    private final CsvParser<ChartOfAccountUpdateCsv> csvParser;
 
     public Optional<OrganisationChartOfAccount> getChartAccount(String organisationId, String customerCode) {
         return chartOfAccountRepository.findById(new OrganisationChartOfAccount.Id(organisationId, customerCode));
@@ -206,5 +212,52 @@ public class ChartOfAccountsService {
 
         OrganisationChartOfAccount chartOfAccountResult = chartOfAccountRepository.save(chartOfAccount);
         return OrganisationChartOfAccountView.createSuccess(chartOfAccountResult);
+    }
+
+    public Either<Set<Problem>, Set<OrganisationChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
+
+
+        Either<Problem, List<ChartOfAccountUpdateCsv>> lists = csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class);
+
+        if (lists.isLeft()) {
+            return Either.left(Set.of(lists.getLeft()));
+        }
+
+        List<ChartOfAccountUpdateCsv> chartOfAccountUpdates = lists.get();
+        Set<OrganisationChartOfAccountView> accountEventViews = new HashSet<>();
+        Set<Problem> errors = new HashSet<>();
+        for (ChartOfAccountUpdateCsv eventCodeUpdate : chartOfAccountUpdates) {
+            // A workAround to fill the nested object
+            try {
+                eventCodeUpdate.fillOpeningBalance();
+            } catch (IllegalArgumentException e) {
+                Problem error = Problem.builder()
+                        .withTitle("OPENING_BALANCE_ERROR")
+                        .withDetail(e.getMessage())
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                errors.add(error);
+                continue;
+            }
+
+            // converting subtype name to ID
+            Optional.ofNullable(eventCodeUpdate.getSubType()).ifPresent(subType -> {
+                organisationChartOfAccountSubTypeRepository.findFirstByName(subType).ifPresent(orgSubType -> {
+                    eventCodeUpdate.setSubType(String.valueOf(orgSubType.getId()));
+                });
+            });
+
+            OrganisationChartOfAccountView accountEventView = insertChartOfAccount(orgId, eventCodeUpdate);
+            if (accountEventView.getError().isPresent()) {
+                Problem error = accountEventView.getError().get();
+                errors.add(error);
+            } else {
+                accountEventViews.add(accountEventView);
+            }
+        }
+        if(!errors.isEmpty()) {
+            return Either.left(errors);
+        }
+        return Either.right(accountEventViews);
     }
 }

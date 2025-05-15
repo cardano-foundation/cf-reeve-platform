@@ -1,14 +1,18 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
@@ -19,6 +23,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.repository.AccountEventRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -29,6 +34,7 @@ public class AccountEventService {
     private final AccountEventRepository accountEventRepository;
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
+    private final CsvParser<EventCodeUpdate> csvParser;
 
     public Optional<AccountEvent> findById(String organisationId, String debitReferenceCode, String creditReferenceCode) {
         return accountEventRepository.findById(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode));
@@ -188,5 +194,30 @@ public class AccountEventService {
         accountEvent.setActive(eventCodeUpdate.getActive());
 
         return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
+    }
+
+    public Either<Set<Problem>, Set<AccountEventView>> insertAccountEventByCsv(String orgId, MultipartFile file) {
+
+        Either<Problem, List<EventCodeUpdate>> lists = csvParser.parseCsv(file, EventCodeUpdate.class);
+        if (lists.isLeft()) {
+            return Either.left(Set.of(lists.getLeft()));
+        }
+
+        List<EventCodeUpdate> eventCodeUpdates = lists.get();
+        Set<AccountEventView> accountEventViews = new HashSet<>();
+        Set<Problem> errors = new HashSet<>();
+        for (EventCodeUpdate eventCodeUpdate : eventCodeUpdates) {
+            AccountEventView accountEventView = insertAccountEvent(orgId, eventCodeUpdate);
+            if (accountEventView.getError().isPresent()) {
+                Problem error = accountEventView.getError().get();
+                errors.add(error);
+            } else {
+                accountEventViews.add(accountEventView);
+            }
+        }
+        if(!errors.isEmpty()) {
+            return Either.left(errors);
+        }
+        return Either.right(accountEventViews);
     }
 }
