@@ -31,7 +31,8 @@ class ExtractionControllerTest {
     @Test
     void transactionSearch_error() {
         ExtractionTransactionsRequest request = mock(ExtractionTransactionsRequest.class);
-
+        when(request.getDateFrom()).thenReturn("2023-01-01");
+        when(request.getDateTo()).thenReturn("2023-12-31");
         when(extractionItemService.findTransactionItems(any(),any(),any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
 
         ResponseEntity<ExtractionTransactionView> extractionTransactionViewResponseEntity = extractionController.transactionSearch(request);
@@ -42,6 +43,8 @@ class ExtractionControllerTest {
     @Test
     void transactionSearch_success() {
         ExtractionTransactionsRequest request = mock(ExtractionTransactionsRequest.class);
+        when(request.getDateFrom()).thenReturn("2023-01-01");
+        when(request.getDateTo()).thenReturn("2023-12-31");
         ExtractionTransactionView expectedResponse = mock(ExtractionTransactionView.class);
 
         when(extractionItemService.findTransactionItems(any(),any(),any(), any(), any(), any(), any())).thenReturn(expectedResponse);
