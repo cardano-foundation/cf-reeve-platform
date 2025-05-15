@@ -107,6 +107,7 @@ public class ReportTypeService {
                         .withTitle("Can't add mappings to Report Type field: %s".formatted(reportUpdate))
                         .withStatus(Status.BAD_REQUEST)
                         .build());
+                continue;
             }
             addMappingToReportTypeField(orgId, reportTypeFieldUpdate).peekLeft(errors::add);
         }

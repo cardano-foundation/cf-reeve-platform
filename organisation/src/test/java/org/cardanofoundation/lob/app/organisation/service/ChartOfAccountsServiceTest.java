@@ -5,17 +5,23 @@ import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.web.multipart.MultipartFile;
+
+import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
+import org.cardanofoundation.lob.app.organisation.domain.csv.ChartOfAccountUpdateCsv;
 import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationChartOfAccountView;
@@ -23,6 +29,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepos
 import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @ExtendWith(MockitoExtension.class)
 class ChartOfAccountsServiceTest {
@@ -41,6 +48,8 @@ class ChartOfAccountsServiceTest {
 
     @Mock
     private OrganisationService organisationService;
+    @Mock
+    private CsvParser<ChartOfAccountUpdateCsv> csvParser;
 
     private ChartOfAccountsService chartOfAccountsService;
 
@@ -61,7 +70,8 @@ class ChartOfAccountsServiceTest {
                 organisationChartOfAccountTypeRepository,
                 organisationChartOfAccountSubTypeRepository,
                 referenceCodeRepository,
-                organisationService
+                organisationService,
+                csvParser
         );
         chartOfAccountId = new OrganisationChartOfAccount.Id(orgId, customerCode);
         chartOfAccount = OrganisationChartOfAccount.builder()
@@ -78,6 +88,104 @@ class ChartOfAccountsServiceTest {
         chartOfAccount.setSubType(subType);
 
         chartOfAccountUpdate = new ChartOfAccountUpdate(customerCode, "EVT123", "REF123", "Description", "3", "USD", "CounterParty", "2", null, Boolean.TRUE, new OpeningBalance(BigDecimal.valueOf(1000), BigDecimal.valueOf(1000), "USD", "USD", OperationType.DEBIT, LocalDate.now()));
+    }
+
+    @Test
+    void insertChartOfAccountByCsv_parseError() {
+        String orgId = "org-1";
+        MultipartFile file = mock(MultipartFile.class);
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.left(Problem.builder()
+                .withTitle("Error")
+                .withStatus(org.zalando.problem.Status.BAD_REQUEST)
+                .build()));
+
+        Either<Set<Problem>, Set<OrganisationChartOfAccountView>> views = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+
+        assertTrue(views.isLeft());
+        assertEquals(1, views.getLeft().size());
+    }
+
+    @Test
+    void insertChartOfAccountByCsv_openingBalanceConvertError() {
+        String orgId = "org-1";
+        MultipartFile file = mock(MultipartFile.class);
+        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
+
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
+        doThrow(new IllegalArgumentException("Error")).when(updateCsv).fillOpeningBalance();
+        Either<Set<Problem>, Set<OrganisationChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        assertTrue(sets.isLeft());
+        assertEquals(1, sets.getLeft().size());
+        assertEquals("OPENING_BALANCE_ERROR", sets.getLeft().iterator().next().getTitle());
+    }
+
+    @Test
+    void insertChartOfAccountByCsv_organisationNotFound() {
+        String orgId = "org-1";
+        MultipartFile file = mock(MultipartFile.class);
+        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
+        OrganisationChartOfAccountSubType subType = mock(OrganisationChartOfAccountSubType.class);
+
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
+        when(updateCsv.getSubType()).thenReturn("SUBTYPE");
+        when(organisationChartOfAccountSubTypeRepository.findFirstByName("SUBTYPE")).thenReturn(Optional.of(subType));
+
+        Either<Set<Problem>, Set<OrganisationChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        assertTrue(sets.isLeft());
+        assertEquals(1, sets.getLeft().size());
+        assertEquals("ORGANISATION_NOT_FOUND", sets.getLeft().iterator().next().getTitle());
+    }
+
+    @Test
+    void insertChartOfAccountByCsv_alreadyExists() {
+        String orgId = "org-1";
+        MultipartFile file = mock(MultipartFile.class);
+        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
+        OrganisationChartOfAccountSubType subType = mock(OrganisationChartOfAccountSubType.class);
+        when(subType.getId()).thenReturn(3L);
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
+        when(updateCsv.getSubType()).thenReturn("SUBTYPE");
+        when(organisationChartOfAccountSubTypeRepository.findFirstByName("SUBTYPE")).thenReturn(Optional.of(subType));
+        when(updateCsv.getEventRefCode()).thenReturn(chartOfAccount.getEventRefCode());
+
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, "SUBTYPE"))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, null))
+                .thenReturn(Optional.of(chartOfAccount));
+
+        Either<Set<Problem>, Set<OrganisationChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        assertTrue(sets.isLeft());
+        assertEquals(1, sets.getLeft().size());
+        assertEquals("CHART_OF_ACCOUNT_ALREADY_EXISTS", sets.getLeft().iterator().next().getTitle());
+    }
+
+    @Test
+    void insertChartOfAccountByCsv_success() {
+        String orgId = "org-1";
+        MultipartFile file = mock(MultipartFile.class);
+        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
+        OrganisationChartOfAccountSubType subType = mock(OrganisationChartOfAccountSubType.class);
+        when(subType.getId()).thenReturn(3L);
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
+        when(updateCsv.getSubType()).thenReturn("SUBTYPE");
+        when(organisationChartOfAccountSubTypeRepository.findFirstByName("SUBTYPE")).thenReturn(Optional.of(subType));
+        when(updateCsv.getEventRefCode()).thenReturn(chartOfAccount.getEventRefCode());
+
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, "SUBTYPE"))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, null))
+                .thenReturn(Optional.empty());
+        when(chartOfAccountRepository.save(any(OrganisationChartOfAccount.class))).thenReturn(chartOfAccount);
+
+        Either<Set<Problem>, Set<OrganisationChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        assertTrue(sets.isRight());
+        assertEquals(1, sets.get().size());
     }
 
     @Test
