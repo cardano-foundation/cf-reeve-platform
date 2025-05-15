@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests;
 
 
-import java.time.LocalDate;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -23,10 +22,10 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 public class ExtractionTransactionsRequest extends BaseRequest {
 
     @Schema(example = "2023-01-01")
-    private LocalDate dateFrom;
+    private String dateFrom;
 
     @Schema(example = "2023-31-01")
-    private LocalDate dateTo;
+    private String dateTo;
 
     @ArraySchema(arraySchema = @Schema(example = "[\"2102110100\",\"2406210100\"]"))
     @Nullable
