@@ -172,7 +172,7 @@ class CsvExtractionServiceTest {
         verify(applicationEventPublisher).publishEvent(captor.capture());
         TransactionBatchFailedEvent value = captor.getValue();
         assertEquals("orgId", value.getOrganisationId());
-        assertEquals(Constants.NO_TRANSACTION_LINES, value.getError().getSubCode());
+        assertEquals(Constants.CSV_PARSING_ERROR, value.getError().getSubCode());
     }
 
     @Test
@@ -338,7 +338,7 @@ class CsvExtractionServiceTest {
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationFailedEvent value = captor.getValue();
         assertEquals("orgId", value.getOrganisationId());
-        assertEquals(Constants.NO_TRANSACTION_LINES, value.getError().getSubCode());
+        assertEquals(Constants.CSV_PARSING_ERROR, value.getError().getSubCode());
     }
 
     @Test
