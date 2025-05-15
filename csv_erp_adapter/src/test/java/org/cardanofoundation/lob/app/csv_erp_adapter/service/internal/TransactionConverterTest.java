@@ -5,9 +5,13 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 
 import io.vavr.control.Either;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 
@@ -22,6 +26,9 @@ import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
 @ExtendWith(MockitoExtension.class)
 class TransactionConverterTest {
 
+    @Mock
+    private Validator validator;
+
     @InjectMocks
     private TransactionConverter transactionConverter;
 
@@ -30,6 +37,22 @@ class TransactionConverterTest {
         Either<Problem, List<Transaction>> lists = transactionConverter.convertToTransaction("orgId", "batchId", List.of());
         Assertions.assertTrue(lists.isRight());
         Assertions.assertTrue(lists.get().isEmpty());
+    }
+
+    @Test
+    void convertToTransaction_validationProblem() {
+        TransactionLine line = mock(TransactionLine.class);
+        ConstraintViolation<TransactionLine> violation = mock(ConstraintViolation.class);
+
+        when(violation.getMessage()).thenReturn("Validation error");
+        when(validator.validate(line)).thenReturn(Set.of(violation));
+        when(line.getTxNumber()).thenReturn("TxNumber");
+
+        Either<Problem, List<Transaction>> lists = transactionConverter.convertToTransaction("orgId", "batchId", List.of(line));
+
+        Assertions.assertTrue(lists.isLeft());
+        Assertions.assertEquals("Transaction validation failed", lists.getLeft().getTitle());
+
     }
 
     @Test

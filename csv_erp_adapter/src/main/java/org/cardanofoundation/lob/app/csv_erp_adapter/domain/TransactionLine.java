@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.csv_erp_adapter.domain;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
 import lombok.Data;
 
 import com.opencsv.bean.CsvBindByName;
@@ -8,12 +11,20 @@ import com.opencsv.bean.CsvBindByName;
 public class TransactionLine {
 
     @CsvBindByName(column = "Transaction Number")
+    @NotNull
+    @NotBlank
     private String txNumber;
     @CsvBindByName(column = "Transaction Date")
+    @NotNull
+    @NotBlank
     private String date;
     @CsvBindByName(column = "Transaction Type")
+    @NotNull
+    @NotBlank
     private String type;
     @CsvBindByName(column = "Fx Rate")
+    @NotNull
+    @NotBlank
     private String fxRate;
     @CsvBindByName(column = "AmountLCY Debit")
     private String amountLCYDebit;
@@ -38,6 +49,8 @@ public class TransactionLine {
     @CsvBindByName(column = "Document Name")
     private String documentNumber;
     @CsvBindByName(column = "Currency")
+    @NotNull
+    @NotBlank
     private String currency;
 
     @CsvBindByName(column = "VAT Rate")

@@ -197,7 +197,7 @@ public class CsvExtractionService {
                     .batchId(batchId)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, Map.of(Constants.BATCH_ID, batchId)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, Map.of("Problem", transactions.getLeft())))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
