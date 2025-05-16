@@ -19,6 +19,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
@@ -65,7 +66,7 @@ public class TransactionBatchService {
     public void createTransactionBatch(String batchId,
                                        String organisationId,
                                        UserExtractionParameters userExtractionParameters,
-                                       SystemExtractionParameters systemExtractionParameters, String user) {
+                                       SystemExtractionParameters systemExtractionParameters, String user, ExtractorType extractorType) {
         log.info("Creating transaction batch, batchId: {}, filteringParameters: {}", batchId, userExtractionParameters);
 
         if (transactionBatchRepository.findById(batchId).isPresent()) {
@@ -93,6 +94,7 @@ public class TransactionBatchService {
                 .organisationId(organisationId)
                 .userExtractionParameters(userExtractionParameters)
                 .systemExtractionParameters(systemExtractionParameters)
+                .extractorType(extractorType)
                 .build()
         );
     }

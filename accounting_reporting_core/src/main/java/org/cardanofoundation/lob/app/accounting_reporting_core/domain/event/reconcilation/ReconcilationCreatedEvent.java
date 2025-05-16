@@ -9,6 +9,7 @@ import lombok.*;
 
 import org.jmolecules.event.annotation.DomainEvent;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @DomainEvent
@@ -34,5 +35,7 @@ public class ReconcilationCreatedEvent {
 
     @NotNull
     private LocalDate to;
+
+    private ExtractorType extractorType = ExtractorType.NETSUITE;
 
 }

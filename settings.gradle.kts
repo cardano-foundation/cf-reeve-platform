@@ -14,6 +14,7 @@ include (
  ":blockchain_reader",
  ":blockchain_common",
  ":netsuite_altavia_erp_adapter",
+ ":csv_erp_adapter",
  ":notification_gateway",
  ":organisation",
 )

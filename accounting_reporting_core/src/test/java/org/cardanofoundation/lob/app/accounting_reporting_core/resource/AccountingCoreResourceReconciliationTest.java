@@ -38,24 +38,24 @@ class AccountingCoreResourceReconciliationTest {
 
     @Test
     void testReconcileTriggerAction_successfull() {
-        when(accountingCoreService.scheduleReconcilation(any(), any(), any())).thenReturn(Either.right(null));
+        when(accountingCoreService.scheduleReconcilation(any(), any(), any(), any(), any(), any())).thenReturn(Either.right(null));
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(new ReconciliationRequest());
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
-        verify(accountingCoreService).scheduleReconcilation(any(), any(), any());
+        verify(accountingCoreService).scheduleReconcilation(any(), any(), any(), any(), any(), any());
         verifyNoMoreInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationViewService);
     }
 
     @Test
     void testReconcileTriggerAction_problem() {
-        when(accountingCoreService.scheduleReconcilation(any(), any(), any())).thenReturn(Either.left(Problem.builder()
+        when(accountingCoreService.scheduleReconcilation(any(), any(), any(), any(), any(), any())).thenReturn(Either.left(Problem.builder()
                 .withTitle("title")
                 .withStatus(BAD_REQUEST)
                 .build()));
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(new ReconciliationRequest());
 
         Assertions.assertEquals(400, responseEntity.getStatusCode().value());
-        verify(accountingCoreService).scheduleReconcilation(any(), any(), any());
+        verify(accountingCoreService).scheduleReconcilation(any(), any(), any(), any(), any(), any());
         verifyNoMoreInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationViewService);
     }
