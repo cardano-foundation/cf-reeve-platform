@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
+import org.zalando.problem.Problem;
+
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
 
 
@@ -20,6 +22,8 @@ public class OrganisationCostCenterView {
 
     private OrganisationCostCenterView parentCustomerCode;
 
+    private Problem error;
+
     public static OrganisationCostCenterView fromEntity(OrganisationCostCenter costCenter) {
         OrganisationCostCenterViewBuilder builder = OrganisationCostCenterView.builder()
                 .customerCode(costCenter.getId() == null ? null : costCenter.getId().getCustomerCode())
@@ -29,5 +33,12 @@ public class OrganisationCostCenterView {
             builder.parentCustomerCode(OrganisationCostCenterView.fromEntity(costCenter.getParent().get()));
         }
         return builder.build();
+    }
+
+    public static OrganisationCostCenterView createFail(String customerCode, Problem error) {
+        return OrganisationCostCenterView.builder()
+                .customerCode(customerCode)
+                .error(error)
+                .build();
     }
 }

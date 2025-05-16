@@ -8,6 +8,7 @@ It is possible to import the following data:
 - Chart of Accounts
 - Ref Codes
 - Report Type Field mapping
+- Cost Center
 
 
 ## Data structure
@@ -77,3 +78,19 @@ The following columns are needed:
 - `Report Type`: Type of the report (e.g. `INCOME_STATEMENT`)
 - `Report Type Field`: Name of the field (e.g. `REVENUE`)
 - `Sub Type`: Type of the field (e.g. `CASH_AND_CASH_EQUIVALENTS`)
+
+### Cost Center data structure
+An example can be found here: [Cost Center CSV Example](./examples/cost_center_csv_example.csv)
+The following columns are needed:
+- `Customer code`: Code of the cost center (e.g. `COST_CENTER_1`)
+- `External customer code`: Name of the external customer code (e.g. `Cost Center 1`)
+- `Name`: Name of the cost center (e.g. `Cost Center 1`)
+- `Parent customer code`: Parent code of the cost center (e.g. `COST_CENTER_2`)
+
+### Project data structure
+An example can be found here: [Project CSV Example](./examples/project_csv_example.csv)
+The following columns are needed:
+- `Customer code`: Code of the project (e.g. `PROJECT_1`)
+- `External customer code`: Name of the external project code (e.g. `Project 1`)
+- `Name`: Name of the project (e.g. `Project 1`)
+- `Parent customer code`: Parent code of the project (e.g. `PROJECT_2`)
