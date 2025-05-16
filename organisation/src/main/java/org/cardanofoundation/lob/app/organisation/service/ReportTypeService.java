@@ -92,15 +92,15 @@ public class ReportTypeService {
                     safeParse(reportUpdate.getReportType()),
                     safeParse(reportUpdate.getReportTypeField()),
                     safeParse(reportUpdate.getSubType()));
-            Optional.ofNullable(reportUpdate.getReportType()).ifPresent(reportTypeName ->
-                    reportTypeRepository.findByOrganisationAndReportName(orgId, reportTypeName).ifPresent(reportTypeEntity ->
-                            reportTypeFieldUpdate.setReportTypeId(reportTypeEntity.getId())));
-            Optional.ofNullable(reportUpdate.getReportTypeField()).ifPresent(reportTypeField ->
-                    reportTypeFieldRepository.findFirstByReportIdAndName(reportTypeFieldUpdate.getReportTypeId(), reportTypeField)
-                            .ifPresent(reportTypeFieldEntity -> reportTypeFieldUpdate.setReportTypeFieldId(reportTypeFieldEntity.getId())));
-            Optional.ofNullable(reportUpdate.getSubType()).ifPresent(subType ->
-                    organisationChartOfAccountSubTypeRepository.findFirstByName(subType)
-                            .ifPresent(organisationChartOfAccountSubType -> reportTypeFieldUpdate.setOrganisationChartOfAccountSubTypeId(organisationChartOfAccountSubType.getId())));
+            Optional.ofNullable(reportUpdate.getReportType())
+                    .flatMap(reportTypeName -> reportTypeRepository.findByOrganisationAndReportName(orgId, reportTypeName))
+                    .ifPresent(reportTypeEntity -> reportTypeFieldUpdate.setReportTypeId(reportTypeEntity.getId()));
+            Optional.ofNullable(reportUpdate.getReportTypeField())
+                    .flatMap(reportTypeField -> reportTypeFieldRepository.findFirstByReportIdAndName(reportTypeFieldUpdate.getReportTypeId(), reportTypeField))
+                    .ifPresent(reportTypeFieldEntity -> reportTypeFieldUpdate.setReportTypeFieldId(reportTypeFieldEntity.getId()));
+            Optional.ofNullable(reportUpdate.getSubType())
+                    .flatMap(organisationChartOfAccountSubTypeRepository::findFirstByName)
+                    .ifPresent(organisationChartOfAccountSubType -> reportTypeFieldUpdate.setOrganisationChartOfAccountSubTypeId(organisationChartOfAccountSubType.getId()));
 
             if (reportTypeFieldUpdate.getReportTypeId() == null || reportTypeFieldUpdate.getReportTypeFieldId() == null || reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId() == null) {
                 errors.add(Problem.builder()
@@ -109,7 +109,8 @@ public class ReportTypeService {
                         .build());
                 continue;
             }
-            addMappingToReportTypeField(orgId, reportTypeFieldUpdate).peekLeft(errors::add);
+            addMappingToReportTypeField(orgId, reportTypeFieldUpdate)
+                    .peekLeft(errors::add);
         }
         if (errors.isEmpty()) {
             return Either.right(null);

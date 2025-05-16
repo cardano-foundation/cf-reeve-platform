@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.List;
 
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -24,6 +26,13 @@ class CsvParserTest {
 
     @InjectMocks
     private CsvParser<EventCodeUpdate> csvParser; // using EventCodeSince it's the easiest to mock
+
+    @BeforeEach
+    void setUp() throws NoSuchFieldException, IllegalAccessException {
+        Field delimiterField = CsvParser.class.getDeclaredField("delimiter");
+        delimiterField.setAccessible(true);
+        delimiterField.set(csvParser, ",");
+    }
 
     @Test
     void parseCsv_emptyFile() {
@@ -59,7 +68,7 @@ class CsvParserTest {
         Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
 
         Assertions.assertTrue(parse.isRight());
-        Assertions.assertTrue(parse.get().size() == 2);
+        Assertions.assertEquals(2, parse.get().size());
         EventCodeUpdate first = parse.get().getFirst();
         Assertions.assertEquals("123", first.getDebitReferenceCode());
         Assertions.assertEquals("456", first.getCreditReferenceCode());

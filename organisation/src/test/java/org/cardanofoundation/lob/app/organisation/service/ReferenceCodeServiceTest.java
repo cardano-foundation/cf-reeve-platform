@@ -79,22 +79,22 @@ class ReferenceCodeServiceTest {
     void insertReferenceCodeByCsv_cantFindOrg() {
         String orgId = "org123";
         MultipartFile file = mock(MultipartFile.class);
-        ReferenceCodeUpdate referenceCodeUpdate = new ReferenceCodeUpdate("ref001", "Test Reference", null, true);
-        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(referenceCodeUpdate)));
+        ReferenceCodeUpdate refCodeUpdate = new ReferenceCodeUpdate("ref001", "Test Reference", null, true);
+        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(refCodeUpdate)));
 
         Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
 
-        assertTrue(result.isLeft());
-        assertEquals(1, result.getLeft().size());
-        assertEquals("Unable to find Organisation by Id: org123", result.getLeft().iterator().next().getDetail());
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        assertEquals("Unable to find Organisation by Id: org123", result.get().iterator().next().getError().get().getDetail());
     }
 
     @Test
     void insertReferencCodeByCsv_success() {
         String orgId = "org123";
         MultipartFile file = mock(MultipartFile.class);
-        ReferenceCodeUpdate referenceCodeUpdate = new ReferenceCodeUpdate(REF_CODE, "Test Reference", null, true);
-        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(referenceCodeUpdate)));
+        ReferenceCodeUpdate refCodeUpdate = new ReferenceCodeUpdate(REF_CODE, "Test Reference", null, true);
+        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(refCodeUpdate)));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrganisation));
         when(referenceCodeRepository.save(any(ReferenceCode.class))).thenReturn(referenceCode);

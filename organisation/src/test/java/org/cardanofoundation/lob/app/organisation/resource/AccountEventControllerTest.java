@@ -52,7 +52,7 @@ class AccountEventControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody()).size()).isEqualTo(1);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
     }
 
     @Test
@@ -65,7 +65,7 @@ class AccountEventControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody()).size()).isEqualTo(1);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
         assertThat(((Set<?>) response.getBody()).iterator().next()).isEqualTo(view);
     }
 
@@ -75,7 +75,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.getReferenceCodes(orgId);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         verify(accountEventService).getAllAccountEvent(orgId);
     }
 
@@ -87,7 +87,7 @@ class AccountEventControllerTest {
         when(view.getError()).thenReturn(Optional.empty());
         ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -103,7 +103,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(404);
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -115,7 +115,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.updateReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -131,7 +131,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.updateReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(400);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -143,7 +143,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.upsertReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -159,7 +159,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.upsertReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(500);
+        assertThat(response.getStatusCode().value()).isEqualTo(500);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -169,7 +169,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.deleteReferenceCode(orgId, "ref123");
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(404);
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
         assertThat(response.getBody()).isInstanceOf(Problem.class);
         assertThat(((Problem) response.getBody()).getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
     }

@@ -44,7 +44,7 @@ class ChartOfAccountControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(500);
         assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody()).size()).isEqualTo(1);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
     }
 
     @Test
@@ -57,7 +57,7 @@ class ChartOfAccountControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody()).size()).isEqualTo(1);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
         assertThat(((Set<?>) response.getBody()).iterator().next()).isEqualTo(view);
     }
 
@@ -69,7 +69,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<Set<OrganisationChartOfAccountView>> response = controller.getChartOfAccounts(orgId);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(accounts);
         verify(chartOfAccountsService).getAllChartOfAccount(orgId);
     }
@@ -84,7 +84,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -103,7 +103,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(400);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -117,7 +117,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.updateChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -136,7 +136,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.upsertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(400);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isEqualTo(view);
     }
 

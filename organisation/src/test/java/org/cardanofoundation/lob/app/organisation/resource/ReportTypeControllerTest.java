@@ -42,7 +42,7 @@ class ReportTypeControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody()).size()).isEqualTo(1);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
     }
 
     @Test

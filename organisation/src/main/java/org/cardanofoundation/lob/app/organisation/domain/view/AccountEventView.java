@@ -38,8 +38,10 @@ public class AccountEventView {
                 .build();
     }
 
-    public static AccountEventView createFail(Problem error) {
+    public static AccountEventView createFail(Problem error, String debitReferenceCode, String creditReferenceCode) {
         return AccountEventView.builder()
+                .debitReferenceCode(debitReferenceCode)
+                .creditReferenceCode(creditReferenceCode)
                 //.name(error.getTitle())
                 //.subType(chartOfAccount.getSubType().getId())
                 //.type(chartOfAccount.getSubType().getType().getId())

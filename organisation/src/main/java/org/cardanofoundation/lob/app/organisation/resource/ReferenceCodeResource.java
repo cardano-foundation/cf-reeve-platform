@@ -82,7 +82,7 @@ public class ReferenceCodeResource {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/reference-codes/insert-csv", produces = "multipart/form-data")
+    @PostMapping(value = "/{orgId}/reference-codes/insert-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 //    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {

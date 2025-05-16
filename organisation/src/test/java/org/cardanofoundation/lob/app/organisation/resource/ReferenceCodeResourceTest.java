@@ -45,7 +45,7 @@ class ReferenceCodeResourceTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(500);
         assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody()).size()).isEqualTo(1);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
     }
 
     @Test
@@ -58,7 +58,7 @@ class ReferenceCodeResourceTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody()).size()).isEqualTo(1);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
         assertThat(((Set<?>) response.getBody()).iterator().next()).isEqualTo(view);
     }
 

@@ -105,8 +105,8 @@ class AccountEventServiceTest {
 
         Either<Set<Problem>, Set<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
 
-        assertTrue(sets.isLeft());
-        assertEquals(1, sets.getLeft().size());
+        assertTrue(sets.isRight());
+        assertEquals(1, sets.get().size());
     }
 
     @Test

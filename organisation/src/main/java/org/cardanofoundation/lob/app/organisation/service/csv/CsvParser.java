@@ -22,8 +22,8 @@ import org.zalando.problem.Problem;
 @RequiredArgsConstructor
 public class CsvParser<T> {
 
-    @Value("${lob.csv.delimiter}")
-    private final String delimiter = ";";
+    @Value("${lob.csv.delimiter:;}")
+    private String delimiter;
 
     public Either<Problem, List<T>> parseCsv(MultipartFile file, Class<T> type){
         if(Objects.isNull(file) || file.isEmpty()){
@@ -35,7 +35,18 @@ public class CsvParser<T> {
                     .build());
         }
         try {
-            return Either.right(new CsvToBeanBuilder<T>(new InputStreamReader(new ByteArrayInputStream(file.getBytes())))
+            return parseCsv(file.getBytes(), type);
+        } catch (Exception e) {
+            return Either.left(Problem.builder()
+                    .withTitle("CSV_PARSING_ERROR")
+                    .withDetail(e.getMessage())
+                    .build());
+        }
+    }
+
+    public Either<Problem, List<T>> parseCsv(byte[] file, Class<T> type) {
+        try {
+            return Either.right(new CsvToBeanBuilder<T>(new InputStreamReader(new ByteArrayInputStream(file)))
                     .withIgnoreLeadingWhiteSpace(true)
                     .withType(type)
                     .withSeparator(delimiter.charAt(0))
@@ -43,7 +54,6 @@ public class CsvParser<T> {
                     .withFieldAsNull(CSVReaderNullFieldIndicator.BOTH)
                     .build().parse());
         } catch (Exception e) {
-            log.info("Error parsing CSV file");
             return Either.left(Problem.builder()
                     .withTitle("CSV_PARSING_ERROR")
                     .withDetail(e.getMessage())

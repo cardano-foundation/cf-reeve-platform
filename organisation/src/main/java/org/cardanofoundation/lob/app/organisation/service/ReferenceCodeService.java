@@ -1,9 +1,9 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,7 +53,8 @@ public class ReferenceCodeService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate.getReferenceCode());
         }
         Optional<ReferenceCode> parentReferenceCode = Optional.empty();
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
@@ -63,7 +64,8 @@ public class ReferenceCodeService {
                         .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
                         .withDetail(STR."Unable to find parent reference Id: \{referenceCodeUpdate.getParentReferenceCode()}")
                         .withStatus(Status.NOT_FOUND)
-                        .build());
+                        .build(),
+                        referenceCodeUpdate.getReferenceCode());
             }
         }
 
@@ -73,7 +75,8 @@ public class ReferenceCodeService {
                     .withTitle("REFERENCE_CODE_ALREADY_EXIST")
                     .withDetail(STR."The reference code with code :\{referenceCodeUpdate.getReferenceCode()} already exists")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate.getReferenceCode());
         }
 
         ReferenceCode referenceCode = ReferenceCode.builder()
@@ -96,7 +99,8 @@ public class ReferenceCodeService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate.getReferenceCode());
         }
         Optional<ReferenceCode> parentReferenceCode = Optional.empty();
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
@@ -106,7 +110,8 @@ public class ReferenceCodeService {
                         .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
                         .withDetail(STR."Unable to find parent reference Id: \{referenceCodeUpdate.getParentReferenceCode()}")
                         .withStatus(Status.NOT_FOUND)
-                        .build());
+                        .build(),
+                        referenceCodeUpdate.getReferenceCode());
             }
         }
 
@@ -117,7 +122,8 @@ public class ReferenceCodeService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail(STR."Unable to find reference Id: \{referenceCodeUpdate.getReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate.getReferenceCode());
         }
 
         ReferenceCode referenceCode = referenceCodeOpt.get();
@@ -140,9 +146,10 @@ public class ReferenceCodeService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate.getReferenceCode());
         }
-        Optional<ReferenceCode> parentReferenceCode = Optional.empty();
+        Optional<ReferenceCode> parentReferenceCode;
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
             parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
@@ -150,7 +157,8 @@ public class ReferenceCodeService {
                         .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
                         .withDetail(STR."Unable to find parent reference Id: \{referenceCodeUpdate.getParentReferenceCode()}")
                         .withStatus(Status.NOT_FOUND)
-                        .build());
+                        .build(),
+                        referenceCodeUpdate.getReferenceCode());
             }
         }
 
@@ -168,27 +176,12 @@ public class ReferenceCodeService {
         return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
     }
 
+    @Transactional
     public Either<Set<Problem>, Set<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
-        Either<Problem, List<ReferenceCodeUpdate>> parsedCsv = csvParser.parseCsv(file, ReferenceCodeUpdate.class);
-        if (parsedCsv.isLeft()) {
-            return Either.left(Set.of(parsedCsv.getLeft()));
-        }
-
-        List<ReferenceCodeUpdate> refCodeUpdates = parsedCsv.get();
-        Set<ReferenceCodeView> refCodeViews = new HashSet<>();
-        Set<Problem> errors = new HashSet<>();
-        for(ReferenceCodeUpdate referenceCodeUpdate : refCodeUpdates) {
-            ReferenceCodeView refCodeView = insertReferenceCode(orgId, referenceCodeUpdate);
-            if(refCodeView.getError().isPresent()){
-                errors.add(refCodeView.getError().get());
-            } else {
-                refCodeViews.add(refCodeView);
-            }
-        }
-        if (errors.isEmpty()) {
-            return Either.right(refCodeViews);
-        } else {
-            return Either.left(errors);
-        }
+        return csvParser.parseCsv(file, ReferenceCodeUpdate.class).fold(
+                problem -> Either.left(Set.of(problem)),
+                referenceCodeUpdates -> Either.right(referenceCodeUpdates.stream().map(
+                        refCodeUpdate -> insertReferenceCode(orgId, refCodeUpdate)).collect(Collectors.toSet()))
+        );
     }
 }
