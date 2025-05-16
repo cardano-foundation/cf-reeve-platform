@@ -17,15 +17,18 @@ import org.springframework.stereotype.Component;
 public class RequestCachingFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
-        if (request instanceof HttpServletRequest httpRequest) {
+        if (request instanceof HttpServletRequest httpServletRequest) {
+            String contentType = httpServletRequest.getContentType();
 
-            // Wrap the original request
-            CustomHttpServletRequestWrapper wrappedRequest = new CustomHttpServletRequestWrapper(httpRequest);
-
-            // Proceed with the request
-            chain.doFilter(wrappedRequest, response);
-        } else {
-            chain.doFilter(request, response);
+            // Don't wrap multipart requests
+            if (contentType == null || !contentType.toLowerCase().startsWith("multipart/")) {
+                CustomHttpServletRequestWrapper wrappedRequest = new CustomHttpServletRequestWrapper(httpServletRequest);
+                chain.doFilter(wrappedRequest, response);
+                return;
+            }
         }
+
+        // Proceed without wrapping
+        chain.doFilter(request, response);
     }
 }

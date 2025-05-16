@@ -3,8 +3,10 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -17,11 +19,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.apache.commons.lang3.Range;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -54,7 +58,7 @@ public class AccountingCoreService {
     private int maxTransactionNumbersPerBatch = 600;
 
     @Transactional
-    public Either<Problem, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters) {
+    public Either<Problem, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, MultipartFile file, Map<String, Object> parameters) {
         log.info("scheduleIngestion, parameters: {}", userExtractionParameters);
 
         String organisationId = userExtractionParameters.getOrganisationId();
@@ -73,10 +77,26 @@ public class AccountingCoreService {
                     .withStatus(BAD_REQUEST)
                     .build());
         }
-
+        byte[] fileBytes;
+        try {
+            if(file != null) {
+                fileBytes = file.getBytes();
+            } else {
+                fileBytes = null;
+            }
+        } catch (IOException e) {
+            return Either.left(Problem.builder()
+                    .withTitle("FILE_READ_ERROR")
+                    .withDetail("Error reading file")
+                    .withStatus(BAD_REQUEST)
+                    .build());
+        }
         ScheduledIngestionEvent event = ScheduledIngestionEvent.builder().metadata(EventMetadata.create(ScheduledIngestionEvent.VERSION, keycloakSecurityHelper.getCurrentUser()))
                 .organisationId(userExtractionParameters.getOrganisationId())
                 .userExtractionParameters(userExtractionParameters)
+                .extractorType(extractorType)
+                .file(fileBytes)
+                .parameters(parameters)
                 .build();
 
         applicationEventPublisher.publishEvent(event);
@@ -87,12 +107,26 @@ public class AccountingCoreService {
     @Transactional
     public Either<Problem, Void> scheduleReconcilation(String organisationId,
                                                        LocalDate fromDate,
-                                                       LocalDate toDate) {
+                                                       LocalDate toDate, ExtractorType extractorType, MultipartFile file, Map<String, Object> parameters) {
         log.info("scheduleReconilation, organisationId: {}, from: {}, to: {}", organisationId, fromDate, toDate);
 
         Either<Problem, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(organisationId, fromDate, toDate);
         if (dateRangeCheckE.isLeft()) {
             return dateRangeCheckE;
+        }
+        byte[] fileBytes;
+        try {
+            if(file != null) {
+                fileBytes = file.getBytes();
+            } else {
+                fileBytes = null;
+            }
+        } catch (IOException e) {
+            return Either.left(Problem.builder()
+                    .withTitle("FILE_READ_ERROR")
+                    .withDetail("Error reading file")
+                    .withStatus(BAD_REQUEST)
+                    .build());
         }
 
         ScheduledReconcilationEvent event = ScheduledReconcilationEvent.builder()
@@ -100,6 +134,9 @@ public class AccountingCoreService {
                 .from(fromDate)
                 .to(toDate)
                 .metadata(EventMetadata.create(ScheduledReconcilationEvent.VERSION))
+                .extractorType(extractorType)
+                .file(fileBytes)
+                .parameters(parameters)
                 .build();
 
         applicationEventPublisher.publishEvent(event);

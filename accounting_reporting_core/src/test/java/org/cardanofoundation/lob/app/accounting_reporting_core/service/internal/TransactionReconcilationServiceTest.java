@@ -22,6 +22,7 @@ import org.mockito.MockitoAnnotations;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -89,7 +90,7 @@ class TransactionReconcilationServiceTest {
         LocalDate fromDate = LocalDate.now().minusDays(5);
         LocalDate toDate = LocalDate.now();
 
-        transactionReconcilationService.createReconcilation(reconcilationId, organisationId, fromDate, toDate);
+        transactionReconcilationService.createReconcilation(reconcilationId, organisationId, fromDate, toDate, ExtractorType.NETSUITE);
 
         ArgumentCaptor<ReconcilationEntity> reconcilationCaptor = ArgumentCaptor.forClass(ReconcilationEntity.class);
         verify(transactionReconcilationRepository).save(reconcilationCaptor.capture());

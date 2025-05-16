@@ -6,7 +6,9 @@ import static org.mockito.Mockito.*;
 import java.util.*;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
+import io.vavr.control.Either;
 import org.mockito.*;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -32,6 +34,34 @@ class ChartOfAccountControllerTest {
     }
 
     @Test
+    void insertReferenceCodeByCsv_error() {
+        when(chartOfAccountsService.insertChartOfAccountByCsv("orgId", null)).thenReturn(Either.left(Set.of(Problem.builder()
+                .withTitle("Error")
+                .withStatus(Status.BAD_REQUEST)
+                .build())));
+
+        ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(500);
+        assertThat(response.getBody()).isInstanceOf(Set.class);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
+    }
+
+    @Test
+    void insertReferenceCodeByCsv_success() {
+        MultipartFile file = mock(MultipartFile.class);
+        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        when(chartOfAccountsService.insertChartOfAccountByCsv("orgId", file)).thenReturn(Either.right(Set.of(view)));
+
+        ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", file);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).isInstanceOf(Set.class);
+        assertThat(((Set<?>) response.getBody())).hasSize(1);
+        assertThat(((Set<?>) response.getBody()).iterator().next()).isEqualTo(view);
+    }
+
+    @Test
     void getChartOfAccounts_returnsAccounts() {
         String orgId = "org-1";
         Set<OrganisationChartOfAccountView> accounts = Set.of(mock(OrganisationChartOfAccountView.class));
@@ -39,7 +69,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<Set<OrganisationChartOfAccountView>> response = controller.getChartOfAccounts(orgId);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(accounts);
         verify(chartOfAccountsService).getAllChartOfAccount(orgId);
     }
@@ -54,7 +84,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -73,7 +103,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(400);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -87,7 +117,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.updateChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -106,7 +136,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.upsertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(400);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isEqualTo(view);
     }
 

@@ -76,8 +76,9 @@ public class OrganisationChartOfAccountView {
                 .build();
     }
 
-    public static OrganisationChartOfAccountView createFail(Problem error) {
+    public static OrganisationChartOfAccountView createFail(Problem error, String customerCode) {
         return OrganisationChartOfAccountView.builder()
+                .customerCode(customerCode)
                 //.name(error.getTitle())
                 //.subType(chartOfAccount.getSubType().getId())
                 //.type(chartOfAccount.getSubType().getType().getId())

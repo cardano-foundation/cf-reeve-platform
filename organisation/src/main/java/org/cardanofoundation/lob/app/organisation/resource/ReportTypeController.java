@@ -15,7 +15,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -57,6 +59,17 @@ public class ReportTypeController {
         return reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).fold(
                 problem ->
                     ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem),
+                success -> ResponseEntity.ok().body(true)
+        );
+    }
+
+    @Operation(description = "Add mapping to Report Type field via CSV")
+    @PostMapping(value = "/{orgId}/field-mapping/csv", produces = "application/json", consumes = "multipart/form-data")
+//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
+        return reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).fold(
+                problem ->
+                    ResponseEntity.status(400).body(problem),
                 success -> ResponseEntity.ok().body(true)
         );
     }

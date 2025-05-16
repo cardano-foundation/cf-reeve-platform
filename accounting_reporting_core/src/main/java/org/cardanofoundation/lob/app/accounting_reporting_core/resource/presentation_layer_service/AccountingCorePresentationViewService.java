@@ -184,14 +184,14 @@ public class AccountingCorePresentationViewService {
         transactionNumbers.removeIf(String::isEmpty);
 
         UserExtractionParameters fp = UserExtractionParameters.builder()
-                .from(LocalDate.parse(body.getDateFrom()))
-                .to(LocalDate.parse(body.getDateTo()))
+                .from(body.getDateFrom().isEmpty() ? LocalDate.EPOCH : LocalDate.parse(body.getDateFrom()))
+                .to(body.getDateTo().isEmpty() ? LocalDate.now() : LocalDate.parse(body.getDateTo()))
                 .organisationId(body.getOrganisationId())
                 .transactionTypes(body.getTransactionType())
                 .transactionNumbers(transactionNumbers)
                 .build();
 
-        return accountingCoreService.scheduleIngestion(fp);
+        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), body.getFile(), body.getParameters());
     }
 
     @Transactional

@@ -97,7 +97,8 @@ public class AccountingCoreEventHandler {
                 event.getOrganisationId(),
                 event.getUserExtractionParameters(),
                 event.getSystemExtractionParameters(),
-                event.getMetadata().getUser()
+                event.getMetadata().getUser(),
+                event.getExtractorType()
         );
 
         log.info("Finished processing handleTransactionBatchStartedEvent event, event: {}", event);

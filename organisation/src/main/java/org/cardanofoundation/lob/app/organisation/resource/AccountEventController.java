@@ -2,15 +2,18 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,6 +22,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 import org.zalando.problem.ThrowableProblem;
@@ -69,6 +73,23 @@ public class AccountEventController {
         return ResponseEntity.ok(eventCode);
     }
 
+    @Operation(description = "Reference Code insert", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", schema = @Schema(implementation = AccountEventView.class))}
+            ),
+    })
+    @PostMapping(value = "/{orgId}/event-codes/insert-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> insertReferenceCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                      @RequestParam(value = "file")  MultipartFile file) {
+
+        Either<Set<Problem>, Set<AccountEventView>> eventCodeE = eventCodeService.insertAccountEventByCsv(orgId, file);
+        if (eventCodeE.isLeft()) {
+            Set<Problem> errors = eventCodeE.getLeft();
+            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(errors);
+        }
+        return ResponseEntity.ok(eventCodeE.get());
+    }
     @Operation(description = "Reference Code update", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", schema = @Schema(implementation = AccountEventView.class))}

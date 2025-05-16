@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
@@ -39,7 +40,7 @@ public class ERPIncomingDataProcessor {
                                   String organisationId,
                                   UserExtractionParameters userExtractionParameters,
                                   SystemExtractionParameters systemExtractionParameters,
-                                  String user) {
+                                  String user, ExtractorType extractorType) {
         log.info("Processing ERPIngestionStored event.");
 
         transactionBatchService.createTransactionBatch(
@@ -47,7 +48,7 @@ public class ERPIncomingDataProcessor {
                 organisationId,
                 userExtractionParameters,
                 systemExtractionParameters,
-                user
+                user, extractorType
         );
 
         log.info("Finished processing ERPIngestionStored event, event.");
@@ -82,7 +83,8 @@ public class ERPIncomingDataProcessor {
                 reconcilationStartedEvent.getReconciliationId(),
                 reconcilationStartedEvent.getOrganisationId(),
                 reconcilationStartedEvent.getFrom(),
-                reconcilationStartedEvent.getTo()
+                reconcilationStartedEvent.getTo(),
+                reconcilationStartedEvent.getExtractorType()
         );
 
         log.info("Finished processing ReconcilationStartedEvent, event: {}", reconcilationStartedEvent);

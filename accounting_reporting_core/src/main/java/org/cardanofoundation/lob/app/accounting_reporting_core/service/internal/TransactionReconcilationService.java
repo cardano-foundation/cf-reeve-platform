@@ -6,6 +6,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.ent
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -13,14 +14,18 @@ import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.vavr.control.Either;
+import org.javers.core.Changes;
 import org.javers.core.Javers;
+import org.javers.core.diff.Diff;
+import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
@@ -54,8 +59,8 @@ public class TransactionReconcilationService {
     public void createReconcilation(String reconcilationId,
                                     String organisationId,
                                     LocalDate from,
-                                    LocalDate to
-    ) {
+                                    LocalDate to,
+                                    ExtractorType extractorType) {
         log.info("Creating transaction reconcilation entity," +
                         " reconcilationId: {}," +
                         " from: {}," +
@@ -85,6 +90,7 @@ public class TransactionReconcilationService {
                 .organisationId(organisationId)
                 .from(from)
                 .to(to)
+                .extractorType(extractorType)
                 .build()
         );
     }
@@ -102,9 +108,9 @@ public class TransactionReconcilationService {
                         " error: {}",
                 reconcilationId, from, to, error
         );
-        val reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
+        Optional<ReconcilationEntity> reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
 
-        var reconcilationEntity = new ReconcilationEntity();
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
         if (reconcilationEntityM.isPresent()) {
             reconcilationEntity = reconcilationEntityM.orElseThrow();
         } else {
@@ -138,10 +144,10 @@ public class TransactionReconcilationService {
         );
 
         // convert detachedChunkTxs to a map so we can easily loop through them
-        val detachedChunkTxsMap = detachedChunkTxs.stream()
+        Map<String, TransactionEntity> detachedChunkTxsMap = detachedChunkTxs.stream()
                 .collect(Collectors.toMap(TransactionEntity::getId, tx -> tx));
 
-        val reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
+        Optional<ReconcilationEntity> reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
         if (reconcilationEntityM.isEmpty()) {
             log.error("Reconcilation entity not found, reconcilationId: {}", reconcilationId);
 
@@ -156,24 +162,24 @@ public class TransactionReconcilationService {
             return;
         }
 
-        val reconcilationEntity = reconcilationEntityM.get();
+        ReconcilationEntity reconcilationEntity = reconcilationEntityM.get();
         reconcilationEntity.incrementMissingTxsCount(detachedChunkTxs.size());
         reconcilationEntity.setStatus(ReconcilationStatus.STARTED);
 
-        val attachedTxEntities = transactionRepositoryGateway.findByAllId(
+        List<TransactionEntity> attachedTxEntities = transactionRepositoryGateway.findByAllId(
                 detachedChunkTxs.stream().map(TransactionEntity::getId).collect(Collectors.toSet())
         );
 
-        val attachedTxIds = attachedTxEntities.stream()
+        Set<String> attachedTxIds = attachedTxEntities.stream()
                 .map(TransactionEntity::getId)
                 .collect(Collectors.toSet());
 
         // Find transactions in detachedChunkTxs but not in attachedTxEntities
-        val transactionsNotInAttached = detachedChunkTxs.stream()
+        Set<TransactionEntity> transactionsNotInAttached = detachedChunkTxs.stream()
                 .filter(tx -> !attachedTxIds.contains(tx.getId()))
                 .collect(Collectors.toSet());
 
-        for (val tx : transactionsNotInAttached) {
+        for (TransactionEntity tx : transactionsNotInAttached) {
             log.warn("Transaction not found in LOB DB yet, needs import, transactionId: {}", tx.getId());
 
             reconcilationEntity.addViolation(ReconcilationViolation.builder()
@@ -189,7 +195,7 @@ public class TransactionReconcilationService {
                     .build());
         }
 
-        val isOnChainE = blockchainReaderPublicApi.isOnChain(attachedTxEntities.stream()
+        Either<Problem, Map<String, Boolean>> isOnChainE = blockchainReaderPublicApi.isOnChain(attachedTxEntities.stream()
                 .map(TransactionEntity::getId)
                 .collect(Collectors.toSet())
         );
@@ -205,24 +211,24 @@ public class TransactionReconcilationService {
 
             return;
         }
-        val isOnChainMap = isOnChainE.get();
+        Map<String, Boolean> isOnChainMap = isOnChainE.get();
 
-        for (val attachedTx : attachedTxEntities) {
+        for (TransactionEntity attachedTx : attachedTxEntities) {
             attachedTx.setLastReconcilation(Optional.empty()); // To avoid cyclical references when a new version exist in the ERP
-            val detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
+            TransactionEntity detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
 
-            val attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
-            val detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
+            String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
+            String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
             log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",
                     attachedTx.getId(), attachedTx.getTransactionInternalNumber(), attachedTxHash, detachedTxHash);
 
-            val sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash)
+            ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash)
                     ? ReconcilationCode.OK : ReconcilationCode.NOK;
 
             if (sourceReconcilationStatus == ReconcilationCode.NOK) {
-                val sourceDiff = javers.compare(attachedTx, detachedTx);
-                val changes = sourceDiff.getChanges();
-                val jsonDiff = javers.getJsonConverter().toJson(changes);
+                Diff sourceDiff = javers.compare(attachedTx, detachedTx);
+                Changes changes = sourceDiff.getChanges();
+                String jsonDiff = javers.getJsonConverter().toJson(changes);
 
                 log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getTransactionInternalNumber(), sourceDiff.prettyPrint());
 
@@ -239,7 +245,7 @@ public class TransactionReconcilationService {
                         .build());
             }
 
-            val sinkReconcilationCode = getSinkReconcilationStatus(attachedTx, isOnChainMap);
+            ReconcilationCode sinkReconcilationCode = getSinkReconcilationStatus(attachedTx, isOnChainMap);
 
             if (sinkReconcilationCode == ReconcilationCode.NOK) {
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
@@ -280,9 +286,9 @@ public class TransactionReconcilationService {
     }
 
     private static ReconcilationCode getSinkReconcilationStatus(TransactionEntity attachedTx, Map<String, Boolean> isOnChainMap) {
-        val isLOBTxOnChain = Optional.ofNullable(isOnChainMap.get(attachedTx.getId())).orElse(false);
+        boolean isLOBTxOnChain = Optional.ofNullable(isOnChainMap.get(attachedTx.getId())).orElse(false);
 
-        var sinkReconcilationStatus = ReconcilationCode.NOK;
+        ReconcilationCode sinkReconcilationStatus = ReconcilationCode.NOK;
         if (isLOBTxOnChain && attachedTx.getLedgerDispatchStatus() == FINALIZED) {
             sinkReconcilationStatus = ReconcilationCode.OK;
         }
@@ -296,7 +302,7 @@ public class TransactionReconcilationService {
                                     long total) {
         log.info("Wrapping up reconcilation, reconcilationId: {}", reconcilationId);
 
-        val reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
+        Optional<ReconcilationEntity> reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
         if (reconcilationEntityM.isEmpty()) {
             log.error("Reconcilation entity not found, reconcilationId: {}", reconcilationId);
 
@@ -310,7 +316,7 @@ public class TransactionReconcilationService {
 
             return;
         }
-        val reconcilationEntity = reconcilationEntityM.get();
+        ReconcilationEntity reconcilationEntity = reconcilationEntityM.get();
         if (total != reconcilationEntity.getProcessedTxCount()) {
             log.info("\n\nReconciliation not ready to proceed, reconcilationId: {}\n\n", reconcilationEntity.getId());
             return;
@@ -323,15 +329,15 @@ public class TransactionReconcilationService {
 
         log.info("Wrapping up reconcilation, reconcilationId: {}", reconcilationEntity.getId());
 
-        val fromDate = reconcilationEntity.getFrom().orElseThrow();
-        val toDate = reconcilationEntity.getTo().orElseThrow();
+        LocalDate fromDate = reconcilationEntity.getFrom().orElseThrow();
+        LocalDate toDate = reconcilationEntity.getTo().orElseThrow();
 
-        val missingTxs = transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate);
+        Set<TransactionEntity> missingTxs = transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate);
         // we have some txs which are in LOB (db) but are missing in the ERP (likely some technical defect)
 
         log.info("Missing txs in ERP but found in LOB, size: {}", missingTxs.size());
 
-        for (val missingTx : missingTxs) {
+        for (TransactionEntity missingTx : missingTxs) {
             log.error("Transaction missing in ERP but was found in the DB, transactionId: {}", missingTx.getId());
 
             missingTx.setReconcilation(Optional.of(Reconcilation.builder()

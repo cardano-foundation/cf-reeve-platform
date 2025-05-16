@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
@@ -57,7 +58,7 @@ class TransactionBatchServiceTest {
     void createTransactionBatchDuplicateBatchId() {
         when(transactionBatchRepository.findById("batchId")).thenReturn(Optional.of(new TransactionBatchEntity()));
 
-        transactionBatchService.createTransactionBatch("batchId", "organisationId", null, null, "system");
+        transactionBatchService.createTransactionBatch("batchId", "organisationId", null, null, "system", ExtractorType.NETSUITE);
 
         verify(transactionBatchRepository).findById("batchId");
         verifyNoMoreInteractions(transactionBatchRepository);
@@ -70,7 +71,7 @@ class TransactionBatchServiceTest {
         when(transactionBatchRepository.findById("batchId")).thenReturn(Optional.empty());
         when(transactionConverter.convertToDbDetached(any(SystemExtractionParameters.class), any(UserExtractionParameters.class))).thenReturn(FilteringParameters.builder().build());
 
-        transactionBatchService.createTransactionBatch("batchId", "organisationId", UserExtractionParameters.builder().build(), SystemExtractionParameters.builder().build(), "system123");
+        transactionBatchService.createTransactionBatch("batchId", "organisationId", UserExtractionParameters.builder().build(), SystemExtractionParameters.builder().build(), "system123", ExtractorType.NETSUITE);
 
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
         transactionBatchEntity.setId("batchId");

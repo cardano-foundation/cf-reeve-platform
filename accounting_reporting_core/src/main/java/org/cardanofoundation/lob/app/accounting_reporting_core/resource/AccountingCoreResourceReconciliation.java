@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -46,10 +47,15 @@ public class AccountingCoreResourceReconciliation {
     @PostMapping(value = "/reconcile/trigger", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerAction(@Valid @RequestBody ReconciliationRequest body) {
-        return accountingCoreService.scheduleReconcilation(body.getOrganisationId(), body.getDateFrom(), body.getDateTo()).fold(
+        return accountingCoreService.scheduleReconcilation(body.getOrganisationId(), body.getDateFrom(), body.getDateTo(), body.getExtractorType(), body.getFile(), body.getParameters()).fold(
                 problem -> ResponseEntity.status(problem.getStatus().getStatusCode()).body(ReconcileResponseView.createFail(problem.getTitle(), body.getDateFrom(), body.getDateTo(), problem)),
                 success -> ResponseEntity.ok(ReconcileResponseView.createSuccess("We have received your reconcile request now.", body.getDateFrom(), body.getDateTo()))
         );
+    }
+
+    @PostMapping(value = "/reconcile/triggercsv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ReconcileResponseView> reconcileTriggerCsvAction(@ModelAttribute ReconciliationRequest body) {
+        return reconcileTriggerAction(body);
     }
 
     @Operation(description = "Get the Reconciliations", responses = {
