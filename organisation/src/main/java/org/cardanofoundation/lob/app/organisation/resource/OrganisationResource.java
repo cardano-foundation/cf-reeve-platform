@@ -113,7 +113,6 @@ public class OrganisationResource {
     public ResponseEntity<Set<OrganisationCostCenterView>> organisationCostCenter(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 organisationService.getAllCostCenter(orgId).stream().map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()));
-
     }
 
     @Operation(description = "Organisation project", responses = {

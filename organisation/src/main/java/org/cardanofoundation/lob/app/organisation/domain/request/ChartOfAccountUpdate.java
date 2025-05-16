@@ -35,7 +35,7 @@ public class ChartOfAccountUpdate {
     private String name;
 
     @Schema(example = "3")
-    @CsvBindByName(column = "Sub Type")
+    @CsvBindByName(column = "Sub Type", required = true)
     private String subType;
 
     @Schema(example = "USD")
@@ -43,11 +43,11 @@ public class ChartOfAccountUpdate {
     private String currency;
 
     @Schema(example = "3")
-    @CsvBindByName(column = "Counter Party")
+    @CsvBindByName(column = "CounterParty")
     private String counterParty;
 
     @Schema(example = "1")
-    @CsvBindByName(column = "Type")
+    @CsvBindByName(column = "Type", required = true)
     private String type;
 
     @Schema(example = "2203560100")

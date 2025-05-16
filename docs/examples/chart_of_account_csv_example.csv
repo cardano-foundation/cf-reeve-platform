@@ -1,2 +1,2 @@
-Customer Code,Event Reference Code,Reference Code,Name,Sub Type,Currency,Counter Party,Parent Customer Code,Active,Balance FCY,Balance LCY,Original Currency ID FCY,Original Currency ID LCY,Balance Type,Balance Date
-123,1102,1102,TestAccount,CASH_AND_CASH_EQUIVALENTS,CHF,CounterParty123,1101100702,True,10,10,USD,CHF,DEBIT,01/01/2025
+Customer Code,Event Reference Code,Reference Code,Name,Type,Sub Type,Currency,CounterParty,Parent Customer Code,Active,Open Balance FCY,Open Balance LCY,Open Balance Currency ID FCY,Open Balance Currency ID LCY,Open Balance Type,Open Balance Date
+123123,1102,1102,TestAccount,EXPENSES11,ADVERTISING_EXPENSES123532d2,CHF,CounterParty123,1101100702,True,10,10,USD,CHF,DEBIT,01/01/2025

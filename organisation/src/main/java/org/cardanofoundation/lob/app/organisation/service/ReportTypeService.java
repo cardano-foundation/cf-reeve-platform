@@ -99,7 +99,7 @@ public class ReportTypeService {
                     .flatMap(reportTypeField -> reportTypeFieldRepository.findFirstByReportIdAndName(reportTypeFieldUpdate.getReportTypeId(), reportTypeField))
                     .ifPresent(reportTypeFieldEntity -> reportTypeFieldUpdate.setReportTypeFieldId(reportTypeFieldEntity.getId()));
             Optional.ofNullable(reportUpdate.getSubType())
-                    .flatMap(organisationChartOfAccountSubTypeRepository::findFirstByName)
+                    .flatMap(s -> organisationChartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, s))
                     .ifPresent(organisationChartOfAccountSubType -> reportTypeFieldUpdate.setOrganisationChartOfAccountSubTypeId(organisationChartOfAccountSubType.getId()));
 
             if (reportTypeFieldUpdate.getReportTypeId() == null || reportTypeFieldUpdate.getReportTypeFieldId() == null || reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId() == null) {

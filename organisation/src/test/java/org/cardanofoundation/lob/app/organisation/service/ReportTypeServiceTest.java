@@ -90,7 +90,7 @@ class ReportTypeServiceTest {
         when(updateCsv.getReportTypeField()).thenReturn("FieldId");
         when(reportTypeFieldRepository.findFirstByReportIdAndName(1L, "FieldId")).thenReturn(Optional.ofNullable(reportTypeFieldEntity));
         when(updateCsv.getSubType()).thenReturn("SubTypeId");
-        when(organisationChartOfAccountSubTypeRepository.findFirstByName("SubTypeId")).thenReturn(Optional.of(subType));
+        when(organisationChartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, "SubTypeId")).thenReturn(Optional.of(subType));
 
         Either<Set<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 

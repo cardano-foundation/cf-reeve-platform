@@ -22,6 +22,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Entity
 @Table(name = "organisation_chart_of_account_type", indexes = {@Index(name = "atu_name", columnList = "name", unique = true)})
 @Audited
+@Builder
 @EntityListeners({AuditingEntityListener.class})
 public class OrganisationChartOfAccountType extends CommonEntity {
 

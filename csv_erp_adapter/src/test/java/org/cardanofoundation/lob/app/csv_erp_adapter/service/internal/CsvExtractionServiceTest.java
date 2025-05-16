@@ -220,7 +220,7 @@ class CsvExtractionServiceTest {
     }
 
     @Test
-    void continueERPExtraction_success() throws IOException {
+    void continueERPExtraction_success() {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
@@ -250,7 +250,7 @@ class CsvExtractionServiceTest {
     }
 
     @Test
-    void continueERPExtraction_emptyList() throws IOException {
+    void continueERPExtraction_emptyList() {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);

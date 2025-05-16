@@ -18,32 +18,32 @@ import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
  */
 public class ChartOfAccountUpdateCsv extends ChartOfAccountUpdate {
 
-    @CsvBindByName(column = "Balance FCY")
+    @CsvBindByName(column = "Open Balance FCY")
     private BigDecimal balanceFCY;
 
-    @CsvBindByName(column = "Balance LCY")
+    @CsvBindByName(column = "Open Balance LCY")
     private BigDecimal balanceLCY;
 
-    @CsvBindByName(column = "Original Currency ID FCY")
-    private String originalCurrencyIdFCY;
+    @CsvBindByName(column = "Open Balance Currency ID FCY")
+    private String openBalanceCurrencyFcy;
 
-    @CsvBindByName(column = "Original Currency ID LCY")
-    private String originalCurrencyIdLCY;
+    @CsvBindByName(column = "Open Balance Currency ID LCY")
+    private String openBalanceCurrencyLcy;
 
     @Enumerated(EnumType.STRING)
-    @CsvBindByName(column = "Balance Type")
+    @CsvBindByName(column = "Open Balance Type")
     private OperationType balanceType;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-    @CsvBindByName(column = "Balance Date")
+    @CsvBindByName(column = "Open Balance Date")
     private String date;
 
     public void fillOpeningBalance() throws IllegalArgumentException{
         this.setOpeningBalance(new OpeningBalance(
                 this.balanceFCY,
                 this.balanceLCY,
-                this.originalCurrencyIdFCY,
-                this.originalCurrencyIdLCY,
+                this.openBalanceCurrencyFcy,
+                this.openBalanceCurrencyLcy,
                 this.balanceType,
                 FlexibleDateParser.parse(this.date)
         ));

@@ -6,6 +6,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -39,6 +42,8 @@ public class ChartOfAccountsService {
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
     private final CsvParser<ChartOfAccountUpdateCsv> csvParser;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public Optional<OrganisationChartOfAccount> getChartAccount(String organisationId, String customerCode) {
         return chartOfAccountRepository.findById(new OrganisationChartOfAccount.Id(organisationId, customerCode));
@@ -240,14 +245,48 @@ public class ChartOfAccountsService {
                 continue;
             }
 
-            // converting subtype name to ID
-            Optional.ofNullable(chartOfAccountUpdateCsv.getSubType()).flatMap(organisationChartOfAccountSubTypeRepository::findFirstByName).ifPresent(orgSubType -> {
-                chartOfAccountUpdateCsv.setSubType(String.valueOf(orgSubType.getId()));
-            });
+            organisationChartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, chartOfAccountUpdateCsv.getType()).ifPresentOrElse(
+                    type -> {
+                        type.getSubTypes().stream().filter(subtype -> subtype.getName().equals(chartOfAccountUpdateCsv.getSubType())).findFirst().ifPresentOrElse(
+                                subType -> chartOfAccountUpdateCsv.setSubType(String.valueOf(subType.getId())),
+                                () -> {
+                                    OrganisationChartOfAccountSubType subType = OrganisationChartOfAccountSubType.builder()
+                                            .type(type)
+                                            .name(chartOfAccountUpdateCsv.getSubType())
+                                            .organisationId(orgId)
+                                            .build();
+                                    // currently needed, since we are
+//                                    resetOrganisationChartOfAccountSubTypeSequence();
+                                    OrganisationChartOfAccountSubType save = organisationChartOfAccountSubTypeRepository.save(subType);
+                                    chartOfAccountUpdateCsv.setSubType(String.valueOf(save.getId()));
+                                }
+                        );
+                    },
+                    () -> {
+                        OrganisationChartOfAccountSubType subType = saveTypeAndSubType(orgId, chartOfAccountUpdateCsv);
+                        chartOfAccountUpdateCsv.setSubType(String.valueOf(subType.getId()));
+                    }
+            );
 
             OrganisationChartOfAccountView accountEventView = insertChartOfAccount(orgId, chartOfAccountUpdateCsv);
             accountEventViews.add(accountEventView);
         }
         return Either.right(accountEventViews);
+    }
+
+    private OrganisationChartOfAccountSubType saveTypeAndSubType(String orgId, ChartOfAccountUpdateCsv chartOfAccountUpdateCsv) {
+
+        OrganisationChartOfAccountType organisationChartOfAccountType = OrganisationChartOfAccountType.builder()
+                .organisationId(orgId)
+                .name(chartOfAccountUpdateCsv.getType())
+                .build();
+        OrganisationChartOfAccountSubType organisationChartOfAccountSubType = OrganisationChartOfAccountSubType.builder()
+                .organisationId(orgId)
+                .name(chartOfAccountUpdateCsv.getSubType())
+                .type(organisationChartOfAccountType)
+                .build();
+        organisationChartOfAccountType.setSubTypes(Set.of(organisationChartOfAccountSubType));
+        OrganisationChartOfAccountType save = organisationChartOfAccountTypeRepository.save(organisationChartOfAccountType);
+        return save.getSubTypes().stream().iterator().next();
     }
 }
