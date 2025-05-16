@@ -26,7 +26,6 @@ import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -78,7 +77,7 @@ public class ReportService {
 
     @Transactional
     public Either<Problem, ReportEntity> approveReportForLedgerDispatch(String reportId) {
-        val reportM = reportRepository.findById(reportId);
+        Optional<ReportEntity> reportM = reportRepository.findById(reportId);
 
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
@@ -88,8 +87,8 @@ public class ReportService {
                     .with("reportId", reportId)
                     .build());
         }
-        val report = reportM.orElseThrow();
-        val canI = canPublish(report);
+        ReportEntity report = reportM.orElseThrow();
+        Either<Problem, Boolean> canI = canPublish(report);
         if (canI.isLeft()) {
             return Either.left(canI.getLeft());
         }
@@ -115,7 +114,7 @@ public class ReportService {
     public Either<Problem, Void> storeIncomeStatementAsExample(String organisationId) {
         log.info("Income Statement::Saving report example...");
 
-        val orgM = organisationPublicApi.findByOrganisationId(organisationId);
+        Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
@@ -124,9 +123,9 @@ public class ReportService {
                     .with("organisationId", organisationId)
                     .build());
         }
-        val org = orgM.orElseThrow();
+        org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
 
-        val reportExample = new ReportEntity();
+        ReportEntity reportExample = new ReportEntity();
         reportExample.setVer(clock.millis());
         reportExample.setIdControl(Report.idControl(organisationId, INCOME_STATEMENT, MONTH, (short) 2023, Optional.of((short) 3)));
         reportExample.setReportId(Report.id(organisationId, INCOME_STATEMENT, MONTH, (short) 2023, reportExample.getVer(), Optional.of((short) 3)));
@@ -147,7 +146,7 @@ public class ReportService {
         reportExample.setMode(USER); // Assuming USER is a constant in ReportMode enum
         reportExample.setDate(LocalDate.now(clock));
 
-        var incomeStatementReportData = IncomeStatementData.builder()
+        IncomeStatementData incomeStatementReportData = IncomeStatementData.builder()
                 .revenues(IncomeStatementData.Revenues.builder()
                         .otherIncome(new BigDecimal("10000.90"))
                         .buildOfLongTermProvision(new BigDecimal("1000000.10"))
@@ -190,7 +189,7 @@ public class ReportService {
     public Either<Problem, Void> storeBalanceSheetAsExample(String organisationId) {
         log.info("Balance Sheet:: Saving report...");
 
-        val orgM = organisationPublicApi.findByOrganisationId(organisationId);
+        Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
@@ -199,9 +198,9 @@ public class ReportService {
                     .with("organisationId", organisationId)
                     .build());
         }
-        val org = orgM.orElseThrow();
+        org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
 
-        val reportExample = new ReportEntity();
+        ReportEntity reportExample = new ReportEntity();
         reportExample.setVer(clock.millis());
         reportExample.setIdControl(Report.idControl(organisationId, BALANCE_SHEET, MONTH, (short) 2023, Optional.of((short) 3)));
         reportExample.setReportId(Report.id(organisationId, INCOME_STATEMENT, YEAR, (short) 2024, reportExample.getVer(), Optional.empty()));
@@ -259,7 +258,7 @@ public class ReportService {
         if (!reportExample.isValid()) {
             return Either.left(Problem.builder()
                     .withTitle("INVALID_REPORT")
-                    .withDetail(STR."Report is not valid since it didn't pass through business checks.")
+                    .withDetail("Report is not valid since it didn't pass through business checks.")
                     .withStatus(Status.BAD_REQUEST)
                     .with("reportId", reportExample.getReportId())
                     .with("reportType", reportExample.getType())
@@ -290,7 +289,7 @@ public class ReportService {
                     .build());
         }
         String organisationId = createReportView.getOrganisationId();
-        val orgM = organisationPublicApi.findByOrganisationId(organisationId);
+        Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
@@ -299,9 +298,9 @@ public class ReportService {
                     .with("organisationId", organisationId)
                     .build());
         }
-        val org = orgM.orElseThrow();
+        org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
 
-        val reportEntityE = exist(organisationId, reportType, intervalType, year, period);
+        Either<Problem, ReportEntity> reportEntityE = exist(organisationId, reportType, intervalType, year, period);
         ReportEntity reportEntity = reportEntityE.fold(problem -> {
             // question: is it safe to assume that problem will always be because it already exists?
 
@@ -338,7 +337,7 @@ public class ReportService {
             reportEntity.setIncomeStatementReportData(createReportView.getIncomeStatementData());
         }
 
-        val result = reportRepository.save(reportEntity);
+        ReportEntity result = reportRepository.save(reportEntity);
 
         log.info(reportType.name() + "::Report saved successfully: {}", result.getReportId());
 
@@ -355,7 +354,7 @@ public class ReportService {
 
     public Either<Problem, ReportEntity> exist(String organisationId, ReportType reportType, IntervalType intervalType, short year, short period) {
         String reportId = Report.idControl(organisationId, reportType, intervalType, year, Optional.of(period));
-        val reportM = reportRepository.findLatestByIdControl(organisationId, reportId);
+        Optional<ReportEntity> reportM = reportRepository.findLatestByIdControl(organisationId, reportId);
 
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
@@ -366,13 +365,13 @@ public class ReportService {
                     .build());
         }
 
-        val report = reportM.orElseThrow();
+        ReportEntity report = reportM.orElseThrow();
 
         return Either.right(report);
     }
 
     public Either<Problem, Boolean> isReportValid(String reportId) {
-        val reportM = reportRepository.findById(reportId);
+        Optional<ReportEntity> reportM = reportRepository.findById(reportId);
 
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
@@ -383,7 +382,7 @@ public class ReportService {
                     .build());
         }
 
-        val report = reportM.orElseThrow();
+        ReportEntity report = reportM.orElseThrow();
 
         return Either.right(report.isValid());
     }
@@ -394,7 +393,7 @@ public class ReportService {
                                        Integer ver,
                                        Optional<Short> period,
                                        Either<IncomeStatementData, BalanceSheetData> reportData) {
-        val orgM = organisationPublicApi.findByOrganisationId(organisationId);
+        Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
@@ -403,15 +402,15 @@ public class ReportService {
                     .with("organisationId", organisationId)
                     .build());
         }
-        val org = orgM.orElseThrow();
+        org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
 
-        val reportType = reportData.isLeft() ? INCOME_STATEMENT : BALANCE_SHEET;
+        ReportType reportType = reportData.isLeft() ? INCOME_STATEMENT : BALANCE_SHEET;
 
-        val reportId = Report.id(organisationId, reportType, intervalType, year, ver, period);
-        val idControl = Report.idControl(organisationId, reportType, intervalType, year, period);
-        val existingReportM = reportRepository.findById(reportId);
+        String reportId = Report.id(organisationId, reportType, intervalType, year, ver, period);
+        String idControl = Report.idControl(organisationId, reportType, intervalType, year, period);
+        Optional<ReportEntity> existingReportM = reportRepository.findById(reportId);
 
-        var reportEntity = new ReportEntity();
+        ReportEntity reportEntity = new ReportEntity();
         if (existingReportM.isPresent()) {
             reportEntity = existingReportM.orElseThrow();
             // Prevent overwriting approved reports
@@ -443,13 +442,13 @@ public class ReportService {
         }
 
         // Validate profitForTheYear consistency between IncomeStatementData and BalanceSheetData
-        val relatedReportType = reportData.isLeft() ? BALANCE_SHEET : INCOME_STATEMENT;
-        val relatedReportId = Report.id(organisationId, relatedReportType, intervalType, year, ver, period);
-        val relatedReportM = reportRepository.findById(relatedReportId);
+        ReportType relatedReportType = reportData.isLeft() ? BALANCE_SHEET : INCOME_STATEMENT;
+        String relatedReportId = Report.id(organisationId, relatedReportType, intervalType, year, ver, period);
+        Optional<ReportEntity> relatedReportM = reportRepository.findById(relatedReportId);
 
         if (relatedReportM.isPresent()) {
-            val relatedReport = relatedReportM.orElseThrow();
-            val relatedProfit = relatedReport.getIncomeStatementReportData()
+            ReportEntity relatedReport = relatedReportM.orElseThrow();
+            Optional<Optional<BigDecimal>> relatedProfit = relatedReport.getIncomeStatementReportData()
                     .map(IncomeStatementData::getProfitForTheYear)
                     .or(() -> relatedReport.getBalanceSheetReportData().flatMap(bsd -> bsd.getCapital().map(BalanceSheetData.Capital::getProfitForTheYear)));
 
@@ -461,7 +460,7 @@ public class ReportService {
                 if (!newProfit.equals(relatedProfit.get().orElse(BigDecimal.ZERO))) {
                     return Either.left(Problem.builder()
                             .withTitle("PROFIT_FOR_THE_YEAR_MISMATCH")
-                            .withDetail(STR."Profit for the year does not match the related report.")
+                            .withDetail("Profit for the year does not match the related report.")
                             .withStatus(Status.BAD_REQUEST)
                             .with("reportId", reportId)
                             .build());
@@ -469,18 +468,18 @@ public class ReportService {
             }
         }
 
-        val emptyCheckE = checkIfEmpty(reportId, reportData);
+        Either<Problem, Void> emptyCheckE = checkIfEmpty(reportId, reportData);
         if (emptyCheckE.isLeft()) {
             return emptyCheckE;
         }
 
         if (reportData.isLeft()) {
-            val reportDataLeft = reportData.getLeft();
+            IncomeStatementData reportDataLeft = reportData.getLeft();
 
             if (!reportDataLeft.isValid()) {
                 return Either.left(Problem.builder()
                         .withTitle("INVALID_REPORT_DATA")
-                        .withDetail(STR."Income Statement report data is not valid. Business Checks failed.")
+                        .withDetail("Income Statement report data is not valid. Business Checks failed.")
                         .withStatus(Status.BAD_REQUEST)
                         .with("reportId", reportId)
                         .build());
@@ -491,7 +490,7 @@ public class ReportService {
             if (!reportData.get().isValid()) {
                 return Either.left(Problem.builder()
                         .withTitle("INVALID_REPORT_DATA")
-                        .withDetail(STR."Balance Sheet report data is not valid. Business Checks failed.")
+                        .withDetail("Balance Sheet report data is not valid. Business Checks failed.")
                         .withStatus(Status.BAD_REQUEST)
                         .with("reportId", reportId)
                         .build());
@@ -519,7 +518,7 @@ public class ReportService {
     private static Either<Problem, Void> emptyReportData(String reportId) {
         return Either.left(Problem.builder()
                 .withTitle("EMPTY_REPORT_DATA")
-                .withDetail(STR."Report is empty.")
+                .withDetail("Report is empty.")
                 .withStatus(Status.BAD_REQUEST)
                 .with("reportId", reportId)
                 .build());
@@ -528,31 +527,31 @@ public class ReportService {
     public Either<Problem, Boolean> canPublish(ReportEntity reportEntity) {
 
         // Validate profitForTheYear consistency between IncomeStatementData and BalanceSheetData
-        val relatedReportType = reportEntity.getType().equals(INCOME_STATEMENT) ? BALANCE_SHEET : INCOME_STATEMENT;
-        val relatedReportId = Report.idControl(reportEntity.getOrganisation().getId(), relatedReportType, reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod());
-        val relatedReportM = reportRepository.findLatestByIdControl(reportEntity.getOrganisation().getId(), relatedReportId);
+        ReportType relatedReportType = reportEntity.getType().equals(INCOME_STATEMENT) ? BALANCE_SHEET : INCOME_STATEMENT;
+        String relatedReportId = Report.idControl(reportEntity.getOrganisation().getId(), relatedReportType, reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod());
+        Optional<ReportEntity> relatedReportM = reportRepository.findLatestByIdControl(reportEntity.getOrganisation().getId(), relatedReportId);
 
         if (!reportEntity.isValid()) {
             return Either.left(Problem.builder()
                     .withTitle("INVALID_REPORT_DATA")
-                    .withDetail(STR."Report data is not valid. Business Checks failed.")
+                    .withDetail("Report data is not valid. Business Checks failed.")
                     .withStatus(Status.BAD_REQUEST)
                     .with("reportId", reportEntity.getReportId())
                     .build());
         }
 
         if (relatedReportM.isPresent()) {
-            val relatedReport = relatedReportM.orElseThrow();
+            ReportEntity relatedReport = relatedReportM.orElseThrow();
             if (!relatedReport.isValid()) {
                 return Either.left(Problem.builder()
                         .withTitle("INVALID_REPORT_DATA")
-                        .withDetail(STR."Report data is not valid. Business Checks failed.")
+                        .withDetail("Report data is not valid. Business Checks failed.")
                         .withStatus(Status.BAD_REQUEST)
                         .with("reportId", reportEntity.getReportId())
                         .build());
             }
 
-            val relatedProfit = relatedReport.getType().equals(INCOME_STATEMENT)
+            BigDecimal relatedProfit = relatedReport.getType().equals(INCOME_STATEMENT)
                     ? relatedReport.getIncomeStatementReportData().flatMap(IncomeStatementData::getProfitForTheYear).orElse(BigDecimal.ZERO)
                     : relatedReport.getBalanceSheetReportData().flatMap(BalanceSheetData::getCapital).flatMap(BalanceSheetData.Capital::getProfitForTheYear).orElse(BigDecimal.ZERO);
 
@@ -569,7 +568,21 @@ public class ReportService {
                         .build());
             }
         }
-        return Either.right(true);
+        // validate against generated report
+        ReportGenerateRequest reportGenerateRequest = new ReportGenerateRequest(reportEntity.getType(), reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod().orElse((short)1));
+        reportGenerateRequest.setOrganisationId(reportEntity.getOrganisation().getId());
+        Either<Problem, ReportEntity> generatedReportE = reportGenerate(reportGenerateRequest);
+        if (generatedReportE.isRight()) {
+            boolean generatedReportsMatch = true;
+            if(reportEntity.getType() == BALANCE_SHEET) {
+                generatedReportsMatch = BalanceSheetMatcher.matches(generatedReportE.get().getBalanceSheetReportData(), reportEntity.getBalanceSheetReportData());
+            } else if(reportEntity.getType() == INCOME_STATEMENT) {
+                generatedReportsMatch = IncomeStatementMatcher.matches(generatedReportE.get().getIncomeStatementReportData(), reportEntity.getIncomeStatementReportData());
+            }
+            return Either.right(generatedReportsMatch);
+        } else {
+            return Either.right(true);
+        }
     }
 
     public Set<ReportEntity> findReportsInDateRange(String organisationId,
