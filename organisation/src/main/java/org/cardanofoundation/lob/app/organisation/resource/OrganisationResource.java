@@ -34,6 +34,8 @@ import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 import org.zalando.problem.ThrowableProblem;
 
+import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
+import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
@@ -122,6 +124,28 @@ public class OrganisationResource {
                 organisationService.getAllCostCenter(orgId).stream().map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()));
     }
 
+    @Operation(description = "Organisation cost center creation", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/cost-center/insert", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationCostCenterView> organisationCostCenterCreation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
+        return ResponseEntity.ok(costCenterService.insertCostCenter(orgId, costCenterUpdate));
+    }
+
+    @Operation(description = "Organisation cost center update", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/cost-center/update", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationCostCenterView> organisationCostCenterUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
+        return ResponseEntity.ok(costCenterService.updateCostCenter(orgId, costCenterUpdate));
+    }
+
     @Operation(description = "Organisation cost center creation csv", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
@@ -145,6 +169,28 @@ public class OrganisationResource {
     public ResponseEntity<Set<OrganisationProjectView>> organisationProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 organisationService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()));
+    }
+
+    @Operation(description = "Organisation project creation", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/project/insert", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationProjectView> organisationProjectCreation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+        return ResponseEntity.ok(projectCodeService.insertProject(orgId, projectUpdate));
+    }
+
+    @Operation(description = "Organisation project update", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/project/update", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationProjectView> organisationProjectUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+        return ResponseEntity.ok(projectCodeService.updateProject(orgId, projectUpdate));
     }
 
     @Operation(description = "Organisation project creation csv", responses = {

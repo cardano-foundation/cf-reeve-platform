@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -39,51 +39,80 @@ public class CostCenterService {
     }
 
     @Transactional
+    public OrganisationCostCenterView updateCostCenter(String orgId, CostCenterUpdate costCenterUpdate) {
+        Optional<OrganisationCostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
+        if(costCenterFound.isPresent()) {
+            OrganisationCostCenter costCenter = costCenterFound.get();
+            costCenter.setExternalCustomerCode(costCenterUpdate.getExternalCustomerCode());
+            costCenter.setName(costCenterUpdate.getName());
+            // check if parent exists
+            if (costCenterUpdate.getParentCustomerCode() != null) {
+                Optional<OrganisationCostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
+                if(project.isPresent()) {
+                    costCenter.setParentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
+                } else {
+                    return OrganisationCostCenterView.createFail(
+                            costCenterUpdate.getCustomerCode(),
+                            Problem.builder()
+                                    .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
+                                    .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
+                                    .build()
+                    );
+                }
+            }
+            return OrganisationCostCenterView.fromEntity(costCenterRepository.save(costCenter));
+        } else {
+            return OrganisationCostCenterView.createFail(
+                    costCenterUpdate.getCustomerCode(),
+                    Problem.builder()
+                            .withTitle("COST_CENTER_CODE_NOT_FOUND")
+                            .withDetail("Cost Center with customer code %s not found.".formatted(costCenterUpdate.getCustomerCode()))
+                            .build()
+            );
+        }
+    }
+
+    @Transactional
+    public OrganisationCostCenterView insertCostCenter(String orgId, CostCenterUpdate costCenterUpdate) {
+        Optional<OrganisationCostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
+        if(costCenterFound.isPresent()) {
+            return OrganisationCostCenterView.createFail(
+                    costCenterUpdate.getCustomerCode(),
+                    Problem.builder()
+                            .withTitle("COST_CENTER_CODE_ALREADY_EXISTS")
+                            .withDetail("Cost Center with customer code %s already exists.".formatted(costCenterUpdate.getCustomerCode()))
+                            .build()
+            );
+        } else {
+            OrganisationCostCenter.OrganisationCostCenterBuilder builder = OrganisationCostCenter.builder()
+                    .id(new OrganisationCostCenter.Id(orgId, costCenterUpdate.getCustomerCode()))
+                    .externalCustomerCode(costCenterUpdate.getExternalCustomerCode())
+                    .name(costCenterUpdate.getName());
+
+            // check if parent exists
+            if (costCenterUpdate.getParentCustomerCode() != null) {
+                Optional<OrganisationCostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
+                if(project.isPresent()) {
+                    builder.parentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
+                } else {
+                    return OrganisationCostCenterView.createFail(
+                            costCenterUpdate.getCustomerCode(),
+                            Problem.builder()
+                                    .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
+                                    .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
+                                    .build()
+                    );
+                }
+            }
+            return OrganisationCostCenterView.fromEntity(costCenterRepository.save(builder.build()));
+        }
+    }
+
+    @Transactional
     public Either<Problem, List<OrganisationCostCenterView>> createCostCenterFromCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, CostCenterUpdate.class).fold(
                 Either::left,
-                costCenterUpdates -> {
-                    List<OrganisationCostCenterView> costCenterViews = new ArrayList<>();
-                    for (CostCenterUpdate costCenterUpdate : costCenterUpdates) {
-                        getCostCenter(orgId, costCenterUpdate.getCustomerCode()).ifPresentOrElse(
-                                costCenter -> {
-                                    costCenterViews.add(OrganisationCostCenterView.createFail(
-                                            costCenterUpdate.getCustomerCode(),
-                                            Problem.builder()
-                                                    .withTitle("COST_CENTER_ALREADY_EXISTS")
-                                                    .withDetail("Cost Center with customer code " + costCenterUpdate.getCustomerCode() + " already exists.")
-                                                    .build()
-                                    ));
-                                },
-                                () -> {
-                                    OrganisationCostCenter.OrganisationCostCenterBuilder builder = OrganisationCostCenter.builder()
-                                            .id(new OrganisationCostCenter.Id(orgId, costCenterUpdate.getCustomerCode()))
-                                            .externalCustomerCode(costCenterUpdate.getExternalCustomerCode())
-                                            .name(costCenterUpdate.getName());
-
-                                    // check if parent exists
-                                    if (costCenterUpdate.getParentCustomerCode() != null) {
-                                        Optional<OrganisationCostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
-                                        if(project.isPresent()) {
-                                            builder.parentCustomerCode(project.get().getId().getCustomerCode());
-                                        } else {
-                                            costCenterViews.add(OrganisationCostCenterView.createFail(
-                                                    costCenterUpdate.getCustomerCode(),
-                                                    Problem.builder()
-                                                            .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
-                                                            .withDetail("Parent project code with customer code " + costCenterUpdate.getParentCustomerCode() + " not found.")
-                                                            .build()
-                                            ));
-                                            return;
-                                        }
-                                    }
-                                    costCenterRepository.save(builder.build());
-                                    costCenterViews.add(OrganisationCostCenterView.fromEntity(builder.build()));
-                                }
-                        );
-                    }
-                    return Either.right(costCenterViews);
-                }
+                costCenterUpdates -> Either.right(costCenterUpdates.stream().map(costCenterUpdate -> insertCostCenter(orgId, costCenterUpdate)).toList())
         );
     }
 
