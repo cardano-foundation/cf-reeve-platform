@@ -72,7 +72,7 @@ class TransactionEntityRepositoryGatewayTest {
         expiredLockTx.setLockedAt(LocalDateTime.now().minus(LOCK_TIMEOUT_DURATION.plusSeconds(1)));
         transactions.add(expiredLockTx);
 
-        when(transactionEntityRepository.findTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(Limit.class)))
+        when(transactionEntityRepository.findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses),  any(LocalDateTime.class), any(Limit.class)))
                 .thenReturn(transactions);
 
         Set<TransactionEntity> result = transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE);
@@ -80,7 +80,7 @@ class TransactionEntityRepositoryGatewayTest {
         assertEquals(2, result.size());
         Assertions.assertTrue(result.stream().allMatch(tx -> tx.getLockedAt().isPresent()));
 
-        verify(transactionEntityRepository).findTransactionsByStatus(ORG_ID, dispatchStatuses, Limit.of(BATCH_SIZE));
+        verify(transactionEntityRepository).findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class),  eq(Limit.of(BATCH_SIZE)));
         verify(transactionEntityRepository).saveAll(result);
         verifyNoMoreInteractions(transactionEntityRepository);
     }
@@ -100,15 +100,15 @@ class TransactionEntityRepositoryGatewayTest {
         expiredLockTx.setLockedAt(LocalDateTime.now().minus(LOCK_TIMEOUT_DURATION));
         transactions.add(expiredLockTx);
 
-        when(transactionEntityRepository.findTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(Limit.class)))
+        when(transactionEntityRepository.findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class), any(Limit.class)))
                 .thenReturn(transactions);
 
         Set<TransactionEntity> result = transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE);
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         Assertions.assertTrue(result.stream().allMatch(tx -> tx.getLockedAt() != null));
 
-        verify(transactionEntityRepository).findTransactionsByStatus(ORG_ID, dispatchStatuses, Limit.of(BATCH_SIZE));
+        verify(transactionEntityRepository).findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class),eq(Limit.of(BATCH_SIZE)));
         verify(transactionEntityRepository).saveAll(result);
         verifyNoMoreInteractions(transactionEntityRepository);
     }
@@ -116,13 +116,13 @@ class TransactionEntityRepositoryGatewayTest {
     @Test
     void testFindAndLockTransactionsReadyToBeDispatchedEmptyList() {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
-        when(transactionEntityRepository.findTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(Limit.class)))
+        when(transactionEntityRepository.findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class), any(Limit.class)))
                 .thenReturn(Set.of());
 
         Set<TransactionEntity> result = transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE);
 
         assertEquals(0, result.size());
-        verify(transactionEntityRepository).findTransactionsByStatus(ORG_ID, dispatchStatuses, Limit.of(BATCH_SIZE));
+        verify(transactionEntityRepository).findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class), eq(Limit.of(BATCH_SIZE)));
         verifyNoMoreInteractions(transactionEntityRepository);
     }
 
