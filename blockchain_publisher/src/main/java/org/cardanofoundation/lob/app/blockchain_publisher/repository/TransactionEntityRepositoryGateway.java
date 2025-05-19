@@ -47,9 +47,10 @@ public class TransactionEntityRepositoryGateway {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
         Limit limit = Limit.of(pullTransactionsBatchSize);
 
-        Set<TransactionEntity> transactionsByStatus = transactionEntityRepository.findTransactionsByStatus(
+        Set<TransactionEntity> transactionsByStatus = transactionEntityRepository.findFreeTransactionsByStatus(
                 organisationId,
                 dispatchStatuses,
+                LocalDateTime.now(clock),
                 limit);
         if (transactionsByStatus.isEmpty()) {
             return transactionsByStatus;
