@@ -111,4 +111,10 @@ public class TransactionEntityRepositoryGateway {
     public void storeTransactions(Set<TransactionEntity> successfullyUpdatedTxEntities) {
         transactionEntityRepository.saveAll(successfullyUpdatedTxEntities);
     }
+
+    public void unlockTransactions(Set<TransactionEntity> transactionsBatch) {
+        transactionsBatch.forEach(transactionEntity ->
+                transactionEntity.setLockedAt(null));
+        transactionEntityRepository.saveAll(transactionsBatch);
+    }
 }

@@ -58,7 +58,9 @@ public class BlockchainTransactionsDispatcher {
             String organisationId = organisation.getId();
             Set<TransactionEntity> transactionsBatch = transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched(organisationId, pullTransactionsBatchSize);
             Set<TransactionEntity> transactionToDispatch = dispatchingStrategy.apply(organisationId, transactionsBatch);
-
+            // unlock other transactions
+            transactionsBatch.removeAll(transactionToDispatch);
+            transactionEntityRepositoryGateway.unlockTransactions(transactionsBatch);
             int dispatchTxCount = transactionToDispatch.size();
             log.info("Dispatching txs for organisationId:{}, tx count:{}", organisationId, dispatchTxCount);
             if (dispatchTxCount > 0) {
