@@ -69,8 +69,7 @@ public class BusinessRulesConfig {
 
     private PipelineTask preCleansingPipelineTask() {
         return new DefaultPipelineTask(List.of(
-                new DiscardZeroBalanceTxItemsTaskItem(),
-                new JournalAccountCreditEnrichmentTaskItem(organisationPublicApi)
+                new DiscardZeroBalanceTxItemsTaskItem()
         ));
     }
 
@@ -79,7 +78,8 @@ public class BusinessRulesConfig {
                 new AmountsFcyCheckTaskItem(),
                 new AmountsLcyCheckTaskItem(),
                 new AmountLcyBalanceZerosOutCheckTaskItem(),
-                new AmountFcyBalanceZerosOutCheckTaskItem()
+                new AmountFcyBalanceZerosOutCheckTaskItem(),
+                new JournalAccountCreditEnrichmentTaskItem(organisationPublicApi)
         ));
     }
 
