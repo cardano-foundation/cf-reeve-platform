@@ -21,8 +21,6 @@ import java.util.Set;
 import lombok.val;
 
 import io.vavr.control.Either;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.mockito.*;
 import org.zalando.problem.Problem;
 
@@ -31,8 +29,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
