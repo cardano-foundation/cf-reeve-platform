@@ -35,6 +35,7 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
@@ -844,11 +845,27 @@ public class ReportService {
                     }
                     BigDecimal amount = BigDecimal.ZERO;
                     // adding the value if it's debit and subtracting it if it's Credit
-                    if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
-                        amount = amount.add(transactionItemEntity.getAmountLcy());
+                    // TODO Workaround need to be removed soon!
+                    if(transactionItemEntity.getTransaction().getTransactionType() == TransactionType.Journal) {
+                        if(transactionItemEntity.getAccountDebit().get().getCode().equals("0000000000")) {
+                            transactionItemEntity.setOperationType(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT);
+                        }
                     }
+                    // Account is on Debit
+                    if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
+                        if(transactionItemEntity.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
+                            amount = amount.add(transactionItemEntity.getAmountLcy());
+                        } else {
+                            amount = amount.add(transactionItemEntity.getAmountLcy().negate());
+                        }
+                    }
+
                     if (transactionItemEntity.getAccountCredit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
-                        amount = amount.add(transactionItemEntity.getAmountLcy().negate());
+                        if(transactionItemEntity.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
+                            amount = amount.subtract(transactionItemEntity.getAmountLcy());
+                        } else {
+                            amount = amount.subtract(transactionItemEntity.getAmountLcy().negate());
+                        }
                     }
                     return amount.stripTrailingZeros();
                 }
