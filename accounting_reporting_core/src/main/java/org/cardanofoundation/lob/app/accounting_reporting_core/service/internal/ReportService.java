@@ -845,12 +845,6 @@ public class ReportService {
                     }
                     BigDecimal amount = BigDecimal.ZERO;
                     // adding the value if it's debit and subtracting it if it's Credit
-                    // TODO Workaround need to be removed soon!
-                    if(transactionItemEntity.getTransaction().getTransactionType() == TransactionType.Journal) {
-                        if(transactionItemEntity.getAccountDebit().get().getCode().equals("0000000000")) {
-                            transactionItemEntity.setOperationType(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT);
-                        }
-                    }
                     // Account is on Debit
                     if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
                         if(transactionItemEntity.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
