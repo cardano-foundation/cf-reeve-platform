@@ -21,6 +21,8 @@ import java.util.Set;
 import lombok.val;
 
 import io.vavr.control.Either;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.mockito.*;
 import org.zalando.problem.Problem;
 
@@ -1261,8 +1263,12 @@ class ReportServiceTest {
         when(organisationChartOfAccount.getId()).thenReturn(organisationChartOfAccountId);
         when(organisationChartOfAccountId.getCustomerCode()).thenReturn("CustomerCode");
         when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(List.of("CustomerCode"), startDate, endDate)).thenReturn(List.of(transactionItemEntity));
+        when(transactionItemEntity.getStatus()).thenReturn(TxItemValidationStatus.OK);
+        when(transactionItemEntity.getAccountDebit()).thenReturn(Optional.of(Account.builder().code("CustomerCode").build()));
+
         when(transactionItemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
         when(transactionItemEntity.getAmountLcy()).thenReturn(BigDecimal.TEN);
+
 
         Either<Problem, ReportEntity> result = reportService.reportGenerate(request);
 
@@ -1273,10 +1279,10 @@ class ReportServiceTest {
         assertTrue(balanceSheetReportData.isPresent());
         BalanceSheetData balanceSheetData = balanceSheetReportData.get();
         BigDecimal profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
-        assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.TEN);
 
+        // Switching Operation Type to Credit - Should be minus 10 now
         when(transactionItemEntity.getOperationType()).thenReturn(OperationType.CREDIT);
-        when(transactionItemEntity.getAmountLcy()).thenReturn(BigDecimal.TEN);
 
         result = reportService.reportGenerate(request);
 
@@ -1287,7 +1293,35 @@ class ReportServiceTest {
         assertTrue(balanceSheetReportData.isPresent());
         balanceSheetData = balanceSheetReportData.get();
         profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
-        assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.valueOf(-10));
+
+        //Switching Item to AccountCredit - Still minus 10
+        when(transactionItemEntity.getAccountDebit()).thenReturn(Optional.empty());
+        when(transactionItemEntity.getAccountCredit()).thenReturn(Optional.of(Account.builder().code("CustomerCode").build()));
+        when(transactionItemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
+
+        result = reportService.reportGenerate(request);
+
+        assertTrue(result.isRight());
+        verify(reportTypeRepository, times(3)).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        balanceSheetReportData = result.get().getBalanceSheetReportData();
+        assertTrue(balanceSheetReportData.isPresent());
+        balanceSheetData = balanceSheetReportData.get();
+        profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.valueOf(-10));
+
+        // Switching Operation Type to credit will be 10
+        when(transactionItemEntity.getOperationType()).thenReturn(OperationType.CREDIT);
+
+        result = reportService.reportGenerate(request);
+
+        assertTrue(result.isRight());
+        verify(reportTypeRepository, times(4)).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        balanceSheetReportData = result.get().getBalanceSheetReportData();
+        assertTrue(balanceSheetReportData.isPresent());
+        balanceSheetData = balanceSheetReportData.get();
+        profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.valueOf(10));
     }
 
     @Test
