@@ -1275,6 +1275,40 @@ class ReportServiceTest {
         BigDecimal profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
         assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
 
+        when(transactionItemEntity.getOperationType()).thenReturn(OperationType.CREDIT);
+        when(transactionItemEntity.getAmountLcy()).thenReturn(BigDecimal.TEN);
+
+        result = reportService.reportGenerate(request);
+
+        assertTrue(result.isRight());
+        verify(reportTypeRepository, times(2)).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        reportEntity = result.get();
+        balanceSheetReportData = reportEntity.getBalanceSheetReportData();
+        assertTrue(balanceSheetReportData.isPresent());
+        balanceSheetData = balanceSheetReportData.get();
+        profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void store_OrganisationNotFound() {
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.empty());
+
+        Either<Problem, Void> storeResponse = reportService.store("org123", IntervalType.YEAR, (short) 2025, 1, Optional.of((short) 1), Either.left(IncomeStatementData.builder().build()));
+
+        assertTrue(storeResponse.isLeft());
+        assertThat(storeResponse.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
+    void exist_reportNotFound() {
+        String reportId = Report.idControl("org123", INCOME_STATEMENT, IntervalType.YEAR, (short) 2025, Optional.of((short) 1));
+        when(reportRepository.findLatestByIdControl("org123", reportId)).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> existsResponse = reportService.exist("org123", INCOME_STATEMENT, IntervalType.YEAR, (short) 2025, (short) 1);
+        assertTrue(existsResponse.isLeft());
+        assertThat(existsResponse.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
+
     }
 
     @Test
