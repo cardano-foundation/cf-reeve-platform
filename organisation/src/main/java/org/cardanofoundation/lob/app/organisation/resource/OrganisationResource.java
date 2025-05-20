@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
 import java.util.Arrays;
 import java.util.List;
@@ -18,6 +20,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -31,11 +34,15 @@ import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 import org.zalando.problem.ThrowableProblem;
 
+import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
+import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
+import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
+import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -48,6 +55,8 @@ public class OrganisationResource {
 
     private final OrganisationService organisationService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final CostCenterService costCenterService;
+    private final ProjectCodeService projectCodeService;
 
     @Operation(description = "Organisations",
             parameters = {
@@ -113,7 +122,42 @@ public class OrganisationResource {
     public ResponseEntity<Set<OrganisationCostCenterView>> organisationCostCenter(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 organisationService.getAllCostCenter(orgId).stream().map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()));
+    }
 
+    @Operation(description = "Organisation cost center creation", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/cost-center/insert", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationCostCenterView> organisationCostCenterCreation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
+        return ResponseEntity.ok(costCenterService.insertCostCenter(orgId, costCenterUpdate));
+    }
+
+    @Operation(description = "Organisation cost center update", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/cost-center/update", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationCostCenterView> organisationCostCenterUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
+        return ResponseEntity.ok(costCenterService.updateCostCenter(orgId, costCenterUpdate));
+    }
+
+    @Operation(description = "Organisation cost center creation csv", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/cost-center-csv", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
+//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> organisationCostCenterCreationCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam("file") MultipartFile file) {
+        return costCenterService.createCostCenterFromCsv(orgId, file).fold(
+                problem -> ResponseEntity.status(BAD_REQUEST).body(problem),
+                ResponseEntity::ok
+        );
     }
 
     @Operation(description = "Organisation project", responses = {
@@ -125,6 +169,42 @@ public class OrganisationResource {
     public ResponseEntity<Set<OrganisationProjectView>> organisationProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 organisationService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()));
+    }
+
+    @Operation(description = "Organisation project creation", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/project/insert", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationProjectView> organisationProjectCreation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+        return ResponseEntity.ok(projectCodeService.insertProject(orgId, projectUpdate));
+    }
+
+    @Operation(description = "Organisation project update", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/project/update", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrganisationProjectView> organisationProjectUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+        return ResponseEntity.ok(projectCodeService.updateProject(orgId, projectUpdate));
+    }
+
+    @Operation(description = "Organisation project creation csv", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+            ),
+    })
+    @PostMapping(value = "/organisation/{orgId}/project-csv", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
+//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> organisationProjectCreationCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam("file") MultipartFile file) {
+        return projectCodeService.createProjectCodeFromCsv(orgId, file).fold(
+                problem -> ResponseEntity.status(BAD_REQUEST).body(problem),
+                ResponseEntity::ok
+        );
     }
 
     @Operation(description = "Organisation Events", responses = {
@@ -143,7 +223,6 @@ public class OrganisationResource {
                     );
                 }).toList()
         );
-
     }
 
     @Operation(description = "Organisation Chart of acount type", responses = {

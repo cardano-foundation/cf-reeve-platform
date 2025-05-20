@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -21,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -36,6 +38,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reco
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
 import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.ExtractionData;
+import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @ExtendWith(MockitoExtension.class)
 class CsvExtractionServiceTest {
@@ -48,9 +52,18 @@ class CsvExtractionServiceTest {
     private SystemExtractionParametersFactory systemExtractionParametersFactory;
     @Mock
     private TransactionConverter transactionConverter;
+    @Mock
+    private CsvParser<TransactionLine> parser;
 
     @InjectMocks
     private CsvExtractionService csvExtractionService;
+
+    @BeforeEach
+    void setUp() throws NoSuchFieldException, IllegalAccessException {
+        Field field = CsvExtractionService.class.getDeclaredField("sendBatchSize");
+        field.setAccessible(true);
+        field.set(csvExtractionService, 1);
+    }
 
     @Test
     void startNewExtraction_noSystemParameters() {
@@ -142,6 +155,7 @@ class CsvExtractionServiceTest {
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(null);
+        when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(Problem.builder().build()));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
@@ -163,6 +177,7 @@ class CsvExtractionServiceTest {
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(new byte[]{1,2,3});
+        when(parser.parseCsv(new byte[]{1,2,3}, TransactionLine.class)).thenReturn(Either.left(Problem.builder().build()));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
@@ -180,6 +195,7 @@ class CsvExtractionServiceTest {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
+        TransactionLine transactionLine = mock(TransactionLine.class);
 
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
@@ -189,6 +205,7 @@ class CsvExtractionServiceTest {
                 .readAllBytes();
 
         when(extractionData.file()).thenReturn(bytes);
+        when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(transactionLine)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.left(Problem.builder().build()));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
@@ -203,20 +220,19 @@ class CsvExtractionServiceTest {
     }
 
     @Test
-    void continueERPExtraction_success() throws IOException {
+    void continueERPExtraction_success() {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
         Transaction transaction = mock(Transaction.class);
+        TransactionLine line = mock(TransactionLine.class);
 
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
-        byte[] bytes = getClass()
-                .getClassLoader()
-                .getResourceAsStream("testData.csv") // adjust the path
-                .readAllBytes();
+        byte[] bytes = new byte[2];
 
         when(extractionData.file()).thenReturn(bytes);
+        when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.right(List.of(transaction)));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
@@ -234,19 +250,18 @@ class CsvExtractionServiceTest {
     }
 
     @Test
-    void continueERPExtraction_emptyList() throws IOException {
+    void continueERPExtraction_emptyList() {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
+        TransactionLine line = mock(TransactionLine.class);
 
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
-        byte[] bytes = getClass()
-                .getClassLoader()
-                .getResourceAsStream("testData.csv") // adjust the path
-                .readAllBytes();
+        byte[] bytes = new byte[2];
 
         when(extractionData.file()).thenReturn(bytes);
+        when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.right(List.of()));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
@@ -310,6 +325,7 @@ class CsvExtractionServiceTest {
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(null);
+        when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(Problem.builder().build()));
 
         csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
 
@@ -329,6 +345,7 @@ class CsvExtractionServiceTest {
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(new byte[]{1,2,3});
+        when(parser.parseCsv(new byte[]{1,2,3}, TransactionLine.class)).thenReturn(Either.right(List.of()));
 
         csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
 
@@ -338,12 +355,13 @@ class CsvExtractionServiceTest {
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationFailedEvent value = captor.getValue();
         assertEquals("orgId", value.getOrganisationId());
-        assertEquals(Constants.CSV_PARSING_ERROR, value.getError().getSubCode());
+        assertEquals(Constants.NO_TRANSACTION_LINES, value.getError().getSubCode());
     }
 
     @Test
     void continueERPReconcilation_transactionConversionError() throws IOException {
         ExtractionData extractionData = mock(ExtractionData.class);
+        TransactionLine line = mock(TransactionLine.class);
 
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
@@ -353,6 +371,7 @@ class CsvExtractionServiceTest {
                 .readAllBytes();
 
         when(extractionData.file()).thenReturn(bytes);
+        when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.left(Problem.builder().build()));
 
         csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
@@ -370,6 +389,7 @@ class CsvExtractionServiceTest {
     void continueERPReconcilation_success() throws IOException {
         ExtractionData extractionData = mock(ExtractionData.class);
         Transaction transaction = mock(Transaction.class);
+        TransactionLine line = mock(TransactionLine.class);
 
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
@@ -379,6 +399,7 @@ class CsvExtractionServiceTest {
                 .readAllBytes();
 
         when(extractionData.file()).thenReturn(bytes);
+        when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.right(List.of(transaction)));
 
         csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
@@ -397,7 +418,7 @@ class CsvExtractionServiceTest {
     @Test
     void continueERPReconcilation_emptyLines() throws Exception {
         ExtractionData extractionData = mock(ExtractionData.class);
-
+        TransactionLine line = mock(TransactionLine.class);
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         byte[] bytes = getClass()
@@ -406,6 +427,7 @@ class CsvExtractionServiceTest {
                 .readAllBytes();
 
         when(extractionData.file()).thenReturn(bytes);
+        when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.right(List.of()));
 
         csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");

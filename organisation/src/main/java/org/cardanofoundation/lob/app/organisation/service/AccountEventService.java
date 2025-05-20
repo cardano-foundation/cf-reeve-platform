@@ -2,13 +2,17 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
@@ -19,6 +23,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.repository.AccountEventRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -29,6 +34,7 @@ public class AccountEventService {
     private final AccountEventRepository accountEventRepository;
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
+    private final CsvParser<EventCodeUpdate> csvParser;
 
     public Optional<AccountEvent> findById(String organisationId, String debitReferenceCode, String creditReferenceCode) {
         return accountEventRepository.findById(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode));
@@ -50,7 +56,7 @@ public class AccountEventService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
         }
 
@@ -58,18 +64,18 @@ public class AccountEventService {
         if (debitReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail(STR."Unable to find refernce code by Id: \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
         Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
         if (creditReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail(STR."Unable to find refernce code by Id: \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
         ReferenceCode debitReferenceG = debitReference.get();
@@ -81,7 +87,7 @@ public class AccountEventService {
                     .withTitle("ACCOUNT_EVENT_ALREADY_EXISTS")
                     .withDetail(STR."Account event already exists for debit reference code: \{eventCodeUpdate.getDebitReferenceCode()} and credit reference code: \{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.CONFLICT)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
         AccountEvent accountEvent = AccountEvent.builder()
@@ -104,7 +110,7 @@ public class AccountEventService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
         }
 
@@ -114,7 +120,7 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
         Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
@@ -123,7 +129,7 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
         ReferenceCode debitReferenceG = debitReference.get();
@@ -134,7 +140,7 @@ public class AccountEventService {
                     .withTitle("ACCOUNT_EVENT_NOT_FOUND")
                     .withDetail(STR."Account event not found for debit reference code: \{eventCodeUpdate.getDebitReferenceCode()} and credit reference code: \{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
         AccountEvent accountEvent = accountEventOpt.get();
         accountEvent.setName(eventCodeUpdate.getName());
@@ -153,7 +159,7 @@ public class AccountEventService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
         }
 
@@ -163,7 +169,7 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
         Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
@@ -172,7 +178,7 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
         ReferenceCode debitReferenceG = debitReference.get();
@@ -188,5 +194,15 @@ public class AccountEventService {
         accountEvent.setActive(eventCodeUpdate.getActive());
 
         return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
+    }
+
+    @Transactional
+    public Either<Set<Problem>, Set<AccountEventView>> insertAccountEventByCsv(String orgId, MultipartFile file) {
+        return csvParser.parseCsv(file, EventCodeUpdate.class).fold(
+                problem ->
+                        Either.left(Set.of(problem)),
+                eventCodeUpdates ->
+                        Either.right(eventCodeUpdates.stream().map(eventCodeUpdate ->  insertAccountEvent(orgId, eventCodeUpdate)).collect(Collectors.toSet()))
+        );
     }
 }

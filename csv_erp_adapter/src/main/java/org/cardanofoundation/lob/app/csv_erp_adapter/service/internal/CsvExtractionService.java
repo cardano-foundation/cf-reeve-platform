@@ -6,9 +6,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent.Status.STARTED;
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
@@ -28,8 +25,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import com.google.common.cache.Cache;
-import com.opencsv.bean.CsvToBean;
-import com.opencsv.bean.CsvToBeanBuilder;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
@@ -48,6 +43,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.ExtractionData;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
@@ -59,12 +55,13 @@ public class CsvExtractionService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final Cache<String, ExtractionData> temporaryFileCache;
     private final SystemExtractionParametersFactory systemExtractionParametersFactory;
-    @Qualifier("CsvTransactionConverter")
+    @Qualifier("csvTransactionConverter")
     private final TransactionConverter transactionConverter;
+    private final CsvParser<TransactionLine> csvParser;
     @Value("${lob.csv.delimiter:;}")
-    private final String delimiter = ";";
+    private String delimiter;
     @Value("${lob.csv.send-batch-size:100}")
-    private final int sendBatchSize = 100;
+    private int sendBatchSize;
 
     public void startNewExtraction(@NotNull String organisationId, String user, @NotNull UserExtractionParameters userExtractionParameters, byte[] file) {
         String batchId = digestAsHex(UUID.randomUUID().toString());
@@ -158,7 +155,7 @@ public class CsvExtractionService {
         // TODO evaluate other parameters to see if they match
 
 
-        Either<Problem, List<TransactionLine>> lists = parseCsv(extractionData.file());
+        Either<Problem, List<TransactionLine>> lists = csvParser.parseCsv(extractionData.file(), TransactionLine.class);
         if(lists.isLeft()) {
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
@@ -230,32 +227,6 @@ public class CsvExtractionService {
         log.info("NetSuite ingestion fully completed.");
     }
 
-    private Either<Problem, List<TransactionLine>> parseCsv(byte[] file){
-        if(Objects.isNull(file)) {
-            log.error(Constants.FILE_IS_NULL);
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.FILE_IS_NULL)
-                    .withDetail(Constants.FILE_IS_NULL)
-                    .build());
-        }
-        try {
-            Reader reader = new InputStreamReader(new ByteArrayInputStream(file));
-            CsvToBean<TransactionLine> csvToBean = new CsvToBeanBuilder<TransactionLine>(reader)
-                    .withType(TransactionLine.class)
-                    .withIgnoreLeadingWhiteSpace(true)
-                    .withSeparator(delimiter.charAt(0))
-                    .withIgnoreEmptyLine(true)
-                    .build();
-            return Either.right(csvToBean.parse());
-        } catch (Exception e) {
-            log.info("Error parsing CSV file");
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.CSV_PARSING_ERROR)
-                    .withDetail(e.getMessage())
-                    .build());
-        }
-    }
-
     public void startNewReconciliation(@NotNull String organisationId, String user, byte[] file, LocalDate reconcileFrom, LocalDate reconcileTo) {
         log.info("Running reconciliation...");
 
@@ -314,7 +285,7 @@ public class CsvExtractionService {
             return;
         }
 
-        Either<Problem, List<TransactionLine>> lists = parseCsv(extractionData.file());
+        Either<Problem, List<TransactionLine>> lists = csvParser.parseCsv(extractionData.file(), TransactionLine.class);
         if(lists.isLeft()) {
             ReconcilationFailedEvent batchFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))

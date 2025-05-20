@@ -50,6 +50,8 @@ lob:
   #  LOB_BLOCKCHAIN_READER_ENABLED=true
   #  LOB_BLOCKCHAIN_PUBLISHER_ENABLED=true
   #  LOB_NETSUITE_ENABLED=true
+  csv:
+    delimiter: ","
   blockchain-reader:
     enabled: false
   blockchain-publisher:

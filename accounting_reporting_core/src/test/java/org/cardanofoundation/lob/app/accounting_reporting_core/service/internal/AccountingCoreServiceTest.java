@@ -82,13 +82,13 @@ class AccountingCoreServiceTest {
         when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
 
-        UserExtractionParameters userExtractionParameters = UserExtractionParameters.builder()
+        UserExtractionParameters userParams = UserExtractionParameters.builder()
                 .organisationId("org-123")
                 .from(LocalDate.of(2023, 1, 1))
                 .to(LocalDate.of(2023, 12, 31))
                 .transactionNumbers(mockList)
                 .build();
-        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, null, null);
+        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, null, null);
         assertThat(voids.isLeft()).isTrue();
         assertThat(voids.getLeft().getTitle()).isEqualTo("TOO_MANY_TRANSACTIONS");
     }
@@ -105,13 +105,13 @@ class AccountingCoreServiceTest {
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
         when(file.getBytes()).thenThrow(new IOException());
 
-        UserExtractionParameters userExtractionParameters = UserExtractionParameters.builder()
+        UserExtractionParameters userParams = UserExtractionParameters.builder()
                 .organisationId("org-123")
                 .from(LocalDate.of(2023, 1, 1))
                 .to(LocalDate.of(2023, 12, 31))
                 .transactionNumbers(mockList)
                 .build();
-        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, file, null);
+        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, file, null);
         assertThat(voids.isLeft()).isTrue();
         assertThat(voids.getLeft().getTitle()).isEqualTo("FILE_READ_ERROR");
     }

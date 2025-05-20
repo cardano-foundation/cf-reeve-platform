@@ -35,8 +35,9 @@ public class ReferenceCodeView {
         return builder.build();
     }
 
-    public static ReferenceCodeView createFail(Problem error) {
+    public static ReferenceCodeView createFail(Problem error, String referenceCode) {
         return ReferenceCodeView.builder()
+                .referenceCode(referenceCode)
                 //.name(error.getTitle())
                 //.subType(chartOfAccount.getSubType().getId())
                 //.type(chartOfAccount.getSubType().getType().getId())

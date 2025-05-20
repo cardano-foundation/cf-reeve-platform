@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.repository;
 
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,4 +15,9 @@ public interface OrganisationChartOfAccountTypeRepository extends JpaRepository<
             "LEFT JOIN FETCH t.subTypes tst " +
             "WHERE t.organisationId = :organisationId")
     Set<OrganisationChartOfAccountType> findAllByOrganisationId(@Param("organisationId") String organisationId);
+
+    Optional<OrganisationChartOfAccountType> findFirstByOrganisationIdAndName(String organisationId, String name);
+
+    @Query("SELECT MAX(t.id) FROM OrganisationChartOfAccountType t")
+    Long getMaxId();
 }

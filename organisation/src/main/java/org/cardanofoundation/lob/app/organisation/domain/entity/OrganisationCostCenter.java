@@ -17,6 +17,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
+@Setter
 @Entity
 @Table(name = "organisation_cost_center")
 @Builder
