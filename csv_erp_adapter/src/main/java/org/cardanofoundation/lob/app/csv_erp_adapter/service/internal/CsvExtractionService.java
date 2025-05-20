@@ -6,6 +6,9 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent.Status.STARTED;
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
@@ -25,6 +28,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import com.google.common.cache.Cache;
+import com.opencsv.bean.CsvToBean;
+import com.opencsv.bean.CsvToBeanBuilder;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
@@ -58,6 +63,8 @@ public class CsvExtractionService {
     @Qualifier("csvTransactionConverter")
     private final TransactionConverter transactionConverter;
     private final CsvParser<TransactionLine> csvParser;
+    @Value("${lob.csv.delimiter:;}")
+    private String delimiter;
     @Value("${lob.csv.send-batch-size:100}")
     private int sendBatchSize;
 

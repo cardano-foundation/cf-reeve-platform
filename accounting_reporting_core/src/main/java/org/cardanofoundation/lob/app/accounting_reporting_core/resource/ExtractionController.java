@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
+import java.time.LocalDate;
+
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presenta
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
+import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
 @RestController
 @RequestMapping("/api")
@@ -31,7 +34,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ex
 @Slf4j
 public class ExtractionController {
     private final ExtractionItemService extractionItemService;
-
 
     @Tag(name = "Extraction", description = "Extraction search")
     @PostMapping(value = "/extraction/search", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
@@ -45,9 +47,11 @@ public class ExtractionController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ExtractionTransactionView> transactionSearch(@Valid @RequestBody ExtractionTransactionsRequest transactionsRequest) {
         try {
+            LocalDate dateFrom = FlexibleDateParser.parse(transactionsRequest.getDateFrom());
+            LocalDate dateTo = FlexibleDateParser.parse(transactionsRequest.getDateTo());
             return ResponseEntity
                     .ok()
-                    .body(extractionItemService.findTransactionItems(transactionsRequest.getDateFrom(), transactionsRequest.getDateTo(), transactionsRequest.getAccountCode(), transactionsRequest.getCostCenter(), transactionsRequest.getProject(), transactionsRequest.getAccountType(), transactionsRequest.getAccountSubType()));
+                    .body(extractionItemService.findTransactionItems(dateFrom, dateTo, transactionsRequest.getAccountCode(), transactionsRequest.getCostCenter(), transactionsRequest.getProject(), transactionsRequest.getAccountType(), transactionsRequest.getAccountSubType()));
         } catch (Exception e) {
             log.error("Error occurred while searching transactions");
             return ResponseEntity.status(500).body(null);
