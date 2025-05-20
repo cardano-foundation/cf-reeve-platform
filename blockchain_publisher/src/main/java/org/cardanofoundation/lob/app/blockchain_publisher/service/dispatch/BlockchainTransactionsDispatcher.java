@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch;
 
 import static org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus.SUBMITTED;
 
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -41,7 +42,7 @@ public class BlockchainTransactionsDispatcher {
     private final LedgerUpdatedEventPublisher ledgerUpdatedEventPublisher;
     private final DispatchingStrategy<TransactionEntity> dispatchingStrategy;
 
-    @Value("${lob.blockchain_publisher.dispatcher.pullBatchSize:50}")
+    @Value("${lob.blockchain_publisher.dispatcher.pullBatchSize:500}")
     private int pullTransactionsBatchSize = 50;
 
     @PostConstruct
@@ -58,7 +59,10 @@ public class BlockchainTransactionsDispatcher {
             String organisationId = organisation.getId();
             Set<TransactionEntity> transactionsBatch = transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched(organisationId, pullTransactionsBatchSize);
             Set<TransactionEntity> transactionToDispatch = dispatchingStrategy.apply(organisationId, transactionsBatch);
-
+            // unlock other transactions
+            HashSet<TransactionEntity> toUnlock = new HashSet<>(transactionsBatch);
+            toUnlock.removeAll(transactionToDispatch);
+            transactionEntityRepositoryGateway.unlockTransactions(toUnlock);
             int dispatchTxCount = transactionToDispatch.size();
             log.info("Dispatching txs for organisationId:{}, tx count:{}", organisationId, dispatchTxCount);
             if (dispatchTxCount > 0) {
@@ -82,6 +86,7 @@ public class BlockchainTransactionsDispatcher {
 
         int submittedTxCount = blockchainTransactions.submittedTransactions().size();
         int remainingTxCount = blockchainTransactions.remainingTransactions().size();
+        transactionEntityRepositoryGateway.unlockTransactions(blockchainTransactions.remainingTransactions());
 
         log.info("Submitted tx count:{}, remainingTxCount:{}", submittedTxCount, remainingTxCount);
     }
