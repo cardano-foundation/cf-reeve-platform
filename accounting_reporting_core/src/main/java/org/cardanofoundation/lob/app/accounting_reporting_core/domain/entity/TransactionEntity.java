@@ -73,6 +73,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Column(name = "processing_status")
     @Enumerated(STRING)
     @Setter
+    @DiffIgnore
     private TransactionProcessingStatus processingStatus;
 
     @Column(name = "accounting_period", nullable = false)
@@ -134,11 +135,13 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Column(name = "transaction_approved", nullable = false)
     @Getter
     @Setter
+    @DiffIgnore
     private Boolean transactionApproved = false;
 
     @Column(name = "ledger_dispatch_approved", nullable = false)
     @Getter
     @Setter
+    @DiffIgnore
     private Boolean ledgerDispatchApproved = false;
 
     @OneToMany(mappedBy = "transaction", orphanRemoval = true, fetch = EAGER, cascade = CascadeType.ALL)

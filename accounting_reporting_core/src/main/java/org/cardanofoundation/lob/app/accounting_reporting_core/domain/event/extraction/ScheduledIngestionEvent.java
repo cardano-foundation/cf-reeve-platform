@@ -1,11 +1,14 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction;
 
+import java.util.Map;
+
 import jakarta.validation.constraints.NotNull;
 
 import lombok.*;
 
 import org.jmolecules.event.annotation.DomainEvent;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
@@ -27,5 +30,12 @@ public class ScheduledIngestionEvent {
 
     @NotNull
     private UserExtractionParameters userExtractionParameters;
+
+    @NotNull
+    private ExtractorType extractorType;
+
+    private byte[] file;
+
+    private Map<String, Object> parameters;
 
 }
