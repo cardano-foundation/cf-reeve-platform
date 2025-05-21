@@ -50,7 +50,6 @@ public class LedgerService {
     @Value("${ledger.dispatch.batch.size:100}")
     private int dispatchBatchSize;
 
-    @Transactional
     public void updateTransactionsWithNewStatuses(Map<String, TxStatusUpdate> statuses) {
         log.info("Updating dispatch status for statusMapCount: {}", statuses.size());
 
@@ -72,13 +71,11 @@ public class LedgerService {
                 tx.setLedgerDispatchReceipt(new LedgerDispatchReceipt(type, hash));
             }
         }
-
         accountingCoreTransactionRepository.saveAll(transactionEntities);
 
         log.info("Updated dispatch status for statusMapCount: {} completed.", statuses.size());
     }
 
-    @Transactional
     public void updateReportsWithNewStatuses(Map<String, ReportStatusUpdate> reportStatusUpdateMap) {
         log.info("Updating dispatch status for statusMapCount: {}", reportStatusUpdateMap.size());
 

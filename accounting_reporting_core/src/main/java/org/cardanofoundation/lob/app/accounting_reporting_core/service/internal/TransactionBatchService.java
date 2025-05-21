@@ -62,7 +62,6 @@ public class TransactionBatchService {
         return transactionBatchRepository.findById(batchId);
     }
 
-    @Transactional
     public void createTransactionBatch(String batchId,
                                        String organisationId,
                                        UserExtractionParameters userExtractionParameters,
@@ -84,7 +83,7 @@ public class TransactionBatchService {
         transactionBatchEntity.setCreatedBy(user);
         AuditorContext.setCurrentUser(user);
 
-        transactionBatchRepository.saveAndFlush(transactionBatchEntity);
+        transactionBatchRepository.save(transactionBatchEntity);
 
         log.info("Transaction batch created, batchId: {}", batchId);
 
@@ -186,7 +185,6 @@ public class TransactionBatchService {
         log.info("EXPENSIVE::Transaction batch status and statistics updated, batchId: {}", batchId);
     }
 
-    @Transactional
     public void updateBatchesPerTransactions(Map<String, TxStatusUpdate> txStatusUpdates) {
         for (TxStatusUpdate txStatusUpdate : txStatusUpdates.values()) {
             String txId = txStatusUpdate.getTxId();
@@ -207,7 +205,7 @@ public class TransactionBatchService {
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<TransactionBatchEntity> findAll() {
         return transactionBatchRepository.findAll();
     }
