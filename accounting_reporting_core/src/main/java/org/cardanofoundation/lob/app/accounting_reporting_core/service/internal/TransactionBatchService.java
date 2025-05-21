@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
@@ -97,7 +98,8 @@ public class TransactionBatchService {
         );
     }
 
-    @Transactional
+    // This should always run after Transactions
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updateTransactionBatchStatusAndStats(String batchId,
                                                      @Nullable Integer totalTransactionsCount,
                                                      Optional<Set<TransactionEntity>> entities) {
