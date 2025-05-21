@@ -4,6 +4,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -43,6 +44,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCorePresentationConverterTest {
@@ -56,7 +60,13 @@ class AccountingCorePresentationConverterTest {
     @Mock
     private TransactionBatchRepositoryGateway transactionBatchRepositoryGateway;
     @Mock
+    private OrganisationPublicApiIF organisationPublicApiIF;
+    @Mock
     private AccountingCoreTransactionRepository transactionRepository;
+    @Mock
+    private CostCenterRepository costCenterRepository;
+    @Mock
+    private ProjectMappingRepository projectMappingRepository;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationConverter;
@@ -183,6 +193,8 @@ class AccountingCorePresentationConverterTest {
     @Test
     void testBatchDetail() {
 
+        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation organisation = mock(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.class);
+        when(organisation.getId()).thenReturn("123");
         TransactionItemEntity transactionItem = new TransactionItemEntity();
         transactionItem.setId("txItemId");
         transactionItem.setAmountLcy(BigDecimal.valueOf(100));
@@ -199,9 +211,11 @@ class AccountingCorePresentationConverterTest {
         BatchStatistics batchStatistics = BatchStatistics.builder().total(10).pendingTransactions(1).invalidTransactions(8).approvedTransactions(5).publishedTransactions(6).readyToApproveTransactions(10).build();
 
         TransactionEntity transaction1 = new TransactionEntity();
+        transaction1.setOrganisation(organisation);
         transaction1.setId("tx-id1");
         transaction1.setTransactionType(TransactionType.Journal);
         TransactionEntity transaction2 = new TransactionEntity();
+        transaction2.setOrganisation(organisation);
         transaction2.setId("tx-id2");
         transaction2.setTransactionType(TransactionType.VendorBill);
 
@@ -225,6 +239,7 @@ class AccountingCorePresentationConverterTest {
 
         transaction1.setBatchId(batchId);
         transaction2.setBatchId(batchId);
+
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(batchId, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
