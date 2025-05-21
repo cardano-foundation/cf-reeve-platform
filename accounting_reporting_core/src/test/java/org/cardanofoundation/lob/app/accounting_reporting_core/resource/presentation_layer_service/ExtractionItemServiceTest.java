@@ -10,7 +10,6 @@ import java.util.Set;
 
 import lombok.val;
 
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -22,6 +21,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @ExtendWith(MockitoExtension.class)
 class ExtractionItemServiceTest {
