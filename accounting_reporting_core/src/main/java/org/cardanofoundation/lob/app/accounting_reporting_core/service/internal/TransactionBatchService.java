@@ -83,7 +83,7 @@ public class TransactionBatchService {
         transactionBatchEntity.setCreatedBy(user);
         AuditorContext.setCurrentUser(user);
 
-        transactionBatchRepository.save(transactionBatchEntity);
+        transactionBatchRepository.saveAndFlush(transactionBatchEntity);
 
         log.info("Transaction batch created, batchId: {}", batchId);
 
