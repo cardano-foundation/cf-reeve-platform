@@ -53,14 +53,13 @@ class AccountingCorePresentationConverterTest {
 
     @Mock
     private TransactionRepositoryGateway transactionRepositoryGateway;
-
+    @Mock
+    private OrganisationPublicApiIF organisationPublicApiIF;
     @Mock
     private AccountingCoreService accountingCoreService;
 
     @Mock
     private TransactionBatchRepositoryGateway transactionBatchRepositoryGateway;
-    @Mock
-    private OrganisationPublicApiIF organisationPublicApiIF;
     @Mock
     private AccountingCoreTransactionRepository transactionRepository;
     @Mock

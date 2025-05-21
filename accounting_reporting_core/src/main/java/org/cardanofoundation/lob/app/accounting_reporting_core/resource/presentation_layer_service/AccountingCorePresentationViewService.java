@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
@@ -57,6 +58,7 @@ public class AccountingCorePresentationViewService {
     private final TransactionReconcilationRepository transactionReconcilationRepository;
     private final CostCenterRepository costCenterRepository;
     private final ProjectMappingRepository projectMappingRepository;
+    private final OrganisationPublicApiIF organisationPublicApiIF;
 
     /**
      * TODO: waiting for refactoring the layer to remove this
@@ -519,7 +521,8 @@ public class AccountingCorePresentationViewService {
         Set<TransactionItemEntity> items = tx.getItems();
 
         if (tx.getTransactionType().equals(TransactionType.Journal)) {
-            items = tx.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(toSet());
+            Optional<String> dummyAccount = organisationPublicApiIF.findByOrganisationId(tx.getOrganisation().getId()).orElse(new org.cardanofoundation.lob.app.organisation.domain.entity.Organisation()).getDummyAccount();
+            items = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
         }
 
         if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
