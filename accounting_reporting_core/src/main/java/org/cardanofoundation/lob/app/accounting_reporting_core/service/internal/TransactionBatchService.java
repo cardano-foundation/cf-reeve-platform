@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
@@ -61,7 +62,6 @@ public class TransactionBatchService {
         return transactionBatchRepository.findById(batchId);
     }
 
-    @Transactional
     public void createTransactionBatch(String batchId,
                                        String organisationId,
                                        UserExtractionParameters userExtractionParameters,
@@ -97,7 +97,8 @@ public class TransactionBatchService {
         );
     }
 
-    @Transactional
+    // This should always run after Transactions
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updateTransactionBatchStatusAndStats(String batchId,
                                                      @Nullable Integer totalTransactionsCount,
                                                      Optional<Set<TransactionEntity>> entities) {
@@ -184,7 +185,6 @@ public class TransactionBatchService {
         log.info("EXPENSIVE::Transaction batch status and statistics updated, batchId: {}", batchId);
     }
 
-    @Transactional
     public void updateBatchesPerTransactions(Map<String, TxStatusUpdate> txStatusUpdates) {
         for (TxStatusUpdate txStatusUpdate : txStatusUpdates.values()) {
             String txId = txStatusUpdate.getTxId();
@@ -205,7 +205,7 @@ public class TransactionBatchService {
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<TransactionBatchEntity> findAll() {
         return transactionBatchRepository.findAll();
     }
