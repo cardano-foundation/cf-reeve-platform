@@ -3,8 +3,10 @@ package org.cardanofoundation.lob.app.organisation.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -58,6 +60,16 @@ class ProjectCodeServiceTest {
         assertTrue(result.isPresent());
         assertEquals(project, result.get());
         verify(projectMappingRepository).findById(projectId);
+    }
+
+    @Test
+    void testGetAllProjects() {
+        Set<OrganisationProject> projects = new HashSet<>();
+        when(projectMappingRepository.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0")).thenReturn(projects);
+        Set<OrganisationProject> result = projectCodeService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
+        assertEquals(projects, result);
+        verify(projectMappingRepository).findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
+        verifyNoMoreInteractions(projectMappingRepository);
     }
 
     @Test
