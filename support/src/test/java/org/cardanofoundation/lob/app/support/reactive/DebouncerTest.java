@@ -39,7 +39,7 @@ public class DebouncerTest {
         MILLISECONDS.sleep(200);
 
         // Verify that the task is executed only once
-        verify(taskRunner, times(1)).runInNewTransaction(task);
+        verify(taskRunner, times(1)).runAfterTransaction(task);
     }
 
     @Test
@@ -51,7 +51,7 @@ public class DebouncerTest {
         MILLISECONDS.sleep(200); // Wait more than the debouncing delay
 
         // Verify that the task is executed only once, ensuring the first call was cancelled
-        verify(taskRunner, times(1)).runInNewTransaction(task);
+        verify(taskRunner, times(1)).runAfterTransaction(task);
     }
 
 //    @Test
