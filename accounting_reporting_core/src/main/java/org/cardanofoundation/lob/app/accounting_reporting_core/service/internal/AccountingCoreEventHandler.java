@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -19,6 +20,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Repor
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
@@ -52,7 +54,9 @@ public class AccountingCoreEventHandler {
 
         Map<String, TxStatusUpdate> txStatusUpdatesMap = event.statusUpdatesMap();
 
-        ledgerService.updateTransactionsWithNewStatuses(txStatusUpdatesMap);
+        List<TransactionEntity> transactionEntities = ledgerService.updateTransactionsWithNewStatuses(txStatusUpdatesMap);
+        ledgerService.saveAllTransactionEntities(transactionEntities);
+
         transactionBatchService.updateBatchesPerTransactions(txStatusUpdatesMap);
 
         log.info("Finished processing handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
@@ -65,7 +69,8 @@ public class AccountingCoreEventHandler {
 
         Map<String, ReportStatusUpdate> reportStatusUpdatesMap = event.statusUpdatesMap();
 
-        ledgerService.updateReportsWithNewStatuses(reportStatusUpdatesMap);
+        List<ReportEntity> reportEntities = ledgerService.updateReportsWithNewStatuses(reportStatusUpdatesMap);
+        ledgerService.saveAllReports(reportEntities);
 
         log.info("Finished processing handleReportsLedgerUpdated, event: {}", event);
     }
