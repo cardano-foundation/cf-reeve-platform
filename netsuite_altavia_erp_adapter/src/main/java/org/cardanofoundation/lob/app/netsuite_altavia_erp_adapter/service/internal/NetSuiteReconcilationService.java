@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
@@ -123,6 +124,7 @@ public class NetSuiteReconcilationService {
                     .organisationId(organisationId)
                     .from(reconcileFrom)
                     .to(reconcileTo)
+                    .extractorType(ExtractorType.NETSUITE)
                     .build()
             );
 

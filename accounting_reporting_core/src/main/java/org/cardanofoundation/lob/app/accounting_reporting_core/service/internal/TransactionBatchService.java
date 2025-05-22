@@ -17,8 +17,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
@@ -54,18 +56,17 @@ public class TransactionBatchService {
     private final DebouncerManager debouncerManager;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
-    @Value("${batch.stats.debounce.duration:PT5S}")
+    @Value("${lob.accounting_reporting_core.debounce.duration:PT10S}")
     private Duration batchStatsDebounceDuration;
 
     public Optional<TransactionBatchEntity> findById(String batchId) {
         return transactionBatchRepository.findById(batchId);
     }
 
-    @Transactional
     public void createTransactionBatch(String batchId,
                                        String organisationId,
                                        UserExtractionParameters userExtractionParameters,
-                                       SystemExtractionParameters systemExtractionParameters, String user) {
+                                       SystemExtractionParameters systemExtractionParameters, String user, ExtractorType extractorType) {
         log.info("Creating transaction batch, batchId: {}, filteringParameters: {}", batchId, userExtractionParameters);
 
         if (transactionBatchRepository.findById(batchId).isPresent()) {
@@ -93,11 +94,13 @@ public class TransactionBatchService {
                 .organisationId(organisationId)
                 .userExtractionParameters(userExtractionParameters)
                 .systemExtractionParameters(systemExtractionParameters)
+                .extractorType(extractorType)
                 .build()
         );
     }
 
-    @Transactional
+    // This should always run after Transactions
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updateTransactionBatchStatusAndStats(String batchId,
                                                      @Nullable Integer totalTransactionsCount,
                                                      Optional<Set<TransactionEntity>> entities) {
@@ -184,7 +187,6 @@ public class TransactionBatchService {
         log.info("EXPENSIVE::Transaction batch status and statistics updated, batchId: {}", batchId);
     }
 
-    @Transactional
     public void updateBatchesPerTransactions(Map<String, TxStatusUpdate> txStatusUpdates) {
         for (TxStatusUpdate txStatusUpdate : txStatusUpdates.values()) {
             String txId = txStatusUpdate.getTxId();
@@ -205,7 +207,7 @@ public class TransactionBatchService {
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<TransactionBatchEntity> findAll() {
         return transactionBatchRepository.findAll();
     }

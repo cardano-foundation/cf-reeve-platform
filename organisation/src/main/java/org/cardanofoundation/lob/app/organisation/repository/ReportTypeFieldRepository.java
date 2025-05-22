@@ -10,4 +10,6 @@ public interface ReportTypeFieldRepository extends JpaRepository<ReportTypeField
 
     Optional<ReportTypeFieldEntity> findByReportIdAndId(Long reportId, Long id);
 
+    Optional<ReportTypeFieldEntity> findFirstByReportIdAndName(Long reportId, String name);
+
 }

@@ -33,6 +33,9 @@ public class OrganisationCheckInterceptor implements HandlerInterceptor {
         if(authentication != null && authentication.getPrincipal().equals("anonymousUser")) {
             return true;
         }
+        if (request.getContentType() != null && request.getContentType().startsWith("multipart/")) {
+            return true;
+        }
         if (request.getContentType() != null && request.getContentType().contains("application/json")) {
             String body = new String(request.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 

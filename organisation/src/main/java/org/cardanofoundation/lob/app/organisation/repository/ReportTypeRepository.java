@@ -28,4 +28,6 @@ public interface ReportTypeRepository extends JpaRepository<ReportTypeEntity, Lo
     Optional<ReportTypeEntity> findByOrganisationIdAndId(@Param("organisationID") String organisationId, @Param("id") Long id);
 
     List<ReportTypeEntity> findAllByOrganisationId(String orgId);
+
+    Optional<ReportTypeEntity> findByOrganisationIdAndName(String orgId, String name);
 }

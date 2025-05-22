@@ -30,7 +30,7 @@ public class Debouncer {
             future.cancel(false); // Cancel the previous task if it is pending.
         }
         future = scheduler.schedule(() ->
-                transactionalTaskRunner.runInNewTransaction(task), delay, TimeUnit.MILLISECONDS);
+                transactionalTaskRunner.runAfterTransaction(task), delay, TimeUnit.MILLISECONDS);
     }
 
     public void shutdown() {
