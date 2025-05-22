@@ -1,0 +1,51 @@
+package org.cardanofoundation.lob.app.accounting_reporting_core.job;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.LedgerService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionBatchService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+@ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
+public class TxStatusUpdaterJob {
+
+    private final Map<String, TxStatusUpdate> txStatusUpdatesMap = new HashMap<>();
+    private final LedgerService ledgerService;
+    private final TransactionBatchService transactionBatchService;
+
+    // This Job collects all TxStatusUpdate events and updates the transactions in the database
+    @Scheduled(
+            fixedDelayString = "${lob.blockchain.dispatcher.fixed_delay:PT20S}",
+            initialDelayString = "${lob.blockchain.dispatcher.initial_delay:PT30S}")
+    public void execute() {
+        Map<String, TxStatusUpdate> updates;
+        synchronized (txStatusUpdatesMap) {
+            updates = new HashMap<>(txStatusUpdatesMap);
+            txStatusUpdatesMap.clear();
+        }
+        List<TransactionEntity> transactionEntities = ledgerService.updateTransactionsWithNewStatuses(updates);
+        ledgerService.saveAllTransactionEntities(transactionEntities);
+
+        transactionBatchService.updateBatchesPerTransactions(txStatusUpdatesMap);
+    }
+
+    public void addToStatusUpdateMap(Map<String, TxStatusUpdate> updateMap) {
+        txStatusUpdatesMap.putAll(updateMap);
+    }
+
+
+}

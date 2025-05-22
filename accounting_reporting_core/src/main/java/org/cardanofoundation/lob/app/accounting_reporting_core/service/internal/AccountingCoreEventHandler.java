@@ -9,6 +9,7 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
@@ -45,6 +46,7 @@ public class AccountingCoreEventHandler {
     private final TransactionBatchService transactionBatchService;
     private final TransactionReconcilationService transactionReconcilationService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final TxStatusUpdaterJob txStatusUpdaterJob;
 
 
     @EventListener
@@ -52,12 +54,7 @@ public class AccountingCoreEventHandler {
     public void handleLedgerUpdatedEvent(TxsLedgerUpdatedEvent event) {
         log.info("Received handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
 
-        Map<String, TxStatusUpdate> txStatusUpdatesMap = event.statusUpdatesMap();
-
-        List<TransactionEntity> transactionEntities = ledgerService.updateTransactionsWithNewStatuses(txStatusUpdatesMap);
-        ledgerService.saveAllTransactionEntities(transactionEntities);
-
-        transactionBatchService.updateBatchesPerTransactions(txStatusUpdatesMap);
+        txStatusUpdaterJob.addToStatusUpdateMap(event.statusUpdatesMap());
 
         log.info("Finished processing handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
     }
