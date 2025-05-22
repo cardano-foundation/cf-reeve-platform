@@ -9,7 +9,6 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
@@ -31,6 +29,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reco
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
