@@ -33,24 +33,14 @@ class OrganisationServiceTest {
 
     @Mock
     private OrganisationRepository organisationRepository;
-
-    @Mock
-    private CostCenterService costCenterService;
-
-    @Mock
-    private ProjectMappingRepository projectMappingRepository;
-
-    @Mock
-    private OrganisationChartOfAccountTypeRepository organisationChartOfAccountTypeRepository;
-
-    @Mock
-    private ChartOfAccountRepository organisationChartOfAccountRepository;
-
     @Mock
     private AccountEventRepository accountEventRepository;
-
     @Mock
     private OrganisationCurrencyService organisationCurrencyService;
+    @Mock
+    private CostCenterService costCenterService;
+    @Mock
+    private ProjectCodeService projectCodeService;
 
     @InjectMocks
     private OrganisationService organisationService;
@@ -164,7 +154,7 @@ class OrganisationServiceTest {
         org.setLogo("logo");
 
         when(costCenterService.getAllCostCenter(anyString())).thenReturn(Set.of(new OrganisationCostCenter()));
-        when(projectMappingRepository.findAllByOrganisationId(anyString())).thenReturn(Set.of(new OrganisationProject()));
+        when(projectCodeService.getAllProjects(anyString())).thenReturn(Set.of(new OrganisationProject()));
         when(organisationCurrencyService.findAllByOrganisationId(anyString())).thenReturn(Set.of(new OrganisationCurrency()));
 
         OrganisationView organisationView = organisationService.getOrganisationView(org);
@@ -188,8 +178,8 @@ class OrganisationServiceTest {
         assertEquals(1, organisationView.getOrganisationCurrencies().size());
 
         verify(costCenterService).getAllCostCenter(anyString());
-        verify(projectMappingRepository).findAllByOrganisationId(anyString());
+        verify(projectCodeService).getAllProjects(anyString());
         verify(organisationCurrencyService).findAllByOrganisationId(anyString());
-        verifyNoMoreInteractions(costCenterService, projectMappingRepository, organisationCurrencyService);
+        verifyNoMoreInteractions(costCenterService, projectCodeService, organisationCurrencyService);
     }
 }
