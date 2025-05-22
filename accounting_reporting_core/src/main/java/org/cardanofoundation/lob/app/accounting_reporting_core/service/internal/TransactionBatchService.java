@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus.*;
-import static org.springframework.transaction.annotation.Propagation.SUPPORTS;
 
 import java.time.Duration;
 import java.util.List;
