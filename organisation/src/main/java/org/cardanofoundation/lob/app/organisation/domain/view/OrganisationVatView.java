@@ -24,7 +24,11 @@ public class OrganisationVatView {
     private String description;
     private Boolean active;
 
-    private Optional<Problem> error;
+    private Problem error;
+
+    public Optional<Problem> getError() {
+        return Optional.ofNullable(error);
+    }
 
 
     public static OrganisationVatView convertFromEntity(OrganisationVat organisationVat) {
@@ -35,16 +39,16 @@ public class OrganisationVatView {
                 .parentOrganisationVat(organisationVat.getParentOrganisationVat())
                 .description(organisationVat.getDescription())
                 .active(organisationVat.getActive())
-                .error(Optional.empty())
                 .build();
     }
 
-    public static OrganisationVatView createFail(Problem error) {
+    public static OrganisationVatView createFail(String customerCode, Problem error) {
         return OrganisationVatView.builder()
+                .customerCode(customerCode)
                 //.name(error.getTitle())
                 //.subType(chartOfAccount.getSubType().getId())
                 //.type(chartOfAccount.getSubType().getType().getId())
-                .error(Optional.of(error))
+                .error(error)
                 .build();
     }
 }

@@ -8,7 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
@@ -16,6 +18,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationVatUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationVatView;
 import org.cardanofoundation.lob.app.organisation.repository.OrganisationVatRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @Slf4j
 @Service
@@ -24,6 +27,7 @@ import org.cardanofoundation.lob.app.organisation.repository.OrganisationVatRepo
 public class OrganisationVatService {
 
     private final OrganisationVatRepository organisationVatRepository;
+    private final CsvParser<OrganisationVatUpdate> csvParser;
 
     public Optional<OrganisationVat> findByOrganisationAndCode(String organisationId, String customerCode) {
         return organisationVatRepository.findById(new OrganisationVat.Id(organisationId, customerCode));
@@ -41,9 +45,9 @@ public class OrganisationVatService {
         Optional<OrganisationVat> organisationVat = organisationVatRepository.findById(new OrganisationVat.Id(organisationId, organisationVatUpdate.getCustomerCode()));
 
         if (organisationVat.isPresent()) {
-            return OrganisationVatView.createFail(Problem.builder()
+            return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
                     .withTitle("ORGANISATION_VAT_ALREADY_EXISTS")
-                    .withDetail(STR."The orgnanisation vat with code :\{organisationVatUpdate.getCustomerCode()} already exists")
+                    .withDetail("The orgnanisation vat with code :%s already exists".formatted(organisationVatUpdate.getCustomerCode()))
                     .withStatus(Status.CONFLICT)
                     .build());
         }
@@ -51,9 +55,9 @@ public class OrganisationVatService {
         if(organisationVatUpdate.getParentOrganisationVat() != null && !organisationVatUpdate.getParentOrganisationVat().isEmpty()){
             Optional<OrganisationVat> parentOrganisationVat = organisationVatRepository.findById(new OrganisationVat.Id(organisationId, organisationVatUpdate.getParentOrganisationVat()));
                     if (parentOrganisationVat.isEmpty()){
-                        return OrganisationVatView.createFail(Problem.builder()
+                        return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
                                 .withTitle("PARENT_ORGANISATION_VAT_DO_NOT_EXISTS")
-                                .withDetail(STR."The parent orgnanisation vat with code :\{organisationVatUpdate.getParentOrganisationVat()} do not exists")
+                                .withDetail("The parent orgnanisation vat with code %s do not exists".formatted(organisationVatUpdate.getParentOrganisationVat()))
                                 .withStatus(Status.NOT_FOUND)
                                 .build());
                     }
@@ -76,9 +80,9 @@ public class OrganisationVatService {
         Optional<OrganisationVat> organisationVat = organisationVatRepository.findById(new OrganisationVat.Id(organisationId, organisationVatUpdate.getCustomerCode()));
 
         if (organisationVat.isEmpty()) {
-            return OrganisationVatView.createFail(Problem.builder()
+            return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
                     .withTitle("ORGANISATION_VAT_DO_NOT_EXISTS")
-                    .withDetail(STR."The orgnanisation vat with code :\{organisationVatUpdate.getCustomerCode()} do not exists")
+                    .withDetail("The orgnanisation vat with code %s do not exists".formatted(organisationVatUpdate.getCustomerCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -86,9 +90,9 @@ public class OrganisationVatService {
         if(organisationVatUpdate.getParentOrganisationVat() != null && !organisationVatUpdate.getParentOrganisationVat().isEmpty()){
             Optional<OrganisationVat> parentOrganisationVat = organisationVatRepository.findById(new OrganisationVat.Id(organisationId, organisationVatUpdate.getParentOrganisationVat()));
             if (parentOrganisationVat.isEmpty()){
-                return OrganisationVatView.createFail(Problem.builder()
+                return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
                         .withTitle("PARENT_ORGANISATION_VAT_DO_NOT_EXISTS")
-                        .withDetail(STR."The parent orgnanisation vat with code :\{organisationVatUpdate.getParentOrganisationVat()} do not exists")
+                        .withDetail("The parent orgnanisation vat with code %s do not exists".formatted(organisationVatUpdate.getParentOrganisationVat()))
                         .withStatus(Status.NOT_FOUND)
                         .build());
             }
@@ -102,6 +106,14 @@ public class OrganisationVatService {
         organisationVatEntity.setActive(organisationVatUpdate.getActive());
 
         return OrganisationVatView.convertFromEntity(organisationVatRepository.save(organisationVatEntity));
+    }
+
+    @Transactional
+    public Either<Problem, List<OrganisationVatView>> insertVatCodesCsv(String organisationId, MultipartFile file) {
+        return csvParser.parseCsv(file, OrganisationVatUpdate.class).fold(
+                Either::left,
+                organisationVatUpdates -> Either.right(organisationVatUpdates.stream().map(organisationVatUpdate -> insert(organisationId, organisationVatUpdate)).toList())
+        );
     }
 
 }

@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+
 import java.util.List;
 
 import jakarta.validation.Valid;
@@ -11,6 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -62,6 +65,8 @@ public class OrganisationVatController {
         return ResponseEntity.ok(eventCode);
     }
 
+
+
     @Operation(description = "Reference Code update", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationVatUpdate.class))}
@@ -77,6 +82,22 @@ public class OrganisationVatController {
             return ResponseEntity.status(eventCode.getError().get().getStatus().getStatusCode()).body(eventCode);
         }
         return ResponseEntity.ok(eventCode);
+    }
+
+    @Operation(description = "Vat codes insert via csv", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationVatView.class))}
+            ),
+    })
+    @PostMapping(value = "/{orgId}/vat-codes/insert-csv", produces = "application/json")
+//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> insertVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                               @RequestParam(value = "file") MultipartFile file) {
+
+        return organisationVatService.insertVatCodesCsv(orgId, file).fold(
+                problem -> ResponseEntity.status(BAD_REQUEST).body(problem),
+                ResponseEntity::ok
+        );
     }
 
 
