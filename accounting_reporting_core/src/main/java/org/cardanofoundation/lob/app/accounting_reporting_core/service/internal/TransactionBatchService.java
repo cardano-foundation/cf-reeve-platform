@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus.*;
-import static org.springframework.transaction.annotation.Propagation.SUPPORTS;
 
 import java.time.Duration;
 import java.util.List;
@@ -17,7 +16,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
@@ -99,15 +97,14 @@ public class TransactionBatchService {
         );
     }
 
-    // This should always run after Transactions
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @Transactional
     public void updateTransactionBatchStatusAndStats(String batchId,
                                                      @Nullable Integer totalTransactionsCount,
                                                      Optional<Set<TransactionEntity>> entities) {
         debouncerManager.callInNewDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.ofNullable(totalTransactionsCount), entities), batchStatsDebounceDuration);
     }
 
-    @Transactional(propagation = SUPPORTS)
+    @Transactional
     public void failTransactionBatch(String batchId,
                                      UserExtractionParameters userExtractionParameters,
                                      Optional<SystemExtractionParameters> systemExtractionParameters,
@@ -136,6 +133,7 @@ public class TransactionBatchService {
         log.info("Transaction batch status updated, batchId: {}", batchId);
     }
 
+    @Transactional
     public void invokeUpdateTransactionBatchStatusAndStats(String batchId,
                                                             Optional<Integer> totalTransactionsCountO,
                                                             Optional<Set<TransactionEntity>> transactionEntities) {

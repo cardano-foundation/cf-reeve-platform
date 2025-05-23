@@ -218,4 +218,42 @@ class DocumentConversionTaskItemTest {
         assertThat(transaction.getViolations()).anyMatch(v -> v.getCode() == CURRENCY_DATA_NOT_FOUND);
     }
 
+    @Test
+    public void testDocumentConversionWithNoCurrenciInDocument() {
+        val txId = "1";
+        val txInternalNumber = "txn123";
+        val organisationId = "org1";
+        val customerCurrencyCode = "UNKNOWN_CURRENCY";
+        val customerVatCode = "UNKNOWN_VAT";
+
+        val document = Document.builder()
+                .vat(Vat.builder()
+                        .customerCode(customerVatCode)
+                        .build())
+                .currency(Currency.builder()
+                        .customerCode("")
+                        .build())
+                .build();
+
+        val txItem = new TransactionItemEntity();
+        txItem.setDocument(Optional.of(document));
+
+        val items = new LinkedHashSet<TransactionItemEntity>();
+        items.add(txItem);
+
+        val transaction = new TransactionEntity();
+        transaction.setId(txId);
+        transaction.setTransactionInternalNumber(txInternalNumber);
+        transaction.setOrganisation(Organisation.builder()
+                .id(organisationId)
+                .build());
+        transaction.setItems(items);
+
+        documentConversionTaskItem.run(transaction);
+
+        assertThat(transaction.getViolations()).hasSize(2);
+        assertThat(transaction.getViolations()).anyMatch(v -> v.getCode() == VAT_DATA_NOT_FOUND);
+        assertThat(transaction.getViolations()).anyMatch(v -> v.getCode() == CURRENCY_DATA_NOT_FOUND);
+    }
+
 }
