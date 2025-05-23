@@ -21,6 +21,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
 
 @Service
 @Slf4j
@@ -28,11 +31,14 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ex
 @Transactional
 public class ExtractionItemService {
     private final TransactionItemExtractionRepository transactionItemRepositoryImpl;
+    private final OrganisationPublicApi organisationPublicApi;
 
     @Transactional(readOnly = true)
     public ExtractionTransactionView findTransactionItems(LocalDate dateFrom, LocalDate dateTo, List<String> accountCode, List<String> costCenter, List<String> project, List<String> accountType, List<String> accountSubType) {
 
-        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project,accountType,accountSubType).stream().map(this::extractionTransactionItemViewBuilder).collect(Collectors.toList());
+        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType).stream().map(item -> {
+            return extractionTransactionItemViewBuilder(item);
+        }).collect(Collectors.toList());
 
         return ExtractionTransactionView.createSuccess(transactionItem);
     }
@@ -79,7 +85,9 @@ public class ExtractionItemService {
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)).orElse(null),
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).map(Object::toString).orElse(null) : null,
                 item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(null),
-                item.getRejection().map(Rejection::getRejectionReason).orElse(null)
+                item.getRejection().map(Rejection::getRejectionReason).orElse(null),
+                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
+                organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(),item.getProject().map(Project::getCustomerCode).orElse(null)).map(OrganisationProject::getParentCustomerCode).orElse(null)
         );
     }
 }

@@ -48,7 +48,13 @@
           "$ref": "#/definitions/countryCodePattern"
         },
         "name": {
-          "type": "string"
+          "anyOf": [
+            { "type": "string" },
+            {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          ]
         },
         "tax_id_number": {
           "type": "string"
@@ -114,7 +120,13 @@
                       "type": "string"
                     },
                     "name": {
-                      "type": "string"
+                      "anyOf": [
+                        { "type": "string" },
+                        {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        }
+                      ]
                     }
                   },
                   "required": ["code", "name"]
@@ -126,7 +138,13 @@
                       "type": "string"
                     },
                     "name": {
-                      "type": "string"
+                      "anyOf": [
+                        { "type": "string" },
+                        {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        }
+                      ]
                     }
                   },
                   "required": ["cust_code", "name"]
@@ -138,7 +156,13 @@
                       "type": "string"
                     },
                     "name": {
-                      "type": "string"
+                      "anyOf": [
+                        { "type": "string" },
+                        {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        }
+                      ]
                     }
                   },
                   "required": ["cust_code", "name"]

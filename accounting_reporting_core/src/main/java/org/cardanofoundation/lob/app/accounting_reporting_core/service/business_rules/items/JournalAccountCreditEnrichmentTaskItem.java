@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.CREDIT;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.Journal;
@@ -69,6 +70,8 @@ public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem 
                 }
                 Account accountDebit = txItem.getAccountDebit().orElseThrow();
                 txItem.setAccountCredit(Optional.of(accountDebit));
+                // If we switch the account credit, we need to set the operation type to DEBIT
+                txItem.setOperationType(DEBIT);
 
                 txItem.clearAccountCodeDebit();
             }
