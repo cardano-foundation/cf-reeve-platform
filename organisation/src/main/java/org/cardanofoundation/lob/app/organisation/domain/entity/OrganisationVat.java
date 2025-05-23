@@ -4,13 +4,11 @@ import java.math.BigDecimal;
 
 import jakarta.persistence.*;
 
-import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import org.springframework.lang.Nullable;
 
 import org.hibernate.envers.Audited;
 
@@ -19,10 +17,12 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
+@Setter
 @Entity
 @Table(name = "organisation_vat")
 @Audited
-@EntityListeners({ AuditingEntityListener.class })
+@Builder
+@EntityListeners({AuditingEntityListener.class})
 public class OrganisationVat extends CommonEntity implements Persistable<OrganisationVat.Id> {
 
     @EmbeddedId
@@ -34,6 +34,16 @@ public class OrganisationVat extends CommonEntity implements Persistable<Organis
 
     @Column(name = "rate", nullable = false)
     private BigDecimal rate;
+
+    @Column(name = "description")
+    private String description;
+
+    @Column(name = "parent_organisation_vat")
+    @Nullable
+    private String parentOrganisationVat;
+
+    @Column(name = "active", nullable = false)
+    private Boolean active = true;
 
     @Embeddable
     @AllArgsConstructor
