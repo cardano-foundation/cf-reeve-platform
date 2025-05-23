@@ -9,6 +9,7 @@ It is possible to import the following data:
 - Ref Codes
 - Report Type Field mapping
 - Cost Center
+- Currency
 
 
 ## Data structure
@@ -94,3 +95,9 @@ The following columns are needed:
 - `External customer code`: Name of the external project code (e.g. `Project 1`)
 - `Name`: Name of the project (e.g. `Project 1`)
 - `Parent customer code`: Parent code of the project (e.g. `PROJECT_2`)
+
+### Currency data structure
+An example can be found here: [Currency CSV Example](./examples/currency_csv_example.csv)
+The following columns are needed:
+- `Currency`: Currency code (e.g. `CHF`)
+- `Name`: Name of the currency (e.g. `ISO_4217:CHF`)

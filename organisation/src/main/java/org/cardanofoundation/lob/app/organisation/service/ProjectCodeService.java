@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.organisation.service;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,10 @@ public class ProjectCodeService {
 
     public Optional<OrganisationProject> getProject(String organisationId, String customerCode) {
         return projectMappingRepository.findById(new OrganisationProject.Id(organisationId, customerCode));
+    }
+
+    public Set<OrganisationProject> getAllProjects(String organisationId) {
+        return projectMappingRepository.findAllByOrganisationId(organisationId);
     }
 
     @Transactional
