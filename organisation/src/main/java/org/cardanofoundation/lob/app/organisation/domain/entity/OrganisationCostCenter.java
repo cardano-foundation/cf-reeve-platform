@@ -49,6 +49,9 @@ public class OrganisationCostCenter extends CommonEntity implements Persistable<
     @Column(name = "parent_customer_code")
     private String parentCustomerCode;
 
+    @Column(name = "active")
+    private boolean active = true;
+
     public Optional<OrganisationCostCenter> getParent() {
         return Optional.ofNullable(parent);
     }
