@@ -34,7 +34,7 @@ public class TxStatusUpdaterJob {
 
     // This Job collects all TxStatusUpdate events and updates the transactions in the database
     @Scheduled(
-            fixedDelayString = "${ob.blockchain.tx-status-updater.fixed_delay:PT20S}",
+            fixedDelayString = "${ob.blockchain.tx-status-updater.fixed_delay:PT30S}",
             initialDelayString = "${lob.blockchain.tx-status-updater.delay:PT30S}")
     @Transactional
     public void execute() {
