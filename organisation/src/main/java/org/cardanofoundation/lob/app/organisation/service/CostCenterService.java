@@ -45,6 +45,7 @@ public class CostCenterService {
             OrganisationCostCenter costCenter = costCenterFound.get();
             costCenter.setExternalCustomerCode(costCenterUpdate.getExternalCustomerCode());
             costCenter.setName(costCenterUpdate.getName());
+            costCenter.setActive(costCenterUpdate.isActive());
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null) {
                 Optional<OrganisationCostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
@@ -87,7 +88,8 @@ public class CostCenterService {
             OrganisationCostCenter.OrganisationCostCenterBuilder builder = OrganisationCostCenter.builder()
                     .id(new OrganisationCostCenter.Id(orgId, costCenterUpdate.getCustomerCode()))
                     .externalCustomerCode(costCenterUpdate.getExternalCustomerCode())
-                    .name(costCenterUpdate.getName());
+                    .name(costCenterUpdate.getName())
+                    .active(costCenterUpdate.isActive());
 
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null) {

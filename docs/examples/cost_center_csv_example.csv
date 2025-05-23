@@ -1,2 +1,2 @@
-customer code,external customer code,name,parent customer code
-12323,456,CostCenter,99
+customer code,external customer code,name,parent customer code,active
+12323,456,CostCenter,99,True

@@ -22,13 +22,16 @@ public class OrganisationCostCenterView {
 
     private OrganisationCostCenterView parentCustomerCode;
 
+    private boolean active;
+
     private Problem error;
 
     public static OrganisationCostCenterView fromEntity(OrganisationCostCenter costCenter) {
         OrganisationCostCenterViewBuilder builder = OrganisationCostCenterView.builder()
                 .customerCode(costCenter.getId() == null ? null : costCenter.getId().getCustomerCode())
                 .externalCustomerCode(costCenter.getExternalCustomerCode())
-                .name(costCenter.getName());
+                .name(costCenter.getName())
+                .active(costCenter.isActive());
         if (costCenter.getParent().isPresent()) {
             builder.parentCustomerCode(OrganisationCostCenterView.fromEntity(costCenter.getParent().get()));
         }

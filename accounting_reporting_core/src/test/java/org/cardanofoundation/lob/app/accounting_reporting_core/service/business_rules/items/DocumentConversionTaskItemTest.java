@@ -219,14 +219,13 @@ class DocumentConversionTaskItemTest {
     }
 
     @Test
-    public void testDocumentConversionWithNoCurrenciInDocument() {
-        val txId = "1";
-        val txInternalNumber = "txn123";
-        val organisationId = "org1";
-        val customerCurrencyCode = "UNKNOWN_CURRENCY";
-        val customerVatCode = "UNKNOWN_VAT";
+    void testDocumentConversionWithNoCurrencyInDocument() {
+        String txId = "1";
+        String txInternalNumber = "txn123";
+        String organisationId = "org1";
+        String customerVatCode = "UNKNOWN_VAT";
 
-        val document = Document.builder()
+        Document document = Document.builder()
                 .vat(Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
@@ -235,13 +234,13 @@ class DocumentConversionTaskItemTest {
                         .build())
                 .build();
 
-        val txItem = new TransactionItemEntity();
+        TransactionItemEntity txItem = new TransactionItemEntity();
         txItem.setDocument(Optional.of(document));
 
-        val items = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> items = new LinkedHashSet<TransactionItemEntity>();
         items.add(txItem);
 
-        val transaction = new TransactionEntity();
+        TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
         transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()

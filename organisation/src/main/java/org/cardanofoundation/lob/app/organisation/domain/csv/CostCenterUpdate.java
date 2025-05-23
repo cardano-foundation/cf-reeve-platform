@@ -19,5 +19,7 @@ public class CostCenterUpdate {
     private String name;
     @CsvBindByName(column = "parent customer code")
     private String parentCustomerCode;
+    @CsvBindByName(column = "active")
+    private boolean active = true;
 
 }
