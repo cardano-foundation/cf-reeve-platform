@@ -20,7 +20,7 @@ public class OrganisationVatView {
     private String organisationId;
     private String customerCode;
     private String rate;
-    private String parentOrganisationVat;
+    private String countryCode;
     private String description;
     private Boolean active;
 
@@ -36,7 +36,7 @@ public class OrganisationVatView {
                 .customerCode(organisationVat.getId().getCustomerCode())
                 .organisationId(organisationVat.getId().getOrganisationId())
                 .rate(organisationVat.getRate().toString())
-                .parentOrganisationVat(organisationVat.getParentOrganisationVat())
+                .countryCode(organisationVat.getCountryCode())
                 .description(organisationVat.getDescription())
                 .active(organisationVat.getActive())
                 .build();

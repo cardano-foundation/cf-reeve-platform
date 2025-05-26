@@ -4,8 +4,6 @@ import static java.lang.Boolean.TRUE;
 
 import java.math.BigDecimal;
 
-import javax.annotation.Nullable;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,9 +26,8 @@ public class OrganisationVatUpdate {
     @CsvBindByName(column = "Rate", required = true)
     private BigDecimal rate;
 
-    @Nullable
-    @CsvBindByName(column = "Parent Customer Code")
-    private String parentOrganisationVat;
+    @CsvBindByName(column = "Country Code")
+    private String countryCode;
 
     @Schema(example = "Example Vat code")
     @CsvBindByName(column = "Description")
