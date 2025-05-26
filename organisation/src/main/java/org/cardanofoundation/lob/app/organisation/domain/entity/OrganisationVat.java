@@ -8,7 +8,6 @@ import lombok.*;
 
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-import org.springframework.lang.Nullable;
 
 import org.hibernate.envers.Audited;
 
@@ -38,9 +37,8 @@ public class OrganisationVat extends CommonEntity implements Persistable<Organis
     @Column(name = "description")
     private String description;
 
-    @Column(name = "parent_organisation_vat")
-    @Nullable
-    private String parentOrganisationVat;
+    @Column(name = "country_code")
+    private String countryCode;
 
     @Column(name = "active", nullable = false)
     private Boolean active = true;

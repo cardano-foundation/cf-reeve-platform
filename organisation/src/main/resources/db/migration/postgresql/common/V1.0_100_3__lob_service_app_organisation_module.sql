@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS organisation_vat (
    customer_code VARCHAR(255) NOT NULL,
    rate DECIMAL(12, 8) NOT NULL,
    active BOOLEAN,
-   parent_organisation_vat VARCHAR(255),
+   country_code VARCHAR(255),
    description VARCHAR(255),
 
    created_by VARCHAR(255),
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS organisation_vat_aud (
    customer_code VARCHAR(255) NOT NULL,
    rate DECIMAL(12, 8) NOT NULL,
    active BOOLEAN,
-   parent_organisation_vat VARCHAR(255),
+   country_code VARCHAR(255),
    description VARCHAR(255),
 
    created_by VARCHAR(255),
