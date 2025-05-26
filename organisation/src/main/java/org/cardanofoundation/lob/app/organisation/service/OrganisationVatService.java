@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
@@ -47,27 +48,24 @@ public class OrganisationVatService {
         if (organisationVat.isPresent()) {
             return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
                     .withTitle("ORGANISATION_VAT_ALREADY_EXISTS")
-                    .withDetail("The orgnanisation vat with code :%s already exists".formatted(organisationVatUpdate.getCustomerCode()))
+                    .withDetail("The organisation vat with code :%s already exists".formatted(organisationVatUpdate.getCustomerCode()))
                     .withStatus(Status.CONFLICT)
                     .build());
         }
 
-        if(organisationVatUpdate.getParentOrganisationVat() != null && !organisationVatUpdate.getParentOrganisationVat().isEmpty()){
-            Optional<OrganisationVat> parentOrganisationVat = organisationVatRepository.findById(new OrganisationVat.Id(organisationId, organisationVatUpdate.getParentOrganisationVat()));
-                    if (parentOrganisationVat.isEmpty()){
-                        return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
-                                .withTitle("PARENT_ORGANISATION_VAT_DO_NOT_EXISTS")
-                                .withDetail("The parent orgnanisation vat with code %s do not exists".formatted(organisationVatUpdate.getParentOrganisationVat()))
-                                .withStatus(Status.NOT_FOUND)
-                                .build());
-                    }
+        if (organisationVatUpdate.getCountryCode() != null && !Locale.getISOCountries(Locale.IsoCountryCode.PART1_ALPHA2).contains(organisationVatUpdate.getCountryCode())) {
+            return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
+                    .withTitle("COUNTRY_CODE_NOT_FOUND")
+                    .withDetail("The organisation vat country_code with code %s do not exists".formatted(organisationVatUpdate.getCountryCode()))
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
         }
 
         OrganisationVat organisationVatEntity = OrganisationVat.builder()
                 .id(new OrganisationVat.Id(organisationId, organisationVatUpdate.getCustomerCode()))
                 .rate(organisationVatUpdate.getRate())
                 .description(organisationVatUpdate.getDescription())
-                .parentOrganisationVat(organisationVatUpdate.getParentOrganisationVat() == null || organisationVatUpdate.getParentOrganisationVat().isEmpty() ? null : organisationVatUpdate.getParentOrganisationVat())
+                .countryCode(organisationVatUpdate.getCountryCode() == null || organisationVatUpdate.getCountryCode().isEmpty() ? null : organisationVatUpdate.getCountryCode())
                 .active(organisationVatUpdate.getActive())
                 .build();
 
@@ -82,27 +80,24 @@ public class OrganisationVatService {
         if (organisationVat.isEmpty()) {
             return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
                     .withTitle("ORGANISATION_VAT_DO_NOT_EXISTS")
-                    .withDetail("The orgnanisation vat with code %s do not exists".formatted(organisationVatUpdate.getCustomerCode()))
+                    .withDetail("The organisation vat with code %s do not exists".formatted(organisationVatUpdate.getCustomerCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
 
-        if(organisationVatUpdate.getParentOrganisationVat() != null && !organisationVatUpdate.getParentOrganisationVat().isEmpty()){
-            Optional<OrganisationVat> parentOrganisationVat = organisationVatRepository.findById(new OrganisationVat.Id(organisationId, organisationVatUpdate.getParentOrganisationVat()));
-            if (parentOrganisationVat.isEmpty()){
-                return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
-                        .withTitle("PARENT_ORGANISATION_VAT_DO_NOT_EXISTS")
-                        .withDetail("The parent orgnanisation vat with code %s do not exists".formatted(organisationVatUpdate.getParentOrganisationVat()))
-                        .withStatus(Status.NOT_FOUND)
-                        .build());
-            }
+        if (organisationVatUpdate.getCountryCode() != null && !Locale.getISOCountries(Locale.IsoCountryCode.PART1_ALPHA2).contains(organisationVatUpdate.getCountryCode())) {
+            return OrganisationVatView.createFail(organisationVatUpdate.getCustomerCode(), Problem.builder()
+                    .withTitle("COUNTRY_CODE_NOT_FOUND")
+                    .withDetail("The organisation vat country_code with code %s do not exists".formatted(organisationVatUpdate.getCountryCode()))
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
         }
 
         OrganisationVat organisationVatEntity = organisationVat.get();
 
         organisationVatEntity.setRate(organisationVatUpdate.getRate());
         organisationVatEntity.setDescription(organisationVatUpdate.getDescription());
-        organisationVatEntity.setParentOrganisationVat(organisationVatUpdate.getParentOrganisationVat() == null || organisationVatUpdate.getParentOrganisationVat().isEmpty() ? null : organisationVatUpdate.getParentOrganisationVat());
+        organisationVatEntity.setCountryCode(organisationVatUpdate.getCountryCode() == null || organisationVatUpdate.getCountryCode().isEmpty() ? null : organisationVatUpdate.getCountryCode());
         organisationVatEntity.setActive(organisationVatUpdate.getActive());
 
         return OrganisationVatView.convertFromEntity(organisationVatRepository.save(organisationVatEntity));

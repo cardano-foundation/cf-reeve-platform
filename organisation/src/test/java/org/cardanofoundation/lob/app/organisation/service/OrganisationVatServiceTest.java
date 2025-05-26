@@ -7,8 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -64,18 +63,17 @@ class OrganisationVatServiceTest {
     }
 
     @Test
-    void insert_parentNotExists() {
+    void insert_countryCodeNotExists() {
         OrganisationVatUpdate update = mock(OrganisationVatUpdate.class);
 
         when(update.getCustomerCode()).thenReturn("customerCode");
-        when(update.getParentOrganisationVat()).thenReturn("parentCustomerCode");
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "parentCustomerCode"))).thenReturn(Optional.empty());
+        when(update.getCountryCode()).thenReturn("CHs");
+        when(organisationVatRepository.findById(any())).thenReturn(Optional.empty());
 
         OrganisationVatView result = organisationVatService.insert("organisationId", update);
 
         assertTrue(result.getError().isPresent());
-        assertEquals("PARENT_ORGANISATION_VAT_DO_NOT_EXISTS", result.getError().get().getTitle());
+        assertEquals("COUNTRY_CODE_NOT_FOUND", result.getError().get().getTitle());
     }
 
     @Test
@@ -84,15 +82,14 @@ class OrganisationVatServiceTest {
         OrganisationVat parent = mock(OrganisationVat.class);
         OrganisationVat saved = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
-        when(update.getParentOrganisationVat()).thenReturn("parentCustomerCode");
+        when(update.getCountryCode()).thenReturn("CH");
         when(update.getRate()).thenReturn(BigDecimal.ONE);
         when(saved.getId()).thenReturn(new OrganisationVat.Id("organisationId", "customerCode"));
         when(saved.getRate()).thenReturn(BigDecimal.ONE);
-        when(saved.getParentOrganisationVat()).thenReturn("parentCustomerCode");
+        when(saved.getCountryCode()).thenReturn("CH");
         when(saved.getActive()).thenReturn(true);
 
         when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "parentCustomerCode"))).thenReturn(Optional.of(parent));
         when(organisationVatRepository.save(any(OrganisationVat.class)))
             .thenReturn(saved);
 
@@ -100,7 +97,7 @@ class OrganisationVatServiceTest {
 
         assertTrue(result.getError().isEmpty());
         assertEquals("customerCode", result.getCustomerCode());
-        assertEquals("parentCustomerCode", result.getParentOrganisationVat());
+        assertEquals("CH", result.getCountryCode());
         assertEquals(BigDecimal.ONE.toString(), result.getRate());
         assertEquals("organisationId", result.getOrganisationId());
         assertEquals(true, result.getActive());
@@ -120,17 +117,16 @@ class OrganisationVatServiceTest {
     }
 
     @Test
-    void update_parentNotExists() {
+    void update_countryCodeNotExists() {
         OrganisationVatUpdate update = mock(OrganisationVatUpdate.class);
         OrganisationVat mock = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
-        when(update.getParentOrganisationVat()).thenReturn("parentCustomerCode");
+        when(update.getCountryCode()).thenReturn("CHs");
         when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(mock));
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "parentCustomerCode"))).thenReturn(Optional.empty());
 
         OrganisationVatView result = organisationVatService.update("organisationId", update);
         assertTrue(result.getError().isPresent());
-        assertEquals("PARENT_ORGANISATION_VAT_DO_NOT_EXISTS", result.getError().get().getTitle());
+        assertEquals("COUNTRY_CODE_NOT_FOUND", result.getError().get().getTitle());
 
     }
 
@@ -140,15 +136,14 @@ class OrganisationVatServiceTest {
         OrganisationVat parent = mock(OrganisationVat.class);
         OrganisationVat saved = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
-        when(update.getParentOrganisationVat()).thenReturn("parentCustomerCode");
+        when(update.getCountryCode()).thenReturn("CH");
         when(update.getRate()).thenReturn(BigDecimal.ONE);
         when(saved.getId()).thenReturn(new OrganisationVat.Id("organisationId", "customerCode"));
         when(saved.getRate()).thenReturn(BigDecimal.ONE);
-        when(saved.getParentOrganisationVat()).thenReturn("parentCustomerCode");
+        when(saved.getCountryCode()).thenReturn("CH");
         when(saved.getActive()).thenReturn(true);
 
         when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(saved));
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "parentCustomerCode"))).thenReturn(Optional.of(parent));
         when(organisationVatRepository.save(any(OrganisationVat.class)))
             .thenReturn(saved);
 
@@ -156,7 +151,7 @@ class OrganisationVatServiceTest {
 
         assertTrue(result.getError().isEmpty());
         assertEquals("customerCode", result.getCustomerCode());
-        assertEquals("parentCustomerCode", result.getParentOrganisationVat());
+        assertEquals("CH", result.getCountryCode());
         assertEquals(BigDecimal.ONE.toString(), result.getRate());
         assertEquals("organisationId", result.getOrganisationId());
         assertEquals(true, result.getActive());
@@ -185,15 +180,14 @@ class OrganisationVatServiceTest {
         OrganisationVat parent = mock(OrganisationVat.class);
         OrganisationVat saved = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
-        when(update.getParentOrganisationVat()).thenReturn("parentCustomerCode");
+        when(update.getCountryCode()).thenReturn("CH");
         when(update.getRate()).thenReturn(BigDecimal.ONE);
         when(saved.getId()).thenReturn(new OrganisationVat.Id("organisationId", "customerCode"));
         when(saved.getRate()).thenReturn(BigDecimal.ONE);
-        when(saved.getParentOrganisationVat()).thenReturn("parentCustomerCode");
+        when(saved.getCountryCode()).thenReturn("CH");
         when(saved.getActive()).thenReturn(true);
 
         when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "parentCustomerCode"))).thenReturn(Optional.of(parent));
         when(organisationVatRepository.save(any(OrganisationVat.class)))
                 .thenReturn(saved);
         Either<Problem, List<OrganisationVatView>> response = organisationVatService.insertVatCodesCsv("organisationId", file);
