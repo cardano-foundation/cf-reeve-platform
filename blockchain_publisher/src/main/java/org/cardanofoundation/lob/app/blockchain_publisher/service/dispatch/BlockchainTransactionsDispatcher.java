@@ -19,6 +19,7 @@ import com.bloxbean.cardano.client.api.exception.ApiException;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.blockchain_common.BlockchainException;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API1BlockchainTransactions;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Submission;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
@@ -121,8 +122,10 @@ public class BlockchainTransactionsDispatcher {
             sendTransactionOnChainAndUpdateDb(serialisedTx);
 
             return Optional.of(serialisedTx);
-        } catch (ApiException e) {
+        } catch (ApiException | BlockchainException e) {
             log.error("Error sending transaction on chain and / or updating db", e);
+        } catch (Exception e) {
+            log.error("Unexpected error while sending transaction on chain and / or updating db", e);
         }
 
         return Optional.empty();
