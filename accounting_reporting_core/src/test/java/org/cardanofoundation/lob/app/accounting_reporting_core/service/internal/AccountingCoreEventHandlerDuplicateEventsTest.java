@@ -46,6 +46,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledg
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
@@ -55,7 +56,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 @SpringBootTest(classes = {JaversConfig.class, TimeConfig.class, JpaConfig.class})
 @TestPropertySource(properties = "spring.main.allow-bean-definition-overriding=true")
 @EnableAutoConfiguration
-@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core","org.cardanofoundation.lob.app.organisation","org.cardanofoundation.lob.app.blockchain_reader","org.cardanofoundation.lob.app.support.security"})
+@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core","org.cardanofoundation.lob.app.organisation","org.cardanofoundation.lob.app.blockchain_reader","org.cardanofoundation.lob.app.support.security", "org.cardanofoundation.lob.app.accounting_reporting_core.job"})
 class AccountingCoreEventHandlerDuplicateEventsTest {
 
     @Autowired
@@ -67,6 +68,8 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
     @Autowired
     private ReportRepository reportRepository;
     @Autowired
+    private TxStatusUpdaterJob txStatusUpdaterJob;
+    @Autowired
     private TransactionReconcilationRepository transactionReconcilationRepository;
 
     @BeforeEach
@@ -76,7 +79,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
     }
 
     @Test
-    void testHandleLedgerUpdate() {
+    void testHandleLedgerUpdate() throws NoSuchFieldException, IllegalAccessException {
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
         transactionBatchEntity.setId("batchId");
         transactionBatchEntity.setFilteringParameters(FilteringParameters.builder()
@@ -105,9 +108,11 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
                 // padding the transaction id to 64 characters to match the length of the id in the database
                 .statusUpdates(Set.of(new TxStatusUpdate(String.format("%-64s", transactionEntity.getId()), LedgerDispatchStatus.MARK_DISPATCH, Set.of())))
                 .build();
+
         // sending events twice to check if the status is updated correctly and no exceptions are thrown
         accountingCoreEventHandler.handleLedgerUpdatedEvent(build);
         accountingCoreEventHandler.handleLedgerUpdatedEvent(build);
+        txStatusUpdaterJob.execute();
 
         Optional<TransactionEntity> txEntity = accountingCoreTransactionRepository.findById("txId");
         Assertions.assertTrue(txEntity.isPresent());

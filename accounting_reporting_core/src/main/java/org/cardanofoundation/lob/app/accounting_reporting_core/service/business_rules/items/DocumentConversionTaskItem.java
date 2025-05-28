@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR;
@@ -76,6 +77,15 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
         val customerCurrencyCode = document.getCurrency().getCustomerCode();
 
         if (isBlank(customerCurrencyCode)) {
+            tx.addViolation(TransactionViolation.builder()
+                    .txItemId(txItem.getId())
+                    .code(CURRENCY_DATA_NOT_FOUND)
+                    .severity(ERROR)
+                    .source(ERP)
+                    .processorModule(getClass().getSimpleName())
+                    .bag(Map.of("customerCode", customerCurrencyCode, "transactionNumber", tx.getTransactionInternalNumber()))
+                    .build());
+
             return Optional.empty();
         }
 

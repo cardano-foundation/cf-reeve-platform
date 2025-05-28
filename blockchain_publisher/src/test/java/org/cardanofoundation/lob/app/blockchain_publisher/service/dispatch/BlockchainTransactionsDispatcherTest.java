@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -81,6 +82,7 @@ class BlockchainTransactionsDispatcherTest {
         verify(organisationPublicApi).listAll();
         verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
+        verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
@@ -106,6 +108,7 @@ class BlockchainTransactionsDispatcherTest {
         verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
+        verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
@@ -131,6 +134,7 @@ class BlockchainTransactionsDispatcherTest {
         verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
+        verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
@@ -156,6 +160,7 @@ class BlockchainTransactionsDispatcherTest {
         verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
+        verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
@@ -190,6 +195,7 @@ class BlockchainTransactionsDispatcherTest {
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
         verify(transactionSubmissionService).submitTransactionWithPossibleConfirmation(eq(new byte[0]), anyString());
         verify(ledgerUpdatedEventPublisher).sendTxLedgerUpdatedEvents(null, new HashSet<>());
+        verify(transactionEntityRepositoryGateway, times(2)).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
