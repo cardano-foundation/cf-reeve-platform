@@ -23,7 +23,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ex
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
 
 @Service
 @Slf4j
@@ -70,11 +69,11 @@ public class ExtractionItemService {
                 item.getAmountFcy(),
                 item.getAmountLcy(),
                 item.getFxRate(),
-                item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null),
-                item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(null),
-                item.getCostCenter().flatMap(CostCenter::getName).orElse(null),
-                item.getProject().map(Project::getCustomerCode).orElse(null),
-                item.getProject().flatMap(Project::getName).orElse(null),
+                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
+                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).flatMap( organisationCostCenter -> Optional.ofNullable(organisationCostCenter.getParent())).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.get().getExternalCustomerCode())).orElse(null),
+                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).flatMap( organisationCostCenter -> Optional.ofNullable(organisationCostCenter.getParent())).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.get().getName())).orElse(null),
+                organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(),item.getProject().map(Project::getCustomerCode).orElse(null)).flatMap(organisationProject -> Optional.ofNullable(organisationProject.getParent())).flatMap(organisationProject -> Optional.ofNullable(organisationProject.get().getId().getCustomerCode())).orElse(null),
+                organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(),item.getProject().map(Project::getCustomerCode).orElse(null)).flatMap(organisationProject -> Optional.ofNullable(organisationProject.getParent())).flatMap(organisationProject -> Optional.ofNullable(organisationProject.get().getName())).orElse(null),
                 item.getProject().flatMap(Project::getExternalCustomerCode).orElse(null),
                 item.getAccountEvent().map(AccountEvent::getCode).orElse(null),
                 item.getAccountEvent().map(AccountEvent::getName).orElse(null),
@@ -85,9 +84,7 @@ public class ExtractionItemService {
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)).orElse(null),
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).map(Object::toString).orElse(null) : null,
                 item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(null),
-                item.getRejection().map(Rejection::getRejectionReason).orElse(null),
-                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
-                organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(),item.getProject().map(Project::getCustomerCode).orElse(null)).map(OrganisationProject::getParentCustomerCode).orElse(null)
+                item.getRejection().map(Rejection::getRejectionReason).orElse(null)
         );
     }
 }

@@ -69,7 +69,8 @@ public class BusinessRulesConfig {
 
     private PipelineTask preCleansingPipelineTask() {
         return new DefaultPipelineTask(List.of(
-                new DiscardZeroBalanceTxItemsTaskItem()
+                new DiscardZeroBalanceTxItemsTaskItem(),
+                new FxRevaluationCopyLcyToFcyTxItemsTaskItem()
         ));
     }
 
