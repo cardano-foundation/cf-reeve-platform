@@ -171,7 +171,8 @@ public class TransactionBatchService {
                 int total = batchStatistics.getInvalidTransactions()
                         + batchStatistics.getApprovedTransactions()
                         + batchStatistics.getPendingTransactions()
-                        + batchStatistics.getReadyToApproveTransactions();
+                        + batchStatistics.getReadyToApproveTransactions()
+                        + batchStatistics.getPublishedTransactions();
                 batchStatistics.setTotal(total);
                 batchStatistics.setProcessedTransactions(total);
                 txBatch.setBatchStatistics(batchStatistics);
