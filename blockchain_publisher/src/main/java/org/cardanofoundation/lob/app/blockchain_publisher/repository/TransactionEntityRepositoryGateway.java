@@ -47,24 +47,18 @@ public class TransactionEntityRepositoryGateway {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
         Limit limit = Limit.of(pullTransactionsBatchSize);
 
-        Set<TransactionEntity> transactionsByStatus = transactionEntityRepository.findTransactionsByStatus(
+        Set<TransactionEntity> transactionsByStatus = transactionEntityRepository.findFreeTransactionsByStatus(
                 organisationId,
                 dispatchStatuses,
+                LocalDateTime.now(clock).minus(lockTimeoutDuration),
                 limit);
         if (transactionsByStatus.isEmpty()) {
             return transactionsByStatus;
         }
         // This logic could be moved to the repository, but for now it is easier to test it here
-        Set<TransactionEntity> filteredTransactions = transactionsByStatus.stream().filter(
-                transactionEntity -> (
-                        transactionEntity.getLockedAt()
-                                .map(lockedAt -> lockedAt.isBefore(LocalDateTime.now(clock).minus(lockTimeoutDuration)))
-                                .orElse(true) // return true if lockedAt is not present
-                        ))
-                .collect(toSet());
-        filteredTransactions.forEach(tx -> tx.setLockedAt(LocalDateTime.now(clock)));
-        transactionEntityRepository.saveAll(filteredTransactions);
-        return filteredTransactions;
+        transactionsByStatus.forEach(tx -> tx.setLockedAt(LocalDateTime.now(clock)));
+        transactionEntityRepository.saveAll(transactionsByStatus);
+        return transactionsByStatus;
     }
 
     public Set<TransactionEntity> findDispatchedTransactionsThatAreNotFinalizedYet(String organisationId, Limit limit) {
@@ -110,5 +104,11 @@ public class TransactionEntityRepositoryGateway {
 
     public void storeTransactions(Set<TransactionEntity> successfullyUpdatedTxEntities) {
         transactionEntityRepository.saveAll(successfullyUpdatedTxEntities);
+    }
+
+    public void unlockTransactions(Set<TransactionEntity> transactionsBatch) {
+        transactionsBatch.forEach(transactionEntity ->
+                transactionEntity.setLockedAt(null));
+        transactionEntityRepository.saveAll(transactionsBatch);
     }
 }

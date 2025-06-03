@@ -711,19 +711,21 @@ public class ReportService {
                 return;
             }
 
-            Optional<LocalDate> startSearchDate;
+            Optional<LocalDate> startSearchDate = Optional.of(startDate);;
             BigDecimal totalAmount = BigDecimal.ZERO;
 
             if (field.isAccumulatedYearly()) {
                 startSearchDate = Optional.of(LocalDate.of(startDate.getYear(), 1, 1));
-            } else if (field.isAccumulated()) {
-                // TODO this calculation can be optimized by using already published reports
+            }
+            if (field.isAccumulated()) {
                 startSearchDate = Optional.of(LocalDate.EPOCH);
-            } else if (field.isAccumulatedPreviousYear()) {
-                startSearchDate = Optional.of(LocalDate.of(startDate.getYear() - 1, 1, 1));
+            }
+            if (field.isAccumulatedPreviousYear()) {
+                if(!field.isAccumulated()) {
+                    startSearchDate = Optional.of(LocalDate.of(startDate.getYear() - 1, 1, 1));
+                }
+
                 endDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
-            }else {
-                startSearchDate = Optional.of(startDate);
             }
 
             totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate);
@@ -844,11 +846,21 @@ public class ReportService {
                     }
                     BigDecimal amount = BigDecimal.ZERO;
                     // adding the value if it's debit and subtracting it if it's Credit
+                    // Account is on Debit
                     if (transactionItemEntity.getAccountDebit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountDebit().get().getCode())) {
-                        amount = amount.add(transactionItemEntity.getAmountLcy());
+                        if(transactionItemEntity.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
+                            amount = amount.add(transactionItemEntity.getAmountLcy());
+                        } else {
+                            amount = amount.add(transactionItemEntity.getAmountLcy().negate());
+                        }
                     }
+
                     if (transactionItemEntity.getAccountCredit().isPresent() && selfMap.containsKey(transactionItemEntity.getAccountCredit().get().getCode())) {
-                        amount = amount.add(transactionItemEntity.getAmountLcy().negate());
+                        if(transactionItemEntity.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
+                            amount = amount.subtract(transactionItemEntity.getAmountLcy());
+                        } else {
+                            amount = amount.subtract(transactionItemEntity.getAmountLcy().negate());
+                        }
                     }
                     return amount.stripTrailingZeros();
                 }

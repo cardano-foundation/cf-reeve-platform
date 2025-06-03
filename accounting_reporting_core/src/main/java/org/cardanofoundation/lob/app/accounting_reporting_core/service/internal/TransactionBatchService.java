@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus.*;
-import static org.springframework.transaction.annotation.Propagation.SUPPORTS;
 
 import java.time.Duration;
 import java.util.List;
@@ -54,14 +53,13 @@ public class TransactionBatchService {
     private final DebouncerManager debouncerManager;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
-    @Value("${batch.stats.debounce.duration:PT5S}")
+    @Value("${lob.accounting_reporting_core.debounce.duration:PT10S}")
     private Duration batchStatsDebounceDuration;
 
     public Optional<TransactionBatchEntity> findById(String batchId) {
         return transactionBatchRepository.findById(batchId);
     }
 
-    @Transactional
     public void createTransactionBatch(String batchId,
                                        String organisationId,
                                        UserExtractionParameters userExtractionParameters,
@@ -104,7 +102,7 @@ public class TransactionBatchService {
         debouncerManager.callInNewDebouncer(batchId, () -> invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.ofNullable(totalTransactionsCount), entities), batchStatsDebounceDuration);
     }
 
-    @Transactional(propagation = SUPPORTS)
+    @Transactional
     public void failTransactionBatch(String batchId,
                                      UserExtractionParameters userExtractionParameters,
                                      Optional<SystemExtractionParameters> systemExtractionParameters,
@@ -133,6 +131,7 @@ public class TransactionBatchService {
         log.info("Transaction batch status updated, batchId: {}", batchId);
     }
 
+    @Transactional
     public void invokeUpdateTransactionBatchStatusAndStats(String batchId,
                                                             Optional<Integer> totalTransactionsCountO,
                                                             Optional<Set<TransactionEntity>> transactionEntities) {
@@ -172,7 +171,8 @@ public class TransactionBatchService {
                 int total = batchStatistics.getInvalidTransactions()
                         + batchStatistics.getApprovedTransactions()
                         + batchStatistics.getPendingTransactions()
-                        + batchStatistics.getReadyToApproveTransactions();
+                        + batchStatistics.getReadyToApproveTransactions()
+                        + batchStatistics.getPublishedTransactions();
                 batchStatistics.setTotal(total);
                 batchStatistics.setProcessedTransactions(total);
                 txBatch.setBatchStatistics(batchStatistics);
@@ -184,7 +184,6 @@ public class TransactionBatchService {
         log.info("EXPENSIVE::Transaction batch status and statistics updated, batchId: {}", batchId);
     }
 
-    @Transactional
     public void updateBatchesPerTransactions(Map<String, TxStatusUpdate> txStatusUpdates) {
         for (TxStatusUpdate txStatusUpdate : txStatusUpdates.values()) {
             String txId = txStatusUpdate.getTxId();
@@ -205,7 +204,7 @@ public class TransactionBatchService {
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<TransactionBatchEntity> findAll() {
         return transactionBatchRepository.findAll();
     }
