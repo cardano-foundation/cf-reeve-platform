@@ -50,7 +50,7 @@ import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApi
 @RequiredArgsConstructor
 public class API1L1TransactionCreator {
 
-    private static final int CARDANO_MAX_TRANSACTION_SIZE_BYTES = 16384;
+    private static final int CARDANO_MAX_TRANSACTION_SIZE_BYTES = 16000;
 
     private final BackendService backendService;
     private final API1MetadataSerialiser api1MetadataSerialiser;

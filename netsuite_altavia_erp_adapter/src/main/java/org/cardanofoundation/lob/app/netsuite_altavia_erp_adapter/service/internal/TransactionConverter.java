@@ -125,7 +125,7 @@ public class TransactionConverter {
                 amountLcy = MoreBigDecimal.zeroForNull(txLine.amountCredit());
                 amountFcy = MoreBigDecimal.zeroForNull(txLine.amountCreditForeignCurrency());
             } else {
-                log.info("Skipping transaction line with zero amounts for transaction: {}", txId);
+                //log.info("Skipping transaction line with zero amounts for transaction: {}", txId);
                 // Create a zero amount item.
                 operationType = OperationType.DEBIT;
                 amountLcy = BigDecimal.ZERO;
@@ -212,6 +212,7 @@ public class TransactionConverter {
     }
 
     private static Optional<Counterparty> convertCounterparty(TxLine txLine) {
+
         return normaliseString(txLine.counterPartyId()).map(customerCode -> Counterparty.builder().customerCode(customerCode).type(VENDOR) // TODO CF hardcoded for now
                 .name(normaliseString(txLine.counterPartyName())).build());
     }
