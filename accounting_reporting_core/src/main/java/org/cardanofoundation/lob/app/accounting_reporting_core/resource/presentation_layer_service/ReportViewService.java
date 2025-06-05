@@ -59,15 +59,17 @@ public class ReportViewService {
         reportResponseView.setPeriod(reportEntity.getPeriod());
         reportResponseView.setDate(reportEntity.getDate());
         reportResponseView.setPublish(reportEntity.getLedgerDispatchApproved());
-        reportResponseView.setCanBePublish(true);
+
         if (reportEntity.getLedgerDispatchReceipt().isPresent()) {
             reportResponseView.setBlockChainHash(reportEntity.getLedgerDispatchReceipt().get().getPrimaryBlockchainHash());
         }
-        Either<Problem, Boolean> left = reportService.canPublish(reportEntity);
+        Either<Problem, Boolean> isReadyToPublish = reportService.canPublish(reportEntity);
         reportResponseView.setError(Optional.empty());
-        if (left.isLeft()) {
+        if (isReadyToPublish.isLeft()) {
             reportResponseView.setCanBePublish(false);
-            reportResponseView.setError(Optional.of(left.getLeft()));
+            reportResponseView.setError(Optional.of(isReadyToPublish.getLeft()));
+        } else {
+            reportResponseView.setCanBePublish(isReadyToPublish.get());
         }
         reportResponseView.setVer(reportEntity.getVer());
         //BalanceSheet
