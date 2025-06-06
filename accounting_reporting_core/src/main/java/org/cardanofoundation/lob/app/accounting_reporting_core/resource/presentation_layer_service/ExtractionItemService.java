@@ -5,6 +5,7 @@ import static java.math.BigDecimal.ZERO;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -23,6 +24,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ex
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
 
 @Service
 @Slf4j
@@ -46,12 +48,14 @@ public class ExtractionItemService {
     public List<ExtractionTransactionItemView> findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
 
         return transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> {
-            return extractionTransactionItemViewBuilder(item);
+            return enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item));
         }).toList();
 
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
+        Optional<OrganisationCostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), Objects.requireNonNull(item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)));
+        Optional<OrganisationProject> project = organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(), item.getProject().map(Project::getCustomerCode).orElse(null));
         return new ExtractionTransactionItemView(
                 item.getId(),
                 item.getTransaction().getTransactionInternalNumber(),
@@ -69,11 +73,11 @@ public class ExtractionItemService {
                 item.getAmountFcy(),
                 item.getAmountLcy(),
                 item.getFxRate(),
-                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
-                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).flatMap( organisationCostCenter -> Optional.ofNullable(organisationCostCenter.getParent())).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.get().getExternalCustomerCode())).orElse(null),
-                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).flatMap( organisationCostCenter -> Optional.ofNullable(organisationCostCenter.getParent())).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.get().getName())).orElse(null),
-                organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(),item.getProject().map(Project::getCustomerCode).orElse(null)).flatMap(organisationProject -> Optional.ofNullable(organisationProject.getParent())).flatMap(organisationProject -> Optional.ofNullable(organisationProject.get().getId().getCustomerCode())).orElse(null),
-                organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(),item.getProject().map(Project::getCustomerCode).orElse(null)).flatMap(organisationProject -> Optional.ofNullable(organisationProject.getParent())).flatMap(organisationProject -> Optional.ofNullable(organisationProject.get().getName())).orElse(null),
+                item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null),
+                item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(null),
+                item.getCostCenter().flatMap(CostCenter::getName).orElse(null),
+                item.getProject().map(Project::getCustomerCode).orElse(null),
+                item.getProject().flatMap(Project::getName).orElse(null),
                 item.getProject().flatMap(Project::getExternalCustomerCode).orElse(null),
                 item.getAccountEvent().map(AccountEvent::getCode).orElse(null),
                 item.getAccountEvent().map(AccountEvent::getName).orElse(null),
@@ -84,7 +88,32 @@ public class ExtractionItemService {
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)).orElse(null),
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).map(Object::toString).orElse(null) : null,
                 item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(null),
-                item.getRejection().map(Rejection::getRejectionReason).orElse(null)
+                item.getRejection().map(Rejection::getRejectionReason).orElse(null),
+                costCenter.map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
+                costCenter.flatMap(organisationCostCenter -> organisationCostCenter.getParent()).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.getExternalCustomerCode())).orElse(null),
+                costCenter.flatMap(organisationCostCenter -> organisationCostCenter.getParent()).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.getName())).orElse(null),
+                project.flatMap(organisationProject -> organisationProject.getParent()).flatMap(parentProject -> Optional.ofNullable(parentProject.getId().getCustomerCode())).orElse(null),
+                project.flatMap(organisationProject -> organisationProject.getParent()).flatMap(parentProject -> Optional.ofNullable(parentProject.getExternalCustomerCode())).orElse(null),
+                project.flatMap(organisationProject -> organisationProject.getParent()).flatMap(parentProject -> Optional.ofNullable(parentProject.getName())).orElse(null)
         );
+    }
+
+    private ExtractionTransactionItemView enrichTransactionItemViewBuilder(ExtractionTransactionItemView item) {
+
+        item.setCostCenterCustomerCode(item.getParentCostCenterCustomerCode());
+        item.setCostCenterExternalCustomerCode(item.getParentCostCenterExternalCustomerCode());
+        item.setCostCenterName(item.getParentCostCenterName());
+        item.setProjectCustomerCode(item.getParentProjectCustomerCode());
+        item.setProjectExternalCustomerCode(item.getParentProjectExternalCustomerCode());
+        item.setProjectName(item.getParentProjectName());
+
+        item.setParentCostCenterName(null);
+        item.setParentCostCenterCustomerCode(null);
+        item.setParentCostCenterExternalCustomerCode(null);
+        item.setParentProjectName(null);
+        item.setParentProjectCustomerCode(null);
+        item.setParentProjectExternalCustomerCode(null);
+
+        return item;
     }
 }

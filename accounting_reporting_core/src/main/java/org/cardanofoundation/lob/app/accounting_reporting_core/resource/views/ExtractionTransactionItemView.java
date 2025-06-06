@@ -86,4 +86,16 @@ public class ExtractionTransactionItemView {
 
     private RejectionReason rejectionReason;
 
+    private String parentCostCenterCustomerCode;
+
+    private String parentCostCenterExternalCustomerCode;
+
+    private String parentCostCenterName;
+
+    private String parentProjectCustomerCode;
+
+    private String parentProjectExternalCustomerCode;
+
+    private String parentProjectName;
+
 }

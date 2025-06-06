@@ -52,6 +52,7 @@ class ExtractionItemServiceTest {
         item1.setDocument(Optional.of(document));
         item1.setAmountFcy(BigDecimal.valueOf(1));
         item1.setAmountLcy(BigDecimal.valueOf(1));
+        item1.setCostCenter(Optional.ofNullable(CostCenter.builder().customerCode("10201").externalCustomerCode("10201").build()));
         tx.setItems(Set.of(item1));
 
         item1.setTransaction(tx);
@@ -88,6 +89,7 @@ class ExtractionItemServiceTest {
         item1.setDocument(Optional.of(document));
         item1.setAmountFcy(BigDecimal.valueOf(1));
         item1.setAmountLcy(BigDecimal.valueOf(1));
+        item1.setCostCenter(Optional.ofNullable(CostCenter.builder().customerCode("10201").externalCustomerCode("10201").build()));
         tx.setItems(Set.of(item1));
 
         item1.setTransaction(tx);
