@@ -5,7 +5,6 @@ import static java.math.BigDecimal.ZERO;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -54,7 +53,7 @@ public class ExtractionItemService {
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
-        Optional<OrganisationCostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), Objects.requireNonNull(item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)));
+        Optional<OrganisationCostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null));
         Optional<OrganisationProject> project = organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(), item.getProject().map(Project::getCustomerCode).orElse(null));
         return new ExtractionTransactionItemView(
                 item.getId(),
