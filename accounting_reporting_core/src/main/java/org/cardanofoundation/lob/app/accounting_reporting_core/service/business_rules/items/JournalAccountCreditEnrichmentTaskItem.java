@@ -25,7 +25,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 @Slf4j
 public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem {
 
-    public static final String DUMMY_ACCOUNT = "Dummy Account";
+    public static final String DUMMY_ACCOUNT = "Transit account";
 
     private final OrganisationPublicApiIF organisationPublicApiIF;
 
