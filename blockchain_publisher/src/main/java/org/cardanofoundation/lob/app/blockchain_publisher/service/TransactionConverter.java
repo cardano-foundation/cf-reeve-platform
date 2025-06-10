@@ -108,12 +108,14 @@ public class TransactionConverter {
 
             // If the cost center is not associated with the parent organisation, we do not set it.
             // Note: Only one parent level.
-            Optional<OrganisationCostCenter> parente = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
-            if (parente.isPresent()) {
-                OrganisationCostCenter parented = parente.get();
-                ccBuilder.customerCode(parented.getParent().get().getId().getCustomerCode());
-                ccBuilder.name(parented.getParent().get().getName());
-                return ccBuilder.build();
+            Optional<OrganisationCostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
+            if (costCenterS.isPresent()) {
+                OrganisationCostCenter costCenter = costCenterS.get();
+                if (costCenter.getParent().isPresent()) {
+                    ccBuilder.customerCode(costCenter.getParent().get().getId().getCustomerCode());
+                    ccBuilder.name(costCenter.getParent().get().getName());
+                    return ccBuilder.build();
+                }
             }
             cc.getExternalCustomerCode().ifPresent(ccBuilder::customerCode);
             cc.getName().ifPresent(ccBuilder::name);
