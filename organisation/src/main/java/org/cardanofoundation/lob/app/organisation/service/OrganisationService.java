@@ -31,11 +31,11 @@ import org.cardanofoundation.lob.app.organisation.service.validation.Organisatio
 public class OrganisationService {
 
     private final OrganisationRepository organisationRepository;
-    private final CostCenterService costCenterService;
-    private final ProjectMappingRepository projectMappingRepository;
     private final AccountEventRepository accountEventRepository;
     private final OrganisationCurrencyService organisationCurrencyService;
     private final List<OrganisationValidationRule> validationRules;
+    private final CostCenterService costCenterService;
+    private final ProjectCodeService projectService;
 
     public Optional<Organisation> findById(String organisationId) {
         return organisationRepository.findById(organisationId);
@@ -43,18 +43,6 @@ public class OrganisationService {
 
     public List<Organisation> findAll() {
         return organisationRepository.findAll();
-    }
-
-    public Set<OrganisationCostCenter> getAllCostCenter(String organisationId) {
-        return costCenterService.getAllCostCenter(organisationId);
-    }
-
-    public Set<OrganisationProject> getAllProjects(String organisationId) {
-        return projectMappingRepository.findAllByOrganisationId(organisationId);
-    }
-
-    public Set<OrganisationCurrency> getOrganisationCurrencies(String orgId) {
-        return organisationCurrencyService.findAllByOrganisationId(orgId);
     }
 
     public Set<AccountEvent> getOrganisationEventCode(String orgId) {
@@ -138,9 +126,9 @@ public class OrganisationService {
                 organisation.getPostCode(),
                 organisation.getProvince(),
                 organisation.getCountryCode(),
-                getAllCostCenter(organisation.getId()).stream()
+                costCenterService.getAllCostCenter(organisation.getId()).stream()
                         .map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()),
-                getAllProjects(organisation.getId()).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()),
+                projectService.getAllProjects(organisation.getId()).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()),
                 organisationCurrencyService.findAllByOrganisationId(organisation.getId())
                         .stream()
                         .map(organisationCurrency ->
