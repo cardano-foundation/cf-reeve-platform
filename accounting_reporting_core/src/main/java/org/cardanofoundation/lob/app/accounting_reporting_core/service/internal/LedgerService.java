@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
-import static org.springframework.transaction.annotation.Propagation.SUPPORTS;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,7 +50,8 @@ public class LedgerService {
     @Value("${ledger.dispatch.batch.size:100}")
     private int dispatchBatchSize;
 
-    public void updateTransactionsWithNewStatuses(Map<String, TxStatusUpdate> statuses) {
+    @Transactional(readOnly = true)
+    public List<TransactionEntity> updateTransactionsWithNewStatuses(Map<String, TxStatusUpdate> statuses) {
         log.info("Updating dispatch status for statusMapCount: {}", statuses.size());
 
         Set<String> txIds = statuses.keySet();
@@ -71,12 +72,17 @@ public class LedgerService {
                 tx.setLedgerDispatchReceipt(new LedgerDispatchReceipt(type, hash));
             }
         }
-        accountingCoreTransactionRepository.saveAll(transactionEntities);
+        return transactionEntities;
 
-        log.info("Updated dispatch status for statusMapCount: {} completed.", statuses.size());
     }
 
-    public void updateReportsWithNewStatuses(Map<String, ReportStatusUpdate> reportStatusUpdateMap) {
+    @Transactional
+    public void saveAllTransactionEntities(Collection<TransactionEntity> transactionEntities) {
+        accountingCoreTransactionRepository.saveAll(transactionEntities);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReportEntity> updateReportsWithNewStatuses(Map<String, ReportStatusUpdate> reportStatusUpdateMap) {
         log.info("Updating dispatch status for statusMapCount: {}", reportStatusUpdateMap.size());
 
         Set<String> reportIds = reportStatusUpdateMap.keySet();
@@ -98,12 +104,15 @@ public class LedgerService {
             }
         }
 
-        reportRepository.saveAll(reports);
-
-        log.info("Updated dispatch status for statusMapCount: {} completed.", reportStatusUpdateMap.size());
+        return reports;
     }
 
     @Transactional
+    public void saveAllReports(Collection<ReportEntity> reports) {
+        reportRepository.saveAll(reports);
+    }
+
+    @Transactional(readOnly = true)
     public void dispatchPending(int limit) {
         for (Organisation organisation : organisationPublicApi.listAll()) {
             Set<TransactionEntity> dispatchTransactions = accountingCoreTransactionRepository.findDispatchableTransactions(organisation.getId(), Limit.of(limit));
@@ -116,7 +125,7 @@ public class LedgerService {
         }
     }
 
-    @Transactional(propagation = SUPPORTS)
+    @Transactional(readOnly = true)
     public void dispatchPendingTransactions(String organisationId,
                                             Set<TransactionEntity> transactions) {
         log.info("dispatchTransactionToBlockchainPublisher, total tx count: {}", transactions.size());
@@ -142,7 +151,6 @@ public class LedgerService {
         }
     }
 
-    @Transactional(propagation = SUPPORTS)
     public void dispatchReports(String organisationId,
                                 Set<ReportEntity> reportEntities) {
         log.info("dispatchReports, total reports count: {}", reportEntities.size());

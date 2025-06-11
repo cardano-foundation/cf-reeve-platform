@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportLedgerUpdateCommand;
@@ -21,6 +22,7 @@ public class BlockchainPublisherEventHandler {
 
     // received when a ledger update command is published meaning accounting core has changed to the transaction status = MARK_DISPATCH
     @EventListener
+    @Async
     public void handleLedgerUpdateCommand(TransactionLedgerUpdateCommand command) {
         log.info("Received LedgerUpdateCommand: {}", command);
 
@@ -31,6 +33,7 @@ public class BlockchainPublisherEventHandler {
     }
 
     @EventListener
+    @Async
     public void handleLedgerUpdateCommand(ReportLedgerUpdateCommand command) {
         log.info("Received ReportLedgerUpdateCommand: {}", command);
 

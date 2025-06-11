@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.*;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
 
 @Service
 @Slf4j
@@ -23,6 +25,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.*;
 public class TransactionConverter {
 
     private final BlockchainPublishStatusMapper blockchainPublishStatusMapper;
+    private final OrganisationPublicApi organisationPublicApi;
 
     public TransactionEntity convertToDbDetached(Transaction tx) {
         val transactionEntity = new TransactionEntity();
@@ -103,6 +106,17 @@ public class TransactionConverter {
         txItemEntity.setCostCenter(txItem.getCostCenter().map(cc -> {
             val ccBuilder = CostCenter.builder();
 
+            // If the cost center is not associated with the parent organisation, we do not set it.
+            // Note: Only one parent level.
+            Optional<OrganisationCostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
+            if (costCenterS.isPresent()) {
+                OrganisationCostCenter costCenter = costCenterS.get();
+                if (costCenter.getParent().isPresent()) {
+                    ccBuilder.customerCode(costCenter.getParent().get().getId().getCustomerCode());
+                    ccBuilder.name(costCenter.getParent().get().getName());
+                    return ccBuilder.build();
+                }
+            }
             cc.getExternalCustomerCode().ifPresent(ccBuilder::customerCode);
             cc.getName().ifPresent(ccBuilder::name);
 

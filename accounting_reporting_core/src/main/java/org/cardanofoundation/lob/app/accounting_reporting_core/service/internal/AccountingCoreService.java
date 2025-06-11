@@ -57,7 +57,7 @@ public class AccountingCoreService {
     @Value("${lob.max.transaction.numbers.per.batch:600}")
     private int maxTransactionNumbersPerBatch = 600;
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Either<Problem, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, MultipartFile file, Map<String, Object> parameters) {
         log.info("scheduleIngestion, parameters: {}", userExtractionParameters);
 
@@ -73,7 +73,7 @@ public class AccountingCoreService {
         if (userExtractionParameters.getTransactionNumbers().size() > maxTransactionNumbersPerBatch) {
             return Either.left(Problem.builder()
                     .withTitle("TOO_MANY_TRANSACTIONS")
-                    .withDetail(STR."Too many transactions requested, maximum is \{maxTransactionNumbersPerBatch}")
+                    .withDetail("Too many transactions requested, maximum is %s".formatted(maxTransactionNumbersPerBatch))
                     .withStatus(BAD_REQUEST)
                     .build());
         }
@@ -104,7 +104,7 @@ public class AccountingCoreService {
         return Either.right(null); // all fine
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Either<Problem, Void> scheduleReconcilation(String organisationId,
                                                        LocalDate fromDate,
                                                        LocalDate toDate, ExtractorType extractorType, MultipartFile file, Map<String, Object> parameters) {

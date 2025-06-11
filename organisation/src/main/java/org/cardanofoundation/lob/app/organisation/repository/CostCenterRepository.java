@@ -12,4 +12,5 @@ public interface CostCenterRepository extends JpaRepository<OrganisationCostCent
 
     @Query("SELECT t FROM OrganisationCostCenter t WHERE t.id.organisationId = :organisationId")
     Set<OrganisationCostCenter> findAllByOrganisationId(@Param("organisationId") String organisationId);
+
 }
