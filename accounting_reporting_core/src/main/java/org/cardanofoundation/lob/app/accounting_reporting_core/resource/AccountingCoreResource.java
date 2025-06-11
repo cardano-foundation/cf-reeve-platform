@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
 
@@ -16,7 +17,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -137,6 +137,24 @@ public class AccountingCoreResource {
     })
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> extractionTrigger(@Valid @RequestBody ExtractionRequest body) {
+        return handleExtraction(body);
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @PostMapping(value = "/extraction", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
+    @Operation(description = "Trigger the extraction from the ERP system(s)", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
+                    responseCode = "202"
+            )
+    })
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> uploadFile(@ModelAttribute ExtractionRequest body) {
+        return handleExtraction(body);
+    }
+
+    private ResponseEntity<?> handleExtraction(ExtractionRequest body) {
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(body.getOrganisationId());
 
         if (orgM.isEmpty()) {
@@ -174,10 +192,7 @@ public class AccountingCoreResource {
         );
     }
 
-    @PostMapping(value = "/uploadCsvTransactions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> uploadFile(@ModelAttribute ExtractionRequest extractionRequest) {
-        return extractionTrigger(extractionRequest);
-    }
+
 
         @Tag(name = "Transactions", description = "Transactions Approval API")
     @PostMapping(value = "/transactions/approve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
