@@ -460,8 +460,8 @@ public class AccountingCorePresentationViewService {
                     item.getAccountCredit().map(Account::getCode).orElse(""),
                     item.getAccountCredit().flatMap(Account::getName).orElse(""),
                     item.getAccountCredit().flatMap(Account::getRefCode).orElse(""),
-                    transaction.getTransactionType().equals(TransactionType.FxRevaluation) ? item.getAmountFcy() : item.getAmountFcy().abs(),
-                    transaction.getTransactionType().equals(TransactionType.FxRevaluation) ? item.getAmountLcy() : item.getAmountLcy().abs(),
+                    item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountFcy().negate() : item.getAmountFcy(),
+                    item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountLcy().negate() : item.getAmountLcy(),
                     item.getFxRate(),
                     item.getCostCenter().map(CostCenter::getCustomerCode).orElse(""),
                     item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(""),
@@ -526,12 +526,17 @@ public class AccountingCorePresentationViewService {
         }
 
         if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
-            items.stream()
+            BigDecimal totalCredit = items.stream()
                     .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
-                    .forEach(item -> {
-                        item.setAmountLcy(item.getAmountLcy().negate());
-                        item.setAmountFcy(item.getAmountFcy().negate());
-                    });
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            BigDecimal totalDebit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.DEBIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            return totalCredit.subtract(totalDebit).abs();
         }
 
         return items.stream()

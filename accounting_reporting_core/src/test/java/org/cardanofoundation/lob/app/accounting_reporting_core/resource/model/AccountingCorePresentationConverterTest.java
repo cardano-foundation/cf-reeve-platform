@@ -120,12 +120,14 @@ class AccountingCorePresentationConverterTest {
         transactionItem.setTransaction(transactionEntity);
         transactionItem.setAmountFcy(BigDecimal.valueOf(1000));
         transactionItem.setAmountLcy(BigDecimal.valueOf(1000));
+        transactionItem.setOperationType(OperationType.DEBIT);
 
         transactionItem3.setAccountDebit(Optional.of(accountDebit));
         transactionItem3.setAccountCredit(Optional.of(accountCredit));
         transactionItem3.setTransaction(transactionEntity);
         transactionItem3.setAmountFcy(BigDecimal.valueOf(500));
         transactionItem3.setAmountLcy(BigDecimal.valueOf(500));
+        transactionItem3.setOperationType(OperationType.DEBIT);
 
 
         transactionEntity2.setId("tx-id2");
