@@ -57,6 +57,10 @@ public class OrganisationCostCenter extends CommonEntity implements Persistable<
         return Optional.ofNullable(parent);
     }
 
+    public void setParentCustomerCode(Optional<String> parentCustomerCode) {
+        this.parentCustomerCode = parentCustomerCode.orElse(null);
+    }
+
     @Embeddable
     @AllArgsConstructor
     @NoArgsConstructor
