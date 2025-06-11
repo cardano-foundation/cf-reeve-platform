@@ -91,7 +91,7 @@ public class CurrencyController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CurrencyView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/currencies/upload", produces = "application/json")
+    @PostMapping(value = "/{orgId}/currencies/insert-csv", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         return currencyService.insertViaCsv(orgId, file).fold(
