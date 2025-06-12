@@ -53,7 +53,7 @@ class AmountsFcyCheckTaskItemTest {
     }
 
     @Test
-    void whenTransactionTypeIsFxRevaluationAndFcyZero_thenViolations() {
+    void whenTransactionTypeIsFxRevaluation_thenNoViolations() {
         val txId = Transaction.id("2", "1");
 
         val txItem1 = new TransactionItemEntity();
@@ -70,8 +70,8 @@ class AmountsFcyCheckTaskItemTest {
 
         taskItem.run(tx);
 
-        assertThat(tx.getAutomatedValidationStatus()).isEqualTo(FAILED);
-        assertThat(tx.getViolations().iterator().next().getCode()).isEqualTo(AMOUNT_FCY_IS_ZERO);
+        assertThat(tx.getAutomatedValidationStatus()).isEqualTo(VALIDATED);
+        assertThat(tx.getViolations()).isEmpty();
     }
 
     @Test
