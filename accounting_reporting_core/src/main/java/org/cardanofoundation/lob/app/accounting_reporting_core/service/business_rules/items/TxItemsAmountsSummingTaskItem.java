@@ -16,9 +16,8 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 
 /**
  * Task item that collapses transaction items with the same key by summing their amounts.
@@ -36,12 +35,13 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
         Map<TransactionItemKey, List<TransactionItemEntity>> itemsPerKeyMap = tx.getItems()
                 .stream()
                 .collect(groupingBy(txItem -> TransactionItemKey.builder()
-                        .costCenterCustomerCode(txItem.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode))
-                        .documentVatCustomerCode(txItem.getDocument().flatMap(d -> d.getVat().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat::getCustomerCode)))
-                        .documentNum(txItem.getDocument().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document::getNum))
+                        .costCenterCustomerCode(txItem.getCostCenter().map(CostCenter::getCustomerCode))
+                        .documentVatCustomerCode(txItem.getDocument().flatMap(d -> d.getVat().map(Vat::getCustomerCode)))
+                        .documentNum(txItem.getDocument().map(Document::getNum))
                         .documentCurrencyId(txItem.getDocument().flatMap(d -> d.getCurrency().getId()))
-                        .documentCounterpartyCustomerCode(txItem.getDocument().flatMap(d -> d.getCounterparty().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Counterparty::getCustomerCode)))
-                        .accountEventCode(txItem.getAccountEvent().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.AccountEvent::getCode))
+                        .documentCounterpartyCustomerCode(txItem.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)))
+                        .accountEventCode(txItem.getAccountEvent().map(AccountEvent::getCode))
+                        .operationType(Optional.ofNullable(txItem.getOperationType()))
                         .build())
                 );
 
@@ -94,6 +94,9 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
 
         @Builder.Default
         private Optional<String> accountEventCode = Optional.empty();
+
+        @Builder.Default
+        private Optional<OperationType> operationType = Optional.empty();
 
     }
 

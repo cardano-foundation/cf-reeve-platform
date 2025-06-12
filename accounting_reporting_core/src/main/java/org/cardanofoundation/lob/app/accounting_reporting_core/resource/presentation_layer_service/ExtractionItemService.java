@@ -47,12 +47,14 @@ public class ExtractionItemService {
     public List<ExtractionTransactionItemView> findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
 
         return transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> {
-            return extractionTransactionItemViewBuilder(item);
+            return enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item));
         }).toList();
 
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
+        Optional<OrganisationCostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null));
+        Optional<OrganisationProject> project = organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(), item.getProject().map(Project::getCustomerCode).orElse(null));
         return new ExtractionTransactionItemView(
                 item.getId(),
                 item.getTransaction().getTransactionInternalNumber(),
@@ -86,8 +88,31 @@ public class ExtractionItemService {
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).map(Object::toString).orElse(null) : null,
                 item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(null),
                 item.getRejection().map(Rejection::getRejectionReason).orElse(null),
-                organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(),item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null)).map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
-                organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(),item.getProject().map(Project::getCustomerCode).orElse(null)).map(OrganisationProject::getParentCustomerCode).orElse(null)
+                costCenter.map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
+                costCenter.flatMap(organisationCostCenter -> organisationCostCenter.getParent()).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.getExternalCustomerCode())).orElse(null),
+                costCenter.flatMap(organisationCostCenter -> organisationCostCenter.getParent()).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.getName())).orElse(null),
+                project.flatMap(organisationProject -> organisationProject.getParent()).flatMap(parentProject -> Optional.ofNullable(parentProject.getId().getCustomerCode())).orElse(null),
+                project.flatMap(organisationProject -> organisationProject.getParent()).flatMap(parentProject -> Optional.ofNullable(parentProject.getExternalCustomerCode())).orElse(null),
+                project.flatMap(organisationProject -> organisationProject.getParent()).flatMap(parentProject -> Optional.ofNullable(parentProject.getName())).orElse(null)
         );
+    }
+
+    private ExtractionTransactionItemView enrichTransactionItemViewBuilder(ExtractionTransactionItemView item) {
+
+        item.setCostCenterCustomerCode(item.getParentCostCenterCustomerCode());
+        item.setCostCenterExternalCustomerCode(item.getParentCostCenterExternalCustomerCode());
+        item.setCostCenterName(item.getParentCostCenterName());
+        item.setProjectCustomerCode(item.getParentProjectCustomerCode());
+        item.setProjectExternalCustomerCode(item.getParentProjectExternalCustomerCode());
+        item.setProjectName(item.getParentProjectName());
+
+        item.setParentCostCenterName(null);
+        item.setParentCostCenterCustomerCode(null);
+        item.setParentCostCenterExternalCustomerCode(null);
+        item.setParentProjectName(null);
+        item.setParentProjectCustomerCode(null);
+        item.setParentProjectExternalCustomerCode(null);
+
+        return item;
     }
 }

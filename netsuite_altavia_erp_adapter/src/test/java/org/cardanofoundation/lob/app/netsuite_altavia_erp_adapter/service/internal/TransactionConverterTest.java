@@ -79,6 +79,9 @@ class TransactionConverterTest {
         when(mockTxLine.accountMain()).thenReturn("accountMain");
         when(validator.validate(mockTxLine)).thenReturn(Set.of());
         when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
+        when(preprocessorService.preProcess("accountMain", FieldType.ACCOUNT_CREDIT_NAME)).thenReturn(Either.right("Success"));
+
+
         Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
 
         assertThat(org.isRight()).isTrue();
@@ -130,6 +133,7 @@ class TransactionConverterTest {
         when(validator.validate(mockTxLine)).thenReturn(Set.of());
         when(transactionTypeMapper.apply("type")).thenReturn(Optional.of(TransactionType.Transfer));
         when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
+        when(preprocessorService.preProcess("accountMain", FieldType.ACCOUNT_CREDIT_NAME)).thenReturn(Either.right("Success"));
 
         Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
 
@@ -159,6 +163,7 @@ class TransactionConverterTest {
         when(validator.validate(mockTxLine)).thenReturn(Set.of());
         when(transactionTypeMapper.apply("type")).thenReturn(Optional.of(TransactionType.Transfer));
         when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
+        when(preprocessorService.preProcess("accountMain", FieldType.ACCOUNT_CREDIT_NAME)).thenReturn(Either.right("Success"));
 
         Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
 
@@ -179,6 +184,7 @@ class TransactionConverterTest {
         when(validator.validate(mockTxLine)).thenReturn(Set.of());
         when(transactionTypeMapper.apply("type")).thenReturn(Optional.of(TransactionType.Transfer));
         when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
+        when(preprocessorService.preProcess("accountMain", FieldType.ACCOUNT_CREDIT_NAME)).thenReturn(Either.right("Success"));
 
         Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
 
@@ -209,6 +215,7 @@ class TransactionConverterTest {
         when(validator.validate(mockTxLine)).thenReturn(Set.of());
         when(transactionTypeMapper.apply("type")).thenReturn(Optional.of(TransactionType.Transfer));
         when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
+        when(preprocessorService.preProcess("accountMain", FieldType.ACCOUNT_CREDIT_NAME)).thenReturn(Either.right("Success"));
 
         Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
 

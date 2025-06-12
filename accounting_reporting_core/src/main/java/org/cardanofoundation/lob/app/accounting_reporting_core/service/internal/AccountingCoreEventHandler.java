@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -17,8 +18,8 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
@@ -30,6 +31,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reco
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
+import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
@@ -45,6 +47,7 @@ public class AccountingCoreEventHandler {
     private final TransactionBatchService transactionBatchService;
     private final TransactionReconcilationService transactionReconcilationService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final TxStatusUpdaterJob txStatusUpdaterJob;
     private final ValidateIngestionResponseWaiter validateIngestionResponseWaiter;
 
 
@@ -53,10 +56,7 @@ public class AccountingCoreEventHandler {
     public void handleLedgerUpdatedEvent(TxsLedgerUpdatedEvent event) {
         log.info("Received handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
 
-        Map<String, TxStatusUpdate> txStatusUpdatesMap = event.statusUpdatesMap();
-
-        ledgerService.updateTransactionsWithNewStatuses(txStatusUpdatesMap);
-        transactionBatchService.updateBatchesPerTransactions(txStatusUpdatesMap);
+        txStatusUpdaterJob.addToStatusUpdateMap(event.statusUpdatesMap());
 
         log.info("Finished processing handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
     }
@@ -77,7 +77,8 @@ public class AccountingCoreEventHandler {
 
         Map<String, ReportStatusUpdate> reportStatusUpdatesMap = event.statusUpdatesMap();
 
-        ledgerService.updateReportsWithNewStatuses(reportStatusUpdatesMap);
+        List<ReportEntity> reportEntities = ledgerService.updateReportsWithNewStatuses(reportStatusUpdatesMap);
+        ledgerService.saveAllReports(reportEntities);
 
         log.info("Finished processing handleReportsLedgerUpdated, event: {}", event);
     }

@@ -52,7 +52,7 @@ public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem 
             return;
         }
 
-        log.info("Normalising journal transaction with id: {}", tx.getId());
+        //log.info("Normalising journal transaction with id: {}", tx.getId());
 
         // at this point we can assume we have it, it is mandatory
         String dummyAccount = dummyAccountM.orElseThrow();

@@ -5,6 +5,7 @@ public enum FieldType {
     COST_CENTER,
     PROJECT,
     CHART_OF_ACCOUNT,
-    VAT
+    VAT,
+    ACCOUNT_CREDIT_NAME
 
 }
