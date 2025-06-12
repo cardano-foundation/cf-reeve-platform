@@ -122,7 +122,6 @@ class CostCenterServiceTest {
         when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
         when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
-        when(parentMock.getId()).thenReturn(new OrganisationCostCenter.Id(organisationId, "parentCustomerCode"));
         when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);

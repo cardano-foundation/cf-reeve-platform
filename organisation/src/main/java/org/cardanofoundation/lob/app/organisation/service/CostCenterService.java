@@ -49,9 +49,7 @@ public class CostCenterService {
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null) {
                 Optional<OrganisationCostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
-                if(project.isPresent()) {
-                    costCenter.setParentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
-                } else {
+                if(project.isEmpty()) {
                     return OrganisationCostCenterView.createFail(
                             costCenterUpdate.getCustomerCode(),
                             Problem.builder()
@@ -61,6 +59,7 @@ public class CostCenterService {
                     );
                 }
             }
+            costCenter.setParentCustomerCode(Optional.ofNullable(costCenterUpdate.getParentCustomerCode()));
             return OrganisationCostCenterView.fromEntity(costCenterRepository.save(costCenter));
         } else {
             return OrganisationCostCenterView.createFail(
