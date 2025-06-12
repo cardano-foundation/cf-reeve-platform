@@ -34,15 +34,19 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
         // Group items by key
         Map<TransactionItemKey, List<TransactionItemEntity>> itemsPerKeyMap = tx.getItems()
                 .stream()
-                .collect(groupingBy(txItem -> TransactionItemKey.builder()
-                        .costCenterCustomerCode(txItem.getCostCenter().map(CostCenter::getCustomerCode))
-                        .documentVatCustomerCode(txItem.getDocument().flatMap(d -> d.getVat().map(Vat::getCustomerCode)))
-                        .documentNum(txItem.getDocument().map(Document::getNum))
-                        .documentCurrencyId(txItem.getDocument().flatMap(d -> d.getCurrency().getId()))
-                        .documentCounterpartyCustomerCode(txItem.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)))
-                        .accountEventCode(txItem.getAccountEvent().map(AccountEvent::getCode))
-                        .operationType(Optional.ofNullable(txItem.getOperationType()))
-                        .build())
+                .collect(groupingBy(txItem -> {
+                            return TransactionItemKey.builder()
+                                    .costCenterCustomerCode(txItem.getCostCenter().map(CostCenter::getCustomerCode))
+                                    .documentVatCustomerCode(txItem.getDocument().flatMap(d -> d.getVat().map(Vat::getCustomerCode)))
+                                    .documentNum(txItem.getDocument().map(Document::getNum))
+                                    .documentCurrencyId(txItem.getDocument().flatMap(d -> d.getCurrency().getId()))
+                                    .documentCounterpartyCustomerCode(txItem.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)))
+                                    .accountEventCode(txItem.getAccountEvent().map(AccountEvent::getCode))
+                                    .accountCodeDebit(txItem.getAccountDebit().map(Account::getCode))
+                                    .accountCodeCredit(txItem.getAccountCredit().map(Account::getCode))
+                                    .operationType(Optional.ofNullable(txItem.getOperationType()))
+                                    .build();
+                        })
                 );
 
         // Mark the original items as ERASED
@@ -94,6 +98,12 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
 
         @Builder.Default
         private Optional<String> accountEventCode = Optional.empty();
+
+        @Builder.Default
+        private Optional<String> accountCodeDebit = Optional.empty();
+
+        @Builder.Default
+        private Optional<String> accountCodeCredit = Optional.empty();
 
         @Builder.Default
         private Optional<OperationType> operationType = Optional.empty();
