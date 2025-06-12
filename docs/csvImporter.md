@@ -35,7 +35,10 @@ The following columns are needed:
 - `Document Name`: Name of the document (e.g. `Invoice 1`)
 - `Currency`: Currency of the transaction (e.g. `USD`)
 - `VAT Rate`: VAT rate of the transaction (e.g. `0.2`)
-- `VAT Amount`: VAT amount of the transaction (e.g. `VAT-123`)
+- `VAT Code`: VAT amount of the transaction (e.g. `VAT-123`)
+- `Cost Center Code`: Cost center code of the transaction (e.g. `COST_CENTER_1`)
+- `Counterparty Code`: Counterparty code of the transaction (e.g. `VENDOR_1`)
+- `Counterparty Name`: Counterparty name of the transaction (e.g. `Vendor 1`)
 
 ### Account Events data structure
 An example can be found here: [Account Events CSV Example](./examples/account_event_csv_example.csv)
@@ -49,7 +52,6 @@ The following columns are needed:
 An example can be found here: [Chart of Accounts CSV Example](./examples/chart_of_account_csv_example.csv)
 The following columns are needed:
 - `Customer Code`: Customer code of the account (e.g. `1000`)
-- `Event Reference Code`: Reference code of the account (e.g. `2000`)
 - `Reference Code`: Reference code of the account (e.g. `2000`)
 - `Name`: Name of the account (e.g. `Cash`)
 - `Type`: Type of the account (e.g. `ASSET`)
@@ -84,20 +86,30 @@ The following columns are needed:
 An example can be found here: [Cost Center CSV Example](./examples/cost_center_csv_example.csv)
 The following columns are needed:
 - `Customer code`: Code of the cost center (e.g. `COST_CENTER_1`)
-- `External customer code`: Name of the external customer code (e.g. `Cost Center 1`)
 - `Name`: Name of the cost center (e.g. `Cost Center 1`)
 - `Parent customer code`: Parent code of the cost center (e.g. `COST_CENTER_2`)
+- `Active`: Active status of the cost center (e.g. `true`)
 
 ### Project data structure
 An example can be found here: [Project CSV Example](./examples/project_csv_example.csv)
 The following columns are needed:
 - `Customer code`: Code of the project (e.g. `PROJECT_1`)
-- `External customer code`: Name of the external project code (e.g. `Project 1`)
 - `Name`: Name of the project (e.g. `Project 1`)
 - `Parent customer code`: Parent code of the project (e.g. `PROJECT_2`)
+- `Active`: Active status of the project (e.g. `true`)
 
 ### Currency data structure
 An example can be found here: [Currency CSV Example](./examples/currency_csv_example.csv)
 The following columns are needed:
 - `Currency`: Currency code (e.g. `CHF`)
 - `Name`: Name of the currency (e.g. `ISO_4217:CHF`)
+- `Active`: Active status of the currency (e.g. `True`)
+
+### Vat Code data structure
+An example can be found here: [Vat Code CSV Example](./examples/vat_csv_example.csv)
+The following columns are needed:
+- `Code`: Code of the VAT (e.g. `VAT-123`)
+- `Description`: Name of the VAT (e.g. `VAT 20%`)
+- `Country`: Country code of the VAT (e.g. `CH`)
+- `Rate`: Rate of the VAT (e.g. `0.2`)
+- `Active`: Active status of the VAT (e.g. `True`)

@@ -23,7 +23,7 @@ public class ChartOfAccountUpdate {
     private String customerCode;
 
     @Schema(example = "0000")
-    @CsvBindByName(column = "Event Reference Code", required = true)
+    @CsvBindByName(column = "Event Reference Code")
     private String eventRefCode;
 
     @Schema(example = "0000")

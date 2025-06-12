@@ -25,6 +25,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Account;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CostCenter;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Currency;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
@@ -120,11 +122,11 @@ public class TransactionConverter {
     private Either<Problem, Void> getViolations(String organisationId, List<TransactionLine> transactionLines, String transactionId) {
         Set<Violation> violations = new HashSet<>();
 
-        for(int i = 0; i < transactionLines.size(); i++) {
+        for (int i = 0; i < transactionLines.size(); i++) {
             TransactionLine line = transactionLines.get(i);
             Set<ConstraintViolation<TransactionLine>> validationIssues = validator.validate(line);
 
-            if(!validationIssues.isEmpty()) {
+            if (!validationIssues.isEmpty()) {
                 Map<String, Object> bag = Map.of("organisationId", organisationId,
                         "txId", transactionId,
                         "internalTransactionNumber", i,
@@ -156,6 +158,9 @@ public class TransactionConverter {
             TransactionItem.TransactionItemBuilder builder = TransactionItem.builder()
                     .id(TransactionItem.id(line.getTxNumber(), String.valueOf(lineNumber++)))
                     .fxRate(MoreBigDecimal.zeroForNull(BigDecimal.valueOf(Double.parseDouble(line.getFxRate()))))
+                    .costCenter(Optional.ofNullable(line.getCostCenterCode())
+                            .map(costCenterCode -> CostCenter.builder()
+                                    .customerCode(costCenterCode).build()))
                     .accountDebit(Optional.of(Account.builder()
                             .code(line.getDebitCode())
                             .name(Optional.ofNullable(line.getDebitName()))
@@ -231,6 +236,11 @@ public class TransactionConverter {
                         .customerCode(line.getVatCode())
                         .rate(Optional.of(BigDecimal.valueOf(Double.parseDouble(line.getVatRate()))))
                         .build()))
+                .counterparty(Optional.ofNullable(line.getCounterPartyCode()).map(counterPartyCode ->
+                        Counterparty.builder()
+                                .customerCode(counterPartyCode)
+                                .name(Optional.ofNullable(line.getCounterPartyName()))
+                                .build()))
                 .build());
     }
 

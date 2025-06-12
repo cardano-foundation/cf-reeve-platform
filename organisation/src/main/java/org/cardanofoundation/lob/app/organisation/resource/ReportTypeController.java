@@ -65,7 +65,7 @@ public class ReportTypeController {
 
     @Operation(description = "Add mapping to Report Type field via CSV")
     @PostMapping(value = "/{orgId}/field-mapping/csv", produces = "application/json", consumes = "multipart/form-data")
-//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         return reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).fold(
                 problem ->

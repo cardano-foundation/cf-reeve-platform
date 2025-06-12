@@ -21,7 +21,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class OrganisationVatUpdate {
 
     @Schema(example = "CH-N")
-    @CsvBindByName(column = "Customer Code", required = true)
+    @CsvBindByName(column = "Code", required = true)
     private String customerCode;
 
     @Schema(example = "0000")
@@ -30,7 +30,7 @@ public class OrganisationVatUpdate {
 
     @Nullable
     @Schema(example = "IE")
-    @CsvBindByName(column = "Country Code")
+    @CsvBindByName(column = "Country")
     private String countryCode;
 
     @Schema(example = "Example Vat code")

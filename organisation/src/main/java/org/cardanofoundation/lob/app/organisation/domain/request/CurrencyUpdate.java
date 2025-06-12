@@ -20,4 +20,6 @@ public class CurrencyUpdate {
     @Schema(example = "ISO_4217:CHF")
     @CsvBindByName(column = "Currency ID", required = true)
     private String currencyId;
+    @CsvBindByName(column = "Active")
+    private boolean active = true;
 }
