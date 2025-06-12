@@ -15,6 +15,7 @@ import lombok.val;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.AccountEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
@@ -72,12 +73,16 @@ class TxItemsAmountsSummingTaskItemTest {
         txItem1.setAccountEvent(Optional.of(AccountEvent.builder().code("e12").build()));
         txItem1.setAmountLcy(BigDecimal.ONE);
         txItem1.setAmountFcy(BigDecimal.TEN);
+        txItem1.setAccountCredit(Optional.ofNullable(Account.builder().code("TheCredit").build()));
+        txItem1.setAccountDebit(Optional.ofNullable(Account.builder().code("TheDebit").build()));
 
         val txItem2 = new TransactionItemEntity();
         txItem2.setId("1:1");
         txItem2.setAccountEvent(Optional.of(AccountEvent.builder().code("e12").build()));
         txItem2.setAmountLcy(BigDecimal.ONE);
         txItem2.setAmountFcy(BigDecimal.TEN);
+        txItem2.setAccountCredit(Optional.ofNullable(Account.builder().code("TheCredit").build()));
+        txItem2.setAccountDebit(Optional.ofNullable(Account.builder().code("TheDebit").build()));
 
         val items = new HashSet<TransactionItemEntity>();
         items.add(txItem1);
