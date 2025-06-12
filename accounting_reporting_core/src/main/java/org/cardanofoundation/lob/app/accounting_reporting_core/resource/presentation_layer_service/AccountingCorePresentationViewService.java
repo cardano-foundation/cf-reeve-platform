@@ -182,18 +182,27 @@ public class AccountingCorePresentationViewService {
 
     @Transactional
     public Either<Problem, Void> extractionTrigger(ExtractionRequest body) {
+        UserExtractionParameters fp = getUserExtractionParameters(body);
+
+        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), body.getFile(), body.getParameters());
+    }
+
+    private static UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
         ArrayList<String> transactionNumbers = new ArrayList<>(body.getTransactionNumbers());
         transactionNumbers.removeIf(String::isEmpty);
 
-        UserExtractionParameters fp = UserExtractionParameters.builder()
+        return UserExtractionParameters.builder()
                 .from(body.getDateFrom().isEmpty() ? LocalDate.EPOCH : LocalDate.parse(body.getDateFrom()))
                 .to(body.getDateTo().isEmpty() ? LocalDate.now() : LocalDate.parse(body.getDateTo()))
                 .organisationId(body.getOrganisationId())
                 .transactionTypes(body.getTransactionType())
                 .transactionNumbers(transactionNumbers)
                 .build();
+    }
 
-        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), body.getFile(), body.getParameters());
+    public Either<List<Problem>, Void> extractionValidation(ExtractionRequest body) {
+        UserExtractionParameters userExtractionParameters = getUserExtractionParameters(body);
+        return accountingCoreService.validateIngestion(userExtractionParameters, body.getExtractorType(), body.getFile(), body.getParameters());
     }
 
     @Transactional

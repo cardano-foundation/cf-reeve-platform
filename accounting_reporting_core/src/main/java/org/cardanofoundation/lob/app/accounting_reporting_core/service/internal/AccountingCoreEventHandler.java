@@ -22,12 +22,14 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
@@ -43,6 +45,7 @@ public class AccountingCoreEventHandler {
     private final TransactionBatchService transactionBatchService;
     private final TransactionReconcilationService transactionReconcilationService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final ValidateIngestionResponseWaiter validateIngestionResponseWaiter;
 
 
     @EventListener
@@ -56,6 +59,15 @@ public class AccountingCoreEventHandler {
         transactionBatchService.updateBatchesPerTransactions(txStatusUpdatesMap);
 
         log.info("Finished processing handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
+    }
+
+    @EventListener
+    @Async
+    public void handleValidateIngestionResponseEvent(ValidateIngestionResponseEvent event) {
+        log.info("Received handleValidateIngestionResponseEvent, event: {}", event);
+
+        String correlationId = event.getCorrelationId();
+        validateIngestionResponseWaiter.complete(correlationId, event);
     }
 
     @EventListener

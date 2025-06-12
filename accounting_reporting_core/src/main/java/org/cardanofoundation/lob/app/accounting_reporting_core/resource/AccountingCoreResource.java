@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
+import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
 
@@ -41,6 +42,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rej
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.ExtractionValidationResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -189,6 +191,45 @@ public class AccountingCoreResource {
                             .status(HttpStatusCode.valueOf(202))
                             .body(response);
                 }
+        );
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @PostMapping(value = "/extraction/validation", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+    @Operation(description = "Trigger the extraction from the ERP system(s)", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
+                    responseCode = "202"
+            )
+    })
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> extractionValidation(@Valid @RequestBody ExtractionRequest body) {
+        return handleExtractionValidation(body);
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @PostMapping(value = "/extraction/validation", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
+    @Operation(description = "Trigger the extraction from the ERP system(s)", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
+                    responseCode = "202"
+            )
+    })
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> extractionValidationForm(@ModelAttribute ExtractionRequest body) {
+        return handleExtractionValidation(body);
+    }
+
+    private ResponseEntity<ExtractionValidationResponse> handleExtractionValidation(ExtractionRequest body) {
+        return accountingCorePresentationService.extractionValidation(body).fold(
+                problems -> ResponseEntity
+                        .status(BAD_REQUEST.getStatusCode())
+                        .body(new ExtractionValidationResponse(false, problems)),
+                _ -> ResponseEntity.ok(
+                        new ExtractionValidationResponse(true, List.of())
+                )
         );
     }
 
