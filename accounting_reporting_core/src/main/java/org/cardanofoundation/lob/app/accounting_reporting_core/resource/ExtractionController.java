@@ -45,20 +45,21 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
 @RestController
-@RequestMapping("/api/extraction")
+@RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
 @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
 public class ExtractionController {
+
     private final ExtractionItemService extractionItemService;
     private final OrganisationPublicApi organisationPublicApi;
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final ObjectMapper objectMapper;
 
     @Tag(name = "Extraction", description = "Extraction search")
-    @PostMapping(value = "/search", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/extraction/search", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @Operation(description = "Search for published transaction items",
             responses = {
                     @ApiResponse(content = {
@@ -80,7 +81,7 @@ public class ExtractionController {
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
-    @PostMapping(value = "/", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/extraction", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
     @Operation(description = "Trigger the extraction from the ERP system(s)", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = APPLICATION_JSON_VALUE,
@@ -125,7 +126,7 @@ public class ExtractionController {
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
-    @PostMapping(value = "/", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/extraction-form", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
     @Operation(description = "Trigger the extraction from the ERP system(s)", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = APPLICATION_JSON_VALUE,
@@ -138,7 +139,7 @@ public class ExtractionController {
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
-    @PostMapping(value = "/validation", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/extraction/validation", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
     @Operation(description = "Validate the extraction request", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = APPLICATION_JSON_VALUE,
@@ -158,7 +159,7 @@ public class ExtractionController {
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
-    @PostMapping(value = "/validation", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/extraction/validation-form", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
     @Operation(description = "Validate the extraction request", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = APPLICATION_JSON_VALUE,
