@@ -56,6 +56,7 @@ public class BusinessRulesConfig {
         val pipelineTasks = new ArrayList<PipelineTask>();
 
         pipelineTasks.add(conversionPipelineTask());
+        pipelineTasks.add(postCleansingPipelineTask());
 
         return new DefaultBusinessRulesPipelineProcessor(pipelineTasks);
     }
@@ -69,8 +70,7 @@ public class BusinessRulesConfig {
 
     private PipelineTask preCleansingPipelineTask() {
         return new DefaultPipelineTask(List.of(
-                new DiscardZeroBalanceTxItemsTaskItem(),
-                new FxRevaluationCopyLcyToFcyTxItemsTaskItem()
+                new DiscardZeroBalanceTxItemsTaskItem()
         ));
     }
 
