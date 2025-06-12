@@ -2,9 +2,11 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
+import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -35,6 +37,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presenta
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ExtractionItemService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.ExtractionValidationResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
@@ -87,6 +90,10 @@ public class ExtractionController {
             )
     })
     public ResponseEntity<?> extractionTrigger(@Valid @RequestBody ExtractionRequest body) {
+        return extractTriggerProcessing(body);
+    }
+
+    private ResponseEntity<?> extractTriggerProcessing(ExtractionRequest body) {
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(body.getOrganisationId());
 
         if (orgM.isEmpty()) {
@@ -102,24 +109,24 @@ public class ExtractionController {
         Organisation org = orgM.orElseThrow();
 
         Either<Problem, Void> extractionResultE = accountingCorePresentationService.extractionTrigger(body);
+        if (extractionResultE.isLeft()) {
+            Problem problem = extractionResultE.getLeft();
+            log.error("Extraction trigger failed with problem: {}", problem);
+            return ResponseEntity
+                    .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
+                    .body(problem);
+        } else {
+            log.info("Extraction triggered successfully for organisation: {}", org.getId());
 
-        return extractionResultE.fold(
-                problem -> ResponseEntity
-                        .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
-                        .body(problem),
-                _ -> {
-                    log.info("Extraction triggered successfully for organisation: {}", org.getId());
+            ObjectNode response = objectMapper.createObjectNode();
 
-                    ObjectNode response = objectMapper.createObjectNode();
+            response.put("event", "EXTRACTION");
+            response.put("message", "We have received your extraction request now. Please review imported transactions from the batch list.");
 
-                    response.put("event", "EXTRACTION");
-                    response.put("message", "We have received your extraction request now. Please review imported transactions from the batch list.");
-
-                    return ResponseEntity
-                            .status(HttpStatusCode.valueOf(202))
-                            .body(response);
-                }
-        );
+            return ResponseEntity
+                    .status(HttpStatusCode.valueOf(202))
+                    .body(response);
+        }
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
@@ -132,41 +139,49 @@ public class ExtractionController {
             )
     })
     public ResponseEntity<?> extractionTriggerForm(@ModelAttribute ExtractionRequest body) {
-        return extractionTrigger(body);
+        return extractTriggerProcessing(body);
     }
-//
-//    @Tag(name = "Transactions", description = "Transactions API")
-//    @PostMapping(value = "/validation", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
-//    @Operation(description = "Validate the extraction request", responses = {
-//            @ApiResponse(content =
-//                    {@Content(mediaType = APPLICATION_JSON_VALUE,
-//                            schema = @Schema(implementation = ExtractionValidationResponse.class))},
-//                    responseCode = "202"
-//            )
-//    })
-//    public ResponseEntity<ExtractionValidationResponse> extractionValidation(@Valid @RequestBody ExtractionRequest body) {
-//        return accountingCorePresentationService.extractionValidation(body).fold(
-//                problems -> ResponseEntity
-//                        .status(BAD_REQUEST.getStatusCode())
-//                        .body(new ExtractionValidationResponse(false, problems)),
-//                _ -> ResponseEntity.ok(
-//                        new ExtractionValidationResponse(true, List.of())
-//                )
-//        );
-//    }
-//
-//    @Tag(name = "Transactions", description = "Transactions API")
-//    @PostMapping(value = "/validation-form", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
-//    @Operation(description = "Validate the extraction request", responses = {
-//            @ApiResponse(content =
-//                    {@Content(mediaType = APPLICATION_JSON_VALUE,
-//                            schema = @Schema(implementation = ExtractionValidationResponse.class))},
-//                    responseCode = "202"
-//            )
-//    })
-//    public ResponseEntity<ExtractionValidationResponse> extractionValidationForm(@ModelAttribute ExtractionRequest body) {
-//        return extractionValidation(body);
-//    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @PostMapping(value = "/validation", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+    @Operation(description = "Validate the extraction request", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ExtractionValidationResponse.class))},
+                    responseCode = "202"
+            )
+    })
+    public ResponseEntity<ExtractionValidationResponse> extractionValidation(@Valid @RequestBody ExtractionRequest body) {
+        return extractionValidationProcessing(body);
+    }
+
+    private ResponseEntity<ExtractionValidationResponse> extractionValidationProcessing(ExtractionRequest body) {
+        Either<List<Problem>, Void> extractionValidation = accountingCorePresentationService.extractionValidation(body);
+        if (extractionValidation.isLeft()) {
+            List<Problem> problems = extractionValidation.getLeft();
+            log.error("Extraction validation failed with problems: {}", problems);
+            return ResponseEntity
+                    .status(BAD_REQUEST.getStatusCode())
+                    .body(new ExtractionValidationResponse(false, problems));
+        } else {
+            return ResponseEntity.ok(
+                    new ExtractionValidationResponse(true, List.of())
+            );
+        }
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @PostMapping(value = "/validation", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
+    @Operation(description = "Validate the extraction request", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ExtractionValidationResponse.class))},
+                    responseCode = "202"
+            )
+    })
+    public ResponseEntity<ExtractionValidationResponse> extractionValidationForm(@ModelAttribute ExtractionRequest body) {
+        return extractionValidationProcessing(body);
+    }
 
 
 }

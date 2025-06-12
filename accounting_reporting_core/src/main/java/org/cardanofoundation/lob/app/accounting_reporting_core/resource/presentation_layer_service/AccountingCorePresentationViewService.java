@@ -187,7 +187,7 @@ public class AccountingCorePresentationViewService {
         return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), body.getFile(), body.getParameters());
     }
 
-    private static UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
+    private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
         ArrayList<String> transactionNumbers = new ArrayList<>(body.getTransactionNumbers());
         transactionNumbers.removeIf(String::isEmpty);
 
