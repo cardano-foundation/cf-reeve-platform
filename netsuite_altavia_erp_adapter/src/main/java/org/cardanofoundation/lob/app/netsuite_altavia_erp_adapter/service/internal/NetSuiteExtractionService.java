@@ -69,7 +69,11 @@ public class NetSuiteExtractionService {
             errors.add(systemExtractionParametersE.getLeft());
         }
 
-        // Todo try to check connection to netsuite
+        Either<Problem, Void> connection = netSuiteClient.testConnection();
+        if (connection.isLeft()) {
+            log.error("Error testing NetSuite connection: {}", connection.getLeft().getDetail());
+            errors.add(connection.getLeft());
+        }
 
         ValidateIngestionResponseEvent build = ValidateIngestionResponseEvent.builder()
                 .correlationId(correlationId)

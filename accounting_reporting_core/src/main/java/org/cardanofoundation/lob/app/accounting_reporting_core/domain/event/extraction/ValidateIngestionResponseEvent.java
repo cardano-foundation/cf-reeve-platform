@@ -20,7 +20,7 @@ import org.zalando.problem.Problem;
 public class ValidateIngestionResponseEvent {
 
     private String correlationId;
-    private boolean valid;
+    private Boolean valid;
     private List<Problem> errors;
 
 }
