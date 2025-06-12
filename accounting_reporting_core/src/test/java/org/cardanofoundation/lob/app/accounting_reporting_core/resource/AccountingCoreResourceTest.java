@@ -41,7 +41,7 @@ class AccountingCoreResourceTest {
     @Mock
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
 
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     private AccountingCoreResource accountingCoreResource;
