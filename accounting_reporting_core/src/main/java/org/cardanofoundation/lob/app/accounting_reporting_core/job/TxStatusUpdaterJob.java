@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
@@ -68,11 +69,13 @@ public class TxStatusUpdaterJob {
             // Updating respective reports - Could be refactored to a separate method
             Set<ReportEntity> reportEntitiesToBeUpdated = new HashSet<>();
             for(TransactionEntity tx : transactionEntities) {
-                LocalDate date = tx.getEntryDate();
-                int year = date.getYear();
-                int month = date.getMonthValue();
-                int quarter = (month - 1) / 3 + 1;
-                reportEntitiesToBeUpdated.addAll(reportRepository.findByOrganisationIdAndContainingDate(tx.getOrganisation().getId(), year, quarter, month));
+                if (tx.getLedgerDispatchStatus() == LedgerDispatchStatus.FINALIZED) {
+                    LocalDate date = tx.getEntryDate();
+                    int year = date.getYear();
+                    int month = date.getMonthValue();
+                    int quarter = (month - 1) / 3 + 1;
+                    reportEntitiesToBeUpdated.addAll(reportRepository.findByOrganisationIdAndContainingDate(tx.getOrganisation().getId(), year, quarter, month));
+                }
             }
 
             reportEntitiesToBeUpdated.forEach(report -> {
