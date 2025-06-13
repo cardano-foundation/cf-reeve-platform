@@ -48,6 +48,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Public
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportReprocessRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
@@ -82,15 +83,22 @@ public class ReportService {
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("REPORT_NOT_FOUND")
-                    .withDetail(STR."Report with ID \{reportId} does not exist.")
+                    .withDetail("Report with ID %s does not exist.".formatted(reportId))
                     .withStatus(Status.BAD_REQUEST)
                     .with("reportId", reportId)
                     .build());
         }
         ReportEntity report = reportM.orElseThrow();
-        Either<Problem, Boolean> canI = canPublish(report);
-        if (canI.isLeft()) {
-            return Either.left(canI.getLeft());
+        Either<Problem, Boolean> isReportReadyToPublish = canPublish(report);
+        if (isReportReadyToPublish.isLeft()) {
+            return Either.left(isReportReadyToPublish.getLeft());
+        } else if( !isReportReadyToPublish.get()) {
+            return Either.left(Problem.builder()
+                    .withTitle("REPORT_NOT_READY_FOR_PUBLISHING")
+                    .withDetail("Report with ID %s is not ready for publishing.".formatted(reportId))
+                    .withStatus(Status.BAD_REQUEST)
+                    .with("reportId", reportId)
+                    .build());
         }
         report.setLedgerDispatchApproved(true);
         report.setLedgerDispatchDate(LocalDateTime.now(clock));
@@ -337,6 +345,13 @@ public class ReportService {
             reportEntity.setIncomeStatementReportData(createReportView.getIncomeStatementData());
         }
 
+        Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);
+        if (isReportReadyToPublish.isLeft()) {
+            return Either.left(isReportReadyToPublish.getLeft());
+        } else {
+            reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
+        }
+
         ReportEntity result = reportRepository.save(reportEntity);
 
         log.info(reportType.name() + "::Report saved successfully: {}", result.getReportId());
@@ -407,7 +422,6 @@ public class ReportService {
         ReportType reportType = reportData.isLeft() ? INCOME_STATEMENT : BALANCE_SHEET;
 
         String reportId = Report.id(organisationId, reportType, intervalType, year, ver, period);
-        String idControl = Report.idControl(organisationId, reportType, intervalType, year, period);
         Optional<ReportEntity> existingReportM = reportRepository.findById(reportId);
 
         ReportEntity reportEntity = new ReportEntity();
@@ -498,7 +512,12 @@ public class ReportService {
 
             reportEntity.setBalanceSheetReportData(Optional.of(reportData.get()));
         }
-
+        Either<Problem, Boolean> isReadyToPublish = canPublish(reportEntity);
+        if (isReadyToPublish.isLeft()) {
+            return Either.left(isReadyToPublish.getLeft());
+        } else {
+            reportEntity.setIsReadyToPublish(isReadyToPublish.get());
+        }
         reportRepository.save(reportEntity);
 
         return Either.right(null);
@@ -525,7 +544,6 @@ public class ReportService {
     }
 
     public Either<Problem, Boolean> canPublish(ReportEntity reportEntity) {
-
         // Validate profitForTheYear consistency between IncomeStatementData and BalanceSheetData
         ReportType relatedReportType = reportEntity.getType().equals(INCOME_STATEMENT) ? BALANCE_SHEET : INCOME_STATEMENT;
         String relatedReportId = Report.idControl(reportEntity.getOrganisation().getId(), relatedReportType, reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod());
@@ -981,5 +999,25 @@ public class ReportService {
         }
 
         return camelCaseString.toString();
+    }
+
+    public Either<Problem, ReportEntity> reportReprocess(@Valid ReportReprocessRequest reportReprocessRequest) {
+        Optional<ReportEntity> firstByOrganisationIdAndReportId = reportRepository.findFirstByOrganisationIdAndReportId(reportReprocessRequest.getOrganisationId(), reportReprocessRequest.getReportId());
+        if (firstByOrganisationIdAndReportId.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle("REPORT_NOT_FOUND")
+                    .withDetail("Report with ID %s does not exist.".formatted(reportReprocessRequest.getReportId()))
+                    .withStatus(Status.NOT_FOUND)
+                    .with("reportId", reportReprocessRequest.getReportId())
+                    .build());
+        }
+        ReportEntity reportEntity = firstByOrganisationIdAndReportId.get();
+        Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);
+        if (isReportReadyToPublish.isLeft()) {
+            return Either.left(isReportReadyToPublish.getLeft());
+        }
+        reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
+        reportRepository.save(reportEntity);
+        return Either.right(reportEntity);
     }
 }

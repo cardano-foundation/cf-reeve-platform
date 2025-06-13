@@ -15,6 +15,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rep
 
 public interface ReportRepository extends JpaRepository<ReportEntity, String> {
 
+    Optional<ReportEntity> findFirstByOrganisationIdAndReportId(@Param("organisationId") String organisationId, @Param("reportId") String reportId);
+
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
              WHERE r.organisation.id = :organisationId
