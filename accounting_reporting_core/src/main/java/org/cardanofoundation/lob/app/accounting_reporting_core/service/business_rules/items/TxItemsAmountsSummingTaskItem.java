@@ -5,6 +5,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.OK;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,7 +17,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 
 /**
@@ -44,20 +44,20 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
                                     .accountEventCode(txItem.getAccountEvent().map(AccountEvent::getCode))
                                     .accountCodeDebit(txItem.getAccountDebit().map(Account::getCode))
                                     .accountCodeCredit(txItem.getAccountCredit().map(Account::getCode))
-                                    .operationType(Optional.ofNullable(txItem.getOperationType()))
                                     .build();
                         })
                 );
 
         // Mark the original items as ERASED
         tx.getItems().forEach(item -> item.setStatus(ERASED_SUM_APPLIED));
+        BigDecimal numero = BigDecimal.ZERO;
 
         // Collapsing logic: combine the amounts for items with the same key
         Set<TransactionItemEntity> collapsedItems = itemsPerKeyMap.values().stream()
                 .map(items -> items.stream()
                         .reduce((txItem1, txItem2) -> {
-                            txItem1.setAmountFcy(txItem1.getAmountFcy().add(txItem2.getAmountFcy()));
-                            txItem1.setAmountLcy(txItem1.getAmountLcy().add(txItem2.getAmountLcy()));
+                            txItem1.setAmountLcy(txItem1.getAmountLcy().add(txItem2.getOperationType().equals(txItem1.getOperationType()) ? txItem2.getAmountLcy() : txItem2.getAmountLcy().negate()));
+                            txItem1.setAmountFcy(txItem1.getAmountFcy().add(txItem2.getOperationType().equals(txItem1.getOperationType()) ? txItem2.getAmountFcy() : txItem2.getAmountFcy().negate()));
                             return txItem1;
                         })
                 )
@@ -105,8 +105,6 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
         @Builder.Default
         private Optional<String> accountCodeCredit = Optional.empty();
 
-        @Builder.Default
-        private Optional<OperationType> operationType = Optional.empty();
 
     }
 
