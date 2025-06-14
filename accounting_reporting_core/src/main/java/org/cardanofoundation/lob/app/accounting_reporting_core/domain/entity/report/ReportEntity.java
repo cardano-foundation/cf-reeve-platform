@@ -197,6 +197,11 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Setter
     private Boolean ledgerDispatchApproved = false;
 
+    @Column(name = "is_ready_to_publish", nullable = false)
+    @Getter
+    @Setter
+    private Boolean isReadyToPublish = false;
+
     @Column(name = "ledger_dispatch_status", nullable = false)
     @Enumerated(STRING)
     @JdbcType(PostgreSQLEnumJdbcType.class)
