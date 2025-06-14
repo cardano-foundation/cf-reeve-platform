@@ -34,6 +34,7 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
@@ -1012,12 +1013,19 @@ public class ReportService {
                     .build());
         }
         ReportEntity reportEntity = firstByOrganisationIdAndReportId.get();
+        if(reportEntity.getLedgerDispatchStatus() != LedgerDispatchStatus.NOT_DISPATCHED) {
+            return Either.left(Problem.builder()
+                    .withTitle("REPORT_ALREADY_DISPATCHED")
+                    .withDetail("Report with ID %s has already been dispatched.".formatted(reportReprocessRequest.getReportId()))
+                    .withStatus(Status.BAD_REQUEST)
+                    .with("reportId", reportReprocessRequest.getReportId())
+                    .build());
+        }
         Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);
         if (isReportReadyToPublish.isLeft()) {
             return Either.left(isReportReadyToPublish.getLeft());
         }
         reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
-        reportRepository.save(reportEntity);
-        return Either.right(reportEntity);
+        return Either.right(reportRepository.save(reportEntity));
     }
 }
