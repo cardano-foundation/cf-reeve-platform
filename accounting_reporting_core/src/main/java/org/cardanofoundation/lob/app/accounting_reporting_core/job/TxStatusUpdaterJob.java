@@ -74,7 +74,7 @@ public class TxStatusUpdaterJob {
                     int year = date.getYear();
                     int month = date.getMonthValue();
                     int quarter = (month - 1) / 3 + 1;
-                    reportEntitiesToBeUpdated.addAll(reportRepository.findByOrganisationIdAndContainingDate(tx.getOrganisation().getId(), year, quarter, month));
+                    reportEntitiesToBeUpdated.addAll(reportRepository.findNotPublishedByOrganisationIdAndContainingDate(tx.getOrganisation().getId(), year, quarter, month));
                 }
             }
 
