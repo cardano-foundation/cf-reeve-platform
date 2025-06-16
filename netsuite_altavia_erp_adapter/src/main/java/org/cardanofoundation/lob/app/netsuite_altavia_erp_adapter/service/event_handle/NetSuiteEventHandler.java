@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal.NetSuiteExtractionService;
@@ -41,6 +42,23 @@ public class NetSuiteEventHandler {
         );
 
         log.info("Handled handleScheduledIngestionEvent.");
+    }
+
+    @EventListener
+    @Async
+    public void handleValidateIngestionEvent(ValidateIngestionEvent event) {
+        log.info("Handling handleValidateIngestionEvent...");
+        ScheduledIngestionEvent scheduledIngestionEvent = event.getScheduledIngestionEvent();
+        if(scheduledIngestionEvent.getExtractorType() != ExtractorType.NETSUITE) {
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE_LOG, scheduledIngestionEvent.getExtractorType());
+            return;
+        }
+        netSuiteExtractionService.validateIngestion(
+                event.getCorrelationId(),
+                scheduledIngestionEvent.getOrganisationId(),
+                scheduledIngestionEvent.getMetadata().getUser()
+        );
+        log.info("Handled handleValidateIngestionEvent.");
     }
 
     @EventListener
