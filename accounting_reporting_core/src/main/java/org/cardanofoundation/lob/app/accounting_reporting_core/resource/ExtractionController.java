@@ -20,7 +20,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ExtractionItemService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
@@ -33,6 +32,7 @@ import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 @RequiredArgsConstructor
 @Slf4j
 public class ExtractionController {
+
     private final ExtractionItemService extractionItemService;
 
     @Tag(name = "Extraction", description = "Extraction search")

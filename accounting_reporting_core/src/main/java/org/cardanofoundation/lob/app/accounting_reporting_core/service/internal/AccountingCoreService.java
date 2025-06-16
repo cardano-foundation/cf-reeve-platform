@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 import org.cardanofoundation.lob.app.support.reactive.DebouncerManager;
+import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Service
@@ -53,6 +54,7 @@ public class AccountingCoreService {
     private final AccountingPeriodCalculator accountingPeriodCalculator;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final DebouncerManager debouncerManager;
+    private final AntiVirusScanner antiVirusScanner;
 
     @Value("${lob.max.transaction.numbers.per.batch:600}")
     private int maxTransactionNumbersPerBatch = 600;
@@ -79,8 +81,15 @@ public class AccountingCoreService {
         }
         byte[] fileBytes;
         try {
-            if(file != null) {
+            if(file != null && !file.isEmpty()) {
                 fileBytes = file.getBytes();
+                if(!antiVirusScanner.isFileSafe(fileBytes)) {
+                    return Either.left(Problem.builder()
+                            .withTitle("FILE_VIRUS_DETECTED")
+                            .withDetail("The uploaded file contains a virus and cannot be processed.")
+                            .withStatus(BAD_REQUEST)
+                            .build());
+                }
             } else {
                 fileBytes = null;
             }
