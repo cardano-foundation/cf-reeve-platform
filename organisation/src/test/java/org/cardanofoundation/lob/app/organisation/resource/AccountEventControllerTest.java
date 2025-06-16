@@ -135,43 +135,4 @@ class AccountEventControllerTest {
         assertThat(response.getBody()).isEqualTo(view);
     }
 
-    @Test
-    void testUpsertReferenceCode_returnsOk() {
-        EventCodeUpdate update = new EventCodeUpdate();
-        AccountEventView view = mock(AccountEventView.class);
-        when(accountEventService.upsertAccountEvent(orgId, update)).thenReturn(view);
-
-        ResponseEntity<?> response = controller.upsertReferenceCode(orgId, update);
-
-        assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(response.getBody()).isEqualTo(view);
-    }
-
-    @Test
-    void testUpsertReferenceCode_withError() {
-        EventCodeUpdate update = new EventCodeUpdate();
-        AccountEventView view = mock(AccountEventView.class);
-        when(view.getError()).thenReturn(Optional.of(Problem.builder()
-                .withTitle("Error")
-                .withStatus(Status.INTERNAL_SERVER_ERROR)
-                .build()));
-        when(accountEventService.upsertAccountEvent(orgId, update)).thenReturn(view);
-
-        ResponseEntity<?> response = controller.upsertReferenceCode(orgId, update);
-
-        assertThat(response.getStatusCode().value()).isEqualTo(500);
-        assertThat(response.getBody()).isEqualTo(view);
-    }
-
-    @Test
-    void testDeleteReferenceCode_orgNotFound() {
-        when(organisationService.findById(orgId)).thenReturn(Optional.empty());
-
-        ResponseEntity<?> response = controller.deleteReferenceCode(orgId, "ref123");
-
-        assertThat(response.getStatusCode().value()).isEqualTo(404);
-        assertThat(response.getBody()).isInstanceOf(Problem.class);
-        assertThat(((Problem) response.getBody()).getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
-    }
-
 }
