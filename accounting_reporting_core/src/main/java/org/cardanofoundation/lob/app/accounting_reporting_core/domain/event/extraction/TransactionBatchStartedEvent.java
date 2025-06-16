@@ -31,6 +31,7 @@ public class TransactionBatchStartedEvent {
     @NotBlank
     private String organisationId;
 
+    @Builder.Default
     private ExtractorType extractorType = ExtractorType.NETSUITE;
 
     @NotNull

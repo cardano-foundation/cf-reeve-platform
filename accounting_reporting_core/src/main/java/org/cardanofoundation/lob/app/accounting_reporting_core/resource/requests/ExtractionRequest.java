@@ -21,27 +21,33 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 @AllArgsConstructor
 @NoArgsConstructor
 @Slf4j
-@Data
+@Builder
 public class ExtractionRequest extends BaseRequest {
 
     @Schema(example = "NETSUITE")
+    @Builder.Default
     private ExtractorType extractorType = ExtractorType.NETSUITE;
 
     @Schema(example = "2013-01-02")
+    @Builder.Default
     private String dateFrom = "";
 
     @Schema(example = "2024-05-01")
+    @Builder.Default
     private String dateTo = "";
 
     @ArraySchema(arraySchema = @Schema(example = "[\"FxRevaluation\",\"Journal\",\"CustomerPayment\"] ", implementation = TransactionType.class))
+    @Builder.Default
     private List<TransactionType> transactionType = List.of();
 
     @ArraySchema(arraySchema = @Schema(example = "[\"CARDCH565\",\"CARDHY777\",\"CARDCHRG159\",\"VENDBIL119\"] "))
+    @Builder.Default
     private List<String> transactionNumbers = List.of();
 
     @Schema(example = "A file for the extraction. E.g. a csv file")
     private MultipartFile file;
 
     @Schema(example = "A map for additional parameters for the extraction")
+    @Builder.Default
     private Map<String, Object> parameters = new HashMap<>();
 }

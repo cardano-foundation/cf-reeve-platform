@@ -22,7 +22,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.CoreCurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCurrency;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,7 +52,7 @@ class DocumentConversionTaskItemTest {
                 .vat(Vat.builder()
                         .customerCode(customerCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode("USD")
                         .build())
                 .build();
@@ -89,7 +89,7 @@ class DocumentConversionTaskItemTest {
         String customerCurrencyCode = "USD";
 
         Document document = Document.builder()
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode(customerCurrencyCode)
                         .build())
                 .build();
@@ -130,7 +130,7 @@ class DocumentConversionTaskItemTest {
                 .vat(Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode(customerCurrencyCode)
                         .build())
                 .build();
@@ -156,7 +156,7 @@ class DocumentConversionTaskItemTest {
                         .build()));
 
         when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(organisationId, customerCurrencyCode))
-                .thenReturn(Optional.of(new OrganisationCurrency(new OrganisationCurrency.Id(organisationId, customerCurrencyCode), currencyId)));
+                .thenReturn(Optional.of(new Currency(new Currency.Id(organisationId, customerCurrencyCode), currencyId)));
 
         when(coreCurrencyRepository.findByCurrencyId(currencyId))
                 .thenReturn(Optional.of(CoreCurrency.builder()
@@ -186,7 +186,7 @@ class DocumentConversionTaskItemTest {
                 .vat(Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode(customerCurrencyCode)
                         .build())
                 .build();
@@ -229,7 +229,7 @@ class DocumentConversionTaskItemTest {
                 .vat(Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode("")
                         .build())
                 .build();

@@ -17,10 +17,10 @@ import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolat
 import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationProjectView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationValidationView;
+import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
+import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
+import org.cardanofoundation.lob.app.organisation.domain.view.ValidationView;
 import org.cardanofoundation.lob.app.organisation.repository.*;
 import org.cardanofoundation.lob.app.organisation.service.validation.OrganisationValidationRule;
 
@@ -32,7 +32,7 @@ public class OrganisationService {
 
     private final OrganisationRepository organisationRepository;
     private final AccountEventRepository accountEventRepository;
-    private final OrganisationCurrencyService organisationCurrencyService;
+    private final CurrencyService currencyService;
     private final List<OrganisationValidationRule> validationRules;
     private final CostCenterService costCenterService;
     private final ProjectCodeService projectService;
@@ -127,9 +127,9 @@ public class OrganisationService {
                 organisation.getProvince(),
                 organisation.getCountryCode(),
                 costCenterService.getAllCostCenter(organisation.getId()).stream()
-                        .map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()),
-                projectService.getAllProjects(organisation.getId()).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()),
-                organisationCurrencyService.findAllByOrganisationId(organisation.getId())
+                        .map(CostCenterView::fromEntity).collect(Collectors.toSet()),
+                projectService.getAllProjects(organisation.getId()).stream().map(ProjectView::fromEntity).collect(Collectors.toSet()),
+                currencyService.findAllByOrganisationId(organisation.getId())
                         .stream()
                         .map(organisationCurrency ->
                                 organisationCurrency.getId() != null ? organisationCurrency.getId().getCustomerCode() : null
@@ -155,11 +155,11 @@ public class OrganisationService {
         return organisation;
     }
 
-    public OrganisationValidationView validateOrganisation(Organisation organisation) {
+    public ValidationView validateOrganisation(Organisation organisation) {
         List<OrganisationViolation> violations = new ArrayList<>();
         validationRules.forEach(rule -> rule.validate(organisation).ifPresent(violations::addAll));
 
-        return OrganisationValidationView.builder()
+        return ValidationView.builder()
                 .organisationId(organisation.getId())
                 .violations(violations)
                 .isValid(violations.isEmpty())

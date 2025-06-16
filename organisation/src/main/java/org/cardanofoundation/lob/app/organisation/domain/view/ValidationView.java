@@ -13,7 +13,7 @@ import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolat
 @Getter
 @Builder
 @AllArgsConstructor
-public class OrganisationValidationView {
+public class ValidationView {
 
     @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
     private String organisationId;

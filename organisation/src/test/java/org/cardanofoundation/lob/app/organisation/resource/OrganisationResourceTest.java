@@ -22,9 +22,9 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationEventView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationValidationView;
+import org.cardanofoundation.lob.app.organisation.domain.view.EventView;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
+import org.cardanofoundation.lob.app.organisation.domain.view.ValidationView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -83,7 +83,7 @@ class OrganisationResourceTest {
                         .name("Test Event")
                         .customerCode("Test Code")
                 .build()));
-        ResponseEntity<List<OrganisationEventView>> responseEntity = organisationResource.organisationEvent("123");
+        ResponseEntity<List<EventView>> responseEntity = organisationResource.organisationEvent("123");
         assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
         assertEquals("Test Event", responseEntity.getBody().getFirst().getName());
@@ -185,7 +185,7 @@ class OrganisationResourceTest {
     @Test
     void validateOrganisation_success() {
         Organisation org = mock(Organisation.class);
-        OrganisationValidationView validationView = mock(OrganisationValidationView.class);
+        ValidationView validationView = mock(ValidationView.class);
         when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.validateOrganisation(org)).thenReturn(validationView);

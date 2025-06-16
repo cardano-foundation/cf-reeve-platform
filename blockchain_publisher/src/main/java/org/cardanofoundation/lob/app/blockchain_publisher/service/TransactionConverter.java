@@ -17,7 +17,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.*;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 
 @Service
 @Slf4j
@@ -104,13 +104,13 @@ public class TransactionConverter {
         txItemEntity.setDocument(convertDocument(txItem.getDocument().orElseThrow()));
 
         txItemEntity.setCostCenter(txItem.getCostCenter().map(cc -> {
-            val ccBuilder = CostCenter.builder();
+            val ccBuilder = org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.builder();
 
             // If the cost center is not associated with the parent organisation, we do not set it.
             // Note: Only one parent level.
-            Optional<OrganisationCostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
+            Optional<CostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
             if (costCenterS.isPresent()) {
-                OrganisationCostCenter costCenter = costCenterS.get();
+                CostCenter costCenter = costCenterS.get();
                 if (costCenter.getParent().isPresent()) {
                     ccBuilder.customerCode(costCenter.getParent().get().getId().getCustomerCode());
                     ccBuilder.name(costCenter.getParent().get().getName());

@@ -108,7 +108,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
             @AttributeOverride(name = "primaryBlockchainType", column = @Column(name = "primary_blockchain_type")),
             @AttributeOverride(name = "primaryBlockchainHash", column = @Column(name = "primary_blockchain_hash"))
     })
-    @Getter
     @Setter
     @Nullable
     private LedgerDispatchReceipt ledgerDispatchReceipt;

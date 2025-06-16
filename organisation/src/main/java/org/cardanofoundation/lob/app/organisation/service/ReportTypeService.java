@@ -19,12 +19,12 @@ import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ReportTypeFieldUpdateCsv;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
 import org.cardanofoundation.lob.app.organisation.domain.request.ReportTypeFieldUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.ReportTypeView;
-import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountSubTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeFieldRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
@@ -36,7 +36,7 @@ public class ReportTypeService {
 
     private final ReportTypeRepository reportTypeRepository;
     private final ReportTypeFieldRepository reportTypeFieldRepository;
-    private final OrganisationChartOfAccountSubTypeRepository organisationChartOfAccountSubTypeRepository;
+    private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
     private final CsvParser<ReportTypeFieldUpdateCsv> csvParser;
 
     @Transactional(readOnly = true)
@@ -64,14 +64,14 @@ public class ReportTypeService {
                         .build());
             }
             ReportTypeFieldEntity reportTypeFieldEntity = optionalReportField.get();
-            Optional<OrganisationChartOfAccountSubType> optionalSubType = organisationChartOfAccountSubTypeRepository.findById(String.valueOf(reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId()));
+            Optional<ChartOfAccountSubType> optionalSubType = chartOfAccountSubTypeRepository.findById(String.valueOf(reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId()));
             if (optionalSubType.isEmpty()) {
                 return Either.left(Problem.builder()
                         .withTitle("Organisation Chart Of Account Sub Type not found")
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
-            List<OrganisationChartOfAccountSubType> mappingTypes = reportTypeFieldEntity.getMappingTypes();
+            List<ChartOfAccountSubType> mappingTypes = reportTypeFieldEntity.getMappingTypes();
             mappingTypes.add(optionalSubType.get());
             reportTypeFieldEntity.setMappingTypes(mappingTypes);
             reportTypeFieldRepository.saveAndFlush(reportTypeFieldEntity);
@@ -99,7 +99,7 @@ public class ReportTypeService {
                     .flatMap(reportTypeField -> reportTypeFieldRepository.findFirstByReportIdAndName(reportTypeFieldUpdate.getReportTypeId(), reportTypeField))
                     .ifPresent(reportTypeFieldEntity -> reportTypeFieldUpdate.setReportTypeFieldId(reportTypeFieldEntity.getId()));
             Optional.ofNullable(reportUpdate.getSubType())
-                    .flatMap(s -> organisationChartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, s))
+                    .flatMap(s -> chartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, s))
                     .ifPresent(organisationChartOfAccountSubType -> reportTypeFieldUpdate.setOrganisationChartOfAccountSubTypeId(organisationChartOfAccountSubType.getId()));
 
             if (reportTypeFieldUpdate.getReportTypeId() == null || reportTypeFieldUpdate.getReportTypeFieldId() == null || reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId() == null) {

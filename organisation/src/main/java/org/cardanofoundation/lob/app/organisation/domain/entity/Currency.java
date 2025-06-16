@@ -24,7 +24,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Table(name = "organisation_currency")
 @Audited
 @EntityListeners({ AuditingEntityListener.class })
-public class OrganisationCurrency extends CommonEntity implements Persistable<OrganisationCurrency.Id> {
+public class Currency extends CommonEntity implements Persistable<Currency.Id> {
 
     @EmbeddedId
     @AttributeOverrides({

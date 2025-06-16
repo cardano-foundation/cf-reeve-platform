@@ -18,7 +18,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class OrganisationVatUpdate {
+public class VatUpdate {
 
     @Schema(example = "CH-N")
     @CsvBindByName(column = "Customer Code", required = true)

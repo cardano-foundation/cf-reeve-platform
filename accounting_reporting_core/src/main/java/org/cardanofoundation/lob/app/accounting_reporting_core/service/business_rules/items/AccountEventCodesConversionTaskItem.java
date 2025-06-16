@@ -18,7 +18,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Opera
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 
 @RequiredArgsConstructor
 public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
@@ -61,7 +61,7 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
     private void setAccountCodeRef(Account account,
                                    OperationType type,
                                    TransactionItemEntity item,
-                                   OrganisationChartOfAccount chartOfAccount) {
+                                   ChartOfAccount chartOfAccount) {
 
         switch (type) {
             case DEBIT:

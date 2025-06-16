@@ -33,7 +33,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
+import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
 
 @RestController
@@ -48,40 +48,40 @@ public class CostCenterController {
 
     @Operation(description = "Organisation cost center", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CostCenterView.class)))}
             ),
     })
     @GetMapping(value = "/organisation/{orgId}/cost-center", produces = "application/json")
-    public ResponseEntity<Set<OrganisationCostCenterView>> getAllCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<Set<CostCenterView>> getAllCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
-                costCenterService.getAllCostCenter(orgId).stream().map(OrganisationCostCenterView::fromEntity).collect(Collectors.toSet()));
+                costCenterService.getAllCostCenter(orgId).stream().map(CostCenterView::fromEntity).collect(Collectors.toSet()));
     }
 
     @Operation(description = "Organisation cost center creation", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CostCenterView.class)))}
             ),
     })
     @PostMapping(value = "/organisation/{orgId}/cost-center/insert", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<OrganisationCostCenterView> insertCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
+    public ResponseEntity<CostCenterView> insertCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         return ResponseEntity.ok(costCenterService.insertCostCenter(orgId, costCenterUpdate));
     }
 
     @Operation(description = "Organisation cost center update", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CostCenterView.class)))}
             ),
     })
     @PostMapping(value = "/organisation/{orgId}/cost-center/update", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<OrganisationCostCenterView> updateCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
+    public ResponseEntity<CostCenterView> updateCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         return ResponseEntity.ok(costCenterService.updateCostCenter(orgId, costCenterUpdate));
     }
 
     @Operation(description = "Organisation cost center creation csv", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CostCenterView.class)))}
             ),
     })
     @PostMapping(value = "/organisation/{orgId}/cost-center-csv", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
