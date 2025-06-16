@@ -9,7 +9,6 @@ import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +17,8 @@ import com.opencsv.bean.CsvToBeanBuilder;
 import com.opencsv.enums.CSVReaderNullFieldIndicator;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+
+import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 
 @Service
 @Slf4j
