@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 
@@ -20,9 +21,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
+import org.cardanofoundation.lob.app.support.security.impl.ClamAVService;
 
 @ExtendWith(MockitoExtension.class)
 class CsvParserTest {
+    @Mock
+    private ClamAVService antiVirusScanner; // Mocked for the sake of the test, no actual scanning needed
 
     @InjectMocks
     private CsvParser<EventCodeUpdate> csvParser; // using EventCodeSince it's the easiest to mock
@@ -65,6 +69,7 @@ class CsvParserTest {
                 .getResourceAsStream("testData.csv") // adjust the path
                 .readAllBytes();
         when(file.getBytes()).thenReturn(bytes);
+        when(antiVirusScanner.isFileSafe(bytes)).thenReturn(true);
         Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
 
         Assertions.assertTrue(parse.isRight());
@@ -80,5 +85,20 @@ class CsvParserTest {
         Assertions.assertEquals("567", second.getCreditReferenceCode());
         Assertions.assertEquals("Test Dummy2", second.getName());
         Assertions.assertFalse(second.getActive());
+    }
+
+    @Test
+    void parseCsv_maliciousFile() throws IOException {
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.isEmpty()).thenReturn(false);
+
+        byte[] bytes = new byte[1];
+        when(file.getBytes()).thenReturn(bytes);
+        when(antiVirusScanner.isFileSafe(bytes)).thenReturn(false);
+
+        Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
+
+        Assertions.assertTrue(parse.isLeft());
+        Assertions.assertEquals("MALICIOUS_FILE_DETECTED", parse.getLeft().getTitle());
     }
 }
