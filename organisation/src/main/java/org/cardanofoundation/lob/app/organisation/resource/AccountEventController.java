@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import jakarta.validation.Valid;
@@ -25,12 +24,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
-import org.zalando.problem.ThrowableProblem;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
 import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 

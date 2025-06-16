@@ -28,9 +28,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
-import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
 import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
-import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 
 @RestController
 @RequestMapping("/api/organisation")
