@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import jakarta.validation.Valid;
 
@@ -28,6 +29,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ReportTypeFieldUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
@@ -58,22 +60,22 @@ public class ReportTypeController {
     @PostMapping(value = "/{orgId}/field-mappings", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ReportTypeFieldUpdate reportTypeFieldUpdate) {
-        return reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).fold(
-                problem ->
-                    ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
-                success -> ResponseEntity.ok().body(true)
-        );
+        if (reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).isLeft()) {
+            Problem problem = reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).getLeft();
+            ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem);
+        }
+        return ResponseEntity.ok().body(true);
     }
 
     @Operation(description = "Add mapping to Report Type field via CSV")
     @PostMapping(value = "/{orgId}/field-mappings", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
-        return reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).fold(
-                problem ->
-                    ResponseEntity.status(400).body(problem),
-                _ -> ResponseEntity.ok().body(true)
-        );
+        if (reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).isLeft()) {
+            Set<Problem> left = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).getLeft();
+            return ResponseEntity.status(Objects.requireNonNull(400)).body(left);
+        }
+        return ResponseEntity.ok().body(true);
     }
 
 }
