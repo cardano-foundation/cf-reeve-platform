@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -39,10 +40,10 @@ public class OrganisationVatController {
 
     @Operation(description = "Vat Codes", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationVatView.class)))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = OrganisationVatView.class)))}
             ),
     })
-    @GetMapping(value = "/{orgId}/vat-codes", produces = "application/json")
+    @GetMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<OrganisationVatView>> getVatCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(organisationVatService.findAllByOrganisationId(orgId));
 
@@ -50,10 +51,10 @@ public class OrganisationVatController {
 
     @Operation(description = "Vat code insert", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationVatView.class))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = OrganisationVatView.class))}
             ),
     })
-    @PostMapping(value = "/{orgId}/vat-codes/insert", produces = "application/json")
+    @PostMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertVatCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                            @Valid @RequestBody OrganisationVatUpdate organisationVatUpdate) {
@@ -69,10 +70,10 @@ public class OrganisationVatController {
 
     @Operation(description = "Reference Code update", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationVatUpdate.class))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = OrganisationVatUpdate.class))}
             ),
     })
-    @PostMapping(value = "/{orgId}/vat-codes/update", produces = "application/json")
+    @PutMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody OrganisationVatUpdate organisationVatUpdate) {
@@ -89,8 +90,8 @@ public class OrganisationVatController {
                     {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationVatView.class))}
             ),
     })
-    @PostMapping(value = "/{orgId}/vat-codes/insert-csv", produces = "application/json")
-//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PostMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                @RequestParam(value = "file") MultipartFile file) {
 

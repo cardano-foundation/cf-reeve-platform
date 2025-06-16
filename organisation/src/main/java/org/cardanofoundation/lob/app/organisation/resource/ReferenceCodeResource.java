@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -53,20 +54,20 @@ public class ReferenceCodeResource {
 
     @Operation(description = "Reference Codes list", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
             ),
     })
-    @GetMapping(value = "/{orgId}/reference-codes", produces = "application/json")
+    @GetMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<ReferenceCodeView> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return referenceCodeService.getAllReferenceCodes(orgId);
     }
 
     @Operation(description = "Reference Code insert", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/reference-codes/insert", produces = "application/json")
+    @PostMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
@@ -79,11 +80,11 @@ public class ReferenceCodeResource {
 
     @Operation(description = "Reference Code insert by CSV", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/reference-codes/insert-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-//    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PostMapping(value = "/{orgId}/reference-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {
         Either<Set<Problem>, Set<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
@@ -96,10 +97,10 @@ public class ReferenceCodeResource {
 
     @Operation(description = "Reference Code update", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/reference-codes/update", produces = "application/json")
+    @PutMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
@@ -108,43 +109,6 @@ public class ReferenceCodeResource {
             return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
         }
         return ResponseEntity.ok(referenceCode);
-    }
-
-
-    @Deprecated
-    @Operation(description = "Reference Code upsert", responses = {
-            @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ReferenceCodeView.class)))}
-            ),
-    })
-    @PostMapping(value = "/{orgId}/reference-codes", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> upsertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                 @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
-        ReferenceCodeView referenceCode = referenceCodeService.upsertReferenceCode(orgId, referenceCodeUpdate);
-        if (referenceCode.getError().isPresent()) {
-            return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
-        }
-        return ResponseEntity.ok(referenceCode);
-    }
-
-    @Operation(description = "Reference Code delete")
-    // Removing the mapping to keep the code but disable the endpoint
-//    @DeleteMapping(value = "/{orgId}/reference-codes/{refCode}", produces = "application/json") // Removing the mapping to keep the code but disable the endpoint
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> deleteReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                 @PathVariable("refCode") String referenceCode) {
-        Optional<Organisation> organisationChe = organisationService.findById(orgId);
-        if (organisationChe.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
-
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
-        }
-        return null;
     }
 
 }
