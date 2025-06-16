@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.service.csv;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -53,6 +54,7 @@ class CsvParserTest {
     void parseCsv_exception() {
         MultipartFile file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(false);
+        when(antiVirusScanner.isFileSafe(any())).thenReturn(true);
         Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
 
         Assertions.assertTrue(parse.isLeft());
