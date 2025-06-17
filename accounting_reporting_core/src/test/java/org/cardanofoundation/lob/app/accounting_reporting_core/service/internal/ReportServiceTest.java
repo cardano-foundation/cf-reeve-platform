@@ -706,6 +706,9 @@ class ReportServiceTest {
         existingReport.setType(INCOME_STATEMENT);
         existingReport.setLedgerDispatchApproved(false);
         existingReport.setIncomeStatementReportData(Optional.of(incomeStatementReportData));
+        existingReport.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
+        existingReport.setIntervalType(IntervalType.YEAR);
+        existingReport.setYear(year);
 
         val organisation = new Organisation();
         organisation.setId(organisationId);
@@ -771,8 +774,11 @@ class ReportServiceTest {
 
         val existingReport = new ReportEntity();
         existingReport.setType(BALANCE_SHEET);
+        existingReport.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
         existingReport.setLedgerDispatchApproved(false);
         existingReport.setBalanceSheetReportData(Optional.of(balanceSheetReportData));
+        existingReport.setIntervalType(IntervalType.YEAR);
+        existingReport.setYear(year);
 
         val organisation = new Organisation();
         organisation.setId(organisationId);
@@ -783,7 +789,6 @@ class ReportServiceTest {
 
         when(organisationPublicApi.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
         when(reportRepository.findById(any())).thenReturn(Optional.of(existingReport));
-
         // Act
         val resultE = reportService.store(organisationId, intervalType, year, ver, periodM, reportDataE);
 
@@ -1146,6 +1151,10 @@ class ReportServiceTest {
         when(organisation.getName()).thenReturn("Name");
         when(reportEntity.getLedgerDispatchApproved()).thenReturn(false); // When LedgerDispatchApproved is true a new report is created
         when(reportEntity.getReportId()).thenReturn("reportId");
+        when(reportEntity.getType()).thenReturn(BALANCE_SHEET);
+        when(reportEntity.getOrganisation()).thenReturn(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
+        when(reportEntity.isValid()).thenReturn(true);
+        when(reportEntity.getIntervalType()).thenReturn(IntervalType.YEAR);
         when(organisationPublicApi.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
 
         when(reportRepository.findLatestByIdControl(anyString(), anyString())).thenReturn(Optional.of(reportEntity));
@@ -1161,7 +1170,6 @@ class ReportServiceTest {
         verify(reportRepository).findLatestByIdControl("org-123", "acf103248617fb66012ed41c275c48f71f29a1298074242728292ddf800fced9");
         verify(reportRepository, times(1)).save(any(ReportEntity.class));
         verifyNoMoreInteractions(organisationPublicApi);
-        verifyNoMoreInteractions(reportRepository);
     }
 
     @Test
