@@ -129,24 +129,24 @@ class AccountEventServiceTest {
     }
 
     @Test
-    void testFindById_Found() {
-        when(accountEventRepository.findById(accountEventId)).thenReturn(Optional.of(mockAccountEvent));
+    void testFindById_AndActive_Found() {
+        when(accountEventRepository.findByIdAndActive(accountEventId,true)).thenReturn(Optional.of(mockAccountEvent));
 
-        Optional<AccountEvent> result = accountEventService.findById(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE);
+        Optional<AccountEvent> result = accountEventService.findByIdAndActive(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE);
 
         assertTrue(result.isPresent());
         assertEquals(mockAccountEvent, result.get());
-        verify(accountEventRepository).findById(accountEventId);
+        verify(accountEventRepository).findByIdAndActive(accountEventId,true);
     }
 
     @Test
-    void testFindById_NotFound() {
-        when(accountEventRepository.findById(accountEventId)).thenReturn(Optional.empty());
+    void testFindById_AndActive_NotFound() {
+        when(accountEventRepository.findByIdAndActive(accountEventId, true)).thenReturn(Optional.empty());
 
-        Optional<AccountEvent> result = accountEventService.findById(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE);
+        Optional<AccountEvent> result = accountEventService.findByIdAndActive(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE);
 
         assertFalse(result.isPresent());
-        verify(accountEventRepository).findById(accountEventId);
+        verify(accountEventRepository).findByIdAndActive(accountEventId,true);
     }
 
     @Test

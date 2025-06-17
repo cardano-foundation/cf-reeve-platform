@@ -23,6 +23,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.CoreCurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
 
 @RequiredArgsConstructor
 public class DocumentConversionTaskItem implements PipelineTaskItem {
@@ -58,14 +59,14 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
         /** Always recalculate the value. */
         return document.getVat()
                 .flatMap(vat -> {
-                    val vatM = organisationPublicApi.findOrganisationByVatAndCode(organisationId, vat.getCustomerCode());
+                    Optional<OrganisationVat> vatM = organisationPublicApi.findOrganisationByVatAndCode(organisationId, vat.getCustomerCode());
 
                     return vatM.map(v -> new Vat(vat.getCustomerCode(), Optional.of(v.getRate())))
                             .or(() -> {
 
                                 addViolation(tx, txItem, VAT_DATA_NOT_FOUND, Map.of("customerCode", vat.getCustomerCode(), "transactionNumber", tx.getTransactionInternalNumber()));
-
-                                return Optional.empty();
+                                // We save the wrong value to allow the reprocess read it and compare it against the database
+                                return Optional.of(new Vat(vat.getCustomerCode(), Optional.empty()));
                             });
                 });
     }

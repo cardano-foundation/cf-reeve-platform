@@ -38,10 +38,10 @@ class OrganisationVatServiceTest {
     private OrganisationVatService organisationVatService;
 
     @Test
-    void findByOrganisationAndCode() {
+    void findByOrganisationAndCodeTest() {
         OrganisationVat.Id id = new OrganisationVat.Id("organisationId", "customerCode");
         OrganisationVat vat = mock(OrganisationVat.class);
-        when(vatRepository.findById(id)).thenReturn(Optional.of(vat));
+        when(vatRepository.findByIdAndActive(id, true)).thenReturn(Optional.of(vat));
 
         Optional<OrganisationVat> result = organisationVatService.findByOrganisationAndCode("organisationId", "customerCode");
 
@@ -77,7 +77,7 @@ class OrganisationVatServiceTest {
     }
 
     @Test
-    void insert_success(){
+    void insert_success() {
         VatUpdate update = mock(VatUpdate.class);
         OrganisationVat parent = mock(OrganisationVat.class);
         OrganisationVat saved = mock(OrganisationVat.class);
@@ -91,7 +91,7 @@ class OrganisationVatServiceTest {
 
         when(vatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
         when(vatRepository.save(any(OrganisationVat.class)))
-            .thenReturn(saved);
+                .thenReturn(saved);
 
         VatView result = organisationVatService.insert("organisationId", update);
 
@@ -145,7 +145,7 @@ class OrganisationVatServiceTest {
 
         when(vatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(saved));
         when(vatRepository.save(any(OrganisationVat.class)))
-            .thenReturn(saved);
+                .thenReturn(saved);
 
         VatView result = organisationVatService.update("organisationId", update);
 

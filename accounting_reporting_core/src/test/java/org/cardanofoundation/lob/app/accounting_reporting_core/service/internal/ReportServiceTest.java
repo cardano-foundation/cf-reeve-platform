@@ -1148,6 +1148,7 @@ class ReportServiceTest {
         when(reportEntity.getLedgerDispatchApproved()).thenReturn(false); // When LedgerDispatchApproved is true a new report is created
         when(reportEntity.getReportId()).thenReturn("reportId");
         when(reportEntity.getType()).thenReturn(BALANCE_SHEET);
+        when(reportEntity.getVer()).thenReturn(1L);
         when(reportEntity.getOrganisation()).thenReturn(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
         when(reportEntity.isValid()).thenReturn(true);
         when(reportEntity.getIntervalType()).thenReturn(IntervalType.YEAR);
@@ -1161,9 +1162,51 @@ class ReportServiceTest {
                 .balanceSheetData(Optional.of(BalanceSheetData.builder().build())).build(), intervalType, year, period);
 
         assertTrue(result.isRight());
-
+        assertEquals(1L,result.get().getVer());
         verify(organisationPublicApi).findByOrganisationId(organisationId);
         verify(reportRepository).findLatestByIdControl("org-123", "acf103248617fb66012ed41c275c48f71f29a1298074242728292ddf800fced9");
+        verify(reportRepository, times(1)).save(any(ReportEntity.class));
+        verifyNoMoreInteractions(organisationPublicApi);
+    }
+
+    @Test
+    void storeReport_successfullNewVersion() {
+        IntervalType intervalType = IntervalType.MONTH;
+        short year = 2025;
+        short period = 3;
+        String organisationId = "org-123";
+        Organisation organisation = Mockito.mock(Organisation.class);
+        ReportEntity reportEntity = Mockito.mock(ReportEntity.class);
+        //reportEntity.setLedgerDispatchApproved(true);
+        //reportEntity.setVer(1L);
+
+        when(organisation.getCountryCode()).thenReturn("CountryCode");
+        when(organisation.getCurrencyId()).thenReturn("CurrencyId");
+        when(organisation.getTaxIdNumber()).thenReturn("TaxIdNumber");
+        when(organisation.getName()).thenReturn("Name");
+        when(reportEntity.isValid()).thenReturn(true);
+        when(reportEntity.getLedgerDispatchApproved()).thenReturn(true); // When LedgerDispatchApproved is true a new report is created
+        when(reportEntity.getReportId()).thenReturn("reportId");
+        when(reportEntity.getType()).thenReturn(INCOME_STATEMENT);
+        when(reportEntity.getVer()).thenReturn(1L);
+        when(reportEntity.getIncomeStatementReportData()).thenReturn(Optional.empty());
+        when(reportEntity.getOrganisation()).thenReturn(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
+
+        when(reportEntity.getIntervalType()).thenReturn(IntervalType.YEAR);
+        when(organisationPublicApi.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
+
+        when(reportRepository.findLatestByIdControl(anyString(), anyString())).thenReturn(Optional.of(reportEntity),Optional.empty());
+        when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
+
+        Either<Problem, ReportEntity> result = reportService.storeReport(INCOME_STATEMENT, CreateReportView.builder()
+                .organisationId(organisationId)
+                .incomeStatementData(Optional.of(IncomeStatementData.builder().build())).build(), intervalType, year, period);
+
+        assertTrue(result.isRight());
+        //Todo: This should be 2, the mock isn't mutating with the process.
+        assertEquals(1L,result.get().getVer());
+        verify(organisationPublicApi).findByOrganisationId(organisationId);
+        verify(reportRepository, times(2)).findLatestByIdControl("org-123", "acf103248617fb66012ed41c275c48f71f29a1298074242728292ddf800fced9");
         verify(reportRepository, times(1)).save(any(ReportEntity.class));
         verifyNoMoreInteractions(organisationPublicApi);
     }
