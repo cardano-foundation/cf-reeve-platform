@@ -1,2 +1,2 @@
-customer code,external customer code,name,parent customer code
-123,456,Project,
+Customer code,Name,Parent customer code,Active
+123,Project,456,True

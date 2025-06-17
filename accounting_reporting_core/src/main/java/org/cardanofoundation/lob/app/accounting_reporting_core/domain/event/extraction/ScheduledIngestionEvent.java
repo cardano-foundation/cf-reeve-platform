@@ -33,7 +33,7 @@ public class ScheduledIngestionEvent {
 
     @NotNull
     private ExtractorType extractorType;
-
+    @ToString.Exclude
     private byte[] file;
 
     private Map<String, Object> parameters;

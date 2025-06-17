@@ -7,6 +7,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserE
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
@@ -62,6 +64,42 @@ public class CsvExtractionService {
     private String delimiter;
     @Value("${lob.csv.send-batch-size:100}")
     private int sendBatchSize;
+
+    public void validateIngestion(String correlationId, String organisationId, byte[] file) {
+        List<Problem> errors = new ArrayList<>();
+
+        Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
+        if(systemExtractionParametersE.isLeft()) {
+            errors.add(systemExtractionParametersE.getLeft());
+        }
+
+        if(Objects.isNull(file) || file.length == 0) {
+            errors.add(Problem.builder()
+                    .withTitle(Constants.EMPTY_FILE)
+                    .withDetail("The provided file is empty.")
+                    .build());
+        } else {
+            Either<Problem, List<TransactionLine>> lists = csvParser.parseCsv(file, TransactionLine.class);
+            if(lists.isLeft()) {
+                errors.add(lists.getLeft());
+            } else {
+                List<TransactionLine> transactionLines = lists.get();
+                if (transactionLines.isEmpty()) {
+                    errors.add(Problem.builder()
+                            .withTitle(Constants.NO_TRANSACTION_LINES)
+                            .withDetail("The provided CSV file does not contain any transaction lines.")
+                            .build());
+                }
+            }
+        }
+
+        ValidateIngestionResponseEvent validateIngestionResponseEvent = ValidateIngestionResponseEvent.builder()
+                .correlationId(correlationId)
+                .errors(errors)
+                .valid(errors.isEmpty())
+                .build();
+        applicationEventPublisher.publishEvent(validateIngestionResponseEvent);
+    }
 
     public void startNewExtraction(@NotNull String organisationId, String user, @NotNull UserExtractionParameters userExtractionParameters, byte[] file) {
         String batchId = digestAsHex(UUID.randomUUID().toString());
@@ -152,8 +190,6 @@ public class CsvExtractionService {
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
-        // TODO evaluate other parameters to see if they match
-
 
         Either<Problem, List<TransactionLine>> lists = csvParser.parseCsv(extractionData.file(), TransactionLine.class);
         if(lists.isLeft()) {

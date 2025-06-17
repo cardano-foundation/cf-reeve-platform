@@ -72,7 +72,7 @@ class CurrencyServiceTest {
     void updateCurrency_notFound() {
         when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.empty());
 
-        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123");
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
         CurrencyView response = currencyService.updateCurrency("org123", currencyUpdate);
 
@@ -87,7 +87,7 @@ class CurrencyServiceTest {
         when(currencyRepository.save(any(Currency.class)))
                 .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123"));
 
-        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123");
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
         CurrencyView response = currencyService.updateCurrency("org123", currencyUpdate);
 
@@ -105,7 +105,7 @@ class CurrencyServiceTest {
         Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD");
         when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
 
-        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123");
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
         CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate);
 
@@ -119,7 +119,7 @@ class CurrencyServiceTest {
         when(currencyRepository.save(any(Currency.class)))
                 .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123"));
 
-        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123");
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
         CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate);
 
@@ -159,7 +159,7 @@ class CurrencyServiceTest {
     @Test
     void insertViaCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
-        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123");
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
         when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.right(List.of(currencyUpdate)));
 
         Currency savedCurrency = new Currency(new Currency.Id("org123", "USD"), "USD123");
