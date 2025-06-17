@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
@@ -40,7 +41,8 @@ class AccountingCoreResourceTest {
 
     @Mock
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
-
+    @Mock
+    private OrganisationPublicApi organisationPublicApi;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
@@ -48,7 +50,7 @@ class AccountingCoreResourceTest {
 
     @BeforeEach
     void setUp() {
-        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper);
+        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi);
     }
 
     @Test

@@ -131,7 +131,7 @@ public class AccountingCoreService {
         if (userExtractionParameters.getTransactionNumbers().size() > maxTransactionNumbersPerBatch) {
             return Either.left(List.of(Problem.builder()
                     .withTitle("TOO_MANY_TRANSACTIONS")
-                    .withDetail(STR."Too many transactions requested, maximum is \{maxTransactionNumbersPerBatch}")
+                    .withDetail("Too many transactions requested, maximum is %s".formatted(maxTransactionNumbersPerBatch))
                     .withStatus(BAD_REQUEST)
                     .build()));
         }
