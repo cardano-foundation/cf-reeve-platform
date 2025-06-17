@@ -16,8 +16,8 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
@@ -30,27 +30,27 @@ public class CostCenterService {
     private final CostCenterRepository costCenterRepository;
     private final CsvParser<CostCenterUpdate> csvParser;
 
-    public Optional<OrganisationCostCenter> getCostCenter(String organisationId, String customerCode) {
-        return costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, customerCode));
+    public Optional<CostCenter> getCostCenter(String organisationId, String customerCode) {
+        return costCenterRepository.findById(new CostCenter.Id(organisationId, customerCode));
     }
 
-    public Set<OrganisationCostCenter> getAllCostCenter(String organisationId){
+    public Set<CostCenter> getAllCostCenter(String organisationId){
         return costCenterRepository.findAllByOrganisationId(organisationId);
     }
 
     @Transactional
-    public OrganisationCostCenterView updateCostCenter(String orgId, CostCenterUpdate costCenterUpdate) {
-        Optional<OrganisationCostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
+    public CostCenterView updateCostCenter(String orgId, CostCenterUpdate costCenterUpdate) {
+        Optional<CostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
         if(costCenterFound.isPresent()) {
-            OrganisationCostCenter costCenter = costCenterFound.get();
+            CostCenter costCenter = costCenterFound.get();
             costCenter.setExternalCustomerCode(costCenterUpdate.getExternalCustomerCode());
             costCenter.setName(costCenterUpdate.getName());
             costCenter.setActive(costCenterUpdate.isActive());
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-                Optional<OrganisationCostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
+                Optional<CostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
                 if(project.isEmpty()) {
-                    return OrganisationCostCenterView.createFail(
+                    return CostCenterView.createFail(
                             costCenterUpdate.getCustomerCode(),
                             Problem.builder()
                                     .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
@@ -60,9 +60,9 @@ public class CostCenterService {
                 }
             }
             costCenter.setParentCustomerCode(Optional.ofNullable(costCenterUpdate.getParentCustomerCode()));
-            return OrganisationCostCenterView.fromEntity(costCenterRepository.save(costCenter));
+            return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
         } else {
-            return OrganisationCostCenterView.createFail(
+            return CostCenterView.createFail(
                     costCenterUpdate.getCustomerCode(),
                     Problem.builder()
                             .withTitle("COST_CENTER_CODE_NOT_FOUND")
@@ -73,10 +73,10 @@ public class CostCenterService {
     }
 
     @Transactional
-    public OrganisationCostCenterView insertCostCenter(String orgId, CostCenterUpdate costCenterUpdate) {
-        Optional<OrganisationCostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
+    public CostCenterView insertCostCenter(String orgId, CostCenterUpdate costCenterUpdate) {
+        Optional<CostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
         if(costCenterFound.isPresent()) {
-            return OrganisationCostCenterView.createFail(
+            return CostCenterView.createFail(
                     costCenterUpdate.getCustomerCode(),
                     Problem.builder()
                             .withTitle("COST_CENTER_CODE_ALREADY_EXISTS")
@@ -84,19 +84,19 @@ public class CostCenterService {
                             .build()
             );
         } else {
-            OrganisationCostCenter.OrganisationCostCenterBuilder builder = OrganisationCostCenter.builder()
-                    .id(new OrganisationCostCenter.Id(orgId, costCenterUpdate.getCustomerCode()))
+            CostCenter.CostCenterBuilder builder = CostCenter.builder()
+                    .id(new CostCenter.Id(orgId, costCenterUpdate.getCustomerCode()))
                     .externalCustomerCode(costCenterUpdate.getExternalCustomerCode())
                     .name(costCenterUpdate.getName())
                     .active(costCenterUpdate.isActive());
 
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-                Optional<OrganisationCostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
+                Optional<CostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
                 if(project.isPresent()) {
                     builder.parentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
                 } else {
-                    return OrganisationCostCenterView.createFail(
+                    return CostCenterView.createFail(
                             costCenterUpdate.getCustomerCode(),
                             Problem.builder()
                                     .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
@@ -105,12 +105,12 @@ public class CostCenterService {
                     );
                 }
             }
-            return OrganisationCostCenterView.fromEntity(costCenterRepository.save(builder.build()));
+            return CostCenterView.fromEntity(costCenterRepository.save(builder.build()));
         }
     }
 
     @Transactional
-    public Either<Problem, List<OrganisationCostCenterView>> createCostCenterFromCsv(String orgId, MultipartFile file) {
+    public Either<Problem, List<CostCenterView>> createCostCenterFromCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, CostCenterUpdate.class).fold(
                 Either::left,
                 costCenterUpdates -> Either.right(costCenterUpdates.stream().map(costCenterUpdate -> insertCostCenter(orgId, costCenterUpdate)).toList())

@@ -88,7 +88,9 @@ public class Organisation extends CommonEntity implements Persistable<String> {
     private String logo;
 
     public static String id(String countryCode, String taxIdNumber) {
-        return digestAsHex(STR."\{countryCode}::\{taxIdNumber}");
+        return digestAsHex("%s::%s".formatted(
+                countryCode, taxIdNumber
+        ));
     }
 
     public boolean isPreApproveTransactionsEnabled() {

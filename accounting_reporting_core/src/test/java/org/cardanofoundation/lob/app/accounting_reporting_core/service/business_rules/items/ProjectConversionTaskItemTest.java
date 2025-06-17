@@ -18,11 +18,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 
 @ExtendWith(MockitoExtension.class)
 public class ProjectConversionTaskItemTest {
@@ -39,7 +38,7 @@ public class ProjectConversionTaskItemTest {
 
     @Test
     public void testProjectFoundConversionSucceeds() {
-        val project = Project.builder().customerCode("cust_code1").build();
+        val project = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project.builder().customerCode("cust_code1").build();
 
         val txItem = new TransactionItemEntity();
         txItem.setId("1:0");
@@ -57,7 +56,7 @@ public class ProjectConversionTaskItemTest {
         transaction.setItems(items);
 
         when(organisationPublicApiIF.findProject("1", "cust_code1"))
-                .thenReturn(Optional.of(new OrganisationProject(new OrganisationProject.Id("1", "cust_code1"), "ext_cust_code1", "name1", null, null)));
+                .thenReturn(Optional.of(new Project(new Project.Id("1", "cust_code1"), "ext_cust_code1", "name1", null, null)));
 
         projectConversionTaskItem.run(transaction);
 
@@ -91,7 +90,7 @@ public class ProjectConversionTaskItemTest {
 
     @Test
     public void testMissingProjectResultsInViolationCreation() {
-        val project = Project.builder().customerCode("cust_code1").build();
+        val project = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project.builder().customerCode("cust_code1").build();
 
         val txItem = new TransactionItemEntity();
         txItem.setId("1:0");

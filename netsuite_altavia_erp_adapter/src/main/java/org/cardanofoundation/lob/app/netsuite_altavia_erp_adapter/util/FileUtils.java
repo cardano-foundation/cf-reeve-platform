@@ -5,19 +5,18 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 @Slf4j
 public class FileUtils {
 
     public static void writeTmpFile(String prefix, String content, String suffix) {
-        val filePath = STR."/tmp/\{prefix}-\{System.currentTimeMillis()}.\{suffix}";
+        String filePath = "/tmp/%s-%s.%s".formatted(prefix, System.currentTimeMillis(), suffix);
 
-        try (val writer = new BufferedWriter(new FileWriter(filePath))) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
             writer.write(content);
 
         } catch (IOException e) {
-            log.error(STR."An error occurred while writing to the file: \{e.getMessage()}");
+            log.error("An error occurred while writing to the file: {}", e.getMessage());
         }
     }
 

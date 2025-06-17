@@ -6,12 +6,12 @@ import lombok.Getter;
 
 import org.zalando.problem.Problem;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 
 @Getter
 @Builder
 @AllArgsConstructor
-public class OrganisationProjectView {
+public class ProjectView {
 
     private String customerCode;
 
@@ -19,23 +19,23 @@ public class OrganisationProjectView {
 
     private String name;
 
-    private OrganisationProjectView parentCustomerCode;
+    private ProjectView parentCustomerCode;
 
     private Problem error;
 
-    public static OrganisationProjectView fromEntity(OrganisationProject costCenter) {
-        OrganisationProjectView.OrganisationProjectViewBuilder builder = OrganisationProjectView.builder()
+    public static ProjectView fromEntity(Project costCenter) {
+        ProjectView.ProjectViewBuilder builder = ProjectView.builder()
                 .customerCode(costCenter.getId() == null ? null : costCenter.getId().getCustomerCode())
                 .externalCustomerCode(costCenter.getExternalCustomerCode())
                 .name(costCenter.getName());
         if (costCenter.getParent().isPresent()) {
-            builder.parentCustomerCode(OrganisationProjectView.fromEntity(costCenter.getParent().get()));
+            builder.parentCustomerCode(ProjectView.fromEntity(costCenter.getParent().get()));
         }
         return builder.build();
     }
 
-    public static OrganisationProjectView createFail(String customerCode, Problem error) {
-        return OrganisationProjectView.builder()
+    public static ProjectView createFail(String customerCode, Problem error) {
+        return ProjectView.builder()
                 .customerCode(customerCode)
                 .error(error)
                 .build();

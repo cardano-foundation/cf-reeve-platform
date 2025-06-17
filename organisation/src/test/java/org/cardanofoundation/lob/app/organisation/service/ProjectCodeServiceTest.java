@@ -21,8 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationProjectView;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
+import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
@@ -39,13 +39,13 @@ class ProjectCodeServiceTest {
 
     private final String organisationId = "org123";
     private final String customerCode = "cust001";
-    private OrganisationProject.Id projectId;
-    private OrganisationProject project;
+    private Project.Id projectId;
+    private Project project;
 
     @BeforeEach
     void setUp() {
-        projectId = new OrganisationProject.Id(organisationId, customerCode);
-        project = OrganisationProject.builder()
+        projectId = new Project.Id(organisationId, customerCode);
+        project = Project.builder()
                 .id(projectId)
                 .name("Test Project")
                 .build();
@@ -55,7 +55,7 @@ class ProjectCodeServiceTest {
     void testGetProject_Found() {
         when(projectMappingRepository.findById(projectId)).thenReturn(Optional.of(project));
 
-        Optional<OrganisationProject> result = projectCodeService.getProject(organisationId, customerCode);
+        Optional<Project> result = projectCodeService.getProject(organisationId, customerCode);
 
         assertTrue(result.isPresent());
         assertEquals(project, result.get());
@@ -64,9 +64,9 @@ class ProjectCodeServiceTest {
 
     @Test
     void testGetAllProjects() {
-        Set<OrganisationProject> projects = new HashSet<>();
+        Set<Project> projects = new HashSet<>();
         when(projectMappingRepository.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0")).thenReturn(projects);
-        Set<OrganisationProject> result = projectCodeService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
+        Set<Project> result = projectCodeService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
         assertEquals(projects, result);
         verify(projectMappingRepository).findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
         verifyNoMoreInteractions(projectMappingRepository);
@@ -76,7 +76,7 @@ class ProjectCodeServiceTest {
     void testGetProject_NotFound() {
         when(projectMappingRepository.findById(projectId)).thenReturn(Optional.empty());
 
-        Optional<OrganisationProject> result = projectCodeService.getProject(organisationId, customerCode);
+        Optional<Project> result = projectCodeService.getProject(organisationId, customerCode);
 
         assertFalse(result.isPresent());
         verify(projectMappingRepository).findById(projectId);
@@ -85,14 +85,14 @@ class ProjectCodeServiceTest {
     @Test
     void insertProject_AlreadyExists() {
         ProjectUpdate update = mock(ProjectUpdate.class);
-        OrganisationProject organisationProject = mock(OrganisationProject.class);
+        Project project = mock(Project.class);
 
         when(update.getCustomerCode()).thenReturn(customerCode);
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, customerCode))).thenReturn(Optional.of(organisationProject));
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
 
-        OrganisationProjectView organisationProjectView = projectCodeService.insertProject(organisationId, update);
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update);
 
-        assertEquals("PROJECT_CODE_ALREADY_EXISTS", organisationProjectView.getError().getTitle());
+        assertEquals("PROJECT_CODE_ALREADY_EXISTS", projectView.getError().getTitle());
     }
 
     @Test
@@ -100,43 +100,43 @@ class ProjectCodeServiceTest {
         ProjectUpdate update = mock(ProjectUpdate.class);
         when(update.getCustomerCode()).thenReturn(customerCode);
         when(update.getParentCustomerCode()).thenReturn("parentCode");
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, customerCode))).thenReturn(Optional.empty());
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, "parentCode"))).thenReturn(Optional.empty());
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.empty());
+        when(projectMappingRepository.findById(new Project.Id(organisationId, "parentCode"))).thenReturn(Optional.empty());
 
-        OrganisationProjectView organisationProjectView = projectCodeService.insertProject(organisationId, update);
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update);
 
-        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", organisationProjectView.getError().getTitle());
+        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", projectView.getError().getTitle());
     }
 
     @Test
     void insertProject_success() {
         ProjectUpdate update = mock(ProjectUpdate.class);
-        OrganisationProject parent = mock(OrganisationProject.class);
+        Project parent = mock(Project.class);
         when(update.getCustomerCode()).thenReturn(customerCode);
         when(update.getParentCustomerCode()).thenReturn("parentCode");
 
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, customerCode))).thenReturn(Optional.empty());
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, "parentCode"))).thenReturn(Optional.of(parent));
-        when(parent.getId()).thenReturn(new OrganisationProject.Id(organisationId, "parentCode"));
-        when(projectMappingRepository.save(any(OrganisationProject.class))).thenReturn(project);
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.empty());
+        when(projectMappingRepository.findById(new Project.Id(organisationId, "parentCode"))).thenReturn(Optional.of(parent));
+        when(parent.getId()).thenReturn(new Project.Id(organisationId, "parentCode"));
+        when(projectMappingRepository.save(any(Project.class))).thenReturn(project);
 
-        OrganisationProjectView organisationProjectView = projectCodeService.insertProject(organisationId, update);
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update);
 
-        assertEquals(customerCode, organisationProjectView.getCustomerCode());
-        assertNull(organisationProjectView.getError());
-        assertEquals("Test Project", organisationProjectView.getName());
-        verify(projectMappingRepository).save(any(OrganisationProject.class));
+        assertEquals(customerCode, projectView.getCustomerCode());
+        assertNull(projectView.getError());
+        assertEquals("Test Project", projectView.getName());
+        verify(projectMappingRepository).save(any(Project.class));
     }
 
     @Test
     void updateProject_NotFound() {
         ProjectUpdate update = mock(ProjectUpdate.class);
         when(update.getCustomerCode()).thenReturn(customerCode);
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, customerCode))).thenReturn(Optional.empty());
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.empty());
 
-        OrganisationProjectView organisationProjectView = projectCodeService.updateProject(organisationId, update);
+        ProjectView projectView = projectCodeService.updateProject(organisationId, update);
 
-        assertEquals("PROJECT_CODE_NOT_FOUND", organisationProjectView.getError().getTitle());
+        assertEquals("PROJECT_CODE_NOT_FOUND", projectView.getError().getTitle());
     }
 
     @Test
@@ -144,31 +144,31 @@ class ProjectCodeServiceTest {
         ProjectUpdate update = mock(ProjectUpdate.class);
         when(update.getCustomerCode()).thenReturn(customerCode);
         when(update.getParentCustomerCode()).thenReturn("parentCode");
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, "parentCode"))).thenReturn(Optional.empty());
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
+        when(projectMappingRepository.findById(new Project.Id(organisationId, "parentCode"))).thenReturn(Optional.empty());
 
-        OrganisationProjectView organisationProjectView = projectCodeService.updateProject(organisationId, update);
+        ProjectView projectView = projectCodeService.updateProject(organisationId, update);
 
-        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", organisationProjectView.getError().getTitle());
+        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", projectView.getError().getTitle());
     }
 
     @Test
     void updateProject_success() {
         ProjectUpdate update = mock(ProjectUpdate.class);
-        OrganisationProject parent = mock(OrganisationProject.class);
+        Project parent = mock(Project.class);
         when(update.getCustomerCode()).thenReturn(customerCode);
         when(update.getParentCustomerCode()).thenReturn("parentCode");
 
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
-        when(projectMappingRepository.findById(new OrganisationProject.Id(organisationId, "parentCode"))).thenReturn(Optional.of(parent));
-        when(parent.getId()).thenReturn(new OrganisationProject.Id(organisationId, "parentCode"));
-        when(projectMappingRepository.save(any(OrganisationProject.class))).thenReturn(project);
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
+        when(projectMappingRepository.findById(new Project.Id(organisationId, "parentCode"))).thenReturn(Optional.of(parent));
+        when(parent.getId()).thenReturn(new Project.Id(organisationId, "parentCode"));
+        when(projectMappingRepository.save(any(Project.class))).thenReturn(project);
 
-        OrganisationProjectView organisationProjectView = projectCodeService.updateProject(organisationId, update);
+        ProjectView projectView = projectCodeService.updateProject(organisationId, update);
 
-        assertEquals(customerCode, organisationProjectView.getCustomerCode());
-        assertNull(organisationProjectView.getError());
-        verify(projectMappingRepository).save(any(OrganisationProject.class));
+        assertEquals(customerCode, projectView.getCustomerCode());
+        assertNull(projectView.getError());
+        verify(projectMappingRepository).save(any(Project.class));
     }
 
     @Test
@@ -177,7 +177,7 @@ class ProjectCodeServiceTest {
 
         when(csvParser.parseCsv(file, ProjectUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("CSV_PARSE_ERROR").build()));
 
-        Either<Problem, List<OrganisationProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
+        Either<Problem, List<ProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
 
         assertTrue(result.isLeft());
         assertEquals("CSV_PARSE_ERROR", result.getLeft().getTitle());

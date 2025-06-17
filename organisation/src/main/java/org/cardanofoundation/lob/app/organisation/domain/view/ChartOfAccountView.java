@@ -9,14 +9,14 @@ import lombok.Getter;
 
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OpeningBalance;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 
 
 @Getter
 @Builder
 @AllArgsConstructor
-public class OrganisationChartOfAccountView {
+public class ChartOfAccountView {
 
     private String customerCode;
 
@@ -42,10 +42,10 @@ public class OrganisationChartOfAccountView {
 
     private Optional<Problem> error;
 
-    public static OrganisationChartOfAccountView createSuccess(OrganisationChartOfAccount chartOfAccount) {
+    public static ChartOfAccountView createSuccess(ChartOfAccount chartOfAccount) {
 
         if (chartOfAccount.getSubType() != null) {
-            return OrganisationChartOfAccountView.builder()
+            return ChartOfAccountView.builder()
                     .customerCode(chartOfAccount.getId().getCustomerCode())
                     .eventRefCode(chartOfAccount.getEventRefCode())
                     .refCode(chartOfAccount.getRefCode())
@@ -61,7 +61,7 @@ public class OrganisationChartOfAccountView {
                     .build();
         }
 
-        return OrganisationChartOfAccountView.builder()
+        return ChartOfAccountView.builder()
                 .customerCode(chartOfAccount.getId().getCustomerCode())
                 .eventRefCode(chartOfAccount.getEventRefCode())
                 .refCode(chartOfAccount.getRefCode())
@@ -76,8 +76,8 @@ public class OrganisationChartOfAccountView {
                 .build();
     }
 
-    public static OrganisationChartOfAccountView createFail(Problem error, String customerCode) {
-        return OrganisationChartOfAccountView.builder()
+    public static ChartOfAccountView createFail(Problem error, String customerCode) {
+        return ChartOfAccountView.builder()
                 .customerCode(customerCode)
                 //.name(error.getTitle())
                 //.subType(chartOfAccount.getSubType().getId())

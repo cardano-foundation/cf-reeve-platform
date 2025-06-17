@@ -43,10 +43,12 @@ public class CoreCurrency {
 
     public String toExternalId() {
         if (isoUniqueId.isEmpty()) {
-            return STR."\{currencyISOStandard}:\{currencyISOCode}";
+            return "%s:%s".formatted(currencyISOStandard, currencyISOCode);
         }
 
-        return STR."\{currencyISOStandard}:\{currencyISOCode}:\{isoUniqueId.orElseThrow()}";
+        return "%s:%s:%s".formatted(
+                currencyISOStandard, currencyISOCode, isoUniqueId.orElseThrow()
+        );
     }
 
     public enum IsoStandard {

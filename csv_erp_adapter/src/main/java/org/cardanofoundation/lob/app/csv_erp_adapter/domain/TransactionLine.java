@@ -58,14 +58,10 @@ public class TransactionLine {
     @CsvBindByName(column = "VAT Code")
     private String vatCode;
 
-//    private String costCenterNumber;
-//    private String costCenterName;
-//    private String projectNumber;
-//    private String projectName;
-//    private String documentNumber;
-//    private String currency;
-//    private String vatRate;
-//    private String vatCode;
-//    private String vendorNumber;
-//    private String vendorName;
+    @CsvBindByName(column = "Cost Center Code")
+    private String costCenterCode;
+    @CsvBindByName(column = "Counterparty Code")
+    private String counterPartyCode;
+    @CsvBindByName(column = "CounterpartyName")
+    private String counterPartyName;
 }

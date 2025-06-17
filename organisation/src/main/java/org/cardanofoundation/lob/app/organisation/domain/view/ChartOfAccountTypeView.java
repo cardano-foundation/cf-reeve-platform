@@ -12,7 +12,7 @@ import lombok.Getter;
 @Getter
 @Builder
 @AllArgsConstructor
-public class OrganisationChartOfAccountTypeView {
+public class ChartOfAccountTypeView {
 
     private Long id;
 
@@ -21,6 +21,6 @@ public class OrganisationChartOfAccountTypeView {
     private String name;
 
     @Builder.Default
-    private Set<OrganisationChartOfAccountSubTypeView> subType = new LinkedHashSet<>();
+    private Set<ChartOfAccountSubTypeView> subType = new LinkedHashSet<>();
 
 }

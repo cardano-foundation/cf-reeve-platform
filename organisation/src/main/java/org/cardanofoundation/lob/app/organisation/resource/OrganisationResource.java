@@ -35,6 +35,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCre
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
+import org.cardanofoundation.lob.app.organisation.util.Constants;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -50,14 +51,13 @@ public class OrganisationResource {
 
     @Operation(description = "Organisations",
             parameters = {
-            @Parameter(
-                    name = "orgIds",
-                    description = "Optional list of organisation IDs",
-                    in = ParameterIn.QUERY,
-                    required = false,
-                    array = @ArraySchema(schema = @Schema(type = "string"))
-            )
-        }, responses = {
+                    @Parameter(
+                            name = "orgIds",
+                            description = "Optional list of organisation IDs",
+                            in = ParameterIn.QUERY,
+                            array = @ArraySchema(schema = @Schema(type = "string"))
+                    )
+            }, responses = {
             @ApiResponse(content =
                     {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = OrganisationView.class)))}
             ),
@@ -78,19 +78,23 @@ public class OrganisationResource {
             @ApiResponse(content =
                     {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = OrganisationView.class))}
             ),
-            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(example = "{\n" +
-                    "    \"title\": \"Organisation not found\",\n" +
-                    "    \"status\": 404,\n" +
-                    "    \"detail\": \"Unable to get the organisation\"\n" +
-                    "}"))})
+            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(example =
+                    """
+                            {
+                            "title": "Organisation not found",
+                            "status": 404,
+                            "detail": "Unable to get the organisation"
+                            }
+                            """
+            ))})
     })
     @GetMapping(value = "/organisations/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> organisationDetailSpecific(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         Optional<OrganisationView> organisation = organisationService.findById(orgId).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build();
 
@@ -102,14 +106,14 @@ public class OrganisationResource {
 
     @Operation(description = "Organisation Events", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationEventView.class)))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = EventView.class)))}
             ),
     })
     @GetMapping(value = "/organisations/{orgId}/events", produces = "application/json")
-    public ResponseEntity<List<OrganisationEventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<List<EventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 organisationService.getOrganisationEventCode(orgId).stream().map(accountEvent -> {
-                    return new OrganisationEventView(
+                    return new EventView(
                             accountEvent.getCustomerCode(),
                             accountEvent.getId().getOrganisationId(),
                             accountEvent.getName()
@@ -122,11 +126,15 @@ public class OrganisationResource {
             @ApiResponse(content =
                     {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = OrganisationView.class))}
             ),
-            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(example = "{\n" +
-                    "    \"title\": \"ORGANISATION_ALREADY_EXIST\",\n" +
-                    "    \"status\": 404,\n" +
-                    "    \"detail\": \"Unable to crate Organisation with IdNumber\"\n" +
-                    "}"))})
+            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(example =
+                    """
+                            {
+                            "title": "ORGANISATION_ALREADY_EXIST",
+                            "status": 404,
+                            "detail": "Unable to crate Organisation with IdNumber"
+                            }
+                            """
+            ))})
     })
     @PostMapping(value = "/organisations", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
@@ -136,7 +144,7 @@ public class OrganisationResource {
         if (organisationChe.isPresent()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_ALREADY_EXIST")
-                    .withDetail(STR."Unable to crate Organisation with IdNumber: \{organisationCreate.getTaxIdNumber()} and CountryCode: \{organisationCreate.getCountryCode()}")
+                    .withDetail("Unable to crate Organisation with IdNumber: %s and CountryCode: %s".formatted(organisationCreate.getTaxIdNumber(), organisationCreate.getCountryCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build();
 
@@ -147,7 +155,7 @@ public class OrganisationResource {
         if (organisation.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_CREATE_ERROR")
-                    .withDetail(STR."Unable to create Organisation by Id: \{organisationCreate.getName()}")
+                    .withDetail("Unable to create Organisation by Id: %s".formatted(organisationCreate.getName()))
                     .withStatus(Status.NOT_FOUND)
                     .build();
 
@@ -163,16 +171,24 @@ public class OrganisationResource {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationView.class))}
             ),
-            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = "application/json", schema = @Schema(example = "{\n" +
-                    "    \"title\": \"Organisation not found\",\n" +
-                    "    \"status\": 404,\n" +
-                    "    \"detail\": \"Unable to get the organisation\"\n" +
-                    "}"))}),
-            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = "application/json", schema = @Schema(example = "{\n" +
-                    "    \"title\": \"ORGANISATION_UPDATE_ERROR\",\n" +
-                    "    \"status\": 404,\n" +
-                    "    \"detail\": \"Unable to create Organisation\"\n" +
-                    "}"))})
+            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = "application/json", schema = @Schema(example =
+                    """
+                            {
+                            "title": "Organisation not found",
+                            "status": 404,
+                            "detail": "Unable to get the organisation"
+                            }
+                            """
+            ))}),
+            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = "application/json", schema = @Schema(example =
+                    """
+                            {
+                            "title": "ORGANISATION_UPDATE_ERROR",
+                            "status": 404,
+                            "detail": "Unable to create Organisation"
+                            }
+                            """
+            ))})
     })
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @PutMapping(value = "/organisations/{orgId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
@@ -180,8 +196,8 @@ public class OrganisationResource {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build();
 
@@ -192,7 +208,7 @@ public class OrganisationResource {
         if (organisation.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_UPDATE_ERROR")
-                    .withDetail(STR."Unable to create Organisation by Id: \{organisationUpdate.getName()}")
+                    .withDetail("Unable to create Organisation by Id: %s".formatted(organisationUpdate.getName()))
                     .withStatus(Status.NOT_FOUND)
                     .build();
 
@@ -206,23 +222,27 @@ public class OrganisationResource {
 
     @Operation(description = "Organisation validation", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = OrganisationValidationView.class))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ValidationView.class))}
             ),
-            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(example = "{\n" +
-                    "    \"title\": \"Organisation not found\",\n" +
-                    "    \"status\": 404,\n" +
-                    "    \"detail\": \"Unable to get the organisation\"\n" +
-                    "}"))})
+            @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = "application/json", schema = @Schema(example =
+                    """
+                            {
+                            "title: "Organisation not found",
+                            "status": 404,
+                            "detail": "Unable to find Organisation by Id"
+                            }
+                            """
+            ))})
     })
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     @GetMapping(value = "/organisations/{orgId}/validate", produces = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> validateOrganisation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String orgId) {
-        if(keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+        if (keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             Optional<Organisation> organisationOptional = organisationService.findById(orgId);
-            if(organisationOptional.isEmpty()) {
+            if (organisationOptional.isEmpty()) {
                 ThrowableProblem issue = Problem.builder()
-                        .withTitle("ORGANISATION_NOT_FOUND")
-                        .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                        .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                        .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
                         .withStatus(Status.NOT_FOUND)
                         .build();
 

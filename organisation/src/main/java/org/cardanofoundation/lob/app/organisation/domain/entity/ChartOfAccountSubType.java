@@ -20,7 +20,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Audited
 @Builder
 @EntityListeners({AuditingEntityListener.class})
-public class OrganisationChartOfAccountSubType extends CommonEntity {
+public class ChartOfAccountSubType extends CommonEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,7 +34,7 @@ public class OrganisationChartOfAccountSubType extends CommonEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "type", referencedColumnName = "id")
-    private OrganisationChartOfAccountType type;
+    private ChartOfAccountType type;
 
 
 }

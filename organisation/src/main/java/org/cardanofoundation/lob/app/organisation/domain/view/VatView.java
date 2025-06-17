@@ -15,7 +15,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
 @Getter
 @Builder
 @AllArgsConstructor
-public class OrganisationVatView {
+public class VatView {
 
     private String organisationId;
     private String customerCode;
@@ -31,8 +31,8 @@ public class OrganisationVatView {
     }
 
 
-    public static OrganisationVatView convertFromEntity(OrganisationVat organisationVat) {
-        return OrganisationVatView.builder()
+    public static VatView convertFromEntity(OrganisationVat organisationVat) {
+        return VatView.builder()
                 .customerCode(organisationVat.getId().getCustomerCode())
                 .organisationId(organisationVat.getId().getOrganisationId())
                 .rate(organisationVat.getRate().toString())
@@ -42,8 +42,8 @@ public class OrganisationVatView {
                 .build();
     }
 
-    public static OrganisationVatView createFail(String customerCode, Problem error) {
-        return OrganisationVatView.builder()
+    public static VatView createFail(String customerCode, Problem error) {
+        return VatView.builder()
                 .customerCode(customerCode)
                 //.name(error.getTitle())
                 //.subType(chartOfAccount.getSubType().getId())

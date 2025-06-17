@@ -11,15 +11,15 @@ import com.opencsv.bean.CsvBindByName;
 @RequiredArgsConstructor
 public class CostCenterUpdate {
 
-    @CsvBindByName(column = "customer code", required = true)
+    @CsvBindByName(column = "Customer code", required = true)
     private String customerCode;
-    @CsvBindByName(column = "external customer code", required = true)
+    @CsvBindByName(column = "external customer code")
     private String externalCustomerCode;
-    @CsvBindByName(column = "name", required = true)
+    @CsvBindByName(column = "Name", required = true)
     private String name;
-    @CsvBindByName(column = "parent customer code")
+    @CsvBindByName(column = "Parent customer code")
     private String parentCustomerCode;
-    @CsvBindByName(column = "active")
+    @CsvBindByName(column = "Active")
     private boolean active = true;
 
 }

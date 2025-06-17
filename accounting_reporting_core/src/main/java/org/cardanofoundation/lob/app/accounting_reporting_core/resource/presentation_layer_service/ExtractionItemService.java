@@ -22,8 +22,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 
 @Service
 @Slf4j
@@ -53,8 +53,8 @@ public class ExtractionItemService {
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
-        Optional<OrganisationCostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null));
-        Optional<OrganisationProject> project = organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(), item.getProject().map(Project::getCustomerCode).orElse(null));
+        Optional<CostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(null));
+        Optional<Project> project = organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(null));
         return new ExtractionTransactionItemView(
                 item.getId(),
                 item.getTransaction().getTransactionInternalNumber(),
@@ -72,12 +72,12 @@ public class ExtractionItemService {
                 item.getAmountFcy(),
                 item.getAmountLcy(),
                 item.getFxRate(),
-                item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null),
-                item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(null),
-                item.getCostCenter().flatMap(CostCenter::getName).orElse(null),
-                item.getProject().map(Project::getCustomerCode).orElse(null),
-                item.getProject().flatMap(Project::getName).orElse(null),
-                item.getProject().flatMap(Project::getExternalCustomerCode).orElse(null),
+                item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(null),
+                item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getExternalCustomerCode).orElse(null),
+                item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getName).orElse(null),
+                item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(null),
+                item.getProject().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getName).orElse(null),
+                item.getProject().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getExternalCustomerCode).orElse(null),
                 item.getAccountEvent().map(AccountEvent::getCode).orElse(null),
                 item.getAccountEvent().map(AccountEvent::getName).orElse(null),
                 item.getDocument().map(Document::getNum).orElse(null),
@@ -88,7 +88,7 @@ public class ExtractionItemService {
                 item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).map(Object::toString).orElse(null) : null,
                 item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(null),
                 item.getRejection().map(Rejection::getRejectionReason).orElse(null),
-                costCenter.map(OrganisationCostCenter::getParentCustomerCode).orElse(null),
+                costCenter.map(CostCenter::getParentCustomerCode).orElse(null),
                 costCenter.flatMap(organisationCostCenter -> organisationCostCenter.getParent()).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.getExternalCustomerCode())).orElse(null),
                 costCenter.flatMap(organisationCostCenter -> organisationCostCenter.getParent()).flatMap(parentCostCenter -> Optional.ofNullable(parentCostCenter.getName())).orElse(null),
                 project.flatMap(organisationProject -> organisationProject.getParent()).flatMap(parentProject -> Optional.ofNullable(parentProject.getId().getCustomerCode())).orElse(null),

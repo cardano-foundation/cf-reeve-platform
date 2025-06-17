@@ -23,8 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationProjectView;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
+import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,10 +39,10 @@ class ProjectCodeControllerTest {
     @Test
     void getAllProjects() {
         // Mock the service call
-        when(projectCodeService.getAllProjects("org123")).thenReturn(Set.of(mock(OrganisationProject.class)));
+        when(projectCodeService.getAllProjects("org123")).thenReturn(Set.of(mock(Project.class)));
 
         // Call the controller method
-        ResponseEntity<Set<OrganisationProjectView>> response = projectCodeController.getAllProjects("org123");
+        ResponseEntity<Set<ProjectView>> response = projectCodeController.getAllProjects("org123");
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
@@ -52,13 +52,13 @@ class ProjectCodeControllerTest {
 
     @Test
     void insertProject() {
-        OrganisationProjectView projectView = mock(OrganisationProjectView.class);
+        ProjectView projectView = mock(ProjectView.class);
         ProjectUpdate projectUpdate = mock(ProjectUpdate.class);
         // Mock the service call
         when(projectCodeService.insertProject("org123", projectUpdate)).thenReturn(projectView);
 
         // Call the controller method
-        ResponseEntity<OrganisationProjectView> response = projectCodeController.insertProject("org123", projectUpdate);
+        ResponseEntity<ProjectView> response = projectCodeController.insertProject("org123", projectUpdate);
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
@@ -68,13 +68,13 @@ class ProjectCodeControllerTest {
 
     @Test
     void updateProject() {
-        OrganisationProjectView projectView = mock(OrganisationProjectView.class);
+        ProjectView projectView = mock(ProjectView.class);
         ProjectUpdate projectUpdate = mock(ProjectUpdate.class);
         // Mock the service call
         when(projectCodeService.updateProject("org123", projectUpdate)).thenReturn(projectView);
 
         // Call the controller method
-        ResponseEntity<OrganisationProjectView> response = projectCodeController.updateProject("org123", projectUpdate);
+        ResponseEntity<ProjectView> response = projectCodeController.updateProject("org123", projectUpdate);
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
@@ -99,7 +99,7 @@ class ProjectCodeControllerTest {
     @Test
     void insertProjectCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
-        OrganisationProjectView projectView = mock(OrganisationProjectView.class);
+        ProjectView projectView = mock(ProjectView.class);
 
         // Mock the service call
         when(projectCodeService.createProjectCodeFromCsv("org123", file)).thenReturn(Either.right(List.of(projectView)));

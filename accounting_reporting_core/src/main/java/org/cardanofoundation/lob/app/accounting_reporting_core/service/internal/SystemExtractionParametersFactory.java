@@ -31,7 +31,7 @@ public class SystemExtractionParametersFactory {
 
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Organisation not found for id: \{organisationId}")
+                    .withDetail("Organisation not found for id: %s".formatted(organisationId))
                     .build();
 
             return Either.left(issue);

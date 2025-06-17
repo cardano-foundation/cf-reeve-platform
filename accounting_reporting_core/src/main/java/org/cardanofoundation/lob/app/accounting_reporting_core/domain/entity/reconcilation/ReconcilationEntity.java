@@ -146,7 +146,8 @@ public class ReconcilationEntity extends CommonEntity implements Persistable<Str
 
     @Override
     public String toString() {
-        return STR."ReconcilationEntity{id='\{id}\{'\''}, createdBy='\{createdBy}\{'\''}, updatedBy='\{updatedBy}\{'\''}, createdAt=\{createdAt}, updatedAt=\{updatedAt}\{'}'}";
+        return "ReconcilationEntity{id='%s', createdBy='%s', updatedBy='%s', createdAt=%s, updatedAt=%s}"
+                .formatted(id, createdBy, updatedBy, createdAt, updatedAt);
     }
 
 }

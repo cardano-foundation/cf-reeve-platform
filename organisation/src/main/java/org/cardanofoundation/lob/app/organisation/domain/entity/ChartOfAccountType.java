@@ -24,7 +24,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Audited
 @Builder
 @EntityListeners({AuditingEntityListener.class})
-public class OrganisationChartOfAccountType extends CommonEntity {
+public class ChartOfAccountType extends CommonEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,7 +38,7 @@ public class OrganisationChartOfAccountType extends CommonEntity {
 
     @OneToMany(mappedBy = "type", orphanRemoval = true, fetch = LAZY, cascade = CascadeType.ALL)
     @Builder.Default
-    private Set<OrganisationChartOfAccountSubType> subTypes = new LinkedHashSet<>();
+    private Set<ChartOfAccountSubType> subTypes = new LinkedHashSet<>();
 
 
 }

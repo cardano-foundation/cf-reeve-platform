@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
 
@@ -32,6 +33,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.ThrowableProblem;
 
@@ -41,6 +43,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -48,10 +52,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
+// TODO Should this endpoint be only accessible for registered users? If so, we should add the @PreAuthorize("authenticated()") annotation
 public class AccountingCoreResource {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final ObjectMapper objectMapper;
+    private final OrganisationPublicApi organisationPublicApi;
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Transaction list", responses = {
@@ -120,6 +126,74 @@ public class AccountingCoreResource {
     public ResponseEntity<RejectionReason[]> rejectionReasons() {
         return ResponseEntity.ok().body(RejectionReason.values());
     }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @PostMapping(value = "/extraction", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+    @Operation(description = "Trigger the extraction from the ERP system(s)", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
+                    responseCode = "202"
+            )
+    })
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> extractionTrigger(@Valid @RequestBody ExtractionRequest body) {
+        return handleExtraction(body);
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @PostMapping(value = "/extraction", consumes = MULTIPART_FORM_DATA_VALUE, produces = APPLICATION_JSON_VALUE)
+    @Operation(description = "Trigger the extraction from the ERP system(s)", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
+                    responseCode = "202"
+            )
+    })
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> uploadFile(@ModelAttribute ExtractionRequest body) {
+        return handleExtraction(body);
+    }
+
+    private ResponseEntity<?> handleExtraction(ExtractionRequest body) {
+        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(body.getOrganisationId());
+
+        if (orgM.isEmpty()) {
+            ThrowableProblem issue = Problem.builder()
+                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(body.getOrganisationId()))
+                    .withStatus(NOT_FOUND)
+                    .build();
+
+            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+        }
+
+        Organisation org = orgM.orElseThrow();
+
+        Either<Problem, Void> extractionResultE = accountingCorePresentationService.extractionTrigger(body);
+
+        return extractionResultE.fold(
+                problem -> {
+                    return ResponseEntity
+                            .status(problem.getStatus().getStatusCode())
+                            .body(problem);
+                },
+                success -> {
+                    log.info("Extraction triggered successfully for organisation: {}", org.getId());
+
+                    ObjectNode response = objectMapper.createObjectNode();
+
+                    response.put("event", "EXTRACTION");
+                    response.put("message", "We have received your extraction request now. Please review imported transactions from the batch list.");
+
+                    return ResponseEntity
+                            .status(HttpStatusCode.valueOf(202))
+                            .body(response);
+                }
+        );
+    }
+
+
 
         @Tag(name = "Transactions", description = "Transactions Approval API")
     @PostMapping(value = "/transactions/approve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)

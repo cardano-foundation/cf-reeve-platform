@@ -59,9 +59,9 @@ public class OrganisationView {
     @Schema(example = "IE")
     private String countryCode;
 
-    private Set<OrganisationCostCenterView> costCenters;
+    private Set<CostCenterView> costCenters;
 
-    private Set<OrganisationProjectView> projects;
+    private Set<ProjectView> projects;
 
     private Set<String> organisationCurrencies;
 

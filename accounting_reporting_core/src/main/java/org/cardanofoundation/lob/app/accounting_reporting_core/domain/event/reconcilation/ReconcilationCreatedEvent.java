@@ -36,6 +36,7 @@ public class ReconcilationCreatedEvent {
     @NotNull
     private LocalDate to;
 
+    @Builder.Default
     private ExtractorType extractorType = ExtractorType.NETSUITE;
 
 }

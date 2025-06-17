@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.domain.entity;
 
+
 import java.util.Optional;
 
 import jakarta.persistence.*;
@@ -19,11 +20,11 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Entity
-@Table(name = "organisation_cost_center")
+@Table(name = "organisation_project")
 @Builder
 @Audited
 @EntityListeners({ AuditingEntityListener.class })
-public class OrganisationCostCenter extends CommonEntity implements Persistable<OrganisationCostCenter.Id> {
+public class Project extends CommonEntity implements Persistable<Project.Id> {
 
     @EmbeddedId
     @AttributeOverrides({
@@ -44,21 +45,13 @@ public class OrganisationCostCenter extends CommonEntity implements Persistable<
             @JoinColumn(name = "parent_customer_code", referencedColumnName = "customer_code", insertable = false, updatable = false)
     })
     @NotAudited
-    private OrganisationCostCenter parent;
+    private Project parent;
 
     @Column(name = "parent_customer_code")
     private String parentCustomerCode;
 
-    @Column(name = "active")
-    @Builder.Default
-    private boolean active = true;
-
-    public Optional<OrganisationCostCenter> getParent() {
+    public Optional<Project> getParent() {
         return Optional.ofNullable(parent);
-    }
-
-    public void setParentCustomerCode(Optional<String> parentCustomerCode) {
-        this.parentCustomerCode = parentCustomerCode.orElse(null);
     }
 
     @Embeddable

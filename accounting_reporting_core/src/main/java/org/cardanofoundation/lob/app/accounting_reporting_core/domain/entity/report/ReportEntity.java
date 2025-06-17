@@ -123,7 +123,6 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
             @AttributeOverride(name = "primaryBlockchainType", column = @Column(name = "primary_blockchain_type")),
             @AttributeOverride(name = "primaryBlockchainHash", column = @Column(name = "primary_blockchain_hash"))
     })
-    @Getter
     @Setter
     @Nullable
     private LedgerDispatchReceipt ledgerDispatchReceipt;

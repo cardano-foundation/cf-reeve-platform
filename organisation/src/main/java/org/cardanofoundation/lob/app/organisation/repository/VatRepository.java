@@ -8,7 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
 
-public interface OrganisationVatRepository extends JpaRepository<OrganisationVat, OrganisationVat.Id> {
+public interface VatRepository extends JpaRepository<OrganisationVat, OrganisationVat.Id> {
 
     @Query("SELECT t FROM OrganisationVat t WHERE t.id.organisationId = :organisationId")
     List<OrganisationVat> findAllByOrganisationId(@Param("organisationId") String organisationId);

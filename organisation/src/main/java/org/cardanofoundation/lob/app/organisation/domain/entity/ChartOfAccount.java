@@ -22,7 +22,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Audited
 @Builder
 @EntityListeners({AuditingEntityListener.class})
-public class OrganisationChartOfAccount extends CommonEntity implements Persistable<OrganisationChartOfAccount.Id> {
+public class ChartOfAccount extends CommonEntity implements Persistable<ChartOfAccount.Id> {
 
     @EmbeddedId
     @AttributeOverrides({
@@ -55,7 +55,7 @@ public class OrganisationChartOfAccount extends CommonEntity implements Persista
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "subType", referencedColumnName = "id")
-    private OrganisationChartOfAccountSubType subType;
+    private ChartOfAccountSubType subType;
 
     @Embedded
     @AttributeOverrides({

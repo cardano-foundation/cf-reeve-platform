@@ -34,10 +34,12 @@ public class ScheduledReconcilationEvent {
     @NotNull
     private LocalDate to;
 
+    @Builder.Default
     private ExtractorType extractorType = ExtractorType.NETSUITE;
 
     private byte[] file;
 
+    @Builder.Default
     private Map<String, Object> parameters = Map.of();
 
 }

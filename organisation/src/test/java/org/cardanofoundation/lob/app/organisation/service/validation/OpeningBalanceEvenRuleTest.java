@@ -19,9 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolation;
 import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolationType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OpeningBalance;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.service.validation.rules.OpeningBalanceEvenRule;
 
@@ -38,8 +38,8 @@ public class OpeningBalanceEvenRuleTest {
 
     @Test
     void validate_noViolations() {
-        OrganisationChartOfAccount chartOfAccount1 = mock(OrganisationChartOfAccount.class);
-        OrganisationChartOfAccount chartOfAccount2 = mock(OrganisationChartOfAccount.class);
+        ChartOfAccount chartOfAccount1 = mock(ChartOfAccount.class);
+        ChartOfAccount chartOfAccount2 = mock(ChartOfAccount.class);
         Organisation organisation = mock(Organisation.class);
 
         when(organisation.getId()).thenReturn(orgId);
@@ -67,8 +67,8 @@ public class OpeningBalanceEvenRuleTest {
 
     @Test
     void validate_fcyNotEqual() {
-        OrganisationChartOfAccount chartOfAccount1 = mock(OrganisationChartOfAccount.class);
-        OrganisationChartOfAccount chartOfAccount2 = mock(OrganisationChartOfAccount.class);
+        ChartOfAccount chartOfAccount1 = mock(ChartOfAccount.class);
+        ChartOfAccount chartOfAccount2 = mock(ChartOfAccount.class);
         Organisation organisation = mock(Organisation.class);
 
         when(organisation.getId()).thenReturn(orgId);
@@ -98,8 +98,8 @@ public class OpeningBalanceEvenRuleTest {
 
     @Test
     void validate_lcyNotEqual() {
-        OrganisationChartOfAccount chartOfAccount1 = mock(OrganisationChartOfAccount.class);
-        OrganisationChartOfAccount chartOfAccount2 = mock(OrganisationChartOfAccount.class);
+        ChartOfAccount chartOfAccount1 = mock(ChartOfAccount.class);
+        ChartOfAccount chartOfAccount2 = mock(ChartOfAccount.class);
         Organisation organisation = mock(Organisation.class);
 
         when(organisation.getId()).thenReturn(orgId);
@@ -129,8 +129,8 @@ public class OpeningBalanceEvenRuleTest {
 
     @Test
     void validate_bothNotEqual() {
-        OrganisationChartOfAccount chartOfAccount1 = mock(OrganisationChartOfAccount.class);
-        OrganisationChartOfAccount chartOfAccount2 = mock(OrganisationChartOfAccount.class);
+        ChartOfAccount chartOfAccount1 = mock(ChartOfAccount.class);
+        ChartOfAccount chartOfAccount2 = mock(ChartOfAccount.class);
         Organisation organisation = mock(Organisation.class);
 
         when(organisation.getId()).thenReturn(orgId);

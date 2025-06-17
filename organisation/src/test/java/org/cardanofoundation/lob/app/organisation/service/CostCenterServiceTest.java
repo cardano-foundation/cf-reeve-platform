@@ -20,8 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
@@ -38,13 +38,13 @@ class CostCenterServiceTest {
 
     private final String organisationId = "org123";
     private final String customerCode = "cust001";
-    private OrganisationCostCenter.Id costCenterId;
-    private OrganisationCostCenter costCenter;
+    private CostCenter.Id costCenterId;
+    private CostCenter costCenter;
 
     @BeforeEach
     void setUp() {
-        costCenterId = new OrganisationCostCenter.Id(organisationId, customerCode);
-        costCenter = OrganisationCostCenter.builder()
+        costCenterId = new CostCenter.Id(organisationId, customerCode);
+        costCenter = CostCenter.builder()
                 .id(costCenterId)
                 .name("Test Cost Center")
                 .build();
@@ -54,7 +54,7 @@ class CostCenterServiceTest {
     void testGetCostCenter_Found() {
         when(costCenterRepository.findById(costCenterId)).thenReturn(Optional.of(costCenter));
 
-        Optional<OrganisationCostCenter> result = costCenterService.getCostCenter(organisationId, customerCode);
+        Optional<CostCenter> result = costCenterService.getCostCenter(organisationId, customerCode);
 
         assertTrue(result.isPresent());
         assertEquals(costCenter, result.get());
@@ -65,7 +65,7 @@ class CostCenterServiceTest {
     void testGetCostCenter_NotFound() {
         when(costCenterRepository.findById(costCenterId)).thenReturn(Optional.empty());
 
-        Optional<OrganisationCostCenter> result = costCenterService.getCostCenter(organisationId, customerCode);
+        Optional<CostCenter> result = costCenterService.getCostCenter(organisationId, customerCode);
 
         assertFalse(result.isPresent());
         verify(costCenterRepository).findById(costCenterId);
@@ -73,10 +73,10 @@ class CostCenterServiceTest {
 
     @Test
     void testGetAllCostCenter() {
-        Set<OrganisationCostCenter> costCenters = Set.of(costCenter);
+        Set<CostCenter> costCenters = Set.of(costCenter);
         when(costCenterRepository.findAllByOrganisationId(organisationId)).thenReturn(costCenters);
 
-        Set<OrganisationCostCenter> result = costCenterService.getAllCostCenter(organisationId);
+        Set<CostCenter> result = costCenterService.getAllCostCenter(organisationId);
 
         assertNotNull(result);
         assertEquals(1, result.size());
@@ -89,13 +89,13 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customerCode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customerCode"))).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customerCode"))).thenReturn(Optional.empty());
 
-        OrganisationCostCenterView organisationCostCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
 
-        assertNotNull(organisationCostCenterView);
-        assertEquals("customerCode", organisationCostCenterView.getCustomerCode());
-        assertEquals("COST_CENTER_CODE_NOT_FOUND", organisationCostCenterView.getError().getTitle());
+        assertNotNull(costCenterView);
+        assertEquals("customerCode", costCenterView.getCustomerCode());
+        assertEquals("COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().getTitle());
     }
 
     @Test
@@ -103,34 +103,34 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentcode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "parentcode"))).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentcode"))).thenReturn(Optional.empty());
 
-        OrganisationCostCenterView organisationCostCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
 
-        assertNotNull(organisationCostCenterView);
-        assertEquals("customercode", organisationCostCenterView.getCustomerCode());
-        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", organisationCostCenterView.getError().getTitle());
+        assertNotNull(costCenterView);
+        assertEquals("customercode", costCenterView.getCustomerCode());
+        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().getTitle());
     }
 
     @Test
     void updateCostCenter_success() {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
-        OrganisationCostCenter parentMock = mock(OrganisationCostCenter.class);
+        CostCenter parentMock = mock(CostCenter.class);
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
         when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
-        OrganisationCostCenterView organisationCostCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
 
-        assertNotNull(organisationCostCenterView);
-        assertEquals(costCenter.getId().getCustomerCode(), organisationCostCenterView.getCustomerCode());
-        assertEquals(costCenter.getName(), organisationCostCenterView.getName());
+        assertNotNull(costCenterView);
+        assertEquals(costCenter.getId().getCustomerCode(), costCenterView.getCustomerCode());
+        assertEquals(costCenter.getName(), costCenterView.getName());
     }
 
     @Test
@@ -138,13 +138,13 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
 
-        OrganisationCostCenterView organisationCostCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
 
-        assertNotNull(organisationCostCenterView);
-        assertEquals("customercode", organisationCostCenterView.getCustomerCode());
-        assertEquals("COST_CENTER_CODE_ALREADY_EXISTS", organisationCostCenterView.getError().getTitle());
+        assertNotNull(costCenterView);
+        assertEquals("customercode", costCenterView.getCustomerCode());
+        assertEquals("COST_CENTER_CODE_ALREADY_EXISTS", costCenterView.getError().getTitle());
     }
 
     @Test
@@ -152,35 +152,35 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentcode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "parentcode"))).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentcode"))).thenReturn(Optional.empty());
 
-        OrganisationCostCenterView organisationCostCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
 
-        assertNotNull(organisationCostCenterView);
-        assertEquals("customercode", organisationCostCenterView.getCustomerCode());
-        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", organisationCostCenterView.getError().getTitle());
+        assertNotNull(costCenterView);
+        assertEquals("customercode", costCenterView.getCustomerCode());
+        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().getTitle());
     }
 
     @Test
     void insertCostCenter_success() {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
-        OrganisationCostCenter parentMock = mock(OrganisationCostCenter.class);
+        CostCenter parentMock = mock(CostCenter.class);
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
-        when(parentMock.getId()).thenReturn(new OrganisationCostCenter.Id(organisationId, "parentCustomerCode"));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
+        when(parentMock.getId()).thenReturn(new CostCenter.Id(organisationId, "parentCustomerCode"));
         when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
-        OrganisationCostCenterView organisationCostCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
 
-        assertNotNull(organisationCostCenterView);
-        assertEquals(costCenter.getId().getCustomerCode(), organisationCostCenterView.getCustomerCode());
-        assertEquals(costCenter.getName(), organisationCostCenterView.getName());
+        assertNotNull(costCenterView);
+        assertEquals(costCenter.getId().getCustomerCode(), costCenterView.getCustomerCode());
+        assertEquals(costCenter.getName(), costCenterView.getName());
     }
 
     @Test
@@ -188,7 +188,7 @@ class CostCenterServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("Parse Error").build()));
 
-        Either<Problem, List<OrganisationCostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
+        Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
         assertTrue(result.isLeft());
         assertEquals("Parse Error", result.getLeft().getTitle());
     }
@@ -198,7 +198,7 @@ class CostCenterServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
-        when(costCenterRepository.findById(new OrganisationCostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
         when(costCenterUpdate.getParentCustomerCode()).thenReturn(null);
         when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
@@ -206,7 +206,7 @@ class CostCenterServiceTest {
         when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.right(List.of(costCenterUpdate)));
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
-        Either<Problem, List<OrganisationCostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
+        Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals(costCenter.getName(), result.get().get(0).getName());

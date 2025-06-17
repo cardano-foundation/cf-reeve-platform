@@ -50,7 +50,7 @@ class ChartOfAccountControllerTest {
     @Test
     void insertReferenceCodeByCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
         when(chartOfAccountsService.insertChartOfAccountByCsv("orgId", file)).thenReturn(Either.right(Set.of(view)));
 
         ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", file);
@@ -64,10 +64,10 @@ class ChartOfAccountControllerTest {
     @Test
     void getChartOfAccounts_returnsAccounts() {
         String orgId = "org-1";
-        Set<OrganisationChartOfAccountView> accounts = Set.of(mock(OrganisationChartOfAccountView.class));
+        Set<ChartOfAccountView> accounts = Set.of(mock(ChartOfAccountView.class));
         when(chartOfAccountsService.getAllChartOfAccount(orgId)).thenReturn(accounts);
 
-        ResponseEntity<Set<OrganisationChartOfAccountView>> response = controller.getChartOfAccounts(orgId);
+        ResponseEntity<Set<ChartOfAccountView>> response = controller.getChartOfAccounts(orgId);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(accounts);
@@ -78,7 +78,7 @@ class ChartOfAccountControllerTest {
     void insertChartOfAccount_success() {
         String orgId = "org-1";
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
         when(view.getError()).thenReturn(Optional.empty());
         when(chartOfAccountsService.insertChartOfAccount(orgId, update)).thenReturn(view);
 
@@ -92,7 +92,7 @@ class ChartOfAccountControllerTest {
     void insertChartOfAccount_withError() {
         String orgId = "org-1";
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
 
         when(view.getError()).thenReturn(Optional.of(Problem.builder()
                 .withTitle("Error")
@@ -111,7 +111,7 @@ class ChartOfAccountControllerTest {
     void updateChartOfAccount_success() {
         String orgId = "org-1";
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
         when(view.getError()).thenReturn(Optional.empty());
         when(chartOfAccountsService.updateChartOfAccount(orgId, update)).thenReturn(view);
 

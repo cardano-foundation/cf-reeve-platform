@@ -61,7 +61,7 @@ public class ReportTypeFieldEntity extends CommonEntity {
             inverseJoinColumns = @JoinColumn(name = "sub_type_id")
     )
     @Builder.Default
-    private List<OrganisationChartOfAccountSubType> mappingTypes = new ArrayList<>();
+    private List<ChartOfAccountSubType> mappingTypes = new ArrayList<>();
 
     @ManyToMany
     @JoinTable(

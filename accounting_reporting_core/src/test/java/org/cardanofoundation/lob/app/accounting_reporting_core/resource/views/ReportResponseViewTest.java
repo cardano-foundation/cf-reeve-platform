@@ -5,9 +5,8 @@ import static org.zalando.problem.Status.NOT_FOUND;
 
 import java.util.List;
 
-import lombok.val;
-
 import org.zalando.problem.Problem;
+import org.zalando.problem.ThrowableProblem;
 
 import org.junit.jupiter.api.Test;
 
@@ -15,9 +14,9 @@ class ReportResponseViewTest {
 
     @Test
     void reportResponseViewCreateFail(){
-        val issue = Problem.builder()
+        ThrowableProblem issue = Problem.builder()
                 .withTitle("ORGANISATION_NOT_FOUND")
-                .withDetail(STR."Unable to find Organisation by Id: Testes")
+                .withDetail("Unable to find Organisation by Id: Testes")
                 .withStatus(NOT_FOUND)
                 .build();
 
