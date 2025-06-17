@@ -40,7 +40,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationProjec
 import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
 
 @RestController
-@RequestMapping("/api/organisation")
+@RequestMapping("/api/organisations")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
@@ -54,7 +54,7 @@ public class ProjectCodeController {
                     {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
             ),
     })
-    @GetMapping(value = "/organisation/{orgId}/projects", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/{orgId}/projects", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Set<OrganisationProjectView>> getAllProjects(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 projectCodeService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()));
@@ -65,7 +65,7 @@ public class ProjectCodeController {
                     {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
             ),
     })
-    @PostMapping(value = "/organisation/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<OrganisationProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         return ResponseEntity.ok(projectCodeService.insertProject(orgId, projectUpdate));
@@ -76,7 +76,7 @@ public class ProjectCodeController {
                     {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
             ),
     })
-    @PutMapping(value = "/organisation/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PutMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<OrganisationProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         return ResponseEntity.ok(projectCodeService.updateProject(orgId, projectUpdate));
@@ -87,7 +87,7 @@ public class ProjectCodeController {
                     {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
             ),
     })
-    @PostMapping(value = "/organisation/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam("file") MultipartFile file) {
         return projectCodeService.createProjectCodeFromCsv(orgId, file).fold(

@@ -35,7 +35,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 
 @RestController
-@RequestMapping("/api/organisation")
+@RequestMapping("/api/organisations")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
