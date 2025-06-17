@@ -47,6 +47,7 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 import org.cardanofoundation.lob.app.support.reactive.DebouncerManager;
+import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Service
@@ -61,6 +62,7 @@ public class AccountingCoreService {
     private final AccountingPeriodCalculator accountingPeriodCalculator;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final DebouncerManager debouncerManager;
+    private final AntiVirusScanner antiVirusScanner;
     private final ValidateIngestionResponseWaiter responseWaiter;
 
     @Value("${lob.max.transaction.numbers.per.batch:600}")
@@ -104,9 +106,19 @@ public class AccountingCoreService {
     }
 
     private Either<Problem, byte[]> readFileBytes(MultipartFile file) {
+        byte[] fileBytes;
         try {
-            if (file != null) {
-                return Either.right(file.getBytes());
+            if(file != null && !file.isEmpty()) {
+                fileBytes = file.getBytes();
+                if (!antiVirusScanner.isFileSafe(fileBytes)) {
+                    return Either.left(Problem.builder()
+                            .withTitle("FILE_VIRUS_DETECTED")
+                            .withDetail("The uploaded file contains a virus and cannot be processed.")
+                            .withStatus(BAD_REQUEST)
+                            .build());
+                } else {
+                    return Either.right(fileBytes);
+                }
             } else {
                 return Either.right(null);
             }
@@ -182,19 +194,9 @@ public class AccountingCoreService {
         if (dateRangeCheckE.isLeft()) {
             return dateRangeCheckE;
         }
-        byte[] fileBytes;
-        try {
-            if (file != null) {
-                fileBytes = file.getBytes();
-            } else {
-                fileBytes = null;
-            }
-        } catch (IOException e) {
-            return Either.left(Problem.builder()
-                    .withTitle("FILE_READ_ERROR")
-                    .withDetail("Error reading file")
-                    .withStatus(BAD_REQUEST)
-                    .build());
+        Either<Problem, byte[]> bytesE = readFileBytes(file);
+        if (bytesE.isLeft()) {
+            return Either.left(bytesE.getLeft());
         }
 
         ScheduledReconcilationEvent event = ScheduledReconcilationEvent.builder()
@@ -203,7 +205,7 @@ public class AccountingCoreService {
                 .to(toDate)
                 .metadata(EventMetadata.create(ScheduledReconcilationEvent.VERSION))
                 .extractorType(extractorType)
-                .file(fileBytes)
+                .file(bytesE.get())
                 .parameters(parameters)
                 .build();
 
