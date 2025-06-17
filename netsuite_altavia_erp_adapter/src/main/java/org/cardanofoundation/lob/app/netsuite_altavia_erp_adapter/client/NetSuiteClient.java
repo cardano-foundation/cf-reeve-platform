@@ -175,6 +175,32 @@ public class NetSuiteClient {
         return Either.right(Optional.of(lines));
     }
 
+    public Either<Problem, Void> testConnection() {
+        ResponseEntity<String> response = null;
+        try {
+            response = callForTransactionLinesData(LocalDate.now(), LocalDate.now(), Optional.empty());
+        } catch (IOException e) {
+            log.error("Error calling NetSuite API: {}", e.getMessage());
+            return Either.left(Problem.builder()
+                    .withStatus(Status.INTERNAL_SERVER_ERROR)
+                    .withTitle(NETSUITE_API_ERROR)
+                    .withDetail(e.getMessage())
+                    .build());
+        }
+
+        if(response.getStatusCode().is2xxSuccessful() || response.getStatusCode().is1xxInformational()) {
+            log.info("Netsuite response success...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
+            return Either.right(null);
+        } else {
+            log.error("Netsuite response error...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
+            return Either.left(Problem.builder()
+                    .withStatus(Status.valueOf(response.getStatusCode().value()))
+                    .withTitle(NETSUITE_API_ERROR)
+                    .withDetail(response.getBody())
+                    .build());
+        }
+    }
+
     private Either<Problem, Optional<String>> retrieveTransactionLineData(LocalDate extractionFrom, LocalDate extractionTo, Optional<Integer> start) {
         ResponseEntity<String> response;
         try {

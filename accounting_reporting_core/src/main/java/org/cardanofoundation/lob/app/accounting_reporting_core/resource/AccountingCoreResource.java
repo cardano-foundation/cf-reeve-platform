@@ -1,11 +1,11 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
-import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -32,7 +32,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.ThrowableProblem;
 
@@ -42,8 +41,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -55,7 +52,6 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 public class AccountingCoreResource {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;
-    private final OrganisationPublicApi organisationPublicApi;
     private final ObjectMapper objectMapper;
 
     @Tag(name = "Transactions", description = "Transactions API")
@@ -88,7 +84,7 @@ public class AccountingCoreResource {
                     .withStatus(NOT_FOUND)
                     .build();
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+            return ResponseEntity.status(Objects.requireNonNull(issue.getStatus()).getStatusCode()).body(issue);
         }
 
         return ResponseEntity.ok().body(transactionEntity);
@@ -333,7 +329,7 @@ public class AccountingCoreResource {
                     .build();
 
             return ResponseEntity
-                    .status(issue.getStatus().getStatusCode())
+                    .status(Objects.requireNonNull(issue.getStatus()).getStatusCode())
                     .body(issue);
         }
 
