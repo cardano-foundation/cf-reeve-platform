@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
 import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
@@ -93,5 +94,22 @@ public class CsvEventHandler implements ReeveErpAdapter {
                 reconcilationCreatedEvent.getOrganisationId()
         );
         log.info("Handled handleCreatedReconciliationEvent.");
+    }
+
+    @Override
+    @EventListener
+    @Async
+    public void handleValidateIngestionEvent(ValidateIngestionEvent event) {
+        log.info("Handling handleScheduledReconciliationEvent...");
+        ScheduledIngestionEvent scheduledIngestionEvent = event.getScheduledIngestionEvent();
+        if (scheduledIngestionEvent.getExtractorType() != ExtractorType.CSV) {
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE, scheduledIngestionEvent.getExtractorType());
+            return;
+        }
+        csvExtractionService.validateIngestion(
+                event.getCorrelationId(),
+                scheduledIngestionEvent.getOrganisationId(),
+                scheduledIngestionEvent.getFile()
+        );
     }
 }

@@ -722,6 +722,7 @@ CREATE table accounting_core_report (
     -- End of main data fields
 
     ledger_dispatch_approved BOOLEAN NOT NULL DEFAULT FALSE,
+    is_ready_to_publish BOOLEAN NOT NULL DEFAULT FALSE,
     ledger_dispatch_status accounting_core_ledger_dispatch_status_type NOT NULL,
     ledger_dispatch_date TIMESTAMP WITHOUT TIME ZONE,
     published_by VARCHAR(255),
@@ -809,6 +810,7 @@ CREATE TABLE IF NOT EXISTS accounting_core_report_aud (
     -- End of main data fields
 
     ledger_dispatch_approved BOOLEAN NOT NULL DEFAULT FALSE,
+    is_ready_to_publish BOOLEAN NOT NULL DEFAULT FALSE,
     ledger_dispatch_status accounting_core_ledger_dispatch_status_type NOT NULL,
     ledger_dispatch_date TIMESTAMP WITHOUT TIME ZONE,
     published_by VARCHAR(255),

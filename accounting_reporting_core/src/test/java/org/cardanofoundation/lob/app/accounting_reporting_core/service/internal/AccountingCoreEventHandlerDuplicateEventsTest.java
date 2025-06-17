@@ -79,7 +79,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
     }
 
     @Test
-    void testHandleLedgerUpdate() throws NoSuchFieldException, IllegalAccessException {
+    void testHandleLedgerUpdate() {
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
         transactionBatchEntity.setId("batchId");
         transactionBatchEntity.setFilteringParameters(FilteringParameters.builder()

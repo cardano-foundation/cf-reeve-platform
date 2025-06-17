@@ -4,6 +4,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
@@ -42,13 +43,23 @@ public class ReportController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportResponseView> reportGenerate(@Valid @RequestBody ReportGenerateRequest reportGenerateRequest) {
         return reportService.reportGenerate(reportGenerateRequest).fold(
-                problem -> {
-                    return ResponseEntity.status(problem.getStatus().getStatusCode()).body(ReportResponseView.createFail(problem));
-                }, success -> {
-                    return ResponseEntity.ok().body(
-                            ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
-                    );
-                }
+                problem ->
+                        ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportResponseView.createFail(problem)),
+                success -> ResponseEntity.ok().body(
+                        ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                )
+        );
+    }
+
+    @Tag(name = "Reporting", description = "Reprocess Report")
+    @PostMapping(value = "/report-reprocess", produces = "application/json")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<ReportResponseView> reportReprocess(@Valid @RequestBody ReportReprocessRequest reportReprocessRequest) {
+        return reportService.reportReprocess(reportReprocessRequest).fold(
+                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportResponseView.createFail(problem)),
+                success -> ResponseEntity.ok().body(
+                        ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                )
         );
     }
 
