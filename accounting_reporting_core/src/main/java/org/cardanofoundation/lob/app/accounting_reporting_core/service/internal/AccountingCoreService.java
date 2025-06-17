@@ -110,7 +110,7 @@ public class AccountingCoreService {
         try {
             if(file != null && !file.isEmpty()) {
                 fileBytes = file.getBytes();
-                if(!antiVirusScanner.isFileSafe(fileBytes)) {
+                if (!antiVirusScanner.isFileSafe(fileBytes)) {
                     return Either.left(Problem.builder()
                             .withTitle("FILE_VIRUS_DETECTED")
                             .withDetail("The uploaded file contains a virus and cannot be processed.")
@@ -120,7 +120,7 @@ public class AccountingCoreService {
                     return Either.right(fileBytes);
                 }
             } else {
-                Either.right(null);
+                return Either.right(null);
             }
         } catch (IOException e) {
             return Either.left(Problem.builder()
