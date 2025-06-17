@@ -2,12 +2,14 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,10 +17,10 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCurrency;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
-import org.cardanofoundation.lob.app.organisation.repository.OrganisationCurrencyRepository;
+import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @RequiredArgsConstructor
@@ -26,7 +28,7 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 @Service
 public class CurrencyService {
 
-    private final OrganisationCurrencyRepository currencyRepository;
+    private final CurrencyRepository currencyRepository;
     private final CsvParser<CurrencyUpdate> csvParser;
 
     public List<CurrencyView> getAllCurrencies(String orgId) {
@@ -36,11 +38,20 @@ public class CurrencyService {
                 .toList();
     }
 
+    public Optional<Currency> findByOrganisationIdAndCode(@Param("organisationId") String organisationId,
+                                                          @Param("customerCode") String customerCode) {
+        return currencyRepository.findById(new Currency.Id(organisationId, customerCode));
+    }
+
+    public Set<Currency> findAllByOrganisationId(@Param("organisationId") String organisationId ){
+        return currencyRepository.findAllByOrganisationId(organisationId);
+    }
+
     public CurrencyView updateCurrency(String orgId, @Valid CurrencyUpdate currencyUpdate) {
-        return currencyRepository.findById(new OrganisationCurrency.Id(orgId, currencyUpdate.getCustomerCode()))
+        return currencyRepository.findById(new Currency.Id(orgId, currencyUpdate.getCustomerCode()))
                 .map(currency -> {
                     currency.setCurrencyId(currencyUpdate.getCurrencyId());
-                    OrganisationCurrency updatedEntity = currencyRepository.save(currency);
+                    Currency updatedEntity = currencyRepository.save(currency);
                     return CurrencyView.createSuccess(updatedEntity.getId().getCustomerCode(), updatedEntity.getCurrencyId());
                 })
                 .orElseGet(() -> {
@@ -64,14 +75,14 @@ public class CurrencyService {
                     return CurrencyView.createFail(error, currencyUpdate.getCustomerCode());
                 })
                 .orElseGet(() -> {
-                    OrganisationCurrency currency = new OrganisationCurrency(new OrganisationCurrency.Id(orgId, currencyUpdate.getCustomerCode()), currencyUpdate.getCurrencyId());
-                    OrganisationCurrency save = currencyRepository.save(currency);
+                    Currency currency = new Currency(new Currency.Id(orgId, currencyUpdate.getCustomerCode()), currencyUpdate.getCurrencyId());
+                    Currency save = currencyRepository.save(currency);
                     return CurrencyView.createSuccess(save.getId().getCustomerCode(), save.getCurrencyId());
                 });
     }
 
     public Optional<CurrencyView> getCurrency(String orgId, String customerCode) {
-        return currencyRepository.findById(new OrganisationCurrency.Id(orgId, customerCode))
+        return currencyRepository.findById(new Currency.Id(orgId, customerCode))
                 .map(currency -> CurrencyView.createSuccess(currency.getId().getCustomerCode(), currency.getCurrencyId()));
     }
 

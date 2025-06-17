@@ -9,7 +9,7 @@ import lombok.Getter;
 @Getter
 @Builder
 @AllArgsConstructor
-public class OrganisationEventView {
+public class EventView {
 
     private String id;
 

@@ -53,8 +53,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
@@ -850,7 +850,7 @@ public class ReportService {
      */
     private BigDecimal addValuesFromTransactionItems(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate) {
         // Finding all ChartOfAccounts that are mapped to the specific field via the subtypes from the chartOfAccount
-        Set<OrganisationChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(OrganisationChartOfAccountSubType::getId).toList());
+        Set<ChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(ChartOfAccountSubType::getId).toList());
 
         // adding Opening Balance if the startDate is before the OpeningBalance Date
         totalAmount = totalAmount.add(allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.isNull(organisationChartOfAccount.getOpeningBalance()) ?
@@ -868,7 +868,7 @@ public class ReportService {
         List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
                 startSearchDate.orElse(LocalDate.EPOCH), endDate);
-        Map<String, OrganisationChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
+        Map<String, ChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
 
         // Summing up the amounts
         totalAmount = totalAmount.add(transactionItemsByAccountCodeAndDateRange.stream().map(transactionItemEntity -> {

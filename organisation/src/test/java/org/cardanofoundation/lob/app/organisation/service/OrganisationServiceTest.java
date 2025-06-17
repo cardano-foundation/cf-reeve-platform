@@ -19,10 +19,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCurrency;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
@@ -36,7 +36,7 @@ class OrganisationServiceTest {
     @Mock
     private AccountEventRepository accountEventRepository;
     @Mock
-    private OrganisationCurrencyService organisationCurrencyService;
+    private CurrencyService currencyService;
     @Mock
     private CostCenterService costCenterService;
     @Mock
@@ -153,9 +153,9 @@ class OrganisationServiceTest {
         org.setWebsiteUrl("webSite");
         org.setLogo("logo");
 
-        when(costCenterService.getAllCostCenter(anyString())).thenReturn(Set.of(new OrganisationCostCenter()));
-        when(projectCodeService.getAllProjects(anyString())).thenReturn(Set.of(new OrganisationProject()));
-        when(organisationCurrencyService.findAllByOrganisationId(anyString())).thenReturn(Set.of(new OrganisationCurrency()));
+        when(costCenterService.getAllCostCenter(anyString())).thenReturn(Set.of(new CostCenter()));
+        when(projectCodeService.getAllProjects(anyString())).thenReturn(Set.of(new Project()));
+        when(currencyService.findAllByOrganisationId(anyString())).thenReturn(Set.of(new Currency()));
 
         OrganisationView organisationView = organisationService.getOrganisationView(org);
 
@@ -179,7 +179,7 @@ class OrganisationServiceTest {
 
         verify(costCenterService).getAllCostCenter(anyString());
         verify(projectCodeService).getAllProjects(anyString());
-        verify(organisationCurrencyService).findAllByOrganisationId(anyString());
-        verifyNoMoreInteractions(costCenterService, projectCodeService, organisationCurrencyService);
+        verify(currencyService).findAllByOrganisationId(anyString());
+        verifyNoMoreInteractions(costCenterService, projectCodeService, currencyService);
     }
 }

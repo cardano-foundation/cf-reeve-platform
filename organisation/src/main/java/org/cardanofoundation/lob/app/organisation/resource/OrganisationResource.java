@@ -104,14 +104,14 @@ public class OrganisationResource {
 
     @Operation(description = "Organisation Events", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationEventView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = EventView.class)))}
             ),
     })
     @GetMapping(value = "/organisation/{orgId}/events", produces = "application/json")
-    public ResponseEntity<List<OrganisationEventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<List<EventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 organisationService.getOrganisationEventCode(orgId).stream().map(accountEvent -> {
-                    return new OrganisationEventView(
+                    return new EventView(
                             accountEvent.getCustomerCode(),
                             accountEvent.getId().getOrganisationId(),
                             accountEvent.getName()
@@ -208,7 +208,7 @@ public class OrganisationResource {
 
     @Operation(description = "Organistion validation", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", schema = @Schema(implementation = OrganisationValidationView.class))}
+                    {@Content(mediaType = "application/json", schema = @Schema(implementation = ValidationView.class))}
             ),
             @ApiResponse(responseCode = "404", description = "Error: response status is 404", content = {@Content(mediaType = "application/json", schema = @Schema(example = "{\n" +
                     "    \"title\": \"Organisation not found\",\n" +

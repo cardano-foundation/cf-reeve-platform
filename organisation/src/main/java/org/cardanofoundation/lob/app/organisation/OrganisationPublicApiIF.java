@@ -11,16 +11,16 @@ public interface OrganisationPublicApiIF {
 
     Optional<Organisation> findByOrganisationId(String id);
 
-    Optional<OrganisationCurrency> findCurrencyByCustomerCurrencyCode(String organisationId,
-                                                                      String customerCurrencyCode);
+    Optional<Currency> findCurrencyByCustomerCurrencyCode(String organisationId,
+                                                          String customerCurrencyCode);
 
     Optional<OrganisationVat> findOrganisationByVatAndCode(String organisationId, String customerCode);
 
-    Optional<OrganisationCostCenter> findCostCenter(String organisationId, String customerCode);
+    Optional<CostCenter> findCostCenter(String organisationId, String customerCode);
 
-    Optional<OrganisationProject> findProject(String organisationId, String customerCode);
+    Optional<Project> findProject(String organisationId, String customerCode);
 
-    Optional<OrganisationChartOfAccount> getChartOfAccounts(String organisationId, String customerCode);
+    Optional<ChartOfAccount> getChartOfAccounts(String organisationId, String customerCode);
 
     Optional<AccountEvent> findEventCode(String organisationId, String debitcustomerCode, String creditCustomerCode);
 

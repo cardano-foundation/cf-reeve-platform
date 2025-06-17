@@ -37,8 +37,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
@@ -455,11 +455,11 @@ public class AccountingCorePresentationViewService {
 
     private Set<TransactionItemView> getTransactionItemView(TransactionEntity transaction) {
         return transaction.getItems().stream().map(item -> {
-            Optional<OrganisationCostCenter> itemCostCenter = Optional.empty();
-            Optional<OrganisationProject> itemProject = Optional.empty();
+            Optional<CostCenter> itemCostCenter = Optional.empty();
+            Optional<Project> itemProject = Optional.empty();
             if (transaction.getOrganisation() != null) {
-                itemCostCenter = costCenterRepository.findById(new OrganisationCostCenter.Id(transaction.getOrganisation().getId(), item.getCostCenter().map(CostCenter::getCustomerCode).orElse("")));
-                itemProject = projectMappingRepository.findById(new OrganisationProject.Id(transaction.getOrganisation().getId(), item.getProject().map(Project::getCustomerCode).orElse("")));
+                itemCostCenter = costCenterRepository.findById(new CostCenter.Id(transaction.getOrganisation().getId(), item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse("")));
+                itemProject = projectMappingRepository.findById(new Project.Id(transaction.getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse("")));
             }
             return new TransactionItemView(
                     item.getId(),
@@ -472,16 +472,16 @@ public class AccountingCorePresentationViewService {
                     item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountFcy().negate() : item.getAmountFcy(),
                     item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountLcy().negate() : item.getAmountLcy(),
                     item.getFxRate(),
-                    item.getCostCenter().map(CostCenter::getCustomerCode).orElse(""),
-                    item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(""),
-                    item.getCostCenter().flatMap(CostCenter::getName).orElse(""),
-                    itemCostCenter.map(costCenter -> costCenter.getParent().map(OrganisationCostCenter::getExternalCustomerCode).orElse("")).orElse(""),
-                    itemCostCenter.map(costCenter -> costCenter.getParent().map(OrganisationCostCenter::getName).orElse("")).orElse(""),
-                    item.getProject().map(Project::getCustomerCode).orElse(""),
-                    item.getProject().flatMap(Project::getName).orElse(""),
-                    item.getProject().flatMap(Project::getExternalCustomerCode).orElse(""),
-                    itemProject.map(costCenter -> costCenter.getParent().map(OrganisationProject::getExternalCustomerCode).orElse("")).orElse(""),
-                    itemProject.map(costCenter -> costCenter.getParent().map(OrganisationProject::getName).orElse("")).orElse(""),
+                    item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
+                    item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getExternalCustomerCode).orElse(""),
+                    item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getName).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParent().map(CostCenter::getExternalCustomerCode).orElse("")).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParent().map(CostCenter::getName).orElse("")).orElse(""),
+                    item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                    item.getProject().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getName).orElse(""),
+                    item.getProject().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getExternalCustomerCode).orElse(""),
+                    itemProject.map(costCenter -> costCenter.getParent().map(Project::getExternalCustomerCode).orElse("")).orElse(""),
+                    itemProject.map(costCenter -> costCenter.getParent().map(Project::getName).orElse("")).orElse(""),
                     item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
                     item.getAccountEvent().map(AccountEvent::getName).orElse(""),
                     item.getDocument().map(Document::getNum).orElse(""),

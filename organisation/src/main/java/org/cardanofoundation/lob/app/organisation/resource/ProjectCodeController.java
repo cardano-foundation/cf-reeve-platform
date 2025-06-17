@@ -33,8 +33,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationProjectView;
+import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
+import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
 
 @RestController
@@ -49,40 +49,40 @@ public class ProjectCodeController {
 
     @Operation(description = "Organisation project", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CostCenterView.class)))}
             ),
     })
     @GetMapping(value = "/organisation/{orgId}/project", produces = "application/json")
-    public ResponseEntity<Set<OrganisationProjectView>> getAllProjects(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<Set<ProjectView>> getAllProjects(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
-                projectCodeService.getAllProjects(orgId).stream().map(OrganisationProjectView::fromEntity).collect(Collectors.toSet()));
+                projectCodeService.getAllProjects(orgId).stream().map(ProjectView::fromEntity).collect(Collectors.toSet()));
     }
 
     @Operation(description = "Organisation project creation", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ProjectView.class)))}
             ),
     })
     @PostMapping(value = "/organisation/{orgId}/project/insert", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<OrganisationProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+    public ResponseEntity<ProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         return ResponseEntity.ok(projectCodeService.insertProject(orgId, projectUpdate));
     }
 
     @Operation(description = "Organisation project update", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationProjectView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ProjectView.class)))}
             ),
     })
     @PostMapping(value = "/organisation/{orgId}/project/update", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<OrganisationProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+    public ResponseEntity<ProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         return ResponseEntity.ok(projectCodeService.updateProject(orgId, projectUpdate));
     }
 
     @Operation(description = "Organisation project creation csv", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationCostCenterView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CostCenterView.class)))}
             ),
     })
     @PostMapping(value = "/organisation/{orgId}/project-csv", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)

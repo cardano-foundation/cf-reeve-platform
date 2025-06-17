@@ -21,18 +21,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
-import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationVatUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationVatView;
-import org.cardanofoundation.lob.app.organisation.repository.OrganisationVatRepository;
+import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
+import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
+import org.cardanofoundation.lob.app.organisation.repository.VatRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @ExtendWith(MockitoExtension.class)
 class OrganisationVatServiceTest {
 
     @Mock
-    private OrganisationVatRepository organisationVatRepository;
+    private VatRepository vatRepository;
     @Mock
-    private CsvParser<OrganisationVatUpdate> csvParser;
+    private CsvParser<VatUpdate> csvParser;
 
     @InjectMocks
     private OrganisationVatService organisationVatService;
@@ -41,7 +41,7 @@ class OrganisationVatServiceTest {
     void findByOrganisationAndCode() {
         OrganisationVat.Id id = new OrganisationVat.Id("organisationId", "customerCode");
         OrganisationVat vat = mock(OrganisationVat.class);
-        when(organisationVatRepository.findById(id)).thenReturn(Optional.of(vat));
+        when(vatRepository.findById(id)).thenReturn(Optional.of(vat));
 
         Optional<OrganisationVat> result = organisationVatService.findByOrganisationAndCode("organisationId", "customerCode");
 
@@ -51,12 +51,12 @@ class OrganisationVatServiceTest {
 
     @Test
     void insert_alreadyExists() {
-        OrganisationVatUpdate organisationVatUpdate = mock(OrganisationVatUpdate.class);
+        VatUpdate vatUpdate = mock(VatUpdate.class);
         OrganisationVat.Id id = new OrganisationVat.Id("organisationId", "customerCode");
-        when(organisationVatUpdate.getCustomerCode()).thenReturn("customerCode");
-        when(organisationVatRepository.findById(id)).thenReturn(Optional.of(mock(OrganisationVat.class)));
+        when(vatUpdate.getCustomerCode()).thenReturn("customerCode");
+        when(vatRepository.findById(id)).thenReturn(Optional.of(mock(OrganisationVat.class)));
 
-        OrganisationVatView result = organisationVatService.insert("organisationId", organisationVatUpdate);
+        VatView result = organisationVatService.insert("organisationId", vatUpdate);
 
         assertTrue(result.getError().isPresent());
         assertEquals("ORGANISATION_VAT_ALREADY_EXISTS", result.getError().get().getTitle());
@@ -64,13 +64,13 @@ class OrganisationVatServiceTest {
 
     @Test
     void insert_countryCodeNotExists() {
-        OrganisationVatUpdate update = mock(OrganisationVatUpdate.class);
+        VatUpdate update = mock(VatUpdate.class);
 
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CHs");
-        when(organisationVatRepository.findById(any())).thenReturn(Optional.empty());
+        when(vatRepository.findById(any())).thenReturn(Optional.empty());
 
-        OrganisationVatView result = organisationVatService.insert("organisationId", update);
+        VatView result = organisationVatService.insert("organisationId", update);
 
         assertTrue(result.getError().isPresent());
         assertEquals("COUNTRY_CODE_NOT_FOUND", result.getError().get().getTitle());
@@ -78,7 +78,7 @@ class OrganisationVatServiceTest {
 
     @Test
     void insert_success(){
-        OrganisationVatUpdate update = mock(OrganisationVatUpdate.class);
+        VatUpdate update = mock(VatUpdate.class);
         OrganisationVat parent = mock(OrganisationVat.class);
         OrganisationVat saved = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
@@ -89,11 +89,11 @@ class OrganisationVatServiceTest {
         when(saved.getCountryCode()).thenReturn("CH");
         when(saved.getActive()).thenReturn(true);
 
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
-        when(organisationVatRepository.save(any(OrganisationVat.class)))
+        when(vatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
+        when(vatRepository.save(any(OrganisationVat.class)))
             .thenReturn(saved);
 
-        OrganisationVatView result = organisationVatService.insert("organisationId", update);
+        VatView result = organisationVatService.insert("organisationId", update);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("customerCode", result.getCustomerCode());
@@ -105,12 +105,12 @@ class OrganisationVatServiceTest {
 
     @Test
     void update_notExists() {
-        OrganisationVatUpdate organisationVatUpdate = mock(OrganisationVatUpdate.class);
+        VatUpdate vatUpdate = mock(VatUpdate.class);
         OrganisationVat.Id id = new OrganisationVat.Id("organisationId", "customerCode");
-        when(organisationVatUpdate.getCustomerCode()).thenReturn("customerCode");
-        when(organisationVatRepository.findById(id)).thenReturn(Optional.empty());
+        when(vatUpdate.getCustomerCode()).thenReturn("customerCode");
+        when(vatRepository.findById(id)).thenReturn(Optional.empty());
 
-        OrganisationVatView result = organisationVatService.update("organisationId", organisationVatUpdate);
+        VatView result = organisationVatService.update("organisationId", vatUpdate);
 
         assertTrue(result.getError().isPresent());
         assertEquals("ORGANISATION_VAT_DO_NOT_EXISTS", result.getError().get().getTitle());
@@ -118,13 +118,13 @@ class OrganisationVatServiceTest {
 
     @Test
     void update_countryCodeNotExists() {
-        OrganisationVatUpdate update = mock(OrganisationVatUpdate.class);
+        VatUpdate update = mock(VatUpdate.class);
         OrganisationVat mock = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CHs");
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(mock));
+        when(vatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(mock));
 
-        OrganisationVatView result = organisationVatService.update("organisationId", update);
+        VatView result = organisationVatService.update("organisationId", update);
         assertTrue(result.getError().isPresent());
         assertEquals("COUNTRY_CODE_NOT_FOUND", result.getError().get().getTitle());
 
@@ -132,7 +132,7 @@ class OrganisationVatServiceTest {
 
     @Test
     void update_success() {
-        OrganisationVatUpdate update = mock(OrganisationVatUpdate.class);
+        VatUpdate update = mock(VatUpdate.class);
         OrganisationVat parent = mock(OrganisationVat.class);
         OrganisationVat saved = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
@@ -143,11 +143,11 @@ class OrganisationVatServiceTest {
         when(saved.getCountryCode()).thenReturn("CH");
         when(saved.getActive()).thenReturn(true);
 
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(saved));
-        when(organisationVatRepository.save(any(OrganisationVat.class)))
+        when(vatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(saved));
+        when(vatRepository.save(any(OrganisationVat.class)))
             .thenReturn(saved);
 
-        OrganisationVatView result = organisationVatService.update("organisationId", update);
+        VatView result = organisationVatService.update("organisationId", update);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("customerCode", result.getCustomerCode());
@@ -160,12 +160,12 @@ class OrganisationVatServiceTest {
     @Test
     void insertVatCodesCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, OrganisationVatUpdate.class)).thenReturn(Either.left(Problem.builder()
+        when(csvParser.parseCsv(file, VatUpdate.class)).thenReturn(Either.left(Problem.builder()
                 .withTitle("CSV_PARSE_ERROR")
                 .withDetail("Error parsing CSV file")
                 .build()));
 
-        Either<Problem, List<OrganisationVatView>> response = organisationVatService.insertVatCodesCsv("organisationId", file);
+        Either<Problem, List<VatView>> response = organisationVatService.insertVatCodesCsv("organisationId", file);
 
         assertTrue(response.isLeft());
         assertEquals("CSV_PARSE_ERROR", response.getLeft().getTitle());
@@ -174,9 +174,9 @@ class OrganisationVatServiceTest {
     @Test
     void insertVatCodesCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
-        OrganisationVatUpdate update = mock(OrganisationVatUpdate.class);
-        List<OrganisationVatUpdate> updates = List.of(update);
-        when(csvParser.parseCsv(file, OrganisationVatUpdate.class)).thenReturn(Either.right(updates));
+        VatUpdate update = mock(VatUpdate.class);
+        List<VatUpdate> updates = List.of(update);
+        when(csvParser.parseCsv(file, VatUpdate.class)).thenReturn(Either.right(updates));
         OrganisationVat parent = mock(OrganisationVat.class);
         OrganisationVat saved = mock(OrganisationVat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
@@ -187,10 +187,10 @@ class OrganisationVatServiceTest {
         when(saved.getCountryCode()).thenReturn("CH");
         when(saved.getActive()).thenReturn(true);
 
-        when(organisationVatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
-        when(organisationVatRepository.save(any(OrganisationVat.class)))
+        when(vatRepository.findById(new OrganisationVat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
+        when(vatRepository.save(any(OrganisationVat.class)))
                 .thenReturn(saved);
-        Either<Problem, List<OrganisationVatView>> response = organisationVatService.insertVatCodesCsv("organisationId", file);
+        Either<Problem, List<VatView>> response = organisationVatService.insertVatCodesCsv("organisationId", file);
 
         assertTrue(response.isRight());
         assertEquals(updates.size(), response.get().size());

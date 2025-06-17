@@ -23,8 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,10 +39,10 @@ class CostCenterControllerTest {
     @Test
     void getAllCostCenter() {
         // Mock the service call
-        when(costCenterService.getAllCostCenter("org123")).thenReturn(Set.of(mock(OrganisationCostCenter.class)));
+        when(costCenterService.getAllCostCenter("org123")).thenReturn(Set.of(mock(CostCenter.class)));
 
         // Call the controller method
-        ResponseEntity<Set<OrganisationCostCenterView>> response = costCenterController.getAllCostCenters("org123");
+        ResponseEntity<Set<CostCenterView>> response = costCenterController.getAllCostCenters("org123");
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
@@ -55,15 +55,15 @@ class CostCenterControllerTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         // Mock the service call
         when(costCenterService.insertCostCenter("org123", costCenterUpdate))
-                .thenReturn(mock(OrganisationCostCenterView.class));
+                .thenReturn(mock(CostCenterView.class));
 
         // Call the controller method
-        ResponseEntity<OrganisationCostCenterView> response = costCenterController.insertCostCenters("org123", costCenterUpdate);
+        ResponseEntity<CostCenterView> response = costCenterController.insertCostCenters("org123", costCenterUpdate);
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
-        assertEquals(OrganisationCostCenterView.class, response.getBody().getClass());
+        assertEquals(CostCenterView.class, response.getBody().getClass());
     }
 
     @Test
@@ -71,15 +71,15 @@ class CostCenterControllerTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         // Mock the service call
         when(costCenterService.updateCostCenter("org123", costCenterUpdate))
-                .thenReturn(mock(OrganisationCostCenterView.class));
+                .thenReturn(mock(CostCenterView.class));
 
         // Call the controller method
-        ResponseEntity<OrganisationCostCenterView> response = costCenterController.updateCostCenters("org123", costCenterUpdate);
+        ResponseEntity<CostCenterView> response = costCenterController.updateCostCenters("org123", costCenterUpdate);
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
-        assertEquals(OrganisationCostCenterView.class, response.getBody().getClass());
+        assertEquals(CostCenterView.class, response.getBody().getClass());
     }
 
     @Test
@@ -95,7 +95,7 @@ class CostCenterControllerTest {
     @Test
     void insertCostCentersCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
-        List<OrganisationCostCenterView> costCenterViews = List.of(mock(OrganisationCostCenterView.class));
+        List<CostCenterView> costCenterViews = List.of(mock(CostCenterView.class));
         when(costCenterService.createCostCenterFromCsv("org123", file)).thenReturn(Either.right(costCenterViews));
 
         ResponseEntity<?> response = costCenterController.insertCostCentersCsv("org123", file);

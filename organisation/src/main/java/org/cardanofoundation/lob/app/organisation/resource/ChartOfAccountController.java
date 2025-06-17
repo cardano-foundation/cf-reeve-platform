@@ -45,25 +45,25 @@ public class ChartOfAccountController {
 
     @Operation(description = "Chart of Account tree", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountTypeView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ChartOfAccountTypeView.class)))}
             ),
     })
     @GetMapping(value = "/{orgId}/chart-type", produces = "application/json")
     @Transactional
-    public ResponseEntity<List<OrganisationChartOfAccountTypeView>> getChartOfAccountTypes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<List<ChartOfAccountTypeView>> getChartOfAccountTypes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(
                 chartOfAccountsService.getAllChartType(orgId).stream().map(chartOfAccountType -> {
 
-                    return new OrganisationChartOfAccountTypeView(
+                    return new ChartOfAccountTypeView(
                             chartOfAccountType.getId(),
                             chartOfAccountType.getOrganisationId(),
                             chartOfAccountType.getName(),
                             chartOfAccountType.getSubTypes().stream().map(chartOfAccountSubType -> {
-                                return new OrganisationChartOfAccountSubTypeView(
+                                return new ChartOfAccountSubTypeView(
                                         chartOfAccountSubType.getId(),
                                         chartOfAccountSubType.getOrganisationId(),
                                         chartOfAccountSubType.getName(),
-                                        chartOfAccountsService.getBySubTypeId(chartOfAccountSubType.getId()).stream().map(OrganisationChartOfAccountView::createSuccess).collect(Collectors.toSet())
+                                        chartOfAccountsService.getBySubTypeId(chartOfAccountSubType.getId()).stream().map(ChartOfAccountView::createSuccess).collect(Collectors.toSet())
                                 );
 
                             }).collect(Collectors.toSet())
@@ -74,17 +74,17 @@ public class ChartOfAccountController {
 
     @Operation(description = "Chart of Account list", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ChartOfAccountView.class)))}
             ),
     })
     @GetMapping(value = "/{orgId}/chart-of-accounts", produces = "application/json")
-    public ResponseEntity<Set<OrganisationChartOfAccountView>> getChartOfAccounts(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<Set<ChartOfAccountView>> getChartOfAccounts(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(chartOfAccountsService.getAllChartOfAccount(orgId));
     }
 
     @Operation(description = "Chart Of Account insert", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ChartOfAccountView.class)))}
             ),
     })
     @PostMapping(value = "/{orgId}/chart-of-accounts/insert", produces = "application/json")
@@ -92,7 +92,7 @@ public class ChartOfAccountController {
     public ResponseEntity<?> insertChartOfAccount(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
 
-        OrganisationChartOfAccountView referenceCode = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView referenceCode = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
         if(referenceCode.getError().isPresent()){
             return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
         }
@@ -102,7 +102,7 @@ public class ChartOfAccountController {
 
     @Operation(description = "Chart Of Account insert by csv", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ChartOfAccountView.class)))}
             ),
     })
     @PostMapping(value = "/{orgId}/chart-of-accounts/insert-csv", consumes = "multipart/form-data")
@@ -110,7 +110,7 @@ public class ChartOfAccountController {
     public ResponseEntity<?> insertChartOfAccountByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                         @RequestParam(value = "file") MultipartFile file) {
 
-        Either<Set<Problem>, Set<OrganisationChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<Set<Problem>, Set<ChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         if (chartOfAccountE.isEmpty()) {
             return ResponseEntity.status(500).body(chartOfAccountE.getLeft());
         }
@@ -120,7 +120,7 @@ public class ChartOfAccountController {
 
     @Operation(description = "Reference Code update", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ChartOfAccountView.class)))}
             ),
     })
     @PostMapping(value = "/{orgId}/chart-of-accounts/update", produces = "application/json")
@@ -128,7 +128,7 @@ public class ChartOfAccountController {
     public ResponseEntity<?> updateChartOfAccount(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
 
-        OrganisationChartOfAccountView referenceCode = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView referenceCode = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
         if(referenceCode.getError().isPresent()){
             return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
         }
@@ -139,7 +139,7 @@ public class ChartOfAccountController {
     @Deprecated
     @Operation(description = "Reference Code upsert", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = OrganisationChartOfAccountView.class)))}
+                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = ChartOfAccountView.class)))}
             ),
     })
     @PostMapping(value = "/{orgId}/chart-of-accounts", produces = "application/json")
@@ -147,7 +147,7 @@ public class ChartOfAccountController {
     public ResponseEntity<?> upsertChartOfAccount(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
 
-        OrganisationChartOfAccountView referenceCode = chartOfAccountsService.upsertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView referenceCode = chartOfAccountsService.upsertChartOfAccount(orgId, chartOfAccountUpdate);
         if(referenceCode.getError().isPresent()){
             return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
         }

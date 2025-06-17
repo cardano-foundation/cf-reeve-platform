@@ -41,6 +41,7 @@ public class OrganisationVat extends CommonEntity implements Persistable<Organis
     private String countryCode;
 
     @Column(name = "active", nullable = false)
+    @Builder.Default
     private Boolean active = true;
 
     @Embeddable

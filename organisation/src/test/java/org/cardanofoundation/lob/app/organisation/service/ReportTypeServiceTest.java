@@ -21,10 +21,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ReportTypeFieldUpdateCsv;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
-import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountSubTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeFieldRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
@@ -37,7 +37,7 @@ class ReportTypeServiceTest {
     @Mock
     private ReportTypeFieldRepository reportTypeFieldRepository;
     @Mock
-    private OrganisationChartOfAccountSubTypeRepository organisationChartOfAccountSubTypeRepository;
+    private ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
     @Mock
     private CsvParser<ReportTypeFieldUpdateCsv> csvParser;
 
@@ -82,7 +82,7 @@ class ReportTypeServiceTest {
         ReportTypeFieldUpdateCsv updateCsv = mock(ReportTypeFieldUpdateCsv.class);
         ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
         ReportTypeFieldEntity reportTypeFieldEntity = mock(ReportTypeFieldEntity.class);
-        OrganisationChartOfAccountSubType subType = mock(OrganisationChartOfAccountSubType.class);
+        ChartOfAccountSubType subType = mock(ChartOfAccountSubType.class);
         when(csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         when(updateCsv.getReportType()).thenReturn("ReportType");
         when(reportTypeRepository.findByOrganisationAndReportName(orgId, "ReportType")).thenReturn(Optional.ofNullable(reportTypeEntity));
@@ -90,7 +90,7 @@ class ReportTypeServiceTest {
         when(updateCsv.getReportTypeField()).thenReturn("FieldId");
         when(reportTypeFieldRepository.findFirstByReportIdAndName(1L, "FieldId")).thenReturn(Optional.ofNullable(reportTypeFieldEntity));
         when(updateCsv.getSubType()).thenReturn("SubTypeId");
-        when(organisationChartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, "SubTypeId")).thenReturn(Optional.of(subType));
+        when(chartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, "SubTypeId")).thenReturn(Optional.of(subType));
 
         Either<Set<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
@@ -114,7 +114,7 @@ class ReportTypeServiceTest {
         Assertions.assertEquals("Organisation Chart Of Account Sub Type not found", voids.getLeft().iterator().next().getTitle());
 
         when(subType.getId()).thenReturn(2L);
-        when(organisationChartOfAccountSubTypeRepository.findById("2")).thenReturn(Optional.of(subType));
+        when(chartOfAccountSubTypeRepository.findById("2")).thenReturn(Optional.of(subType));
 
         voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 

@@ -16,7 +16,7 @@ public class ReportTypeFieldView {
     private Long id;
     private String name;
     private List<ReportTypeFieldView> fields;
-    private List<OrganisationChartOfAccountSubTypeView> mappings;
+    private List<ChartOfAccountSubTypeView> mappings;
     private boolean accumulated;
     private boolean accumulatedYearly;
 
@@ -31,7 +31,7 @@ public class ReportTypeFieldView {
                 .id(reportTypeFieldEntity.getId())
                 .name(reportTypeFieldEntity.getName())
                 .fields(fromEntities(reportTypeFieldEntity.getChildFields()))
-                .mappings(OrganisationChartOfAccountSubTypeView.fromEntities(reportTypeFieldEntity.getMappingTypes()))
+                .mappings(ChartOfAccountSubTypeView.fromEntities(reportTypeFieldEntity.getMappingTypes()))
                 .accumulated(reportTypeFieldEntity.isAccumulated())
                 .accumulatedYearly(reportTypeFieldEntity.isAccumulatedYearly())
                 .build();
