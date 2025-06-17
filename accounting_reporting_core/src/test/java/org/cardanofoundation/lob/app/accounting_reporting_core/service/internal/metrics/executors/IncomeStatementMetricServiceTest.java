@@ -61,6 +61,7 @@ class IncomeStatementMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         Map<IncomeStatemenCategories, Integer> totalExpenses = (Map<IncomeStatemenCategories, Integer>) incomeStatementMetricService.getData(MetricEnum.SubMetric.TOTAL_EXPENSES, "organisationId", Optional.empty(), Optional.empty());
 
@@ -80,6 +81,7 @@ class IncomeStatementMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         Map<IncomeStatemenCategories, Integer> incomeStream = (Map<IncomeStatemenCategories, Integer>) incomeStatementMetricService.getData(MetricEnum.SubMetric.INCOME_STREAMS, "organisationId", Optional.empty(), Optional.empty());
 
