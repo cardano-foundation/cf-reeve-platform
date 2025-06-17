@@ -31,7 +31,7 @@ public class CostCenterService {
     private final CsvParser<CostCenterUpdate> csvParser;
 
     public Optional<CostCenter> getCostCenter(String organisationId, String customerCode) {
-        return costCenterRepository.findById(new CostCenter.Id(organisationId, customerCode));
+        return costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, customerCode),true);
     }
 
     public Set<CostCenter> getAllCostCenter(String organisationId){
