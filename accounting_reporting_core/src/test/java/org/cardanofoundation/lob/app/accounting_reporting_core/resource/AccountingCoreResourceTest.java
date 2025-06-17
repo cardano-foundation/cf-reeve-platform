@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
@@ -35,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemsProcessRejectView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceTest {
