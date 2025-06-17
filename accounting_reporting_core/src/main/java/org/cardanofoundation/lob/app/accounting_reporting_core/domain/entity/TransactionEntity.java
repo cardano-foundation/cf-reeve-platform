@@ -280,7 +280,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     }
 
     public boolean hasAnyRejection(Source source) {
-        for (val txItem : items) {
+        for (TransactionItemEntity txItem : items) {
             if (txItem.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == source)) {
                 return true;
             }
@@ -378,7 +378,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        val that = (TransactionEntity) o;
+        TransactionEntity that = (TransactionEntity) o;
 
         return Objects.equal(id, that.id);
     }
@@ -395,6 +395,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @Override
     public String toString() {
-        return STR."TransactionEntity{id='\{id}\{'\''}, transactionInternalNumber='\{transactionInternalNumber}\{'\''}, batchId='\{batchId}'}";
+        return "TransactionEntity{id='%s, transactionInternalNumber='%s, batchId='%s'}".formatted(
+                id, transactionInternalNumber, batchId);
     }
 }

@@ -84,7 +84,7 @@ public class AccountingCoreResource {
         if (transactionEntity.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("TX_NOT_FOUND")
-                    .withDetail(STR."Transaction with id: {\{id}} could not be found")
+                    .withDetail("Transaction with id: {%s} could not be found".formatted(id))
                     .withStatus(NOT_FOUND)
                     .build();
 
@@ -160,7 +160,7 @@ public class AccountingCoreResource {
         if (orgM.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{body.getOrganisationId()}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(body.getOrganisationId()))
                     .withStatus(NOT_FOUND)
                     .build();
 
@@ -328,7 +328,7 @@ public class AccountingCoreResource {
         if (txBatchM.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("BATCH_NOT_FOUND")
-                    .withDetail(STR."Batch with id: {\{batchId}} could not be found")
+                    .withDetail("Batch with id: {%s} could not be found".formatted(batchId))
                     .withStatus(NOT_FOUND)
                     .build();
 

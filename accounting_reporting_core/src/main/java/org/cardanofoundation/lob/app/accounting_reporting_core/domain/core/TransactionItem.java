@@ -59,7 +59,9 @@ public class TransactionItem {
 
     public static String id(String transactionId,
                             String lineNo) {
-        return digestAsHex(STR."\{transactionId}::\{lineNo}");
+        return digestAsHex("%s::%s".formatted(
+                transactionId, lineNo
+        ));
     }
 
 }

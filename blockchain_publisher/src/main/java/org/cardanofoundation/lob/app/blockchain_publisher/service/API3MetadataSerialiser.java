@@ -52,7 +52,7 @@ public class API3MetadataSerialiser {
                     reportEntity.getBalanceSheetReportData().orElseThrow()));
             case INCOME_STATEMENT -> globalMetadataMap.put("data", serialiseIncomeStatementData(
                     reportEntity.getIncomeStatementReportData().orElseThrow()));
-            default -> throw new IllegalArgumentException(STR."Unsupported report type: \{reportEntity.getType()}");
+            default -> throw new IllegalArgumentException("Unsupported report type: %s".formatted(reportEntity.getType()));
         }
 
         return globalMetadataMap;

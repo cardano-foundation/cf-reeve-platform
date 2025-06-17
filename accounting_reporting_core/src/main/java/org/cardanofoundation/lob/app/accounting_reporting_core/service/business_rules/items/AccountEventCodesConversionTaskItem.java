@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
-import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
@@ -27,9 +26,9 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
 
     @Override
     public void run(TransactionEntity tx) {
-        val organisationId = tx.getOrganisation().getId();
+        String organisationId = tx.getOrganisation().getId();
 
-        for (val item : tx.getItems()) {
+        for (TransactionItemEntity item : tx.getItems()) {
             processAccountCode(DEBIT, item.getAccountDebit(), organisationId, item, tx);
             processAccountCode(CREDIT, item.getAccountCredit(), organisationId, item, tx);
 
@@ -43,13 +42,13 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
                                     TransactionItemEntity item,
                                     TransactionEntity tx) {
         accountCodeM.ifPresent(acc -> {
-            val accountCode = acc.getCode().trim();
+            String accountCode = acc.getCode().trim();
 
             if (isEmpty(accountCode)) {
                 return;
             }
 
-            val accountChartMappingM = organisationPublicApi.getChartOfAccounts(organisationId, accountCode);
+            Optional<OrganisationChartOfAccount> accountChartMappingM = organisationPublicApi.getChartOfAccounts(organisationId, accountCode);
 
             accountChartMappingM.ifPresentOrElse(
                     chartOfAccount -> setAccountCodeRef(acc, type, item, chartOfAccount),
@@ -80,7 +79,7 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
                                                    TransactionItemEntity item,
                                                    TransactionEntity tx,
                                                    Source source) {
-        val violation = TransactionViolation.builder()
+        TransactionViolation violation = TransactionViolation.builder()
                 .txItemId(item.getId())
                 .code(CHART_OF_ACCOUNT_NOT_FOUND)
                 .subCode(type.name())
@@ -100,7 +99,7 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
     private void addMissingEventViolation(String eventCode,
                                           TransactionItemEntity item,
                                           TransactionEntity tx) {
-        val violation = TransactionViolation.builder()
+        TransactionViolation violation = TransactionViolation.builder()
                 .txItemId(item.getId())
                 .code(EVENT_DATA_NOT_FOUND)
                 .severity(ERROR)
@@ -118,11 +117,13 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
     private void setAccountEventCode(String organisationId,
                                      TransactionEntity tx,
                                      TransactionItemEntity item) {
-        val accountDebitRefCode = item.getAccountDebit().flatMap(Account::getRefCode);
-        val accountCreditRefCode = item.getAccountCredit().flatMap(Account::getRefCode);
+        Optional<String> accountDebitRefCode = item.getAccountDebit().flatMap(Account::getRefCode);
+        Optional<String> accountCreditRefCode = item.getAccountCredit().flatMap(Account::getRefCode);
 
         if (accountDebitRefCode.isPresent() && accountCreditRefCode.isPresent()) {
-            val eventCode = STR."\{accountDebitRefCode.orElseThrow()}\{accountCreditRefCode.orElseThrow()}";
+            String eventCode = "%s%s".formatted(
+                    accountDebitRefCode.orElseThrow(),
+                    accountCreditRefCode.orElseThrow());
 
             organisationPublicApi.findEventCode(organisationId, accountDebitRefCode.get(), accountCreditRefCode.get())
                     .ifPresentOrElse(

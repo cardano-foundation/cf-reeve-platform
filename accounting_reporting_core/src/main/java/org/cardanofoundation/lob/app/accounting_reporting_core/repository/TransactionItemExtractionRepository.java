@@ -127,45 +127,45 @@ public class TransactionItemExtractionRepository {
         String jpql = """
                 SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
                 """;
-        String where = STR."""
+        String where = """
                 WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
-                AND te.organisation.id = '\{orgId}'
-                AND ti.status = '\{TxItemValidationStatus.OK}'
-                """;
+                AND te.organisation.id = '%s'
+                AND ti.status = '%s'
+                """.formatted(orgId, TxItemValidationStatus.OK);
 
         if (!event.isEmpty()) {
-            where += STR."""
-            AND (ti.accountEvent.code in (\{event.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}) )
-            """;
+            where += """
+            AND (ti.accountEvent.code in (%s) )
+            """.formatted(event.stream().map(code -> "'" + code + "'").collect(Collectors.joining(",")));
         }
 
         if (!currency.isEmpty()) {
-            where += STR."""
-            AND (ti.document.currency.customerCode in (\{currency.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}) )
-            """;
+            where += """
+            AND (ti.document.currency.customerCode in (%s) )
+            """.formatted(currency.stream().map(code -> "'" + code + "'").collect(Collectors.joining(",")));
         }
 
         if (minAmount.isPresent()) {
-            where += STR."""
-            AND ABS(ti.amountFcy) >= \{minAmount.get()}
-            """;
+            where += """
+            AND ABS(ti.amountFcy) >= %s
+            """.formatted(minAmount.get());
         }
 
         if (maxAmount.isPresent()) {
-            where += STR."""
-            AND ABS(ti.amountFcy) <= \{maxAmount.get()}
-            """;
+            where += """
+            AND ABS(ti.amountFcy) <= %s
+            """.formatted(maxAmount.get());
         }
 
         if (!transactionHash.isEmpty() && 0 < transactionHash.stream().count()) {
-            where += STR."""
-            AND (te.ledgerDispatchReceipt.primaryBlockchainHash in (\{transactionHash.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}))
-            """;
+            where += """
+            AND (te.ledgerDispatchReceipt.primaryBlockchainHash in (%s))
+            """.formatted(transactionHash.stream().map(code -> "'" + code + "'").collect(Collectors.joining(",")));
         }
 
-        where += STR."""
-        AND te.ledgerDispatchStatus = '\{LedgerDispatchStatus.FINALIZED}'
-        """;
+        where += """
+        AND te.ledgerDispatchStatus = '%s'
+        """.formatted(LedgerDispatchStatus.FINALIZED);
 
         Query resultQuery = em.createQuery(jpql + where);
 
