@@ -54,7 +54,7 @@ public class AccountEventService {
         if (organisationChe.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
@@ -64,7 +64,7 @@ public class AccountEventService {
         if (debitReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Unable to find refernce code by Id: %s:%s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
@@ -73,7 +73,7 @@ public class AccountEventService {
         if (creditReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Unable to find refernce code by Id: %s:%s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
@@ -85,7 +85,7 @@ public class AccountEventService {
         if (accountEventOpt.isPresent()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("ACCOUNT_EVENT_ALREADY_EXISTS")
-                    .withDetail(STR."Account event already exists for debit reference code: \{eventCodeUpdate.getDebitReferenceCode()} and credit reference code: \{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Account event already exists for debit reference code: %s and credit reference code: %s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.CONFLICT)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
@@ -108,7 +108,7 @@ public class AccountEventService {
         if (organisationChe.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
@@ -118,7 +118,7 @@ public class AccountEventService {
         if (debitReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Unable to find refernce code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
@@ -127,7 +127,7 @@ public class AccountEventService {
         if (creditReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Unable to find refernce code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
@@ -138,7 +138,7 @@ public class AccountEventService {
         if (accountEventOpt.isEmpty()){
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("ACCOUNT_EVENT_NOT_FOUND")
-                    .withDetail(STR."Account event not found for debit reference code: \{eventCodeUpdate.getDebitReferenceCode()} and credit reference code: \{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Account event not found for debit reference code: %s and credit reference code: %s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
@@ -157,7 +157,7 @@ public class AccountEventService {
         if (organisationChe.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
@@ -167,7 +167,7 @@ public class AccountEventService {
         if (debitReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Unable to find reference code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
@@ -176,7 +176,7 @@ public class AccountEventService {
         if (creditReference.isEmpty()) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find refernce code by Id: \{orgId} and \{eventCodeUpdate.getDebitReferenceCode()}:\{eventCodeUpdate.getCreditReferenceCode()}")
+                    .withDetail("Unable to find reference code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }

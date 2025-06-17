@@ -90,7 +90,7 @@ public class API1L1TransactionCreator {
 
             return Either.left(Problem.builder()
                     .withTitle("ERROR_CREATING_TRANSACTION")
-                    .withDetail(STR."Exception encountered: \{e.getMessage()}")
+                    .withDetail("Exception encountered: %s".formatted(e.getMessage()))
                     .withStatus(INTERNAL_SERVER_ERROR)
                     .build());
         }
@@ -186,7 +186,7 @@ public class API1L1TransactionCreator {
     private void potentiallyStoreTxs(long creationSlot, SerializedCardanoL1Transaction tx) throws IOException {
         if (debugStoreOutputTx) {
             String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
-            String name = STR."lob-txs-api1-metadata-\{runId}-\{timestamp}-\{creationSlot}";
+            String name = "lob-txs-api1-metadata-%s-%s-%s".formatted(runId, timestamp, creationSlot);
             Path tmpJsonTxFile = Files.createTempFile(name, ".json");
             Path tmpCborFile = Files.createTempFile(name, ".cbor");
 

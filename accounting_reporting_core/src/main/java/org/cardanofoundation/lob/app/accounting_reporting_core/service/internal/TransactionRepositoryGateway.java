@@ -107,7 +107,7 @@ public class TransactionRepositoryGateway {
         if (!tx.getTransactionApproved()) {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("TX_NOT_APPROVED")
-                    .withDetail(STR."Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: \{transactionId}")
+                    .withDetail("Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId))
                     .withStatus(METHOD_NOT_ALLOWED)
                     .with("transactionId", transactionId)
                     .build();

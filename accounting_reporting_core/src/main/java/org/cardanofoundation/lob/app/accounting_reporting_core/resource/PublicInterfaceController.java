@@ -61,7 +61,7 @@ public class PublicInterfaceController {
         if (orgM.isEmpty()) {
             val issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{reportSearchRequest.getOrganisationId()}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(reportSearchRequest.getOrganisationId()))
                     .withStatus(NOT_FOUND)
                     .build();
 
@@ -93,7 +93,7 @@ public class PublicInterfaceController {
         if (orgM.isEmpty()) {
             val issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{transactionsRequest.getOrganisationId()}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(transactionsRequest.getOrganisationId()))
                     .withStatus(NOT_FOUND)
                     .build();
 

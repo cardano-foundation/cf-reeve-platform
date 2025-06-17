@@ -66,7 +66,7 @@ public class TransactionViolation {
 
     @Override
     public String toString() {
-        return STR."TransactionViolation{code=\{code}, txItemId=\{txItemId}";
+        return "TransactionViolation{code=%s, txItemId=%s".formatted(code, txItemId);
     }
 
     public void setTxItemId(Optional<String> txItemId) {

@@ -90,7 +90,7 @@ public class ChartOfAccountsService {
         if (chartOfAccountOpt.isEmpty()) {
             return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("CHART_OF_ACCOUNT_NOT_FOUND")
-                    .withDetail(STR."Unable to find the chart of account with code :\{chartOfAccountUpdate.getCustomerCode()}")
+                    .withDetail("Unable to find the chart of account with code :%s".formatted(chartOfAccountUpdate.getCustomerCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), chartOfAccountUpdate.getCustomerCode()));
         }
@@ -102,7 +102,7 @@ public class ChartOfAccountsService {
         if (organisationChe.isEmpty()) {
             return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(), customerCode));
         }
@@ -114,7 +114,7 @@ public class ChartOfAccountsService {
         if (referenceCode.isEmpty()) {
             return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getEventRefCode()}")
+                    .withDetail("Unable to find event ref code: %s".formatted(chartOfAccountUpdate.getEventRefCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), chartOfAccountUpdate.getCustomerCode()));
         }
@@ -126,7 +126,7 @@ public class ChartOfAccountsService {
         return subType.<Either<ChartOfAccountView, ChartOfAccountSubType>>map(Either::right)
                 .orElseGet(() -> Either.left(ChartOfAccountView.createFail(Problem.builder()
                 .withTitle("SUBTYPE_NOT_FOUND")
-                .withDetail(STR."Unable to find subtype code :\{chartOfAccountUpdate.getSubType()}")
+                .withDetail("Unable to find subtype code :%s".formatted(chartOfAccountUpdate.getSubType()))
                 .withStatus(Status.NOT_FOUND)
                 .build(), chartOfAccountUpdate.getCustomerCode())));
     }
@@ -137,7 +137,7 @@ public class ChartOfAccountsService {
             if (parentChartOfAccount.isEmpty()) {
                 return Either.left(ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("PARENT_ACCOUNT_NOT_FOUND")
-                        .withDetail(STR."Unable to find the parent chart of account with code :\{chartOfAccountUpdate.getParentCustomerCode()}")
+                        .withDetail("Unable to find the parent chart of account with code :%s".formatted(chartOfAccountUpdate.getParentCustomerCode()))
                         .withStatus(Status.NOT_FOUND)
                         .build(), chartOfAccountUpdate.getCustomerCode()));
             }
@@ -164,7 +164,7 @@ public class ChartOfAccountsService {
         if (chartOfAccountOpt.isPresent()) {
             return ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
-                    .withDetail(STR."The chart of account with code :\{chartOfAccountUpdate.getCustomerCode()} already exists")
+                    .withDetail("The chart of account with code :%s already exists".formatted(chartOfAccountUpdate.getCustomerCode()))
                     .withStatus(Status.CONFLICT)
                     .build(), chartOfAccountUpdate.getCustomerCode());
         }

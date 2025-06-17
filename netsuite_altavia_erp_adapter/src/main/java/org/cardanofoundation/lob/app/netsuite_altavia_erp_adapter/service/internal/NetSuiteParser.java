@@ -48,7 +48,7 @@ public class NetSuiteParser {
 
             return Either.left(Problem.builder()
                     .withTitle("JSON_PARSE_ERROR")
-                    .withDetail(STR."JSON rrror parsing NetSuite search error: \{e.getMessage()}")
+                    .withDetail("JSON rrror parsing NetSuite search error: %s".formatted(e.getMessage()))
                     .build());
         }
     }

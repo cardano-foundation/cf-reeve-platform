@@ -49,13 +49,13 @@ public class OpeningBalanceEvenRule implements OrganisationValidationRule {
         }
         if (totalOpeningBalanceLCY.compareTo(BigDecimal.ZERO) != 0) {
             violations.add(OrganisationViolation.builder()
-                    .message(STR."Total Opening Balance LCY is not zero. Total Opening Balance LCY: \{totalOpeningBalanceLCY}")
+                    .message("Total Opening Balance LCY is not zero. Total Opening Balance LCY: %s".formatted(totalOpeningBalanceLCY))
                     .type(OrganisationViolationType.OPENING_BALANCE_LCY_NOT_ZERO)
                     .build());
         }
         if (totalOpeningBalanceFCY.compareTo(BigDecimal.ZERO) != 0) {
             violations.add(OrganisationViolation.builder()
-                    .message(STR."Total Opening Balance FCY is not zero. Total Opening Balance FCY: \{totalOpeningBalanceFCY}")
+                    .message("Total Opening Balance FCY is not zero. Total Opening Balance FCY: %s".formatted(totalOpeningBalanceFCY))
                     .type(OrganisationViolationType.OPENING_BALANCE_FCY_NOT_ZERO)
                     .build());
         }

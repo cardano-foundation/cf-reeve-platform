@@ -110,7 +110,10 @@ public class NetSuiteClient {
             return;
         }
         // Encode parameters
-        String requestBody = STR."grant_type=\{URLEncoder.encode("client_credentials", StandardCharsets.UTF_8)}&client_assertion_type=\{URLEncoder.encode("urn:ietf:params:oauth:client-assertion-type:jwt-bearer", StandardCharsets.UTF_8)}&client_assertion=\{URLEncoder.encode(jwtToken, StandardCharsets.UTF_8)}";
+        String requestBody = "grant_type=%s&client_assertion_type=%s&client_assertion=%s"
+                .formatted(URLEncoder.encode("client_credentials", StandardCharsets.UTF_8),
+                        URLEncoder.encode("urn:ietf:params:oauth:client-assertion-type:jwt-bearer", StandardCharsets.UTF_8),
+                        URLEncoder.encode(jwtToken, StandardCharsets.UTF_8));
         // Create the request
         try {
             ResponseEntity<String> entity = restClient.post()
@@ -154,7 +157,7 @@ public class NetSuiteClient {
                     try {
                         TransactionDataSearchResult transactionDataSearchResult = objectMapper.readValue(searchResultString.get(), TransactionDataSearchResult.class);
                         lines.add(searchResultString.get());
-                        if(transactionDataSearchResult.more()) {
+                        if (transactionDataSearchResult.more()) {
                             hasMore = true;
                             start += 1;
                         } else {
@@ -167,7 +170,7 @@ public class NetSuiteClient {
                 }
 
             }
-        } while(hasMore);
+        } while (hasMore);
         log.info("Netsuite response success...customerCode:{}, messageCount:{}", 200, lines.size());
         return Either.right(Optional.of(lines));
     }
@@ -245,7 +248,7 @@ public class NetSuiteClient {
                         .build());
             }
         }
-        if(response.getStatusCode().is1xxInformational()) {
+        if (response.getStatusCode().is1xxInformational()) {
             log.info("Netsuite response success...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
             return Either.right(Optional.empty());
         }
@@ -260,7 +263,7 @@ public class NetSuiteClient {
     private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) throws IOException {
         log.info("Retrieving data from NetSuite...");
 
-        if(LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
+        if (LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
             refreshToken();
         }
         String baseUrl = this.baseUrl;
@@ -276,7 +279,7 @@ public class NetSuiteClient {
         String uriString = uriComponentsBuilder.toUriString();
         log.info("Call to url: {}", uriString);
         RestClient.RequestHeadersSpec<?> uri = restClient.get().uri(uriString);
-        accessToken.ifPresent(s -> uri.header("Authorization", STR."Bearer \{s}"));
+        accessToken.ifPresent(s -> uri.header("Authorization", "Bearer %s".formatted(s)));
         return uri.retrieve().toEntity(String.class);
     }
 

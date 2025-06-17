@@ -6,8 +6,6 @@ import static org.zalando.problem.Status.METHOD_NOT_ALLOWED;
 
 import java.util.List;
 
-import lombok.val;
-
 import org.springframework.dao.DataAccessException;
 
 import io.vavr.control.Either;
@@ -22,9 +20,9 @@ import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem
 public final class FailureResponses {
 
     public static Either<IdentifiableProblem, TransactionEntity> transactionFailedResponse(String transactionId) {
-        val problem = Problem.builder()
+        ThrowableProblem problem = Problem.builder()
                 .withTitle("CANNOT_APPROVE_FAILED_TX")
-                .withDetail(STR."Cannot approve a failed transaction, transactionId: \{transactionId}")
+                .withDetail("Cannot approve a failed transaction, transactionId: %s".formatted(transactionId))
                 .with("transactionId", transactionId)
                 .build();
 
@@ -32,9 +30,9 @@ public final class FailureResponses {
     }
 
     public static Either<IdentifiableProblem, TransactionEntity> transactionRejectedResponse(String transactionId) {
-        val problem = Problem.builder()
+        ThrowableProblem problem = Problem.builder()
                 .withTitle("CANNOT_APPROVE_REJECTED_TX")
-                .withDetail(STR."Cannot approve a rejected transaction, transactionId: \{transactionId}")
+                .withDetail("Cannot approve a rejected transaction, transactionId: %s".formatted(transactionId))
                 .withStatus(METHOD_NOT_ALLOWED)
                 .with("transactionId", transactionId)
                 .build();
@@ -43,9 +41,9 @@ public final class FailureResponses {
     }
 
     public static Either<IdentifiableProblem, TransactionEntity> transactionNotFoundResponse(String txId) {
-        val problem = Problem.builder()
+        ThrowableProblem problem = Problem.builder()
                 .withTitle("TX_NOT_FOUND")
-                .withDetail(STR."Transaction with id \{txId} not found")
+                .withDetail("Transaction with id %s not found".formatted(txId))
                 .with("txId", txId)
                 .build();
 
@@ -53,9 +51,9 @@ public final class FailureResponses {
     }
 
     public static ThrowableProblem createTransactionDBError(String transactionId, DataAccessException dae) {
-        val problem = Problem.builder()
+        ThrowableProblem problem = Problem.builder()
                 .withTitle("DB_ERROR")
-                .withDetail(STR."DB error approving transaction publish:\{transactionId}")
+                .withDetail("DB error approving transaction publish:%s".formatted(transactionId))
                 .with("transactionId", transactionId)
                 .with("error", dae.getMessage())
                 .build();
@@ -67,9 +65,9 @@ public final class FailureResponses {
         return transactionItemsRejectionRequest.getTransactionItemsRejections()
                 .stream()
                 .map(txItemRejectionRequest -> {
-                    val problem = Problem.builder()
+                    ThrowableProblem problem = Problem.builder()
                             .withTitle("TX_NOT_FOUND")
-                            .withDetail(STR."Transaction with id \{transactionId} not found")
+                            .withDetail("Transaction with id %s not found".formatted(transactionId))
                             .with("transactionId", transactionId)
                             .build();
 
@@ -79,9 +77,9 @@ public final class FailureResponses {
 
     public static Either<IdentifiableProblem, TransactionItemEntity> transactionItemCannotRejectAlreadyApprovedForDispatchResponse(String transactionId,
                                                                                                                                    String txItemId) {
-        val problem = Problem.builder()
+        ThrowableProblem problem = Problem.builder()
                 .withTitle("TX_ALREADY_APPROVED_CANNOT_REJECT_TX_ITEM")
-                .withDetail(STR."Cannot reject transaction item \{txItemId} because transaction \{transactionId} has already been approved for dispatch")
+                .withDetail("Cannot reject transaction item %s because transaction %s has already been approved for dispatch".formatted(txItemId, transactionId))
                 .with("transactionId", transactionId)
                 .with("transactionItemId", txItemId)
                 .build();
@@ -91,9 +89,9 @@ public final class FailureResponses {
 
     public static Either<IdentifiableProblem, TransactionItemEntity> transactionItemNotFoundResponse(String transactionId,
                                                                                                      String txItemId) {
-        val problem = Problem.builder()
+        ThrowableProblem problem = Problem.builder()
                 .withTitle("TX_ITEM_NOT_FOUND")
-                .withDetail(STR."Transaction item with id \{txItemId} not found")
+                .withDetail("Transaction item with id %s not found".formatted(txItemId))
                 .with("transactionId", transactionId)
                 .with("transactionItemId", txItemId)
                 .build();

@@ -127,7 +127,7 @@ public class ReportService {
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Organisation with ID \{organisationId} does not exist.")
+                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
                     .with("organisationId", organisationId)
                     .build());
@@ -202,7 +202,7 @@ public class ReportService {
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Organisation with ID \{organisationId} does not exist.")
+                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
                     .with("organisationId", organisationId)
                     .build());
@@ -292,7 +292,7 @@ public class ReportService {
                 reportType == INCOME_STATEMENT && createReportView.getIncomeStatementData().isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("INVALID_REPORT_TYPE")
-                    .withDetail(STR."Report type is not valid. Expected BALANCE_SHEET but got \{reportType}.")
+                    .withDetail("Report type is not valid. Expected BALANCE_SHEET but got %s.".formatted(reportType))
                     .withStatus(Status.BAD_REQUEST)
                     .with("reportType", reportType)
                     .build());
@@ -302,7 +302,7 @@ public class ReportService {
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Organisation with ID \{organisationId} does not exist.")
+                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
                     .with("organisationId", organisationId)
                     .build());
@@ -375,7 +375,7 @@ public class ReportService {
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("REPORT_NOT_FOUND")
-                    .withDetail(STR."Report with ID \{reportId} does not exist.")
+                    .withDetail("Report with ID %s does not exist.".formatted(reportId))
                     .withStatus(Status.NOT_FOUND)
                     .with("reportId", reportId)
                     .build());
@@ -392,7 +392,7 @@ public class ReportService {
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("REPORT_NOT_FOUND")
-                    .withDetail(STR."Report with ID \{reportId} does not exist.")
+                    .withDetail("Report with ID %s does not exist.".formatted(reportId))
                     .withStatus(Status.NOT_FOUND)
                     .with("reportId", reportId)
                     .build());
@@ -413,7 +413,7 @@ public class ReportService {
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Organisation with ID \{organisationId} does not exist.")
+                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
                     .with("organisationId", organisationId)
                     .build());
@@ -432,7 +432,7 @@ public class ReportService {
             if (reportEntity.getLedgerDispatchApproved()) {
                 return Either.left(Problem.builder()
                         .withTitle("REPORT_ALREADY_APPROVED")
-                        .withDetail(STR."Report with ID \{reportId} has already been approved for ledger dispatch.")
+                        .withDetail("Report with ID %s has already been approved for ledger dispatch.".formatted(reportId))
                         .withStatus(Status.BAD_REQUEST)
                         .with("reportId", reportId)
                         .build());
@@ -581,7 +581,7 @@ public class ReportService {
             if (0 != newProfit.compareTo(relatedProfit)) {
                 return Either.left(Problem.builder()
                         .withTitle("PROFIT_FOR_THE_YEAR_MISMATCH")
-                        .withDetail(STR."Profit for the year does not match the related report. \{newProfit} != \{relatedProfit}")
+                        .withDetail("Profit for the year does not match the related report. %s != %s".formatted(newProfit, relatedProfit))
                         .withStatus(Status.BAD_REQUEST)
                         .with("reportId", reportEntity.getReportId())
                         .build());
@@ -739,7 +739,7 @@ public class ReportService {
     private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate) {
         if (field.getChildFields().isEmpty()) {
             if (field.getMappingTypes().isEmpty() && field.getMappingReportTypes().isEmpty()) {
-                log.debug(STR."Field \{field.getName()} has no mapping type, skipping...");
+                log.debug("Field %s has no mapping type, skipping...".formatted(field.getName()));
                 return;
             }
 
@@ -822,7 +822,7 @@ public class ReportService {
                 field.setAccessible(true);
                 currentObject = field.get(currentObject);
             } catch (NoSuchFieldException | IllegalAccessException e) {
-                log.error(STR."Field \{fieldName} not found in object \{currentObject.getClass().getName()}");
+                log.error("Field %s not found in object %s".formatted(fieldName, currentObject.getClass().getName()));
                 currentObject = null;
                 break;
             }
@@ -837,7 +837,7 @@ public class ReportService {
         } else if (currentObject instanceof String) {
             return new BigDecimal((String) currentObject);
         } else {
-            log.error(STR."Field \{mappedTypeField.getName()} is not a number, returning 0");
+            log.error("Field %s is not a number, returning 0".formatted(mappedTypeField.getName()));
             return BigDecimal.ZERO;
         }
     }

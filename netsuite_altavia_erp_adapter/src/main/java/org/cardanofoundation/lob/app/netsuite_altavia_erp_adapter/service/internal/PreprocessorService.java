@@ -5,7 +5,6 @@ import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
@@ -19,10 +18,10 @@ public class PreprocessorService {
     private final Map<FieldType, Function<String, Either<Problem, String>>> fieldProcessors;
 
     public Either<Problem, String> preProcess(String data, FieldType fieldType) {
-        val fieldProcessorFun = fieldProcessors.get(fieldType);
+        Function<String, Either<Problem, String>> fieldProcessorFun = fieldProcessors.get(fieldType);
 
         if (fieldProcessorFun == null) {
-            throw new RuntimeException(STR."Field processor not found for field severity: \{fieldType}");
+            throw new RuntimeException("Field processor not found for field severity: %s".formatted(fieldType));
         }
 
         return fieldProcessorFun.apply(data);

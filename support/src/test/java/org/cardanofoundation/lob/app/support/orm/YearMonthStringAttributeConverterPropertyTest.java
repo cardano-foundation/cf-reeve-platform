@@ -4,8 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.YearMonth;
 
-import lombok.val;
-
 import net.jqwik.api.*;
 import net.jqwik.api.constraints.IntRange;
 
@@ -16,12 +14,12 @@ public class YearMonthStringAttributeConverterPropertyTest {
     @Property
     void convertingYearMonthToStringAndBackResultsInOriginal(@ForAll @IntRange(min = 1900, max = 9999) int year,
                                                              @ForAll @IntRange(min = 1, max = 12) int month) {
-        val original = YearMonth.of(year, month);
+        YearMonth original = YearMonth.of(year, month);
 
-        val dbData = converter.convertToDatabaseColumn(original);
-        val backConverted = converter.convertToEntityAttribute(dbData);
+        String dbData = converter.convertToDatabaseColumn(original);
+        YearMonth backConverted = converter.convertToEntityAttribute(dbData);
 
-        assertThat(dbData).matches(STR."\{year}-\{String.format("%02d", month)}");
+        assertThat(dbData).matches("%s-%s".formatted(year, String.format("%02d", month)));
 
         assertThat(backConverted).isEqualTo(original);
         assertThat(backConverted.getYear()).isEqualTo(year);

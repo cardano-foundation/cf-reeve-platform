@@ -143,7 +143,7 @@ public class AccountingCoreService {
         if (userExtractionParameters.getTransactionNumbers().size() > maxTransactionNumbersPerBatch) {
             return Either.left(List.of(Problem.builder()
                     .withTitle("TOO_MANY_TRANSACTIONS")
-                    .withDetail(STR."Too many transactions requested, maximum is \{maxTransactionNumbersPerBatch}")
+                    .withDetail("Too many transactions requested, maximum is %s".formatted(maxTransactionNumbersPerBatch))
                     .withStatus(BAD_REQUEST)
                     .build()));
         }
@@ -222,7 +222,7 @@ public class AccountingCoreService {
         if (txBatchM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("TX_BATCH_NOT_FOUND")
-                    .withDetail(STR."Transaction batch with id: \{batchId} not found")
+                    .withDetail("Transaction batch with id: %s not found".formatted(batchId))
                     .withStatus(NOT_FOUND)
                     .build());
         }
@@ -279,7 +279,7 @@ public class AccountingCoreService {
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Organisation with id: \{organisationId} not found")
+                    .withDetail("Organisation with id: %s not found".formatted(organisationId))
                     .withStatus(BAD_REQUEST)
                     .build());
         }
@@ -292,7 +292,7 @@ public class AccountingCoreService {
         if (outsideOfRange) {
             return Either.left(Problem.builder()
                     .withTitle("ORGANISATION_DATE_MISMATCH")
-                    .withDetail(STR."Date range must be within the accounting period: \{accountingPeriod}")
+                    .withDetail("Date range must be within the accounting period: %s".formatted(accountingPeriod))
                     .withStatus(BAD_REQUEST)
                     .with("accountingPeriodFrom", accountingPeriod.getMinimum())
                     .with("accountingPeriodTo", accountingPeriod.getMaximum())

@@ -34,13 +34,15 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemsProcessRejectView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceTest {
 
     @Mock
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
-
+    @Mock
+    private OrganisationPublicApi organisationPublicApi;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
@@ -48,7 +50,7 @@ class AccountingCoreResourceTest {
 
     @BeforeEach
     void setUp() {
-        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper);
+        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi);
     }
 
     @Test

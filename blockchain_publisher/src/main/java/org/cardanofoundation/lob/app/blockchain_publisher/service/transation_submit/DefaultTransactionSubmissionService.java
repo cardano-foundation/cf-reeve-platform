@@ -90,7 +90,7 @@ public class DefaultTransactionSubmissionService implements TransactionSubmissio
 
             try {
                 Thread.sleep(5000);
-            } catch (InterruptedException _) {}
+            } catch (InterruptedException e) {}
         }
     }
 
