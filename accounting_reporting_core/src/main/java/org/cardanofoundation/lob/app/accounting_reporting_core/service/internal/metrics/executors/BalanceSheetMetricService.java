@@ -45,14 +45,18 @@ public class BalanceSheetMetricService extends MetricExecutor {
         Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.BALANCE_SHEET, startDate, endDate);
 
         final BigDecimal[] totalLiabilities = {BigDecimal.ZERO};
-        reportEntities.forEach(reportEntity -> reportEntity.getBalanceSheetReportData().flatMap(BalanceSheetData::getLiabilities).ifPresent(liabilities -> {
+        Optional<ReportEntity> maxEntityO = reportService.getMostRecentReport(reportEntities);
+        if(maxEntityO.isEmpty()) {
+            return totalLiabilities[0];
+        }
+        maxEntityO.get().getBalanceSheetReportData().flatMap(BalanceSheetData::getLiabilities).ifPresent(liabilities -> {
             liabilities.getCurrentLiabilities().ifPresent(currentLiabilities -> {
                 currentLiabilities.getTradeAccountsPayables().ifPresent(tradeAccountsPayables -> totalLiabilities[0] = totalLiabilities[0].add(tradeAccountsPayables));
                 currentLiabilities.getOtherShortTermLiabilities().ifPresent(otherCurrentLiabilities -> totalLiabilities[0] = totalLiabilities[0].add(otherCurrentLiabilities));
                 currentLiabilities.getAccrualsAndShortTermProvisions().ifPresent(accruals -> totalLiabilities[0] = totalLiabilities[0].add(accruals));
             });
             liabilities.getNonCurrentLiabilities().flatMap(BalanceSheetData.Liabilities.NonCurrentLiabilities::getProvisions).ifPresent(provisions -> totalLiabilities[0] = totalLiabilities[0].add(provisions));
-        }));
+        });
         return totalLiabilities[0];
     }
 
@@ -60,7 +64,11 @@ public class BalanceSheetMetricService extends MetricExecutor {
         Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.BALANCE_SHEET, startDate, endDate);
 
         final BigDecimal[] totalAssets = {BigDecimal.ZERO};
-        reportEntities.forEach(reportEntity -> reportEntity.getBalanceSheetReportData().flatMap(BalanceSheetData::getAssets).ifPresent(assets -> {
+        Optional<ReportEntity> maxEntityO = reportService.getMostRecentReport(reportEntities);
+        if(maxEntityO.isEmpty()) {
+            return totalAssets;
+        }
+        maxEntityO.get().getBalanceSheetReportData().flatMap(BalanceSheetData::getAssets).ifPresent(assets -> {
             assets.getCurrentAssets().ifPresent(currentAssets -> {
                 currentAssets.getCryptoAssets().ifPresent(cryptoAssets -> totalAssets[0] = totalAssets[0].add(cryptoAssets));
                 currentAssets.getCashAndCashEquivalents().ifPresent(cash -> totalAssets[0] = totalAssets[0].add(cash));
@@ -73,7 +81,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
                 nonCurrentAssets.getTangibleAssets().ifPresent(propertyPlantEquipment -> totalAssets[0] = totalAssets[0].add(propertyPlantEquipment));
                 nonCurrentAssets.getInvestments().ifPresent(investments -> totalAssets[0] = totalAssets[0].add(investments));
             });
-        }));
+        });
         return totalAssets[0];
     }
 
@@ -82,8 +90,11 @@ public class BalanceSheetMetricService extends MetricExecutor {
 
         Map<BalanceSheetCategories, Integer> assetCategories = new EnumMap<>(BalanceSheetCategories.class);
 
-        reportEntities.forEach(reportEntity ->
-                reportEntity.getBalanceSheetReportData().flatMap(BalanceSheetData::getAssets).ifPresent(assets -> {
+        Optional<ReportEntity> maxEntityO = reportService.getMostRecentReport(reportEntities);
+        if(maxEntityO.isEmpty()) {
+            return assetCategories;
+        }
+        maxEntityO.get().getBalanceSheetReportData().flatMap(BalanceSheetData::getAssets).ifPresent(assets -> {
             assets.getCurrentAssets().ifPresent(currentAssets -> {
                 currentAssets.getCashAndCashEquivalents().ifPresent(
                         cash -> assetCategories.merge(BalanceSheetCategories.CASH, cash.intValue(), Integer::sum));
@@ -105,7 +116,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
                 nonCurrentAssets.getTangibleAssets().ifPresent(
                         propertyPlantEquipment -> assetCategories.merge(BalanceSheetCategories.OTHER, propertyPlantEquipment.intValue(), Integer::sum));
             });
-        }));
+        });
 
         return assetCategories;
     }
@@ -115,7 +126,11 @@ public class BalanceSheetMetricService extends MetricExecutor {
 
         Map<BalanceSheetCategories, Map<BalanceSheetCategories, Integer>> balanceSheetOverview = new EnumMap<>(BalanceSheetCategories.class);
 
-        reportEntities.forEach(reportEntity -> reportEntity.getBalanceSheetReportData().ifPresent(balanceSheetData -> {
+        Optional<ReportEntity> maxEntityO = reportService.getMostRecentReport(reportEntities);
+        if(maxEntityO.isEmpty()) {
+            return balanceSheetOverview;
+        }
+        maxEntityO.get().getBalanceSheetReportData().ifPresent(balanceSheetData -> {
             balanceSheetData.getAssets().ifPresent(assets -> {
                 Map<BalanceSheetCategories, Integer> assetMap = balanceSheetOverview.getOrDefault(BalanceSheetCategories.ASSETS, new HashMap<>());
                 processAssets(assets, assetMap);
@@ -132,7 +147,7 @@ public class BalanceSheetMetricService extends MetricExecutor {
                 processCapital(capital, liabilityMap);
                 balanceSheetOverview.put(BalanceSheetCategories.LIABILITIES, liabilityMap);
             });
-        }));
+        });
         return balanceSheetOverview;
     }
 
