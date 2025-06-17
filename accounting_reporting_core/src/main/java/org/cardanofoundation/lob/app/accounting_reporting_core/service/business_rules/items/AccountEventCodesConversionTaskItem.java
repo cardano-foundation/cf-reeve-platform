@@ -48,7 +48,7 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
                 return;
             }
 
-            Optional<OrganisationChartOfAccount> accountChartMappingM = organisationPublicApi.getChartOfAccounts(organisationId, accountCode);
+            Optional<ChartOfAccount> accountChartMappingM = organisationPublicApi.getChartOfAccounts(organisationId, accountCode);
 
             accountChartMappingM.ifPresentOrElse(
                     chartOfAccount -> setAccountCodeRef(acc, type, item, chartOfAccount),
