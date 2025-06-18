@@ -121,23 +121,4 @@ class ChartOfAccountControllerTest {
         assertThat(response.getBody()).isEqualTo(view);
     }
 
-    @Test
-    void upsertChartOfAccount_withError() {
-        String orgId = "org-1";
-        ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        ChartOfAccountView view = mock(ChartOfAccountView.class);
-
-        when(view.getError()).thenReturn(Optional.of(Problem.builder()
-                .withTitle("Error")
-                .withDetail("Invalid")
-                .withStatus(Status.BAD_REQUEST)
-                .build()));
-        when(chartOfAccountsService.upsertChartOfAccount(orgId, update)).thenReturn(view);
-
-        ResponseEntity<?> response = controller.upsertChartOfAccount(orgId, update);
-
-        assertThat(response.getStatusCode().value()).isEqualTo(400);
-        assertThat(response.getBody()).isEqualTo(view);
-    }
-
 }

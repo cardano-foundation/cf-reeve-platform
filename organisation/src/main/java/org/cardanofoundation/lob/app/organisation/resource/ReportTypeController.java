@@ -1,12 +1,15 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -26,6 +29,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ReportTypeFieldUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
@@ -33,7 +37,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ReportTypeView;
 import org.cardanofoundation.lob.app.organisation.service.ReportTypeService;
 
 @RestController
-@RequestMapping("/api/organisation/report-types")
+@RequestMapping("/api/organisations/report-types")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
@@ -44,34 +48,34 @@ public class ReportTypeController {
 
     @Operation(description = "Report Types", responses = {
             @ApiResponse(content =
-                    {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = AccountEventView.class)))}
+                    {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = AccountEventView.class)))}
             ),
     })
-    @GetMapping(value = "/{orgId}", produces = "application/json")
+    @GetMapping(value = "/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<ReportTypeView>> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(reportTypeService.getAllReportTypes(orgId));
     }
 
     @Operation(description = "Add mapping to Report Type field")
-    @PostMapping(value = "/{orgId}/field-mapping", produces = "application/json")
+    @PostMapping(value = "/{orgId}/field-mappings", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ReportTypeFieldUpdate reportTypeFieldUpdate) {
-        return reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).fold(
-                problem ->
-                    ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem),
-                success -> ResponseEntity.ok().body(true)
-        );
+        if (reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).isLeft()) {
+            Problem problem = reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).getLeft();
+            ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem);
+        }
+        return ResponseEntity.ok().body(true);
     }
 
     @Operation(description = "Add mapping to Report Type field via CSV")
-    @PostMapping(value = "/{orgId}/field-mapping/csv", produces = "application/json", consumes = "multipart/form-data")
+    @PostMapping(value = "/{orgId}/field-mappings", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
-        return reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).fold(
-                problem ->
-                    ResponseEntity.status(400).body(problem),
-                success -> ResponseEntity.ok().body(true)
-        );
+        if (reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).isLeft()) {
+            Set<Problem> left = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).getLeft();
+            return ResponseEntity.status(Objects.requireNonNull(400)).body(left);
+        }
+        return ResponseEntity.ok().body(true);
     }
 
 }

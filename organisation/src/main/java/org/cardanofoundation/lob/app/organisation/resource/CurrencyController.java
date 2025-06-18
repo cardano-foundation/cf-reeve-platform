@@ -8,12 +8,14 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -33,7 +35,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 
 @RestController
-@RequestMapping("/api/organisation")
+@RequestMapping("/api/organisations")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
@@ -47,7 +49,7 @@ public class CurrencyController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CurrencyView.class)))}
             ),
     })
-    @GetMapping(value = "/{orgId}/currencies", produces = "application/json")
+    @GetMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<CurrencyView>> getAllCurrencies(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         return ResponseEntity.ok().body(currencyService.getAllCurrencies(orgId));
     }
@@ -57,7 +59,7 @@ public class CurrencyController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CurrencyView.class)))}
             ),
     })
-    @GetMapping(value = "/{orgId}/currencies/{customerCode}", produces = "application/json")
+    @GetMapping(value = "/{orgId}/currencies/{customerCode}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CurrencyView> getCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @PathVariable("customerCode") @Parameter(example = "CHF") String customerCode) {
         return currencyService.getCurrency(orgId, customerCode)
                 .map(ResponseEntity::ok)
@@ -69,7 +71,7 @@ public class CurrencyController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CurrencyView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/currencies/insert", produces = "application/json")
+    @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         return ResponseEntity.ok().body(currencyService.insertCurrency(orgId, currencyUpdate));
@@ -80,7 +82,7 @@ public class CurrencyController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CurrencyView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/currencies/update", produces = "application/json")
+    @PutMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         return ResponseEntity.ok().body(currencyService.updateCurrency(orgId, currencyUpdate));
@@ -91,7 +93,7 @@ public class CurrencyController {
                     {@Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = CurrencyView.class)))}
             ),
     })
-    @PostMapping(value = "/{orgId}/currencies/insert-csv", produces = "application/json")
+    @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         return currencyService.insertViaCsv(orgId, file).fold(
