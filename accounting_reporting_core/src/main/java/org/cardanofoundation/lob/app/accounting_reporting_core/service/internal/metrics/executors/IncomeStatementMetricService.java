@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
@@ -41,38 +42,54 @@ public class IncomeStatementMetricService extends MetricExecutor {
 
     private Map<Short, Long> getProfitOfTheYear(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
         Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.INCOME_STATEMENT, startDate, endDate);
-
         return reportEntities.stream()
-                .collect(Collectors.groupingBy(ReportEntity::getYear,
-                        Collectors.summingLong(value ->
-                                value.getIncomeStatementReportData().orElseGet(IncomeStatementData::new)
-                                        .getProfitForTheYear().orElse(BigDecimal.ZERO).longValue())));
+                .collect(Collectors.groupingBy(
+                        ReportEntity::getYear,
+                        Collectors.collectingAndThen(
+                                Collectors.maxBy(Comparator.comparing(o ->
+                                        reportService.getReportEndDate(
+                                                o.getIntervalType(),
+                                                reportService.getReportStartDate(
+                                                        o.getIntervalType(),
+                                                        o.getPeriod().orElseThrow(), // handle Optional safely if needed
+                                                        o.getYear()
+                                                )
+                                        )
+                                )),
+                                maxReportOpt -> maxReportOpt
+                                        .flatMap(ReportEntity::getIncomeStatementReportData)
+                                        .flatMap(data -> data.getProfitForTheYear().map(BigDecimal::longValue))
+                                        .orElse(0L)
+                        )
+                ));
     }
 
     private Map<IncomeStatemenCategories, Integer> getTotalExpenses(String organisationID, Optional<LocalDate> startDate, Optional<LocalDate> endDate) {
         Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.INCOME_STATEMENT, startDate, endDate);
 
         Map<IncomeStatemenCategories, Integer> totalExpenses = new EnumMap<>(IncomeStatemenCategories.class);
-
-        reportEntities.forEach(reportEntity -> {
-            if(reportEntity.getIncomeStatementReportData().isPresent()) {
-                IncomeStatementData incomeStatementData = reportEntity.getIncomeStatementReportData().get();
-                incomeStatementData.getCostOfGoodsAndServices().ifPresent(costOfGoodsAndServices -> totalExpenses.merge(IncomeStatemenCategories.COST_OF_SERVICE, costOfGoodsAndServices.getExternalServices().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
-                incomeStatementData.getOperatingExpenses().ifPresent(operatingExpenses -> {
-                    totalExpenses.merge(IncomeStatemenCategories.PERSONNEL_EXPENSES, operatingExpenses.getPersonnelExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
-                    // Other Operating Expenses
-                    int otherOperatingExpenses = sumUpOptionalFields(
-                            operatingExpenses.getRentExpenses(),
-                            operatingExpenses.getGeneralAndAdministrativeExpenses(),
-                            operatingExpenses.getAmortizationOnIntangibleAssets(),
-                            operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets(),
-                            operatingExpenses.getRentExpenses());
-                    totalExpenses.merge(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, otherOperatingExpenses, Integer::sum);
-                });
-                incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> totalExpenses.merge(IncomeStatemenCategories.FINANCIAL_EXPENSES, financialIncome.getFinancialExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
-                incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> totalExpenses.merge(IncomeStatemenCategories.TAX_EXPENSES, taxExpenses.getDirectTaxes().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
-            }
-        });
+        Optional<ReportEntity> maxEntityO = reportService.getMostRecentReport(reportEntities);
+        if(maxEntityO.isEmpty()) {
+            return totalExpenses;
+        }
+        ReportEntity maxEntity = maxEntityO.get();
+        if(maxEntity.getIncomeStatementReportData().isPresent()) {
+            IncomeStatementData incomeStatementData = maxEntity.getIncomeStatementReportData().get();
+            incomeStatementData.getCostOfGoodsAndServices().ifPresent(costOfGoodsAndServices -> totalExpenses.merge(IncomeStatemenCategories.COST_OF_SERVICE, costOfGoodsAndServices.getExternalServices().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
+            incomeStatementData.getOperatingExpenses().ifPresent(operatingExpenses -> {
+                totalExpenses.merge(IncomeStatemenCategories.PERSONNEL_EXPENSES, operatingExpenses.getPersonnelExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
+                // Financial Expenses Expenses
+                int financialExpenses = sumUpOptionalFields(
+                        operatingExpenses.getRentExpenses(),
+                        operatingExpenses.getGeneralAndAdministrativeExpenses(),
+                        operatingExpenses.getAmortizationOnIntangibleAssets(),
+                        operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets(),
+                        operatingExpenses.getRentExpenses());
+                totalExpenses.merge(IncomeStatemenCategories.FINANCIAL_EXPENSES, financialExpenses, Integer::sum);
+            });
+            incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> totalExpenses.merge(IncomeStatemenCategories.TAX_EXPENSES, financialIncome.getFinancialExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
+            incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> totalExpenses.merge(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, taxExpenses.getDirectTaxes().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
+        }
         return totalExpenses;
     }
 
@@ -80,10 +97,13 @@ public class IncomeStatementMetricService extends MetricExecutor {
         Set<ReportEntity> reportEntities = reportService.findReportsInDateRange(organisationID, ReportType.INCOME_STATEMENT, startDate, endDate);
 
         Map<IncomeStatemenCategories, Integer> incomeStream = new EnumMap<>(IncomeStatemenCategories.class);
+        Optional<ReportEntity> maxEntityO = reportService.getMostRecentReport(reportEntities);
+        if(maxEntityO.isEmpty()) {
+            return incomeStream;
+        }
+        ReportEntity maxEntity = maxEntityO.get();
 
-
-        reportEntities.forEach(reportEntity ->
-                reportEntity.getIncomeStatementReportData().ifPresent(incomeStatementData -> {
+        maxEntity.getIncomeStatementReportData().ifPresent(incomeStatementData -> {
             incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> {
                 incomeStream.merge(IncomeStatemenCategories.STAKING_REWARDS, financialIncome.getStakingRewardsIncome().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
                 incomeStream.merge(IncomeStatemenCategories.OTHER, financialIncome.getNetIncomeOptionsSale().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
@@ -94,7 +114,7 @@ public class IncomeStatementMetricService extends MetricExecutor {
                 incomeStream.merge(IncomeStatemenCategories.BUILDING_OF_PROVISIONS, revenues.getBuildOfLongTermProvision().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
                 incomeStream.merge(IncomeStatemenCategories.OTHER, revenues.getOtherIncome().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
             });
-        }));
+        });
 
         return incomeStream;
     }

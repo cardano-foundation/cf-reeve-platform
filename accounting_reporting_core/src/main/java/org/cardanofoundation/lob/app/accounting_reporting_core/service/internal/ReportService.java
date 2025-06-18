@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -613,8 +614,8 @@ public class ReportService {
 
         // filtering by dates
         reportEntities = reportEntities.stream().filter(reportEntity -> {
-            LocalDate reportStartDate = getStartDate(reportEntity.getIntervalType(), reportEntity.getPeriod().orElse((short) 0), reportEntity.getYear());
-            LocalDate reportEndDate = getEndDate(reportEntity.getIntervalType(), reportStartDate);
+            LocalDate reportStartDate = getReportStartDate(reportEntity.getIntervalType(), reportEntity.getPeriod().orElse((short) 0), reportEntity.getYear());
+            LocalDate reportEndDate = getReportEndDate(reportEntity.getIntervalType(), reportStartDate);
             return reportStartDate.plusDays(1).isAfter(startDate) && reportEndDate.minusDays(1).isBefore(endDate);
         }).collect(Collectors.toSet());
         // sorting by Year, Quarter, Month
@@ -674,8 +675,8 @@ public class ReportService {
     }
 
     public Either<Problem, ReportEntity> reportGenerate(@Valid ReportGenerateRequest reportGenerateRequest) {
-        LocalDate startDate = getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear());
-        LocalDate endDate = getEndDate(reportGenerateRequest.getIntervalType(), getStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear()));
+        LocalDate startDate = getReportStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear());
+        LocalDate endDate = getReportEndDate(reportGenerateRequest.getIntervalType(), getReportStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear()));
 
         ReportEntity reportEntity = new ReportEntity();
         reportEntity.setYear(reportGenerateRequest.getYear());
@@ -951,7 +952,7 @@ public class ReportService {
      * @param year         The year.
      * @return The start date.
      */
-    private LocalDate getStartDate(IntervalType intervalType, int period, short year) {
+    public LocalDate getReportStartDate(IntervalType intervalType, int period, short year) {
         switch (intervalType) {
             case MONTH:
                 return LocalDate.of(year, period, 1);
@@ -972,7 +973,7 @@ public class ReportService {
      * @param startDate    The start date.
      * @return The end date.
      */
-    private LocalDate getEndDate(IntervalType intervalType, LocalDate startDate) {
+    public LocalDate getReportEndDate(IntervalType intervalType, LocalDate startDate) {
         switch (intervalType) {
             case MONTH:
                 return startDate.plusMonths(1).minusDays(1);
@@ -983,6 +984,20 @@ public class ReportService {
             default:
                 throw new IllegalArgumentException("Unsupported IntervalType: " + intervalType);
         }
+    }
+
+    public Optional<ReportEntity> getMostRecentReport(Set<ReportEntity> reportEntities) {
+        return reportEntities.stream()
+                .max(Comparator.comparing(o ->
+                        getReportEndDate(
+                                o.getIntervalType(),
+                                getReportStartDate(
+                                        o.getIntervalType(),
+                                        o.getPeriod().orElseThrow(), // handle Optional safely if needed
+                                        o.getYear()
+                                )
+                        )
+                ));
     }
 
     /**

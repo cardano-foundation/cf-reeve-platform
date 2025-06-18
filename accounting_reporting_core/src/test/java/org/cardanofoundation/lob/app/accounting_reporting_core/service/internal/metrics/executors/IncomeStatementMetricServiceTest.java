@@ -61,15 +61,16 @@ class IncomeStatementMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         Map<IncomeStatemenCategories, Integer> totalExpenses = (Map<IncomeStatemenCategories, Integer>) incomeStatementMetricService.getData(MetricEnum.SubMetric.TOTAL_EXPENSES, "organisationId", Optional.empty(), Optional.empty());
 
         assertThat(totalExpenses).isNotNull();
         assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.PERSONNEL_EXPENSES, 10);
         assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.COST_OF_SERVICE, 10);
-        assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.FINANCIAL_EXPENSES, 10);
         assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.TAX_EXPENSES, 10);
-        assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, 50);
+        assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, 10);
+        assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.FINANCIAL_EXPENSES, 50);
     }
 
     @Test
@@ -80,6 +81,7 @@ class IncomeStatementMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         Map<IncomeStatemenCategories, Integer> incomeStream = (Map<IncomeStatemenCategories, Integer>) incomeStatementMetricService.getData(MetricEnum.SubMetric.INCOME_STREAMS, "organisationId", Optional.empty(), Optional.empty());
 
