@@ -78,17 +78,17 @@ public class IncomeStatementMetricService extends MetricExecutor {
             incomeStatementData.getCostOfGoodsAndServices().ifPresent(costOfGoodsAndServices -> totalExpenses.merge(IncomeStatemenCategories.COST_OF_SERVICE, costOfGoodsAndServices.getExternalServices().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
             incomeStatementData.getOperatingExpenses().ifPresent(operatingExpenses -> {
                 totalExpenses.merge(IncomeStatemenCategories.PERSONNEL_EXPENSES, operatingExpenses.getPersonnelExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
-                // Other Operating Expenses
-                int otherOperatingExpenses = sumUpOptionalFields(
+                // Financial Expenses Expenses
+                int financialExpenses = sumUpOptionalFields(
                         operatingExpenses.getRentExpenses(),
                         operatingExpenses.getGeneralAndAdministrativeExpenses(),
                         operatingExpenses.getAmortizationOnIntangibleAssets(),
                         operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets(),
                         operatingExpenses.getRentExpenses());
-                totalExpenses.merge(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, otherOperatingExpenses, Integer::sum);
+                totalExpenses.merge(IncomeStatemenCategories.FINANCIAL_EXPENSES, financialExpenses, Integer::sum);
             });
-            incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> totalExpenses.merge(IncomeStatemenCategories.FINANCIAL_EXPENSES, financialIncome.getFinancialExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
-            incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> totalExpenses.merge(IncomeStatemenCategories.TAX_EXPENSES, taxExpenses.getDirectTaxes().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
+            incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> totalExpenses.merge(IncomeStatemenCategories.TAX_EXPENSES, financialIncome.getFinancialExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
+            incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> totalExpenses.merge(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, taxExpenses.getDirectTaxes().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
         }
         return totalExpenses;
     }
