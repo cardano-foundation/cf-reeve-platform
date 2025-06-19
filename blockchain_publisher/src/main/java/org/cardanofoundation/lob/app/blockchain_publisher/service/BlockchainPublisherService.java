@@ -47,6 +47,9 @@ public class BlockchainPublisherService {
         ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, storedTransactions);
     }
 
+    // This method aggregates transaction items by their aggregated hash and sums their amounts.
+    // the hash is currently derived from all the fields of the TransactionItemEntity except the amount.
+    // this is to ensure that items with the same details but different amounts are treated as separate items.
     private Set<TransactionItemEntity> aggregateTxItems(Set<TransactionItemEntity> items) {
         return items.stream()
                 .collect(Collectors.groupingBy(TransactionItemEntity::aggregatedHash, Collectors.toSet()))
