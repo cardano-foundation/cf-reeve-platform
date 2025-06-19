@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs;
 import static jakarta.persistence.FetchType.EAGER;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.persistence.*;
@@ -16,8 +17,6 @@ import lombok.Setter;
 
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
-import com.google.common.base.Objects;
 
 import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyEntity;
 
@@ -97,12 +96,16 @@ public class TransactionItemEntity extends CommonDateOnlyEntity implements Persi
         if (o == null || getClass() != o.getClass()) return false;
         TransactionItemEntity that = (TransactionItemEntity) o;
 
-        return Objects.equal(id, that.id);
+        return id.equals(that.id);
     }
 
     @Override
     public int hashCode() {
         return Objects.hashCode(id);
+    }
+
+    public int aggregatedHash() {
+        return Objects.hash(accountEvent, fxRate, project, costCenter, document);
     }
 
     @Override
