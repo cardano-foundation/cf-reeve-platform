@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.repository;
 
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,5 +13,8 @@ public interface CostCenterRepository extends JpaRepository<CostCenter, CostCent
 
     @Query("SELECT t FROM CostCenter t WHERE t.id.organisationId = :organisationId")
     Set<CostCenter> findAllByOrganisationId(@Param("organisationId") String organisationId);
+
+    @Query("SELECT t FROM CostCenter t WHERE t.id = :Id AND t.active = :active ")
+    Optional<CostCenter> findByIdAndActive(@Param("Id") CostCenter.Id Id, @Param("active") boolean active);
 
 }
