@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.views;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Objects;
 
 import javax.annotation.Nullable;
 
@@ -98,4 +99,17 @@ public class ExtractionTransactionItemView {
 
     private String parentProjectName;
 
+    // this function is used for aggregating objects, thus the amount will not be taken into account for the hash code
+    public int aggregationHashCode() {
+        return Objects.hash(
+                blockChainHash,
+                transactionID,
+                entryDate,
+                transactionType,
+                documentNum,
+                documentCurrencyCustomerCode,
+                fxRate,
+                accountEventCode
+        );
+    }
 }
