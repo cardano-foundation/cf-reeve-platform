@@ -36,9 +36,8 @@ public class ExtractionItemService {
     @Transactional(readOnly = true)
     public ExtractionTransactionView findTransactionItems(LocalDate dateFrom, LocalDate dateTo, List<String> accountCode, List<String> costCenter, List<String> project, List<String> accountType, List<String> accountSubType) {
 
-        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType).stream().map(item -> {
-            return extractionTransactionItemViewBuilder(item);
-        }).collect(Collectors.toList());
+        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType)
+                .stream().map(this::extractionTransactionItemViewBuilder).toList();
 
         return ExtractionTransactionView.createSuccess(transactionItem);
     }
@@ -46,10 +45,23 @@ public class ExtractionItemService {
     @Transactional(readOnly = true)
     public List<ExtractionTransactionItemView> findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
 
-        return transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> {
-            return enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item));
-        }).toList();
+        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
 
+        // aggregating in case there are duplicate items
+        return list.stream()
+                .collect(Collectors.groupingBy(ExtractionTransactionItemView::aggregationHashCode, Collectors.toSet()))
+                .values().stream()
+                .map(itemSet -> {
+                    ExtractionTransactionItemView aggregatedItem = itemSet.iterator().next();
+                    aggregatedItem.setAmountFcy(BigDecimal.valueOf(itemSet.stream()
+                            .mapToLong(value -> value.getAmountFcy().longValue())
+                            .sum()));
+                    aggregatedItem.setAmountLcy(BigDecimal.valueOf(itemSet.stream()
+                            .mapToLong(value -> value.getAmountLcy().longValue())
+                            .sum()));
+                    return aggregatedItem;
+                })
+                .toList();
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
