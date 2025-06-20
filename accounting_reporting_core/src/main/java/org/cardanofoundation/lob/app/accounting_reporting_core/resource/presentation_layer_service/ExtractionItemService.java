@@ -47,7 +47,7 @@ public class ExtractionItemService {
 
         List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
 
-        // aggregating in case there are duplicate items
+        // aggregating in case there are duplicate items due to the enrichment process it is possible to have newly duplicates
         return list.stream()
                 .collect(Collectors.groupingBy(ExtractionTransactionItemView::aggregationHashCode, Collectors.toSet()))
                 .values().stream()
