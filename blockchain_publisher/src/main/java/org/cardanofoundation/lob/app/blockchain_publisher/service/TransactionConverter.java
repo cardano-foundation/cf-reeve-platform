@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
+import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
 
 import java.math.BigDecimal;
@@ -61,9 +62,9 @@ public class TransactionConverter {
                 .values().stream()
                 .map(itemSet -> {
                     TransactionItemEntity aggregatedItem = itemSet.iterator().next();
-                    aggregatedItem.setAmountFcy(BigDecimal.valueOf(itemSet.stream()
-                            .mapToLong(value -> value.getAmountFcy().longValue())
-                            .sum()));
+                    aggregatedItem.setAmountFcy(itemSet.stream()
+                            .map(TransactionItemEntity::getAmountFcy)
+                            .reduce(ZERO,BigDecimal::add));
                     return aggregatedItem;
                 })
                 .collect(Collectors.toSet());

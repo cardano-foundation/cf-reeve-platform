@@ -102,14 +102,11 @@ public class ExtractionTransactionItemView {
     // this function is used for aggregating objects, thus the amount will not be taken into account for the hash code
     public int aggregationHashCode() {
         return Objects.hash(
-                blockChainHash,
-                transactionID,
-                entryDate,
-                transactionType,
-                documentNum,
-                documentCurrencyCustomerCode,
+                accountEventCode,
                 fxRate,
-                accountEventCode
+                projectCustomerCode,
+                costCenterCustomerCode,
+                documentNum
         );
     }
 }

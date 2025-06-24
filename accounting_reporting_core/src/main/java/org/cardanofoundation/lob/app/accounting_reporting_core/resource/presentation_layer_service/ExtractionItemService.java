@@ -53,12 +53,12 @@ public class ExtractionItemService {
                 .values().stream()
                 .map(itemSet -> {
                     ExtractionTransactionItemView aggregatedItem = itemSet.iterator().next();
-                    aggregatedItem.setAmountFcy(BigDecimal.valueOf(itemSet.stream()
-                            .mapToLong(value -> value.getAmountFcy().longValue())
-                            .sum()));
-                    aggregatedItem.setAmountLcy(BigDecimal.valueOf(itemSet.stream()
-                            .mapToLong(value -> value.getAmountLcy().longValue())
-                            .sum()));
+                    aggregatedItem.setAmountFcy(itemSet.stream()
+                            .map(ExtractionTransactionItemView::getAmountFcy)
+                            .reduce(ZERO,BigDecimal::add));
+                    aggregatedItem.setAmountLcy(itemSet.stream()
+                            .map(ExtractionTransactionItemView::getAmountLcy)
+                            .reduce(ZERO,BigDecimal::add));
                     return aggregatedItem;
                 })
                 .toList();
