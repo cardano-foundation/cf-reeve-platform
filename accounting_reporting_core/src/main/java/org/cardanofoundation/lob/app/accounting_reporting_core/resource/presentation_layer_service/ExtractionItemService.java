@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
@@ -55,10 +56,10 @@ public class ExtractionItemService {
                     ExtractionTransactionItemView aggregatedItem = itemSet.iterator().next();
                     aggregatedItem.setAmountFcy(itemSet.stream()
                             .map(ExtractionTransactionItemView::getAmountFcy)
-                            .reduce(ZERO,BigDecimal::add));
+                            .reduce(ZERO, BigDecimal::add));
                     aggregatedItem.setAmountLcy(itemSet.stream()
                             .map(ExtractionTransactionItemView::getAmountLcy)
-                            .reduce(ZERO,BigDecimal::add));
+                            .reduce(ZERO, BigDecimal::add));
                     return aggregatedItem;
                 })
                 .toList();
@@ -81,7 +82,7 @@ public class ExtractionItemService {
                 item.getAccountCredit().map(Account::getCode).orElse(null),
                 item.getAccountCredit().flatMap(Account::getName).orElse(null),
                 item.getAccountCredit().flatMap(Account::getRefCode).orElse(null),
-                item.getAmountFcy(),
+                item.getTransaction().getTransactionType().equals(TransactionType.FxRevaluation) ? item.getAmountLcy() : item.getAmountFcy(),
                 item.getAmountLcy(),
                 item.getFxRate(),
                 item.getCostCenter().map(CostCenter::getCustomerCode).orElse(null),
