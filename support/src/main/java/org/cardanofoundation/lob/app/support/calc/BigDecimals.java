@@ -32,4 +32,8 @@ public class BigDecimals {
         return normalise(dec).toEngineeringString();
     }
 
+    public String normalisePlainString(BigDecimal dec) {
+        return normalise(dec).toPlainString();
+    }
+
 }

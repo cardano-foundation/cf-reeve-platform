@@ -79,6 +79,22 @@ class BigDecimalsTest {
     }
 
     @Test
+    @DisplayName("Should return BigDecimal in plan String format")
+    void testNormalisePlainString_withValidBigDecimal() {
+        BigDecimal input = new BigDecimal("123.456789123");
+        String result = BigDecimals.normalisePlainString(input);
+        assertThat(result).isEqualTo("123.45678912");
+
+        input = new BigDecimal("1000.00000");
+        result = BigDecimals.normalisePlainString(input);
+        assertThat(result).isEqualTo("1000");
+
+        input = new BigDecimal("0.00001");
+        result = BigDecimals.normalisePlainString(input);
+        assertThat(result).isEqualTo("0.00001");
+    }
+
+    @Test
     @DisplayName("Should return Engineering String representation for very small numbers")
     void testNormaliseEngineeringString_withSmallNumbers() {
         BigDecimal input = new BigDecimal("0.00000001");

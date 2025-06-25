@@ -161,7 +161,7 @@ class API1MetadataSerialiserTest {
                     .findFirst().orElseThrow();
 
             assertThat(itemMap.get("id")).isEqualTo(item.getId());
-            assertThat(itemMap.get("amount")).isEqualTo(BigDecimals.normaliseEngineeringString(item.getAmountFcy()));
+            assertThat(itemMap.get("amount")).isEqualTo(BigDecimals.normalisePlainString(item.getAmountFcy()));
             assertThat(itemMap.get("fx_rate")).isEqualTo(BigDecimals.normaliseEngineeringString(item.getFxRate()));
             assertThat(itemMap.get("document")).isInstanceOf(MetadataMap.class);
         }
@@ -171,7 +171,7 @@ class API1MetadataSerialiserTest {
         val itemMap3 = assertContainsItem("item3", itemsList);
 
         assertThat(itemMap1.get("id")).isEqualTo("item1");
-        assertThat(itemMap1.get("amount")).isEqualTo(BigDecimals.normaliseEngineeringString(item1.getAmountFcy()));
+        assertThat(itemMap1.get("amount")).isEqualTo(BigDecimals.normalisePlainString(item1.getAmountFcy()));
         assertThat(itemMap1.get("fx_rate")).isEqualTo(BigDecimals.normaliseEngineeringString(item1.getFxRate()));
         assertThat(itemMap1.get("document")).isInstanceOf(MetadataMap.class);
         assertThat(itemMap1.get("project")).isInstanceOf(MetadataMap.class); // only for item 1
