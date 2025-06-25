@@ -23,7 +23,7 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
     }
 
     @Test
-    @Disabled
+    @Disabled //
     void testApproveTransaction() {
         given()
                 .contentType("application/json")
