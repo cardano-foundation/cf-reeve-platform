@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.*;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
@@ -122,6 +123,9 @@ public class TransactionConverter {
         txItemEntity.setFxRate(txItem.getFxRate());
 
         txItemEntity.setAmountFcy(txItem.getAmountFcy());
+        if(parent.getTransactionType().equals(TransactionType.FxRevaluation)){
+            txItemEntity.setAmountFcy(txItem.getAmountLcy());
+        }
 
         txItemEntity.setDocument(convertDocument(txItem.getDocument().orElseThrow()));
 
