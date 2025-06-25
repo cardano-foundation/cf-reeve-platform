@@ -31,7 +31,7 @@ jobs:
 
       - name: Test
         run: |
-         ./gradlew clean test jacocoTestReport
+          TESTCONTAINERS_ENABLED=false ./gradlew clean test jacocoTestReport
       - name: Spotless
         run : |
           ./gradlew spotlessCheck
