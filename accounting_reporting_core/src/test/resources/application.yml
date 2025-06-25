@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    name: ${DB_NAME:lob_service}
+    name: ${DB_NAME:postgres}
     url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=lob_service}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
