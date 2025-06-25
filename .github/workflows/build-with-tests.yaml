@@ -30,8 +30,15 @@ jobs:
           distribution: 'corretto'
 
       - name: Test
+        env:
+          DB_NAME: postgres
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_URL: jdbc:postgresql://localhost:5432/postgres
+          DB_DRIVER: org.postgresql.Driver
+          TESTCONTAINERS_ENABLED: false
         run: |
-          TESTCONTAINERS_ENABLED=false ./gradlew clean test jacocoTestReport
+          ./gradlew clean test jacocoTestReport
       - name: Spotless
         run : |
           ./gradlew spotlessCheck
