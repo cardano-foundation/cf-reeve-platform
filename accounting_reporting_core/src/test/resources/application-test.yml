@@ -1,0 +1,64 @@
+server:
+  port: 19000
+
+spring:
+  datasource:
+    name: ${DB_NAME:postgres}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=lob_service}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+  jpa:
+    hibernate:
+    ddl-auto: create
+  kafka:
+    enabled: false
+  flyway:
+    out-of-order: false
+    # baselineOnMigrate this will create a baseline version if none exists (https://flywaydb.org/documentation/configuration/parameters/baselineOnMigrate)
+    baselineOnMigrate: true
+    enabled: true
+    validateMigrationNaming: true
+    cleanDisabled: false
+    locations:
+      - classpath:db/migration/{vendor}/common
+      - classpath:db/migration/{vendor}/dev
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+    clean-on-validation-error: true
+
+netsuite:
+  altavia:
+    client-url: http://localhost:19000/api/mockresult
+lob:
+  cardano:
+    network: "DEV"
+  dispatching_strategy:
+    type: "IMMEDIATE"
+
+  blockfrost:
+    url: "http://localhost:8080/api/v1/"
+    # locally YaciDevKit runs on port 8080
+    api_key: ""
+  netsuite:
+    enabled: false
+    client:
+      url: "http://localhost:19000/api/mockresult"
+  #  LOB_BLOCKCHAIN_READER_ENABLED=true
+  #  LOB_BLOCKCHAIN_PUBLISHER_ENABLED=true
+  #  LOB_NETSUITE_ENABLED=true
+  csv:
+    delimiter: ","
+  blockchain-reader:
+    enabled: false
+  blockchain-publisher:
+    enabled: false
+  organisation:
+    enabled: false
+
+#spring.profiles.active=dev--yaci-dev-kit
+keycloak:
+  enabled: false
+  token-url: ""
+  authorization-url: ""
+testcontainers:
+  enabled: true

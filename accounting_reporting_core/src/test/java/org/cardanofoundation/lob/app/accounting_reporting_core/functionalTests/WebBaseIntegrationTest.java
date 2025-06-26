@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 
@@ -36,6 +37,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.config.TimeConfig
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Slf4j
 @Testcontainers
+@ActiveProfiles("test")
 public class WebBaseIntegrationTest {
 
     @LocalServerPort
