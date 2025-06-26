@@ -1,6 +1,10 @@
 server:
   port: 19000
 
+logging:
+  level:
+    org.hibernate.sql: DEBUG
+
 spring:
   datasource:
     name: ${DB_NAME:postgres}
