@@ -10,20 +10,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.flywaydb.core.Flyway;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 @Slf4j
 class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTest {
 
-    @BeforeEach
-    void clearDatabase(@Autowired Flyway flyway){
-        flyway.clean();
-        flyway.migrate();
-    }
-
     @Test
-    @Disabled //
     void testApproveTransaction() {
         given()
                 .contentType("application/json")
@@ -64,14 +56,16 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
     void testApproveTransactionTransactionNotFound() {
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"NotExistingTransaction\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                            "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                            "transactionIds": [
+                                {
+                                  "id": "NotExistingTransaction"
+                                }
+                            ]
+                        }
+                        """)
                 .when()
                 .post("/api/transactions/approve")
                 .then()
