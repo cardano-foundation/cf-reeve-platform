@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.functionalTests;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -16,6 +15,7 @@ import org.springframework.test.context.TestPropertySource;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.restassured.RestAssured;
+import org.flywaydb.core.Flyway;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
