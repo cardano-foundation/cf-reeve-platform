@@ -22,7 +22,7 @@ spring:
     cleanDisabled: false
     locations:
       - classpath:db/migration/{vendor}/common
-      - classpath:db/migration/{vendor}/dev
+      - classpath:db/migration/{vendor}/test
     driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
     clean-on-validation-error: true
 
