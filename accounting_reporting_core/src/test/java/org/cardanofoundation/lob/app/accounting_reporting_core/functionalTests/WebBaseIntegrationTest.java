@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.functionalTests;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.flywaydb.core.Flyway;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,6 +15,7 @@ import org.springframework.test.context.TestPropertySource;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.restassured.RestAssured;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import org.junit.jupiter.api.AfterAll;
@@ -39,6 +42,8 @@ public class WebBaseIntegrationTest {
     protected int serverPort;
     protected static WireMockServer wireMockServer;
     protected int randomWebMockPort = 19000;
+    @Autowired
+    private PostgreSQLContainer postgresContainer;
 
     @BeforeAll
     void setUp() {
@@ -50,6 +55,12 @@ public class WebBaseIntegrationTest {
 
         RestAssured.port = serverPort;
         RestAssured.baseURI = "http://localhost";
+
+        Flyway flyway = Flyway.configure()
+                .dataSource(postgresContainer.getJdbcUrl(), postgresContainer.getUsername(), postgresContainer.getPassword())
+                .locations("classpath:db/migration/postgresql/dev", "classpath:db/migration/postgresql/common")
+                .load();
+        flyway.migrate();
     }
 
     @AfterAll
