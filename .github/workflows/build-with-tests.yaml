@@ -22,7 +22,7 @@ jobs:
 
       - name: Test
         run: |
-          ./gradlew clean test jacocoTestReport --info --stacktrace
+          ./gradlew clean test jacocoTestReport
       - name: Spotless
         run : |
           ./gradlew spotlessCheck
