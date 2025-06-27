@@ -9,15 +9,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16.3
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
 
     steps:
       - name: Checkout
@@ -31,7 +22,7 @@ jobs:
 
       - name: Test
         run: |
-         ./gradlew clean test jacocoTestReport
+          ./gradlew clean test jacocoTestReport
       - name: Spotless
         run : |
           ./gradlew spotlessCheck
