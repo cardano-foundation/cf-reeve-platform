@@ -171,7 +171,11 @@ public class AccountingCoreService {
             ValidateIngestionResponseEvent response = future.get(10, TimeUnit.SECONDS);
             if (!response.isValid()) {
                 // return the list of problems
-                return Either.left(response.getErrors());
+                return Either.left(response.getErrors().stream().map(error -> Problem.builder()
+                        .withTitle("VALIDATION_ERROR")
+                        .withDetail(error)
+                        .withStatus(BAD_REQUEST)
+                        .build()).collect(Collectors.toList()));
             }
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
             log.error("Error waiting for ValidateIngestionResponseEvent", e);

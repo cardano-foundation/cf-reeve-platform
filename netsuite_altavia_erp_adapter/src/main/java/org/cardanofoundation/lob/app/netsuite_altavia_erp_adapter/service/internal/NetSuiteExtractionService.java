@@ -77,7 +77,7 @@ public class NetSuiteExtractionService {
 
         ValidateIngestionResponseEvent build = ValidateIngestionResponseEvent.builder()
                 .correlationId(correlationId)
-                .errors(errors)
+                .errors(errors.stream().map(Problem::getDetail).toList())
                 .valid(errors.isEmpty())
                 .build();
         applicationEventPublisher.publishEvent(build);

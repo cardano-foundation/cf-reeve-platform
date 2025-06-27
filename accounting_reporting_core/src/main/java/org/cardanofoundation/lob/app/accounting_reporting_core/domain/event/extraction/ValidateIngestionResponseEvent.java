@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 import org.jmolecules.event.annotation.DomainEvent;
-import org.zalando.problem.Problem;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -21,6 +20,6 @@ public class ValidateIngestionResponseEvent {
 
     private String correlationId;
     private boolean valid;
-    private List<Problem> errors;
+    private List<String> errors;
 
 }
