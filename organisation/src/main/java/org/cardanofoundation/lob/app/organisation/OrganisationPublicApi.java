@@ -54,6 +54,6 @@ public class OrganisationPublicApi implements OrganisationPublicApiIF {
     }
 
     public Optional<AccountEvent> findEventCode(String organisationId, String debitcustomerCode, String creditCustomerCode) {
-        return accountEventService.findById(organisationId, debitcustomerCode, creditCustomerCode);
+        return accountEventService.findByIdAndActive(organisationId, debitcustomerCode, creditCustomerCode);
     }
 }

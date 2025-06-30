@@ -36,8 +36,8 @@ public class AccountEventService {
     private final OrganisationService organisationService;
     private final CsvParser<EventCodeUpdate> csvParser;
 
-    public Optional<AccountEvent> findById(String organisationId, String debitReferenceCode, String creditReferenceCode) {
-        return accountEventRepository.findById(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode));
+    public Optional<AccountEvent> findByIdAndActive(String organisationId, String debitReferenceCode, String creditReferenceCode) {
+        return accountEventRepository.findByIdAndActive(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode),true );
     }
 
     public List<AccountEventView> getAllAccountEvent(String orgId) {

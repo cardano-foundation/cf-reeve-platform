@@ -46,7 +46,7 @@ public class ChartOfAccountsService {
     private EntityManager entityManager;
 
     public Optional<ChartOfAccount> getChartAccount(String organisationId, String customerCode) {
-        return chartOfAccountRepository.findById(new ChartOfAccount.Id(organisationId, customerCode));
+        return chartOfAccountRepository.findByIdAndActive(new ChartOfAccount.Id(organisationId, customerCode), true);
     }
 
     @Transactional
@@ -125,10 +125,10 @@ public class ChartOfAccountsService {
         Optional<ChartOfAccountSubType> subType = chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType());
         return subType.<Either<ChartOfAccountView, ChartOfAccountSubType>>map(Either::right)
                 .orElseGet(() -> Either.left(ChartOfAccountView.createFail(Problem.builder()
-                .withTitle("SUBTYPE_NOT_FOUND")
-                .withDetail("Unable to find subtype code :%s".formatted(chartOfAccountUpdate.getSubType()))
-                .withStatus(Status.NOT_FOUND)
-                .build(), chartOfAccountUpdate.getCustomerCode())));
+                        .withTitle("SUBTYPE_NOT_FOUND")
+                        .withDetail("Unable to find subtype code :%s".formatted(chartOfAccountUpdate.getSubType()))
+                        .withStatus(Status.NOT_FOUND)
+                        .build(), chartOfAccountUpdate.getCustomerCode())));
     }
 
     Either<ChartOfAccountView, Void> isParentCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
@@ -241,7 +241,7 @@ public class ChartOfAccountsService {
                         .withDetail(e.getMessage())
                         .withStatus(Status.BAD_REQUEST)
                         .build();
-                accountEventViews.add(ChartOfAccountView.createFail(error , chartOfAccountUpdateCsv.getCustomerCode()));
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv.getCustomerCode()));
                 continue;
             }
 

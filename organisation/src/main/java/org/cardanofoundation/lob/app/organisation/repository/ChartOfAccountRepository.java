@@ -27,4 +27,7 @@ public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, 
     @Query("SELECT t FROM ChartOfAccount t " +
             "WHERE t.subType.id IN :subTypeIds")
     Set<ChartOfAccount> findAllByOrganisationIdSubTypeIds(@Param("subTypeIds") List<Long> mappingType);
+
+    @Query("SELECT t FROM ChartOfAccount t WHERE t.id = :Id AND t.active = :active ")
+    Optional<ChartOfAccount> findByIdAndActive(@Param("Id") ChartOfAccount.Id Id, @Param("active") boolean active);
 }
