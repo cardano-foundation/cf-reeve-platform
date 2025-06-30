@@ -31,7 +31,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
                         "[\n\"MISSING_IN_ERP\",  \"IN_PROCESSING\",  \"NEW_IN_ERP\",   \"NEW_VERSION_NOT_PUBLISHED\", \"NEW_VERSION\"\n]" +
                         "}")
                 .when()
-                .post("/api/transactions-reconcile")
+                .post("/api/v1/transactions-reconcile")
                 .then()
                 .statusCode(200)
                 .body("total", equalTo(0))
@@ -58,7 +58,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
                         "\"dateTo\": \"2024-11-01\"" +
                         "}")
                 .when()
-                .post("/api/reconcile/trigger")
+                .post("/api/v1/reconcile/trigger")
                 .then()
                 .statusCode(200)
                 .body("message", equalTo("We have received your reconcile request now."))
@@ -82,7 +82,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
                         "\"dateTo\": \"2024-11-05\"" +
                         "}")
                 .when()
-                .post("/api/reconcile/trigger")
+                .post("/api/v1/reconcile/trigger")
                 .then()
                 .statusCode(400)
                 .body("message", equalTo("ORGANISATION_DATE_MISMATCH"))
@@ -104,7 +104,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
                         "\"dateTo\": \"2024-11-05\"" +
                         "}")
                 .when()
-                .post("/api/reconcile/trigger")
+                .post("/api/v1/reconcile/trigger")
                 .then()
                 .statusCode(400)
                 .body("message", equalTo("ORGANISATION_NOT_FOUND"))
@@ -121,7 +121,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions-rejection-codes")
+                .get("/api/v1/transactions-rejection-codes")
                 .then()
                 .statusCode(200)
                 .body(equalTo("[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\"]"))

@@ -26,7 +26,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/PublishTx")
+                .get("/api/v1/transactions/PublishTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("PUBLISH"));
@@ -43,7 +43,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                         "  ]\n" +
                         "}")
                 .when()
-                .post("/api/transactions/publish")
+                .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("PublishTx"))
@@ -52,7 +52,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/PublishTx")
+                .get("/api/v1/transactions/PublishTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("PUBLISHED"));
@@ -65,7 +65,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/PublishTx")
+                .get("/api/v1/transactions/PublishTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("PUBLISHED"));
@@ -81,7 +81,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                         "  ]\n" +
                         "}")
                 .when()
-                .post("/api/transactions/publish")
+                .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("PublishTx"))
@@ -91,7 +91,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/PublishTx")
+                .get("/api/v1/transactions/PublishTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("PUBLISHED"));
@@ -105,7 +105,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/PublishTx")
+                .get("/api/v1/transactions/PublishTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("PUBLISHED"));
@@ -121,7 +121,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                         "  ]\n" +
                         "}")
                 .when()
-                .post("/api/transactions/publish")
+                .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("PublishTx"))
@@ -130,7 +130,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/PublishTx")
+                .get("/api/v1/transactions/PublishTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("PUBLISHED"));
@@ -151,7 +151,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                         "  ]\n" +
                         "}")
                 .when()
-                .post("/api/transactions/publish")
+                .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("ApproveTx"))
@@ -175,7 +175,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                         "  ]\n" +
                         "}")
                 .when()
-                .post("/api/transactions/publish")
+                .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("ReadyToApprove_1_8a283b41eab57add98278561ab51d23f3f3daa461b84aca"))
@@ -198,7 +198,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                         "  ]\n" +
                         "}")
                 .when()
-                .post("/api/transactions/publish")
+                .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("InvalidTx"))
@@ -221,7 +221,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                         "  ]\n" +
                         "}")
                 .when()
-                .post("/api/transactions/publish")
+                .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("InvalidTx"))
