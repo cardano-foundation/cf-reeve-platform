@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs;
 
+import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.persistence.Embeddable;
@@ -41,6 +42,11 @@ public class Document {
 
     public void setCounterparty(Optional<Counterparty> counterparty) {
         this.counterparty = counterparty.orElse(null);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(num, currency, vat, counterparty);
     }
 
 }

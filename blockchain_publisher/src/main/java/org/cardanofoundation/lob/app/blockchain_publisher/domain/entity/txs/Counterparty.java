@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs;
 
 import static jakarta.persistence.EnumType.STRING;
 
+import java.util.Objects;
+
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.Enumerated;
 
@@ -23,5 +25,10 @@ public class Counterparty {
     @Enumerated(STRING)
     @JdbcType(PostgreSQLEnumJdbcType.class)
     private org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty.Type type;
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(customerCode, type);
+    }
 
 }

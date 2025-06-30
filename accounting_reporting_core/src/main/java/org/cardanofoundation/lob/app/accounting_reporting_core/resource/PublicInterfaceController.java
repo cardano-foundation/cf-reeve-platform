@@ -35,7 +35,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @RestController
-@RequestMapping("/api/public")
+@RequestMapping("/api/v1/public")
 @RequiredArgsConstructor
 @Slf4j
 public class PublicInterfaceController {
