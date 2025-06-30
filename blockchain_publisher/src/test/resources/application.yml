@@ -32,7 +32,7 @@ spring:
 
 netsuite:
   altavia:
-    client-url: http://localhost:19000/api/mockresult
+    client-url: http://localhost:19000/api/v1/mockresult
 lob:
   cardano:
     network: "DEV"
@@ -46,7 +46,7 @@ lob:
   netsuite:
     enabled: false
     client:
-      url: "http://localhost:19000/api/mockresult"
+      url: "http://localhost:19000/api/v1/mockresult"
   #  LOB_BLOCKCHAIN_READER_ENABLED=true
   #  LOB_BLOCKCHAIN_PUBLISHER_ENABLED=true
   #  LOB_NETSUITE_ENABLED=true
