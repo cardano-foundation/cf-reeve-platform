@@ -1210,7 +1210,7 @@ class ReportServiceTest {
         //Todo: This should be 2, the mock isn't mutating with the process.
         assertEquals(1L,result.get().getVer());
         verify(organisationPublicApi).findByOrganisationId(organisationId);
-        verify(reportRepository).findLatestByIdControl("org-123", "acf103248617fb66012ed41c275c48f71f29a1298074242728292ddf800fced9");
+        verify(reportRepository, times(2)).findLatestByIdControl("org-123", "acf103248617fb66012ed41c275c48f71f29a1298074242728292ddf800fced9");
         verify(reportRepository, times(1)).save(any(ReportEntity.class));
         verifyNoMoreInteractions(organisationPublicApi);
     }
