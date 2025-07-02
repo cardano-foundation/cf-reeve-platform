@@ -42,11 +42,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 
