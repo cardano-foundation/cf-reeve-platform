@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.organisation.domain.request;
 
-import static java.lang.Boolean.TRUE;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -28,6 +27,6 @@ public class EventCodeUpdate {
     @CsvBindByName(column = "Name", required = true)
     private String name;
 
-    @CsvBindByName(column = "Active", required = true)
-    private Boolean active = TRUE;
+    @CsvBindByName(column = "Active")
+    private Boolean active = true;
 }

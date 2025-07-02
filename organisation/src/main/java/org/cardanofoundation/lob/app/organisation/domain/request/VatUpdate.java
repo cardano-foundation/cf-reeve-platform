@@ -34,7 +34,7 @@ public class VatUpdate {
     private String countryCode;
 
     @Schema(example = "Example Vat code")
-    @CsvBindByName(column = "Description")
+    @CsvBindByName(column = "Description", required = true)
     private String description;
 
     @CsvBindByName(column = "Active")
