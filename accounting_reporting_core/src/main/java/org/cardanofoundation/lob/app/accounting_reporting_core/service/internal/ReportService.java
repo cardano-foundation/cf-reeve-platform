@@ -348,13 +348,25 @@ public class ReportService {
         }
 
         Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);
-        if (isReportReadyToPublish.isLeft()) {
-            return Either.left(isReportReadyToPublish.getLeft());
+        if (isReportReadyToPublish.isLeft() || isReportReadyToPublish.get().equals(false)) {
+            reportEntity.setIsReadyToPublish(false);
         } else {
             reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
         }
 
         ReportEntity result = reportRepository.save(reportEntity);
+
+        ReportType relatedReportType = reportEntity.getType().equals(INCOME_STATEMENT) ? BALANCE_SHEET : INCOME_STATEMENT;
+        String relatedReportId = Report.idControl(reportEntity.getOrganisation().getId(), relatedReportType, reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod());
+        Optional<ReportEntity> relatedReportM = reportRepository.findLatestByIdControl(reportEntity.getOrganisation().getId(), relatedReportId);
+
+        if (relatedReportM.isPresent()) {
+            ReportReprocessRequest relatedReport = new ReportReprocessRequest();
+            relatedReport.setReportId(relatedReportM.get().getReportId());
+            relatedReport.setOrganisationId(organisationId);
+            reportReprocess(relatedReport);
+        }
+
 
         log.info(reportType.name() + "::Report saved successfully: {}", result.getReportId());
 
@@ -600,9 +612,9 @@ public class ReportService {
                 generatedReportsMatch = IncomeStatementMatcher.matches(generatedReportE.get().getIncomeStatementReportData(), reportEntity.getIncomeStatementReportData());
             }
             return Either.right(generatedReportsMatch);
-        } else {
-            return Either.right(true);
         }
+        return Either.right(true);
+
     }
 
     public Set<ReportEntity> findReportsInDateRange(String organisationId,
@@ -1038,9 +1050,10 @@ public class ReportService {
         }
         Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);
         if (isReportReadyToPublish.isLeft()) {
-            return Either.left(isReportReadyToPublish.getLeft());
+            reportEntity.setIsReadyToPublish(false);
+        }else{
+            reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
         }
-        reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
         return Either.right(reportRepository.save(reportEntity));
     }
 }
