@@ -22,7 +22,6 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.bean.CsvBindByName;
 import com.opencsv.bean.CsvToBeanBuilder;
-import com.opencsv.bean.FuzzyMappingStrategy;
 import com.opencsv.enums.CSVReaderNullFieldIndicator;
 import com.opencsv.exceptions.CsvValidationException;
 import io.vavr.control.Either;
@@ -117,7 +116,6 @@ public class CsvParser<T> {
 
             return Either.right(new CsvToBeanBuilder<T>(new InputStreamReader(new ByteArrayInputStream(file)))
                     .withIgnoreLeadingWhiteSpace(true)
-                            .withMappingStrategy(new FuzzyMappingStrategy<>())
                     .withType(type)
                     .withSeparator(delimiter.charAt(0))
                     .withIgnoreEmptyLine(true)

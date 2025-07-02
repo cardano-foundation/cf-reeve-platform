@@ -19,21 +19,21 @@ The delimiter can be adjusted by using the environment variable `LOB_CSV_DELIMIT
 ### Transactions data structure
 An example can be found here: [Transactions CSV Example](./examples/transactions_csv_example.csv)
 The following columns are needed (* denotes a mandatory field):
-- `Transaction Number`**(Required)**: Internal transaction number (e.g. `EXPENSE_1`)
-- `Transaction Date` **(Required)**: Date of the transaction (e.g. `25/01/2024`)
-- `Transaction Type` **(Required)**: Type of the transaction (e.g. `INVOICE`, `PAYMENT`, `CREDIT_NOTE`, `DEBIT_NOTE`)
-- `Fx Rate` **(Required)**: Exchange rate of the transaction (e.g. `1.2`)
-- `Amount LCY Debit` **(Required)**: Amount in local currency (debit) (e.g. `100`)
-- `Amount LCY Credit` **(Required)**: Amount in local currency (credit) (e.g. `200`)
-- `Amount FCY Debit` **(Required)**: Amount in foreign currency (debit) (e.g. `100`)
-- `Amount FCY Credit` **(Required)**: Amount in foreign currency (credit) (e.g. `200`)
-- `Debit Code` **(Required)**: Account code of debit participant (e.g. `1000`)
+- `Transaction Number`: Internal transaction number (e.g. `EXPENSE_1`)
+- `Transaction Date`: Date of the transaction (e.g. `25/01/2024`)
+- `Transaction Type`: Type of the transaction (e.g. `INVOICE`, `PAYMENT`, `CREDIT_NOTE`, `DEBIT_NOTE`)
+- `Fx Rate`: Exchange rate of the transaction (e.g. `1.2`)
+- `Amount LCY Debit`: Amount in local currency (debit) (e.g. `100`)
+- `Amount LCY Credit`: Amount in local currency (credit) (e.g. `200`)
+- `Amount FCY Debit`: Amount in foreign currency (debit) (e.g. `100`)
+- `Amount FCY Credit`: Amount in foreign currency (credit) (e.g. `200`)
+- `Debit Code`: Account code of debit participant (e.g. `1000`)
 - `Debit Name`: Account name of debit participant (e.g. `Cash`)
-- `Credit Code` **(Required)**: Account code of credit participant (e.g. `2000`)
+- `Credit Code`: Account code of credit participant (e.g. `2000`)
 - `Credit Name`: Account name of credit participant (e.g. `Bank`)
 - `Project Code`: Project code of the transaction (e.g. `PROJECT_1`)
-- `Document Name` **(Required)**: Name of the document (e.g. `Invoice 1`)
-- `Currency` **(Required)**: Currency of the transaction (e.g. `USD`)
+- `Document Name`: Name of the document (e.g. `Invoice 1`)
+- `Currency`: Currency of the transaction (e.g. `USD`)
 - `VAT Rate`: VAT rate of the transaction (e.g. `0.2`)
 - `VAT Code`: VAT amount of the transaction (e.g. `VAT-123`)
 - `Cost Center Code`: Cost center code of the transaction (e.g. `COST_CENTER_1`)
@@ -43,19 +43,19 @@ The following columns are needed (* denotes a mandatory field):
 ### Account Events data structure
 An example can be found here: [Account Events CSV Example](./examples/account_event_csv_example.csv)
 The following columns are needed:
-- `Debit Reference Code` **(Required)**: Reference code of the debit account (e.g. `1000`)
-- `Credit Reference Code` **(Required)**: Reference code of the credit account (e.g. `2000`)
-- `Name` **(Required)**: Name of the account event (e.g. `Invoice 1`)
+- `Debit Reference Code`: Reference code of the debit account (e.g. `1000`)
+- `Credit Reference Code`: Reference code of the credit account (e.g. `2000`)
+- `Name`: Name of the account event (e.g. `Invoice 1`)
 - `Active`: Active status of the account event (e.g. `true`)
 
 ### Chart of Accounts data structure
 An example can be found here: [Chart of Accounts CSV Example](./examples/chart_of_account_csv_example.csv)
 The following columns are needed:
-- `Customer Code` **(Required)**: Customer code of the account (e.g. `1000`)
-- `Reference Code` **(Required)**: Reference code of the account (e.g. `2000`)
-- `Name` **(Required)**: Name of the account (e.g. `Cash`)
-- `Type` **(Required)**: Type of the account (e.g. `ASSET`)
-- `Sub Type` **(Required)**: Sub type of the account (e.g. `BANK`)
+- `Customer Code`: Customer code of the account (e.g. `1000`)
+- `Reference Code`: Reference code of the account (e.g. `2000`)
+- `Name`: Name of the account (e.g. `Cash`)
+- `Type`: Type of the account (e.g. `ASSET`)
+- `Sub Type`: Sub type of the account (e.g. `BANK`)
 - `Currency`: Currency of the account (e.g. `USD`)
 - `CounterParty`: Counterparty of the account (e.g. `Vendor1`)
 - `Parent Customer Code`: Parent customer code of the account (e.g. `1001`)
@@ -71,46 +71,46 @@ The following columns are needed:
 ### Ref Codes data structure
 An example can be found here: [Ref Codes CSV Example](./examples/ref_code_csv_example.csv)
 The following columns are needed:
-- `Reference Code` **(Required)**: Reference code of the ref code (e.g. `1000`)
-- `Name` **(Required)**: Name of the ref code (e.g. `Cash`)
+- `Reference Code`: Reference code of the ref code (e.g. `1000`)
+- `Name`: Name of the ref code (e.g. `Cash`)
 - `Parent Reference Code`: Parent reference code of the ref code (e.g. `1001`)
 - `Active`: Active status of the ref code (e.g. `true`)
 
 ### Report Type Field mapping data structure
 An example can be found here: [Report Type Field mapping CSV Example](./examples/report_type_field_csv_example.csv)
 The following columns are needed:
-- `Report Type` **(Required)**: Type of the report (e.g. `INCOME_STATEMENT`)
-- `Report Type Field` **(Required)**: Name of the field (e.g. `REVENUE`)
-- `Sub Type` **(Required)**: Type of the field (e.g. `CASH_AND_CASH_EQUIVALENTS`)
+- `Report Type`: Type of the report (e.g. `INCOME_STATEMENT`)
+- `Report Type Field`: Name of the field (e.g. `REVENUE`)
+- `Sub Type`: Type of the field (e.g. `CASH_AND_CASH_EQUIVALENTS`)
 
 ### Cost Center data structure
 An example can be found here: [Cost Center CSV Example](./examples/cost_center_csv_example.csv)
 The following columns are needed:
-- `Customer code` **(Required)**: Code of the cost center (e.g. `COST_CENTER_1`)
-- `Name` **(Required)**: Name of the cost center (e.g. `Cost Center 1`)
+- `Customer code`: Code of the cost center (e.g. `COST_CENTER_1`)
+- `Name`: Name of the cost center (e.g. `Cost Center 1`)
 - `Parent customer code`: Parent code of the cost center (e.g. `COST_CENTER_2`)
 - `Active`: Active status of the cost center (e.g. `true`)
 
 ### Project data structure
 An example can be found here: [Project CSV Example](./examples/project_csv_example.csv)
 The following columns are needed:
-- `Customer code` **(Required)**: Code of the project (e.g. `PROJECT_1`)
-- `Name` **(Required)**: Name of the project (e.g. `Project 1`)
+- `Customer code`: Code of the project (e.g. `PROJECT_1`)
+- `Name`: Name of the project (e.g. `Project 1`)
 - `Parent customer code`: Parent code of the project (e.g. `PROJECT_2`)
 - `Active`: Active status of the project (e.g. `true`)
 
 ### Currency data structure
 An example can be found here: [Currency CSV Example](./examples/currency_csv_example.csv)
 The following columns are needed:
-- `Currency` **(Required)**: Currency code (e.g. `CHF`)
-- `Name` **(Required)**: Name of the currency (e.g. `ISO_4217:CHF`)
+- `Currency`: Currency code (e.g. `CHF`)
+- `Name`: Name of the currency (e.g. `ISO_4217:CHF`)
 - `Active`: Active status of the currency (e.g. `True`)
 
 ### Vat Code data structure
 An example can be found here: [Vat Code CSV Example](./examples/vat_csv_example.csv)
 The following columns are needed:
-- `Code` **(Required)**: Code of the VAT (e.g. `VAT-123`)
-- `Description` **(Required)**: Name of the VAT (e.g. `VAT 20%`)
+- `Code`: Code of the VAT (e.g. `VAT-123`)
+- `Description`: Name of the VAT (e.g. `VAT 20%`)
 - `Country`: Country code of the VAT (e.g. `CH`)
-- `Rate` **(Required)**: Rate of the VAT (e.g. `0.2`)
+- `Rate`: Rate of the VAT (e.g. `0.2`)
 - `Active`: Active status of the VAT (e.g. `True`)
