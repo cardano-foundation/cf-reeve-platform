@@ -258,7 +258,7 @@ class ChartOfAccountsServiceTest {
 
     @Test
     void testGetChartAccount_Found() {
-        when(chartOfAccountRepository.findById(any())).thenReturn(Optional.of(chartOfAccount));
+        when(chartOfAccountRepository.findByIdAndActive(any(),eq(true))).thenReturn(Optional.of(chartOfAccount));
 
         Optional<ChartOfAccount> result = chartOfAccountsService.getChartAccount(orgId, customerCode);
 
@@ -268,7 +268,7 @@ class ChartOfAccountsServiceTest {
 
     @Test
     void testGetChartAccount_NotFound() {
-        when(chartOfAccountRepository.findById(any())).thenReturn(Optional.empty());
+        when(chartOfAccountRepository.findByIdAndActive(any(),eq(true))).thenReturn(Optional.empty());
 
         Optional<ChartOfAccount> result = chartOfAccountsService.getChartAccount(orgId, customerCode);
 

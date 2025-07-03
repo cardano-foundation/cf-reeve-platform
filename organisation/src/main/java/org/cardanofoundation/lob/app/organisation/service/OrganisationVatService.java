@@ -31,7 +31,7 @@ public class OrganisationVatService {
     private final CsvParser<VatUpdate> csvParser;
 
     public Optional<OrganisationVat> findByOrganisationAndCode(String organisationId, String customerCode) {
-        return vatRepository.findById(new OrganisationVat.Id(organisationId, customerCode));
+        return vatRepository.findByIdAndActive(new OrganisationVat.Id(organisationId, customerCode),true);
     }
 
     public List<VatView> findAllByOrganisationId(String organisationId) {
