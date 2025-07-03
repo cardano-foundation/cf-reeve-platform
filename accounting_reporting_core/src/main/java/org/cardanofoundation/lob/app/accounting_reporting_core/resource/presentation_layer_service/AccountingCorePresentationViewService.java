@@ -508,21 +508,16 @@ public class AccountingCorePresentationViewService {
 
     private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(Object[] violations) {
         for (Object o : violations) {
+            if (Objects.isNull(o)) {
+                continue;
+            }
             if (o instanceof TransactionEntity transactionEntity && transactionEntity.getLastReconcilation().isPresent()) {
                 return getTransactionReconciliationView(transactionEntity);
             }
             if (o instanceof ReconcilationViolation reconcilationViolation) {
                 return getTransactionReconciliationViolationView(reconcilationViolation);
             }
-
-            try {
-                log.warn("Object type: {}", o.getClass());
-            } catch (Exception e) {
-                log.warn("\nempty object: {}\n", o);
-            }
-
         }
-
         return getTransactionReconciliationViolationView();
     }
 
