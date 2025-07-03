@@ -21,7 +21,7 @@ An example can be found here: [Transactions CSV Example](./examples/transactions
 The following columns are needed (* denotes a mandatory field):
 - `Transaction Number`: Internal transaction number (e.g. `EXPENSE_1`)
 - `Transaction Date`: Date of the transaction (e.g. `25/01/2024`)
-- `Transaction Type`: Type of the transaction (e.g. `INVOICE`, `PAYMENT`, `CREDIT_NOTE`, `DEBIT_NOTE`)
+- `Transaction Type`: Type of the transaction (`CardCharge`,`VendorBill`,`CardRefund`,`Journal`,`FxRevaluation`,`Transfer`,`CustomerPayment`,`ExpenseReport`,`VendorPayment`,`CustomerInvoice`,`BillCredit`,`Unknown`)
 - `Fx Rate`: Exchange rate of the transaction (e.g. `1.2`)
 - `Amount LCY Debit`: Amount in local currency (debit) (e.g. `100`)
 - `Amount LCY Credit`: Amount in local currency (credit) (e.g. `200`)
