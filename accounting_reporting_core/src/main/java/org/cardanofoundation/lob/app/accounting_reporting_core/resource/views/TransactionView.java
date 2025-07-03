@@ -38,6 +38,8 @@ public class TransactionView {
 
     private TxValidationStatus validationStatus = TxValidationStatus.VALIDATED;
 
+    private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;
+
     private boolean transactionApproved = false;
 
     private boolean ledgerDispatchApproved = false;
