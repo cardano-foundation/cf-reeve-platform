@@ -763,7 +763,6 @@ public class ReportService {
             }
 
             Optional<LocalDate> startSearchDate = Optional.of(startDate);
-            ;
             BigDecimal totalAmount = BigDecimal.ZERO;
 
             if (field.isAccumulatedYearly()) {
