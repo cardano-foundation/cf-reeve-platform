@@ -1,10 +1,15 @@
 package org.cardanofoundation.lob.app.organisation.service.csv;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,8 +18,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.bean.CsvBindByName;
 import com.opencsv.bean.CsvToBeanBuilder;
 import com.opencsv.enums.CSVReaderNullFieldIndicator;
+import com.opencsv.exceptions.CsvValidationException;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
@@ -49,6 +58,42 @@ public class CsvParser<T> {
         }
     }
 
+    private Either<Problem, Void> checkHeaders(byte[] file, Class<T> type) throws CsvValidationException, IOException {
+        CSVReader headerReader = new CSVReaderBuilder(new InputStreamReader(new ByteArrayInputStream(file)))
+                .withSkipLines(0)
+                .build();
+
+        String[] csvHeader = headerReader.readNext();
+        Set<String> headerSet = csvHeader == null
+                ? Set.of()
+                : Arrays.stream(csvHeader).map(String::trim).collect(Collectors.toSet());
+
+        Set<String> requiredHeaders = getRequiredHeaders(type);
+        Set<String> missingHeaders = requiredHeaders.stream()
+                .filter(req -> headerSet.stream().noneMatch(h -> h.equalsIgnoreCase(req)))
+                .collect(Collectors.toSet());
+
+        if (!missingHeaders.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle("CSV_HEADER_ERROR")
+                    .withDetail("Missing required headers: " + String.join(", ", missingHeaders))
+                    .build());
+        }
+        return Either.right(null); // No missing headers, return success
+    }
+
+    private <T> Set<String> getRequiredHeaders(Class<T> type) {
+        Set<String> requiredHeaders = new HashSet<>();
+        for (Field field : type.getDeclaredFields()) {
+            CsvBindByName bind = field.getAnnotation(CsvBindByName.class);
+            if (bind != null) {
+                String header = bind.column().isEmpty() ? field.getName() : bind.column();
+                requiredHeaders.add(header);
+            }
+        }
+        return requiredHeaders;
+    }
+
     public Either<Problem, List<T>> parseCsv(byte[] file, Class<T> type) {
         try {
             if (!antiVirusScanner.isFileSafe(file)) {
@@ -57,6 +102,18 @@ public class CsvParser<T> {
                         .withDetail("The uploaded file contains malicious content and has been rejected.")
                         .build());
             }
+            try {
+                Either<Problem, Void> headerCheck = checkHeaders(file, type);
+                if (headerCheck.isLeft()) {
+                    return Either.left(headerCheck.getLeft());
+                }
+            } catch (CsvValidationException | IOException e) {
+                return Either.left(Problem.builder()
+                        .withTitle("CSV_HEADER_ERROR")
+                        .withDetail(e.getMessage())
+                        .build());
+            }
+
             return Either.right(new CsvToBeanBuilder<T>(new InputStreamReader(new ByteArrayInputStream(file)))
                     .withIgnoreLeadingWhiteSpace(true)
                     .withType(type)

@@ -19,11 +19,11 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 public class ReferenceCodeUpdate {
 
     @Schema(example = "0000")
-    @CsvBindByName(column = "Reference Code", required = true)
+    @CsvBindByName(column = "Reference Code")
     private String referenceCode;
 
     @Schema(example = "Example reference code")
-    @CsvBindByName(column = "Name", required = true)
+    @CsvBindByName(column = "Name")
     private String name;
 
     @Nullable
@@ -31,7 +31,7 @@ public class ReferenceCodeUpdate {
     private String parentReferenceCode;
 
     @Schema(example = "true")
-    @CsvBindByName(column = "Active", required = true)
+    @CsvBindByName(column = "Active")
     private boolean isActive = true;
 
     public ReferenceCode toEntity(String orgId) {

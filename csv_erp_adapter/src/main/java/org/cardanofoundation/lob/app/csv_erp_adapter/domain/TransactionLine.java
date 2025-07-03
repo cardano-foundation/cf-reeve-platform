@@ -34,11 +34,11 @@ public class TransactionLine {
     private String amountFCYDebit;
     @CsvBindByName(column = "AmountFCY Credit")
     private String amountFCYCredit;
-    @CsvBindByName(column = "Debit Code")
+    @CsvBindByName(column = "Debit Code", required = true)
     private String debitCode;
     @CsvBindByName(column = "Debit Name")
     private String debitName;
-    @CsvBindByName(column = "Credit Code")
+    @CsvBindByName(column = "Credit Code", required = true)
     private String creditCode;
     @CsvBindByName(column = "Credit Name")
     private String creditName;
@@ -46,7 +46,7 @@ public class TransactionLine {
     @CsvBindByName(column = "Project Code")
     private String projectCode;
 
-    @CsvBindByName(column = "Document Name")
+    @CsvBindByName(column = "Document Name", required = true)
     private String documentNumber;
     @CsvBindByName(column = "Currency", required = true)
     @NotNull

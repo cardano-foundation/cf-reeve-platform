@@ -18,7 +18,7 @@ The delimiter can be adjusted by using the environment variable `LOB_CSV_DELIMIT
 
 ### Transactions data structure
 An example can be found here: [Transactions CSV Example](./examples/transactions_csv_example.csv)
-The following columns are needed:
+The following columns are needed (* denotes a mandatory field):
 - `Transaction Number`: Internal transaction number (e.g. `EXPENSE_1`)
 - `Transaction Date`: Date of the transaction (e.g. `25/01/2024`)
 - `Transaction Type`: Type of the transaction (e.g. `INVOICE`, `PAYMENT`, `CREDIT_NOTE`, `DEBIT_NOTE`)
@@ -66,6 +66,7 @@ The following columns are needed:
 - `Open Balance Currency ID LCY`: Original currency ID of the account in local currency (e.g. `USD`)
 - `Open Balance Type`: Type of the open balance (e.g. `DEBIT`)
 - `Open Balance Date`: Date of the open balance (e.g. `25/01/2024`)
+- `Active`: Active status of the account (e.g. `true`)
 
 ### Ref Codes data structure
 An example can be found here: [Ref Codes CSV Example](./examples/ref_code_csv_example.csv)
