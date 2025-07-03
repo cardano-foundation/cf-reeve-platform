@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
@@ -36,9 +37,8 @@ public class ExtractionItemService {
     @Transactional(readOnly = true)
     public ExtractionTransactionView findTransactionItems(LocalDate dateFrom, LocalDate dateTo, List<String> accountCode, List<String> costCenter, List<String> project, List<String> accountType, List<String> accountSubType) {
 
-        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType).stream().map(item -> {
-            return extractionTransactionItemViewBuilder(item);
-        }).collect(Collectors.toList());
+        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType)
+                .stream().map(this::extractionTransactionItemViewBuilder).toList();
 
         return ExtractionTransactionView.createSuccess(transactionItem);
     }
@@ -46,10 +46,23 @@ public class ExtractionItemService {
     @Transactional(readOnly = true)
     public List<ExtractionTransactionItemView> findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
 
-        return transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> {
-            return enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item));
-        }).toList();
+        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
 
+        // aggregating in case there are duplicate items due to the enrichment process it is possible to have newly duplicates
+        return list.stream()
+                .collect(Collectors.groupingBy(ExtractionTransactionItemView::aggregationHashCode, Collectors.toSet()))
+                .values().stream()
+                .map(itemSet -> {
+                    ExtractionTransactionItemView aggregatedItem = itemSet.iterator().next();
+                    aggregatedItem.setAmountFcy(itemSet.stream()
+                            .map(ExtractionTransactionItemView::getAmountFcy)
+                            .reduce(ZERO, BigDecimal::add));
+                    aggregatedItem.setAmountLcy(itemSet.stream()
+                            .map(ExtractionTransactionItemView::getAmountLcy)
+                            .reduce(ZERO, BigDecimal::add));
+                    return aggregatedItem;
+                })
+                .toList();
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
@@ -69,7 +82,7 @@ public class ExtractionItemService {
                 item.getAccountCredit().map(Account::getCode).orElse(null),
                 item.getAccountCredit().flatMap(Account::getName).orElse(null),
                 item.getAccountCredit().flatMap(Account::getRefCode).orElse(null),
-                item.getAmountFcy(),
+                item.getTransaction().getTransactionType().equals(TransactionType.FxRevaluation) ? item.getAmountLcy() : item.getAmountFcy(),
                 item.getAmountLcy(),
                 item.getFxRate(),
                 item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(null),

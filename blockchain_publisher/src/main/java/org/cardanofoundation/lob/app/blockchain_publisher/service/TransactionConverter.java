@@ -48,6 +48,23 @@ public class TransactionConverter {
         return transactionEntity;
     }
 
+    // This method aggregates transaction items by their aggregated hash and sums their amounts.
+    // the hash is currently derived from all the fields of the TransactionItemEntity except the amount.
+    // this is to ensure that items with the same details but different amounts are treated as separate items.
+    private Set<TransactionItemEntity> aggregateTxItems(Set<TransactionItemEntity> items) {
+        return items.stream()
+                .collect(Collectors.groupingBy(TransactionItemEntity::aggregatedHash, Collectors.toSet()))
+                .values().stream()
+                .map(itemSet -> {
+                    TransactionItemEntity aggregatedItem = itemSet.iterator().next();
+                    aggregatedItem.setAmountFcy(itemSet.stream()
+                            .map(TransactionItemEntity::getAmountFcy)
+                            .reduce(ZERO,BigDecimal::add));
+                    return aggregatedItem;
+                })
+                .collect(Collectors.toSet());
+    }
+
     private Set<TransactionItemEntity> convertTxItems(Transaction tx, TransactionEntity transactionEntity) {
         return tx.getItems()
                 .stream()
@@ -87,7 +104,7 @@ public class TransactionConverter {
     @OneToOne
     public TransactionItemEntity convertToDbDetached(TransactionEntity parent,
                                                      TransactionItem txItem) {
-        val txItemEntity = new TransactionItemEntity();
+        TransactionItemEntity txItemEntity = new TransactionItemEntity();
         txItemEntity.setId(txItem.getId());
         txItemEntity.setTransaction(parent);
 
@@ -100,11 +117,14 @@ public class TransactionConverter {
         txItemEntity.setFxRate(txItem.getFxRate());
 
         txItemEntity.setAmountFcy(txItem.getAmountFcy());
+        if(parent.getTransactionType().equals(TransactionType.FxRevaluation)){
+            txItemEntity.setAmountFcy(txItem.getAmountLcy());
+        }
 
         txItemEntity.setDocument(convertDocument(txItem.getDocument().orElseThrow()));
 
         txItemEntity.setCostCenter(txItem.getCostCenter().map(cc -> {
-            val ccBuilder = org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.builder();
+            CostCenter.CostCenterBuilder ccBuilder = CostCenter.builder();
 
             // If the cost center is not associated with the parent organisation, we do not set it.
             // Note: Only one parent level.
