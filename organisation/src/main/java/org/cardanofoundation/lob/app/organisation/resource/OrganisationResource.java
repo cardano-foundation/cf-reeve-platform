@@ -39,7 +39,7 @@ import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor

@@ -28,7 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ex
 import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 @Slf4j
