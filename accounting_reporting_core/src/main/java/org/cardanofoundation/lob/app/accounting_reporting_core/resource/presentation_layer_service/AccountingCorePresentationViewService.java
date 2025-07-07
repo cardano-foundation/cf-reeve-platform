@@ -373,6 +373,7 @@ public class AccountingCorePresentationViewService {
                 transactionEntity.getOverallStatus(),
                 getTransactionDispatchStatus(transactionEntity),
                 transactionEntity.getAutomatedValidationStatus(),
+                transactionEntity.getLedgerDispatchStatus(),
                 transactionEntity.getTransactionApproved(),
                 transactionEntity.getLedgerDispatchApproved(),
                 getAmountLcyTotalForAllDebitItems(transactionEntity),
