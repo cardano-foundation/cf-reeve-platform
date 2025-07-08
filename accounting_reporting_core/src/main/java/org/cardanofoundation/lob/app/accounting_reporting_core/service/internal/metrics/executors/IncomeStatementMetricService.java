@@ -83,7 +83,8 @@ public class IncomeStatementMetricService extends MetricExecutor {
                         operatingExpenses.getRentExpenses(),
                         operatingExpenses.getGeneralAndAdministrativeExpenses(),
                         operatingExpenses.getAmortizationOnIntangibleAssets(),
-                        operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets());
+                        operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets(),
+                        operatingExpenses.getRentExpenses());
                 totalExpenses.merge(IncomeStatemenCategories.FINANCIAL_EXPENSES, financialExpenses, Integer::sum);
             });
             incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> totalExpenses.merge(IncomeStatemenCategories.TAX_EXPENSES, financialIncome.getFinancialExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum));
