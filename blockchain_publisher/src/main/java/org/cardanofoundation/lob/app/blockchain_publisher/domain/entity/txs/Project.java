@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs;
 
+import java.util.Objects;
+
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 
@@ -19,5 +21,10 @@ public class Project {
 
     @NotBlank
     private String name;
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(customerCode, name);
+    }
 
 }

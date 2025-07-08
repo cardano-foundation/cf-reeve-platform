@@ -35,7 +35,7 @@ public class ProjectConversionTaskItem implements PipelineTaskItem {
             val organisationId = tx.getOrganisation().getId();
             val customerCode = projectM.orElseThrow().getCustomerCode();
 
-            log.info("Looking for project mapping for organisationId:{}, customerCode:{}", organisationId, customerCode);
+            //log.info("Looking for project mapping for organisationId:{}, customerCode:{}", organisationId, customerCode);
 
             val projectMappingM = organisationPublicApi.findProject(organisationId, customerCode);
 

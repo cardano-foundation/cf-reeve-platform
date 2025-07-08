@@ -5,13 +5,14 @@ import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.event_publish.LedgerUpdatedEventPublisher;
@@ -32,11 +33,11 @@ public class BlockchainPublisherService {
                                                  Set<Transaction> txs) {
         log.info("dispatchTransactionsToBlockchains..., orgId:{}", organisationId);
 
-        val txEntities = txs.stream()
+        Set<TransactionEntity> txEntities = txs.stream()
                 .map(transactionConverter::convertToDbDetached)
                 .collect(Collectors.toSet());
 
-        val storedTransactions = transactionEntityRepositoryGateway.storeOnlyNew(txEntities);
+        Set<TransactionEntity> storedTransactions = transactionEntityRepositoryGateway.storeOnlyNew(txEntities);
 
         ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, storedTransactions);
     }
@@ -46,7 +47,7 @@ public class BlockchainPublisherService {
                                              Set<Report> reports) {
         log.info("storeReportsForDispatchLater..., orgId:{}", organisationId);
 
-        val storedReports = reportEntityRepositoryGateway.storeOnlyNew(reports.stream()
+        Set<ReportEntity> storedReports = reportEntityRepositoryGateway.storeOnlyNew(reports.stream()
                 .map(reportConverter::convertToDbDetached)
                 .collect(Collectors.toSet()));
 

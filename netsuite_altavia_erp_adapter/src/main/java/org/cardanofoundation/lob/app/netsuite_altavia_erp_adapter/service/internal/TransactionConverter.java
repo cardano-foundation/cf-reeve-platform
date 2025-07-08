@@ -108,6 +108,7 @@ public class TransactionConverter {
             }
 
             Optional<String> accountCreditCodeM = accountCreditCode(organisationId, txLine.accountMain());
+            Optional<String> accountCreditNameM = accountCreditName(organisationId, txLine.accountMain());
 
             OperationType operationType;
             BigDecimal amountLcy;
@@ -125,7 +126,7 @@ public class TransactionConverter {
                 amountLcy = MoreBigDecimal.zeroForNull(txLine.amountCredit());
                 amountFcy = MoreBigDecimal.zeroForNull(txLine.amountCreditForeignCurrency());
             } else {
-                log.info("Skipping transaction line with zero amounts for transaction: {}", txId);
+                //log.info("Skipping transaction line with zero amounts for transaction: {}", txId);
                 // Create a zero amount item.
                 operationType = OperationType.DEBIT;
                 amountLcy = BigDecimal.ZERO;
@@ -137,11 +138,15 @@ public class TransactionConverter {
 
             Optional<Document> documentM = convertDocument(organisationId, txLine);
 
-            TransactionItem txItem = TransactionItem.builder().id(TransactionItem.id(txId, txLine.lineID().toString())).accountDebit(Optionals.zip(normaliseString(txLine.name()), normaliseString(txLine.number()), (accountDebitName, accountDebitCode) -> {
-                return Account.builder().name(Optional.of(accountDebitName)).code(accountDebitCode).build();
-            })).accountCredit(accountCreditCodeM.map(accountCreditCode -> {
-                return Account.builder().code(accountCreditCode).build();
-            })).project(projectCodeM.map(pc -> Project.builder().customerCode(pc).build())).costCenter(costCenterM.map(cc -> CostCenter.builder().customerCode(cc).build())).document(documentM).fxRate(fxRate).amountLcy(amountLcy).amountFcy(amountFcy).operationType(operationType).build();
+            TransactionItem txItem = TransactionItem.builder().id(TransactionItem.id(txId, txLine.lineID().toString())).
+                    accountDebit(Optionals.zip(normaliseString(txLine.name()), normaliseString(txLine.number()), (accountDebitName, accountDebitCode) -> {
+                        return Account.builder().name(Optional.of(accountDebitName)).code(accountDebitCode).build();
+                    }))
+                    .accountCredit(
+                            accountCreditCodeM.map(accountCreditCode -> {
+                                        return Account.builder().name(accountCreditNameM.get().describeConstable()).code(accountCreditCode).build();
+                                    }
+                            )).project(projectCodeM.map(pc -> Project.builder().customerCode(pc).build())).costCenter(costCenterM.map(cc -> CostCenter.builder().customerCode(cc).build())).document(documentM).fxRate(fxRate).amountLcy(amountLcy).amountFcy(amountFcy).operationType(operationType).build();
 
             txItems.add(txItem);
         }
@@ -212,6 +217,7 @@ public class TransactionConverter {
     }
 
     private static Optional<Counterparty> convertCounterparty(TxLine txLine) {
+
         return normaliseString(txLine.counterPartyId()).map(customerCode -> Counterparty.builder().customerCode(customerCode).type(VENDOR) // TODO CF hardcoded for now
                 .name(normaliseString(txLine.counterPartyName())).build());
     }
@@ -223,6 +229,28 @@ public class TransactionConverter {
             String accountCodeCreditText = accountCodeCreditM.orElseThrow();
 
             Either<Problem, String> accountCreditCodeE = preprocessorService.preProcess(accountCodeCreditM.orElseThrow(), CHART_OF_ACCOUNT);
+
+            if (accountCreditCodeE.isEmpty()) {
+                log.warn("Conversion failed for accountCodeCredit: {} in organisation: {}", accountCodeCreditText, organisationId);
+
+                return Optional.of(accountCodeCreditText);
+            }
+
+            String accountCreditCode = accountCreditCodeE.get();
+
+            return Optional.of(accountCreditCode);
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> accountCreditName(String organisationId, String accountMain) {
+        Optional<String> accountCodeCreditM = normaliseString(accountMain);
+
+        if (accountCodeCreditM.isPresent()) {
+            String accountCodeCreditText = accountCodeCreditM.orElseThrow();
+
+            Either<Problem, String> accountCreditCodeE = preprocessorService.preProcess(accountCodeCreditM.orElseThrow(), ACCOUNT_CREDIT_NAME);
 
             if (accountCreditCodeE.isEmpty()) {
                 log.warn("Conversion failed for accountCodeCredit: {} in organisation: {}", accountCodeCreditText, organisationId);

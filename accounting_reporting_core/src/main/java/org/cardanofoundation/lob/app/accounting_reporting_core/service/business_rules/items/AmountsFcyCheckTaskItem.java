@@ -19,26 +19,26 @@ public class AmountsFcyCheckTaskItem implements PipelineTaskItem {
     @Override
     public void run(TransactionEntity tx) {
         if (tx.getTransactionType() != FxRevaluation) {
-            for (val txItem : tx.getItems()) {
-                if (txItem.getAmountLcy().signum() != 0 && txItem.getAmountFcy().signum() == 0) {
-                    val v = TransactionViolation.builder()
-                            .code(AMOUNT_FCY_IS_ZERO)
-                            .txItemId(txItem.getId())
-                            .severity(ERROR)
-                            .source(ERP)
-                            .processorModule(this.getClass().getSimpleName())
-                            .bag(
-                                    Map.of(
-                                            "transactionNumber", tx.getTransactionInternalNumber(),
-                                            "amountFcy", txItem.getAmountFcy().toEngineeringString(),
-                                            "amountLcy", txItem.getAmountLcy().toEngineeringString()
-                                    )
-                            )
-                            .build();
+        for (val txItem : tx.getItems()) {
+            if (txItem.getAmountLcy().signum() != 0 && txItem.getAmountFcy().signum() == 0) {
+                val v = TransactionViolation.builder()
+                        .code(AMOUNT_FCY_IS_ZERO)
+                        .txItemId(txItem.getId())
+                        .severity(ERROR)
+                        .source(ERP)
+                        .processorModule(this.getClass().getSimpleName())
+                        .bag(
+                                Map.of(
+                                        "transactionNumber", tx.getTransactionInternalNumber(),
+                                        "amountFcy", txItem.getAmountFcy().toEngineeringString(),
+                                        "amountLcy", txItem.getAmountLcy().toEngineeringString()
+                                )
+                        )
+                        .build();
 
-                    tx.addViolation(v);
-                }
+                tx.addViolation(v);
             }
+        }
         }
     }
 

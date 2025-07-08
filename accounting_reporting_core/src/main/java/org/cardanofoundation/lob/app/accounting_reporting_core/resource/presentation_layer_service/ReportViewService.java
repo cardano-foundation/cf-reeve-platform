@@ -1,8 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service;
 
 
-import java.util.Optional;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -59,16 +57,11 @@ public class ReportViewService {
         reportResponseView.setPeriod(reportEntity.getPeriod());
         reportResponseView.setDate(reportEntity.getDate());
         reportResponseView.setPublish(reportEntity.getLedgerDispatchApproved());
-        reportResponseView.setCanBePublish(true);
+
         if (reportEntity.getLedgerDispatchReceipt().isPresent()) {
             reportResponseView.setBlockChainHash(reportEntity.getLedgerDispatchReceipt().get().getPrimaryBlockchainHash());
         }
-        Either<Problem, Boolean> left = reportService.canPublish(reportEntity);
-        reportResponseView.setError(Optional.empty());
-        if (left.isLeft()) {
-            reportResponseView.setCanBePublish(false);
-            reportResponseView.setError(Optional.of(left.getLeft()));
-        }
+        reportResponseView.setCanBePublish(reportEntity.getIsReadyToPublish());
         reportResponseView.setVer(reportEntity.getVer());
         //BalanceSheet
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getTangibleAssets()))).ifPresent(bigDecimal -> reportResponseView.setTangibleAssets(bigDecimal.toString()));

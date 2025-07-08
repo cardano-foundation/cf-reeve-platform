@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.request
 import javax.annotation.Nullable;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -19,6 +20,7 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 @AllArgsConstructor
 @NoArgsConstructor
 @Slf4j
+@Builder
 public class ReportGenerateRequest extends BaseRequest {
 
     @Schema(example = "INCOME_STATEMENT")

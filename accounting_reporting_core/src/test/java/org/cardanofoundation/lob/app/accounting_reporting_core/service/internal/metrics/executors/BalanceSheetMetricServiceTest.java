@@ -46,6 +46,7 @@ class BalanceSheetMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         BigDecimal totalLiabilities = (BigDecimal) balanceSheetMetricService.getData(MetricEnum.SubMetric.TOTAL_LIABILITIES, "organisationId", Optional.empty(), Optional.empty());
         assertThat(totalLiabilities).isEqualTo(BigDecimal.valueOf(40));
@@ -59,6 +60,7 @@ class BalanceSheetMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         BigDecimal totelAssets = (BigDecimal) balanceSheetMetricService.getData(MetricEnum.SubMetric.TOTAL_ASSETS, "organisationId", Optional.empty(), Optional.empty());
         assertThat(totelAssets).isEqualTo(BigDecimal.valueOf(80));
@@ -72,6 +74,7 @@ class BalanceSheetMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         Map<BalanceSheetCategories, Integer> assetCategories = (Map<BalanceSheetCategories, Integer>) balanceSheetMetricService.getData(MetricEnum.SubMetric.ASSET_CATEGORIES, "organisationId", Optional.empty(), Optional.empty());
 
@@ -88,6 +91,7 @@ class BalanceSheetMetricServiceTest {
 
         when(reportService.findReportsInDateRange(anyString(), any(), any(), any()))
                 .thenReturn(Set.of(reportEntity));
+        when(reportService.getMostRecentReport(Set.of(reportEntity))).thenReturn(Optional.of(reportEntity));
 
         Map<BalanceSheetCategories, Map<BalanceSheetCategories, Integer>> balanceSheetOverview = (Map<BalanceSheetCategories, Map<BalanceSheetCategories, Integer>>) balanceSheetMetricService.getData(MetricEnum.SubMetric.BALANCE_SHEET_OVERVIEW, "organisationId", Optional.empty(), Optional.empty());
 

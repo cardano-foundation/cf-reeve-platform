@@ -21,12 +21,16 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @ExtendWith(MockitoExtension.class)
 class ExtractionItemServiceTest {
 
     @Mock
     private TransactionItemExtractionRepository transactionItemExtractionRepository;
+
+    @Mock
+    private OrganisationPublicApi organisationPublicApi;
 
     @Test
     void findTransactionItemsTest() {
@@ -48,12 +52,15 @@ class ExtractionItemServiceTest {
         item1.setDocument(Optional.of(document));
         item1.setAmountFcy(BigDecimal.valueOf(1));
         item1.setAmountLcy(BigDecimal.valueOf(1));
+        item1.setCostCenter(Optional.ofNullable(CostCenter.builder().customerCode("10201").externalCustomerCode("10201").build()));
         tx.setItems(Set.of(item1));
 
         item1.setTransaction(tx);
 
         Mockito.when(transactionItemExtractionRepository.findByItemAccount(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(List.of(item1));
-        ExtractionItemService extractionItemService = new ExtractionItemService(transactionItemExtractionRepository);
+        Mockito.when(organisationPublicApi.findProject(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
+        Mockito.when(organisationPublicApi.findCostCenter(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
+        ExtractionItemService extractionItemService = new ExtractionItemService(transactionItemExtractionRepository, organisationPublicApi);
 
         ExtractionTransactionView result = extractionItemService.findTransactionItems(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
         assertInstanceOf(ExtractionTransactionView.class, result);
@@ -82,18 +89,21 @@ class ExtractionItemServiceTest {
         item1.setDocument(Optional.of(document));
         item1.setAmountFcy(BigDecimal.valueOf(1));
         item1.setAmountLcy(BigDecimal.valueOf(1));
+        item1.setCostCenter(Optional.ofNullable(CostCenter.builder().customerCode("10201").externalCustomerCode("10201").build()));
         tx.setItems(Set.of(item1));
 
         item1.setTransaction(tx);
 
         Mockito.when(transactionItemExtractionRepository.findByItemAccountDate(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(List.of(item1));
-        ExtractionItemService extractionItemService = new ExtractionItemService(transactionItemExtractionRepository);
+        Mockito.when(organisationPublicApi.findProject(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
+        Mockito.when(organisationPublicApi.findCostCenter(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
+        ExtractionItemService extractionItemService = new ExtractionItemService(transactionItemExtractionRepository, organisationPublicApi);
 
         ExtractionTransactionView result = ExtractionTransactionView.createSuccess(extractionItemService.findTransactionItemsPublic(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()));
         assertInstanceOf(ExtractionTransactionView.class, result);
         assertEquals(1L, result.getTotal());
-        assertEquals("item1",result.getTransactions().getFirst().getId());
-        assertEquals("TxId1",result.getTransactions().getFirst().getTransactionID());
+        assertEquals("item1", result.getTransactions().getFirst().getId());
+        assertEquals("TxId1", result.getTransactions().getFirst().getTransactionID());
         verifyNoMoreInteractions(transactionItemExtractionRepository);
 
     }

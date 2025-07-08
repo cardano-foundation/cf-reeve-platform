@@ -23,7 +23,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionBatchService;
 
 @RestController
-@RequestMapping("/api/core")
+@RequestMapping("/api/v1/core")
 @Slf4j
 @RequiredArgsConstructor
 @Deprecated(forRemoval = true)

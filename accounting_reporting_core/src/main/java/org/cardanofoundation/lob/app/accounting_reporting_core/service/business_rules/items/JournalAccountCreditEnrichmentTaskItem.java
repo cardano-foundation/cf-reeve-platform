@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.CREDIT;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.Journal;
@@ -24,7 +25,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 @Slf4j
 public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem {
 
-    public static final String DUMMY_ACCOUNT = "Dummy Account";
+    public static final String DUMMY_ACCOUNT = "Transit account";
 
     private final OrganisationPublicApiIF organisationPublicApiIF;
 
@@ -51,7 +52,7 @@ public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem 
             return;
         }
 
-        log.info("Normalising journal transaction with id: {}", tx.getId());
+        //log.info("Normalising journal transaction with id: {}", tx.getId());
 
         // at this point we can assume we have it, it is mandatory
         String dummyAccount = dummyAccountM.orElseThrow();
@@ -69,6 +70,8 @@ public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem 
                 }
                 Account accountDebit = txItem.getAccountDebit().orElseThrow();
                 txItem.setAccountCredit(Optional.of(accountDebit));
+                // If we switch the account credit, we need to set the operation type to DEBIT
+                txItem.setOperationType(DEBIT);
 
                 txItem.clearAccountCodeDebit();
             }

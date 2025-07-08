@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
@@ -57,6 +58,7 @@ public class AccountingCorePresentationViewService {
     private final TransactionReconcilationRepository transactionReconcilationRepository;
     private final CostCenterRepository costCenterRepository;
     private final ProjectMappingRepository projectMappingRepository;
+    private final OrganisationPublicApiIF organisationPublicApiIF;
 
     /**
      * TODO: waiting for refactoring the layer to remove this
@@ -458,8 +460,8 @@ public class AccountingCorePresentationViewService {
                     item.getAccountCredit().map(Account::getCode).orElse(""),
                     item.getAccountCredit().flatMap(Account::getName).orElse(""),
                     item.getAccountCredit().flatMap(Account::getRefCode).orElse(""),
-                    transaction.getTransactionType().equals(TransactionType.FxRevaluation) ? item.getAmountFcy() : item.getAmountFcy().abs(),
-                    transaction.getTransactionType().equals(TransactionType.FxRevaluation) ? item.getAmountLcy() : item.getAmountLcy().abs(),
+                    item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountFcy().negate() : item.getAmountFcy(),
+                    item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountLcy().negate() : item.getAmountLcy(),
                     item.getFxRate(),
                     item.getCostCenter().map(CostCenter::getCustomerCode).orElse(""),
                     item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(""),
@@ -497,21 +499,16 @@ public class AccountingCorePresentationViewService {
 
     private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(Object[] violations) {
         for (Object o : violations) {
+            if (Objects.isNull(o)) {
+                continue;
+            }
             if (o instanceof TransactionEntity transactionEntity && transactionEntity.getLastReconcilation().isPresent()) {
                 return getTransactionReconciliationView(transactionEntity);
             }
             if (o instanceof ReconcilationViolation reconcilationViolation) {
                 return getTransactionReconciliationViolationView(reconcilationViolation);
             }
-
-            try {
-                log.warn("Object type: {}", o.getClass());
-            } catch (Exception e) {
-                log.warn("\nempty object: {}\n", o);
-            }
-
         }
-
         return getTransactionReconciliationViolationView();
     }
 
@@ -519,16 +516,22 @@ public class AccountingCorePresentationViewService {
         Set<TransactionItemEntity> items = tx.getItems();
 
         if (tx.getTransactionType().equals(TransactionType.Journal)) {
-            items = tx.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(toSet());
+            Optional<String> dummyAccount = organisationPublicApiIF.findByOrganisationId(tx.getOrganisation().getId()).orElse(new org.cardanofoundation.lob.app.organisation.domain.entity.Organisation()).getDummyAccount();
+            items = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
         }
 
         if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
-            items.stream()
+            BigDecimal totalCredit = items.stream()
                     .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
-                    .forEach(item -> {
-                        item.setAmountLcy(item.getAmountLcy().negate());
-                        item.setAmountFcy(item.getAmountFcy().negate());
-                    });
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            BigDecimal totalDebit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.DEBIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            return totalCredit.subtract(totalDebit).abs();
         }
 
         return items.stream()

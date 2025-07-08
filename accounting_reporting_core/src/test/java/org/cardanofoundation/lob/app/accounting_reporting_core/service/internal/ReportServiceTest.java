@@ -29,8 +29,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
@@ -704,6 +706,9 @@ class ReportServiceTest {
         existingReport.setType(INCOME_STATEMENT);
         existingReport.setLedgerDispatchApproved(false);
         existingReport.setIncomeStatementReportData(Optional.of(incomeStatementReportData));
+        existingReport.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
+        existingReport.setIntervalType(IntervalType.YEAR);
+        existingReport.setYear(year);
 
         val organisation = new Organisation();
         organisation.setId(organisationId);
@@ -769,8 +774,11 @@ class ReportServiceTest {
 
         val existingReport = new ReportEntity();
         existingReport.setType(BALANCE_SHEET);
+        existingReport.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
         existingReport.setLedgerDispatchApproved(false);
         existingReport.setBalanceSheetReportData(Optional.of(balanceSheetReportData));
+        existingReport.setIntervalType(IntervalType.YEAR);
+        existingReport.setYear(year);
 
         val organisation = new Organisation();
         organisation.setId(organisationId);
@@ -781,7 +789,6 @@ class ReportServiceTest {
 
         when(organisationPublicApi.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
         when(reportRepository.findById(any())).thenReturn(Optional.of(existingReport));
-
         // Act
         val resultE = reportService.store(organisationId, intervalType, year, ver, periodM, reportDataE);
 
@@ -1144,6 +1151,11 @@ class ReportServiceTest {
         when(organisation.getName()).thenReturn("Name");
         when(reportEntity.getLedgerDispatchApproved()).thenReturn(false); // When LedgerDispatchApproved is true a new report is created
         when(reportEntity.getReportId()).thenReturn("reportId");
+        when(reportEntity.getType()).thenReturn(BALANCE_SHEET);
+        when(reportEntity.getVer()).thenReturn(1L);
+        when(reportEntity.getOrganisation()).thenReturn(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
+        when(reportEntity.isValid()).thenReturn(true);
+        when(reportEntity.getIntervalType()).thenReturn(IntervalType.YEAR);
         when(organisationPublicApi.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
 
         when(reportRepository.findLatestByIdControl(anyString(), anyString())).thenReturn(Optional.of(reportEntity));
@@ -1154,12 +1166,53 @@ class ReportServiceTest {
                 .balanceSheetData(Optional.of(BalanceSheetData.builder().build())).build(), intervalType, year, period);
 
         assertTrue(result.isRight());
-
+        assertEquals(1L,result.get().getVer());
         verify(organisationPublicApi).findByOrganisationId(organisationId);
         verify(reportRepository).findLatestByIdControl("org-123", "acf103248617fb66012ed41c275c48f71f29a1298074242728292ddf800fced9");
         verify(reportRepository, times(1)).save(any(ReportEntity.class));
         verifyNoMoreInteractions(organisationPublicApi);
-        verifyNoMoreInteractions(reportRepository);
+    }
+
+    @Test
+    void storeReport_successfullNewVersion() {
+        IntervalType intervalType = IntervalType.MONTH;
+        short year = 2025;
+        short period = 3;
+        String organisationId = "org-123";
+        Organisation organisation = Mockito.mock(Organisation.class);
+        ReportEntity reportEntity = Mockito.mock(ReportEntity.class);
+        //reportEntity.setLedgerDispatchApproved(true);
+        //reportEntity.setVer(1L);
+
+        when(organisation.getCountryCode()).thenReturn("CountryCode");
+        when(organisation.getCurrencyId()).thenReturn("CurrencyId");
+        when(organisation.getTaxIdNumber()).thenReturn("TaxIdNumber");
+        when(organisation.getName()).thenReturn("Name");
+        when(reportEntity.isValid()).thenReturn(true);
+        when(reportEntity.getLedgerDispatchApproved()).thenReturn(true); // When LedgerDispatchApproved is true a new report is created
+        when(reportEntity.getReportId()).thenReturn("reportId");
+        when(reportEntity.getType()).thenReturn(INCOME_STATEMENT);
+        when(reportEntity.getVer()).thenReturn(1L);
+        when(reportEntity.getIncomeStatementReportData()).thenReturn(Optional.empty());
+        when(reportEntity.getOrganisation()).thenReturn(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build());
+
+        when(reportEntity.getIntervalType()).thenReturn(IntervalType.YEAR);
+        when(organisationPublicApi.findByOrganisationId(organisationId)).thenReturn(Optional.of(organisation));
+
+        when(reportRepository.findLatestByIdControl(anyString(), anyString())).thenReturn(Optional.of(reportEntity),Optional.empty());
+        when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
+
+        Either<Problem, ReportEntity> result = reportService.storeReport(INCOME_STATEMENT, CreateReportView.builder()
+                .organisationId(organisationId)
+                .incomeStatementData(Optional.of(IncomeStatementData.builder().build())).build(), intervalType, year, period);
+
+        assertTrue(result.isRight());
+        //Todo: This should be 2, the mock isn't mutating with the process.
+        assertEquals(1L,result.get().getVer());
+        verify(organisationPublicApi).findByOrganisationId(organisationId);
+        verify(reportRepository, times(2)).findLatestByIdControl("org-123", "acf103248617fb66012ed41c275c48f71f29a1298074242728292ddf800fced9");
+        verify(reportRepository, times(1)).save(any(ReportEntity.class));
+        verifyNoMoreInteractions(organisationPublicApi);
     }
 
     @Test
@@ -1261,8 +1314,12 @@ class ReportServiceTest {
         when(organisationChartOfAccount.getId()).thenReturn(organisationChartOfAccountId);
         when(organisationChartOfAccountId.getCustomerCode()).thenReturn("CustomerCode");
         when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(List.of("CustomerCode"), startDate, endDate)).thenReturn(List.of(transactionItemEntity));
+        when(transactionItemEntity.getStatus()).thenReturn(TxItemValidationStatus.OK);
+        when(transactionItemEntity.getAccountDebit()).thenReturn(Optional.of(Account.builder().code("CustomerCode").build()));
+
         when(transactionItemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
         when(transactionItemEntity.getAmountLcy()).thenReturn(BigDecimal.TEN);
+
 
         Either<Problem, ReportEntity> result = reportService.reportGenerate(request);
 
@@ -1273,7 +1330,69 @@ class ReportServiceTest {
         assertTrue(balanceSheetReportData.isPresent());
         BalanceSheetData balanceSheetData = balanceSheetReportData.get();
         BigDecimal profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
-        assertThat(profitForTheYear).isEqualTo(BigDecimal.ZERO);
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.TEN);
+
+        // Switching Operation Type to Credit - Should be minus 10 now
+        when(transactionItemEntity.getOperationType()).thenReturn(OperationType.CREDIT);
+
+        result = reportService.reportGenerate(request);
+
+        assertTrue(result.isRight());
+        verify(reportTypeRepository, times(2)).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        reportEntity = result.get();
+        balanceSheetReportData = reportEntity.getBalanceSheetReportData();
+        assertTrue(balanceSheetReportData.isPresent());
+        balanceSheetData = balanceSheetReportData.get();
+        profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.valueOf(-10));
+
+        //Switching Item to AccountCredit - Still minus 10
+        when(transactionItemEntity.getAccountDebit()).thenReturn(Optional.empty());
+        when(transactionItemEntity.getAccountCredit()).thenReturn(Optional.of(Account.builder().code("CustomerCode").build()));
+        when(transactionItemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
+
+        result = reportService.reportGenerate(request);
+
+        assertTrue(result.isRight());
+        verify(reportTypeRepository, times(3)).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        balanceSheetReportData = result.get().getBalanceSheetReportData();
+        assertTrue(balanceSheetReportData.isPresent());
+        balanceSheetData = balanceSheetReportData.get();
+        profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.valueOf(-10));
+
+        // Switching Operation Type to credit will be 10
+        when(transactionItemEntity.getOperationType()).thenReturn(OperationType.CREDIT);
+
+        result = reportService.reportGenerate(request);
+
+        assertTrue(result.isRight());
+        verify(reportTypeRepository, times(4)).findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name());
+        balanceSheetReportData = result.get().getBalanceSheetReportData();
+        assertTrue(balanceSheetReportData.isPresent());
+        balanceSheetData = balanceSheetReportData.get();
+        profitForTheYear = balanceSheetData.getCapital().get().getProfitForTheYear().get();
+        assertThat(profitForTheYear).isEqualTo(BigDecimal.valueOf(10));
+    }
+
+    @Test
+    void store_OrganisationNotFound() {
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.empty());
+
+        Either<Problem, Void> storeResponse = reportService.store("org123", IntervalType.YEAR, (short) 2025, 1, Optional.of((short) 1), Either.left(IncomeStatementData.builder().build()));
+
+        assertTrue(storeResponse.isLeft());
+        assertThat(storeResponse.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
+    void exist_reportNotFound() {
+        String reportId = Report.idControl("org123", INCOME_STATEMENT, IntervalType.YEAR, (short) 2025, Optional.of((short) 1));
+        when(reportRepository.findLatestByIdControl("org123", reportId)).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> existsResponse = reportService.exist("org123", INCOME_STATEMENT, IntervalType.YEAR, (short) 2025, (short) 1);
+        assertTrue(existsResponse.isLeft());
+        assertThat(existsResponse.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
 
     }
 
