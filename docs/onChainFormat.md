@@ -1,5 +1,5 @@
 # On-Chain Format
-For Reeve we are using a specific on-chain format, which is dealt under the label 1517.
+For Reeve we are using a specific on-chain format, which is dealt under the label 1447.
 The label was chosen in reference to the death year of [Luca Pacioli](https://en.wikipedia.org/wiki/Luca_Pacioli), the renowned accountant widely regarded as the father of accounting.
 
 ## General structure
