@@ -204,7 +204,7 @@ public class OrganisationResource {
             return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
         }
 
-        Optional<OrganisationView> organisation = organisationService.upsertOrganisation(organisationChe.get(), organisationUpdate).map(organisationService::getOrganisationView);
+        Optional<OrganisationView> organisation = organisationService.updateOrganisation(organisationChe.get(), organisationUpdate).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_UPDATE_ERROR")

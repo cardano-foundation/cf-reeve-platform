@@ -135,47 +135,6 @@ public class ReferenceCodeService {
         return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
     }
 
-
-    @Deprecated
-    @Transactional
-    public ReferenceCodeView upsertReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate) {
-
-        Optional<Organisation> organisationChe = organisationService.findById(orgId);
-        if (organisationChe.isEmpty()) {
-            return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(),
-                    referenceCodeUpdate.getReferenceCode());
-        }
-        Optional<ReferenceCode> parentReferenceCode;
-        if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
-            parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
-            if (parentReferenceCode.isEmpty()) {
-                return ReferenceCodeView.createFail(Problem.builder()
-                        .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
-                        .withDetail("Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()))
-                        .withStatus(Status.NOT_FOUND)
-                        .build(),
-                        referenceCodeUpdate.getReferenceCode());
-            }
-        }
-
-        ReferenceCode referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode()).orElse(
-                ReferenceCode.builder()
-                        .id(new ReferenceCode.Id(orgId, referenceCodeUpdate.getReferenceCode()))
-                        .build()
-        );
-
-        referenceCode.setName(referenceCodeUpdate.getName());
-        referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
-
-        referenceCode.setActive(referenceCodeUpdate.isActive());
-        // The reference code returning is not the latest version after save
-        return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
-    }
-
     @Transactional
     public Either<Set<Problem>, Set<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, ReferenceCodeUpdate.class).fold(

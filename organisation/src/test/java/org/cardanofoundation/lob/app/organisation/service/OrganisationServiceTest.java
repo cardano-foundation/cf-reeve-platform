@@ -98,7 +98,7 @@ class OrganisationServiceTest {
 
         when(organisationRepository.saveAndFlush(any())).thenReturn(organisation);
 
-        Organisation result = organisationService.upsertOrganisation(organisation, organisationUpdate).get();
+        Organisation result = organisationService.updateOrganisation(organisation, organisationUpdate).get();
         assertNotNull(result);
         assertEquals("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0",result.getId());
         assertEquals("Street",result.getAddress());

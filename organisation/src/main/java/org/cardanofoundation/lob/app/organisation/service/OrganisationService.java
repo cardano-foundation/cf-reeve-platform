@@ -68,7 +68,7 @@ public class OrganisationService {
     }
 
     @Transactional
-    public Optional<Organisation> upsertOrganisation(Organisation organisationO, OrganisationUpdate organisationUpdate) {
+    public Optional<Organisation> updateOrganisation(Organisation organisationO, OrganisationUpdate organisationUpdate) {
 
         if (organisationUpdate.getName() != null) {
             organisationO.setName(organisationUpdate.getName());

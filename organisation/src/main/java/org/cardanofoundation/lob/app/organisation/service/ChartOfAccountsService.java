@@ -177,33 +177,6 @@ public class ChartOfAccountsService {
 
     }
 
-    @Deprecated
-    @Transactional
-    public ChartOfAccountView upsertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
-
-        Either<ChartOfAccountView, Void> organisationAvaliable = isOrganisationAvaliable(orgId, chartOfAccountUpdate.getCustomerCode());
-        if (organisationAvaliable.isLeft()) return organisationAvaliable.getLeft();
-
-        Either<ChartOfAccountView, Void> referenceCodeAvailable = isReferenceCodeAvailable(orgId, chartOfAccountUpdate);
-        if (referenceCodeAvailable.isLeft()) return referenceCodeAvailable.getLeft();
-
-        Either<ChartOfAccountView, ChartOfAccountSubType> subType = isSubTypeAvailable(orgId, chartOfAccountUpdate);
-        if (subType.isLeft()) return subType.getLeft();
-
-        Either<ChartOfAccountView, Void> parentCodeAvailable = isParentCodeAvailable(orgId, chartOfAccountUpdate);
-        if (parentCodeAvailable.isLeft()) return parentCodeAvailable.getLeft();
-
-        ChartOfAccount chartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()).orElse(
-                ChartOfAccount.builder()
-                        .id(new ChartOfAccount.Id(orgId, chartOfAccountUpdate.getCustomerCode()))
-
-                        .build()
-        );
-
-        return updateAndSaveChartOfAccount(chartOfAccountUpdate, subType, chartOfAccount);
-
-    }
-
     private ChartOfAccountView updateAndSaveChartOfAccount(ChartOfAccountUpdate chartOfAccountUpdate, Either<ChartOfAccountView, ChartOfAccountSubType> subType, ChartOfAccount chartOfAccount) {
         chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
         chartOfAccount.setName(chartOfAccountUpdate.getName());
