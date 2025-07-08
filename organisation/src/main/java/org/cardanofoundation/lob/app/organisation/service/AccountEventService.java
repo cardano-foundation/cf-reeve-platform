@@ -132,8 +132,6 @@ public class AccountEventService {
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
 
-        ReferenceCode debitReferenceG = debitReference.get();
-        ReferenceCode creditReferenceG = creditReference.get();
         Optional<AccountEvent> accountEventOpt = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         if (accountEventOpt.isEmpty()){
             return AccountEventView.createFail(Problem.builder()
@@ -143,53 +141,6 @@ public class AccountEventService {
                     .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
         }
         AccountEvent accountEvent = accountEventOpt.get();
-        accountEvent.setName(eventCodeUpdate.getName());
-        accountEvent.setActive(eventCodeUpdate.getActive());
-
-        return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
-    }
-
-    @Deprecated
-    @Transactional
-    public AccountEventView upsertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
-
-        Optional<Organisation> organisationChe = organisationService.findById(orgId);
-        if (organisationChe.isEmpty()) {
-            return AccountEventView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
-
-        }
-
-        Optional<ReferenceCode> debitReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode());
-        if (debitReference.isEmpty()) {
-            return AccountEventView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail("Unable to find reference code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
-        }
-
-        Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
-        if (creditReference.isEmpty()) {
-            return AccountEventView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail("Unable to find reference code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
-        }
-
-        ReferenceCode debitReferenceG = debitReference.get();
-        ReferenceCode creditReferenceG = creditReference.get();
-        AccountEvent accountEvent = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()).orElse(
-                AccountEvent.builder()
-                        .id(new AccountEvent.Id(orgId, debitReferenceG.getId().getReferenceCode(), creditReferenceG.getId().getReferenceCode()))
-                        .customerCode(debitReferenceG.getId().getReferenceCode() + creditReferenceG.getId().getReferenceCode())
-                        .build()
-        );
-
         accountEvent.setName(eventCodeUpdate.getName());
         accountEvent.setActive(eventCodeUpdate.getActive());
 

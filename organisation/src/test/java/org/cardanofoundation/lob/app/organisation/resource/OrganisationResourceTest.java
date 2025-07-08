@@ -145,7 +145,7 @@ class OrganisationResourceTest {
         OrganisationUpdate request = mock(OrganisationUpdate.class);
         Organisation org = mock(Organisation.class);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
-        when(organisationService.upsertOrganisation(org, request)).thenReturn(Optional.empty());
+        when(organisationService.updateOrganisation(org, request)).thenReturn(Optional.empty());
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
         assertEquals(404, responseEntity.getStatusCode().value());
@@ -157,7 +157,7 @@ class OrganisationResourceTest {
         Organisation org = mock(Organisation.class);
         OrganisationView view = mock(OrganisationView.class);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
-        when(organisationService.upsertOrganisation(org, request)).thenReturn(Optional.of(org));
+        when(organisationService.updateOrganisation(org, request)).thenReturn(Optional.of(org));
         when(organisationService.getOrganisationView(org)).thenReturn(view);
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);

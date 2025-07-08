@@ -44,7 +44,7 @@ public class CsvParser<T> {
             String fileIsNullLog = "File is null";
             log.error(fileIsNullLog);
             return Either.left(Problem.builder()
-                    .withTitle(fileIsNullLog)
+                    .withTitle("FILE_IS_EMPTY_ERROR")
                     .withDetail(fileIsNullLog)
                     .build());
         }
