@@ -80,7 +80,6 @@ public class IncomeStatementMetricService extends MetricExecutor {
                 totalExpenses.merge(IncomeStatemenCategories.PERSONNEL_EXPENSES, operatingExpenses.getPersonnelExpenses().orElse(BigDecimal.ZERO).intValue(), Integer::sum);
                 // Financial Expenses Expenses
                 int financialExpenses = sumUpOptionalFields(
-                        operatingExpenses.getRentExpenses(),
                         operatingExpenses.getGeneralAndAdministrativeExpenses(),
                         operatingExpenses.getAmortizationOnIntangibleAssets(),
                         operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets(),
