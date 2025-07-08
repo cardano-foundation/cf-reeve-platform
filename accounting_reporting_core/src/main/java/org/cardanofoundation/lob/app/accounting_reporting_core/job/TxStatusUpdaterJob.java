@@ -96,7 +96,11 @@ public class TxStatusUpdaterJob {
 
     public void addToStatusUpdateMap(Map<String, TxStatusUpdate> updateMap) {
         synchronized (txStatusUpdatesMap) {
-            txStatusUpdatesMap.putAll(updateMap);
+            updateMap.forEach((key, value) -> {
+                txStatusUpdatesMap.merge(key, value, (oldValue, newValue) ->
+                    newValue.getStatus().compareTo(oldValue.getStatus()) > 0 ? newValue : oldValue
+                );
+            });
         }
         if(txStatusUpdatesMap.size() > maxMapSize) {
             log.warn("TxStatusUpdate map size exceeded the limit of {}. Current size: {}", maxMapSize, txStatusUpdatesMap.size());
