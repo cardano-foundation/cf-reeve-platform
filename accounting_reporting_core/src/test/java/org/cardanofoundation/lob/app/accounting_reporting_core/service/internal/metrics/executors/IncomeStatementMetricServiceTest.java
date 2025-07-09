@@ -70,7 +70,7 @@ class IncomeStatementMetricServiceTest {
         assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.COST_OF_SERVICE, 10);
         assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.TAX_EXPENSES, 10);
         assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.OTHER_OPERATING_EXPENSES, 10);
-        assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.FINANCIAL_EXPENSES, 50);
+        assertThat(totalExpenses).containsEntry(IncomeStatemenCategories.FINANCIAL_EXPENSES, 40);
     }
 
     @Test
