@@ -29,7 +29,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationVatService;
 
 @RestController
-@RequestMapping("/api/organisations")
+@RequestMapping("/api/v1/organisations")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor

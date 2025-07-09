@@ -38,7 +38,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
