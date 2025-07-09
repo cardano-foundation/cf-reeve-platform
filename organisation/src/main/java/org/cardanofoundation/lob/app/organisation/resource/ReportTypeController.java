@@ -37,7 +37,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ReportTypeView;
 import org.cardanofoundation.lob.app.organisation.service.ReportTypeService;
 
 @RestController
-@RequestMapping("/api/organisations/report-types")
+@RequestMapping("/api/v1/organisations/report-types")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor

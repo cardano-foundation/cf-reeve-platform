@@ -45,7 +45,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
 @RestController
-@RequestMapping("/api/extraction")
+@RequestMapping("/api/v1/extraction")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 @Slf4j
