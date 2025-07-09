@@ -15,7 +15,7 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/ApproveTx")
+                .get("/api/v1/transactions/ApproveTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("APPROVE"));
@@ -32,7 +32,7 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
                           ]
                         }""")
                 .when()
-                .post("/api/transactions/approve")
+                .post("/api/v1/transactions/approve")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("ApproveTx"))
@@ -41,7 +41,7 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
         given()
                 .contentType("application/json")
                 .when()
-                .get("/api/transactions/ApproveTx")
+                .get("/api/v1/transactions/ApproveTx")
                 .then()
                 .statusCode(200)
                 .body("statistic", equalTo("PUBLISH"));
@@ -62,7 +62,7 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
                         }
                         """)
                 .when()
-                .post("/api/transactions/approve")
+                .post("/api/v1/transactions/approve")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("NotExistingTransaction"))
@@ -85,7 +85,7 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
                           ]
                         }""")
                 .when()
-                .post("/api/transactions/approve")
+                .post("/api/v1/transactions/approve")
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("InvalidTx"))
