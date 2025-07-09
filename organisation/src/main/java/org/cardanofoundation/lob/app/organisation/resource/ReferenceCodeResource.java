@@ -38,7 +38,7 @@ import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.organisation.service.ReferenceCodeService;
 
 @RestController
-@RequestMapping("/api/organisations")
+@RequestMapping("/api/v1/organisations")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor

@@ -31,7 +31,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
 
 @RestController
-@RequestMapping("/api/organisations")
+@RequestMapping("/api/v1/organisations")
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor

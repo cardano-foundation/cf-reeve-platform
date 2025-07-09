@@ -29,7 +29,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.me
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.metrics.MetricService;
 
 @RestController
-@RequestMapping("/api/metrics")
+@RequestMapping("/api/v1/metrics")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 @Slf4j

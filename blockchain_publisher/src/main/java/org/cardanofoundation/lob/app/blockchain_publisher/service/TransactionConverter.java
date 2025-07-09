@@ -12,14 +12,16 @@ import jakarta.persistence.OneToOne;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.*;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 
@@ -32,7 +34,7 @@ public class TransactionConverter {
     private final OrganisationPublicApi organisationPublicApi;
 
     public TransactionEntity convertToDbDetached(Transaction tx) {
-        val transactionEntity = new TransactionEntity();
+        TransactionEntity transactionEntity = new TransactionEntity();
         transactionEntity.setId(tx.getId());
         transactionEntity.setInternalNumber(tx.getInternalTransactionNumber());
         transactionEntity.setBatchId(tx.getBatchId());
@@ -41,13 +43,15 @@ public class TransactionConverter {
         transactionEntity.setEntryDate(tx.getEntryDate());
         transactionEntity.setAccountingPeriod(tx.getAccountingPeriod());
 
-        val publishStatus = blockchainPublishStatusMapper.convert(tx.getLedgerDispatchStatus());
+        BlockchainPublishStatus publishStatus = blockchainPublishStatusMapper.convert(tx.getLedgerDispatchStatus());
         transactionEntity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
                 .publishStatus(publishStatus)
                 .build())
         );
 
-        transactionEntity.setItems(convertTxItems(tx, transactionEntity));
+        Set<TransactionItemEntity> transactionItemEntities = convertTxItems(tx, transactionEntity);
+
+        transactionEntity.setItems(aggregateTxItems(transactionItemEntities));
 
         return transactionEntity;
     }
