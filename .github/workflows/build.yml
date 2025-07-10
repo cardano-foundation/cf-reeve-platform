@@ -44,7 +44,8 @@ jobs:
           earthly +docker-publish \
             --PUSH=${DOCKER_PUSH} \
             --DOCKER_REGISTRIES="${{ secrets.DOCKER_REGISTRIES }}" \
-            --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}"
+            --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}" \
+            --GITHUB_EVENT_NAME="${GITHUB_EVENT_NAME}"
       - name: Generate SBOM
         run: ./gradlew cyclonedxBom
       - name: Upload SBOM to GitHub

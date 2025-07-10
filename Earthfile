@@ -21,7 +21,12 @@ docker-publish:
   ARG GITHUB_EVENT_NAME
   LOCALLY
   LET PUSH_PUBLIC = "false"
-  RUN if [ "$PUSH" = "true" ] && [[ ! "$GITHUB_EVENT_NAME" = "pull_request" ]]; then PUSH_PUBLIC="true"; fi
+  IF [ "$PUSH" = "true" ] 
+    IF [[ ! "$GITHUB_EVENT_NAME" = "pull_request" ]]
+      SET PUSH_PUBLIC = "true"
+    END
+  END
+  RUN echo "push public is set to $PUSH_PUBLIC"
   WAIT
     BUILD +all --RELEASE_TAG=${RELEASE_TAG}
   END
