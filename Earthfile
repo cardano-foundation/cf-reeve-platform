@@ -22,7 +22,7 @@ docker-publish:
   LOCALLY
   LET PUSH_PUBLIC = "false"
   IF [ "$PUSH" = "true" ] 
-    IF [[ ! "$GITHUB_EVENT_NAME" = "pull_request" ]]
+    IF [ ! "$GITHUB_EVENT_NAME" = "pull_request" ]
       SET PUSH_PUBLIC = "true"
     END
   END
