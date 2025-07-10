@@ -133,7 +133,7 @@ public class TransactionItemExtractionRepository {
         return (long) resultQuery.getSingleResult();
     }
 
-    public List<TransactionItemEntity> findByItemAccountDate(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int size) {
+    public List<TransactionItemEntity> findByItemAccountDate(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
         String jpql = """
                 SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
@@ -147,8 +147,8 @@ public class TransactionItemExtractionRepository {
         resultQuery.setParameter("dateTo", dateTo);
 
         // adding pagination
-        resultQuery.setFirstResult(page * size);
-        resultQuery.setMaxResults(size);
+        resultQuery.setFirstResult(page * limit);
+        resultQuery.setMaxResults(limit);
 
         return resultQuery.getResultList();
     }

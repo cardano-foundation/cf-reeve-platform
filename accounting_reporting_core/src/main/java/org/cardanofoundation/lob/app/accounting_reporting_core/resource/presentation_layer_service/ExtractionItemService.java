@@ -44,9 +44,9 @@ public class ExtractionItemService {
     }
 
     @Transactional(readOnly = true)
-    public ExtractionTransactionView findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int size) {
+    public ExtractionTransactionView findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
-        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash, page, size).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
+        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash, page, limit).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
         long countTotalElements = transactionItemRepositoryImpl.countItemsByAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash);
         // aggregating in case there are duplicate items due to the enrichment process it is possible to have newly duplicates
         List<ExtractionTransactionItemView> transactionItemViews = list.stream()
@@ -63,7 +63,7 @@ public class ExtractionItemService {
                     return aggregatedItem;
                 })
                 .toList();
-        return ExtractionTransactionView.createSuccess(transactionItemViews, countTotalElements, page, size);
+        return ExtractionTransactionView.createSuccess(transactionItemViews, countTotalElements, page, limit);
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {

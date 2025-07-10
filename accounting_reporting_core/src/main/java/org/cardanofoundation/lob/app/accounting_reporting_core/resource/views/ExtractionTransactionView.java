@@ -24,14 +24,14 @@ public class ExtractionTransactionView {
     private int page;
     private int size;
 
-    public static ExtractionTransactionView createSuccess(List<ExtractionTransactionItemView> transactions, long totalElements, int page, int size) {
+    public static ExtractionTransactionView createSuccess(List<ExtractionTransactionItemView> transactions, long totalElements, int page, int limit) {
         return new ExtractionTransactionView(
                 true,
                 totalElements,
                 transactions,
                 Optional.empty(),
                 page,
-                size
+                limit
         );
     }
 

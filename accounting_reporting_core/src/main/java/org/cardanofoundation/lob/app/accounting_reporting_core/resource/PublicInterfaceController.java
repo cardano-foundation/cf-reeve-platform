@@ -114,7 +114,7 @@ public class PublicInterfaceController {
                                 transactionsRequest.getMaxAmount(),
                                 transactionsRequest.getTransactionHashes(),
                                 transactionsRequest.getPage(),
-                                transactionsRequest.getSize()
+                                transactionsRequest.getLimit()
                         )
                 );
     }

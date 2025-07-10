@@ -42,5 +42,5 @@ public class PublicInterfaceTransactionsRequest extends BaseRequest {
     private Set<String> transactionHashes = Set.of();
 
     private int page = 0;
-    private int size = 100;
+    private int limit = 100;
 }
