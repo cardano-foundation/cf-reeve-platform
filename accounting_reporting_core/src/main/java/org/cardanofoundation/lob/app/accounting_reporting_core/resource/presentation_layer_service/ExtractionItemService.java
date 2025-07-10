@@ -40,16 +40,16 @@ public class ExtractionItemService {
         List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType)
                 .stream().map(this::extractionTransactionItemViewBuilder).toList();
 
-        return ExtractionTransactionView.createSuccess(transactionItem);
+        return ExtractionTransactionView.createSuccess(transactionItem, transactionItem.size(), 0, transactionItem.size());
     }
 
     @Transactional(readOnly = true)
-    public List<ExtractionTransactionItemView> findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
+    public ExtractionTransactionView findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
-        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
-
+        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash, page, limit).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
+        long countTotalElements = transactionItemRepositoryImpl.countItemsByAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash);
         // aggregating in case there are duplicate items due to the enrichment process it is possible to have newly duplicates
-        return list.stream()
+        List<ExtractionTransactionItemView> transactionItemViews = list.stream()
                 .collect(Collectors.groupingBy(ExtractionTransactionItemView::aggregationHashCode, Collectors.toSet()))
                 .values().stream()
                 .map(itemSet -> {
@@ -63,6 +63,7 @@ public class ExtractionItemService {
                     return aggregatedItem;
                 })
                 .toList();
+        return ExtractionTransactionView.createSuccess(transactionItemViews, countTotalElements, page, limit);
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {

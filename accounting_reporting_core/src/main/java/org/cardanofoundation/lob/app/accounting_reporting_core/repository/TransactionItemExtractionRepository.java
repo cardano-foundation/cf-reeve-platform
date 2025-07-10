@@ -118,15 +118,46 @@ public class TransactionItemExtractionRepository {
         return query.getResultList();
     }
 
+    public long countItemsByAccountDate(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
+        String jpql = """
+                SELECT COUNT(ti) FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
+                """;
 
-    public List<TransactionItemEntity> findByItemAccountDate(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
+        String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
 
-        minAmount = Optional.ofNullable(minAmount).orElse(Optional.empty());
-        maxAmount = Optional.ofNullable(maxAmount).orElse(Optional.empty());
+        Query resultQuery = em.createQuery(jpql + where);
+
+        resultQuery.setParameter("dateFrom", dateFrom);
+        resultQuery.setParameter("dateTo", dateTo);
+
+        return (long) resultQuery.getSingleResult();
+    }
+
+    public List<TransactionItemEntity> findByItemAccountDate(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
         String jpql = """
                 SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
                 """;
+
+        String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
+
+        Query resultQuery = em.createQuery(jpql + where);
+
+        resultQuery.setParameter("dateFrom", dateFrom);
+        resultQuery.setParameter("dateTo", dateTo);
+
+        // adding pagination
+        resultQuery.setFirstResult(page * limit);
+        resultQuery.setMaxResults(limit);
+
+        return resultQuery.getResultList();
+    }
+
+    private static String constructWhereClauseForExtraction(String orgId, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
+        minAmount = Optional.ofNullable(minAmount).orElse(Optional.empty());
+        maxAmount = Optional.ofNullable(maxAmount).orElse(Optional.empty());
+
+
         String where = STR."""
                 WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
                 AND te.organisation.id = '\{orgId}'
@@ -166,13 +197,7 @@ public class TransactionItemExtractionRepository {
         where += STR."""
         AND te.ledgerDispatchStatus = '\{LedgerDispatchStatus.FINALIZED}'
         """;
-
-        Query resultQuery = em.createQuery(jpql + where);
-
-        resultQuery.setParameter("dateFrom", dateFrom);
-        resultQuery.setParameter("dateTo", dateTo);
-
-        return resultQuery.getResultList();
+        return where;
     }
 
 
