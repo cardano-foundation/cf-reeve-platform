@@ -18,6 +18,9 @@ all:
 docker-publish:
   ARG EARTHLY_GIT_SHORT_HASH
   ARG RELEASE_TAG
+  ARG GITHUB_EVENT_NAME
+  LET PUSH_PUBLIC = "false"
+  RUN if [ "$PUSH" = "true" ] && [[ ! "$GITHUB_EVENT_NAME" = "pull_request" ]]; then PUSH_PUBLIC="true"; fi
   WAIT
     BUILD +all --RELEASE_TAG=${RELEASE_TAG}
   END
@@ -28,21 +31,27 @@ docker-publish:
       SET IMAGE_NAME = ${DOCKER_IMAGE_PREFIX}-${image_target}
       IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
         FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
-          IF [ "$registry" = "hub.docker.com" ]
+          IF [ "$registry" = "hub.docker.com" ] && [ "$PUSH_PUBLIC" = "true" ]
             RUN docker tag ${IMAGE_NAME}:latest ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${image_tag}
-            RUN if [ "$PUSH" = "true" ]; then docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${image_tag}; fi
-          ELSE
+            RUN docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${image_tag}
+          ELSE IF [ "$registry" = "ghcr.io" ] && [ "$PUSH_PUBLIC" = "true" ]
             RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
-            RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${image_tag}; fi
+            RUN docker push ${registry}/${IMAGE_NAME}:${image_tag}
+          ELSE IF [ "$PUSH" = "true" ]
+            RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
+            RUN docker push ${registry}/${IMAGE_NAME}:${image_tag}
           END
         END
       END
-      IF [ "$registry" = "hub.docker.com" ]
+      IF [ "$registry" = "hub.docker.com" ] && [ "$PUSH_PUBLIC" = "true" ]
         RUN docker tag ${IMAGE_NAME}:latest ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        RUN if [ "$PUSH" = "true" ]; then docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
-      ELSE
+        RUN docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+      ELSE IF [ "$registry" = "ghcr.io" ] && [ "$PUSH_PUBLIC" = "true" ]
         RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
+        RUN docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+      ELSE IF [ "$PUSH" = "true"]
+        RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+        RUN docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
       END
     END
   END
