@@ -21,16 +21,21 @@ public class ExtractionTransactionView {
 
     private Optional<Problem> error;
 
-    public static ExtractionTransactionView createSuccess(List<ExtractionTransactionItemView> transactions) {
+    private int page;
+    private int size;
+
+    public static ExtractionTransactionView createSuccess(List<ExtractionTransactionItemView> transactions, long totalElements, int page, int size) {
         return new ExtractionTransactionView(
                 true,
-                transactions.stream().count(),
+                totalElements,
                 transactions,
-                Optional.empty()
+                Optional.empty(),
+                page,
+                size
         );
     }
 
     public static ExtractionTransactionView createFail(Problem error) {
-        return new ExtractionTransactionView(false, 0L, List.of(), Optional.of(error));
+        return new ExtractionTransactionView(false, 0L, List.of(), Optional.of(error), 0, 0);
     }
 }
