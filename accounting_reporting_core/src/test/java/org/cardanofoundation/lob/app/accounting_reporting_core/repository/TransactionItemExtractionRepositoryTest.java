@@ -108,7 +108,9 @@ class TransactionItemExtractionRepositoryTest {
                 Set.of("Currency2", "Currency1"),
                 Optional.of(BigDecimal.valueOf(100)),
                 Optional.of(BigDecimal.valueOf(1000)),
-                Set.of("TheHast2", "TheHast1")
+                Set.of("TheHast2", "TheHast1"),
+                0,
+                10
         );
         Mockito.verify(em, Mockito.times(1)).createQuery(anyString());
     }
