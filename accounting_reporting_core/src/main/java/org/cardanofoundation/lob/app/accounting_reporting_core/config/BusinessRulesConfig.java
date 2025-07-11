@@ -106,7 +106,8 @@ public class BusinessRulesConfig {
                 new AccountCodeDebitCheckTaskItem(),
                 new AccountCodeCreditCheckTaskItem(),
                 new DocumentMustBePresentTaskItem(),
-                new CheckIfAllTxItemsAreErasedTaskItem()
+                new CheckIfAllTxItemsAreErasedTaskItem(),
+                new NetOffCreditDebitTaskItem(organisationPublicApi)
         ));
     }
 
