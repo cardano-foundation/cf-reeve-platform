@@ -48,7 +48,7 @@ class PublicInterfaceControllerTest {
 
         when(organisationPublicApi.findByOrganisationId("org-id")).thenReturn(Optional.empty());
 
-        ResponseEntity<ExtractionTransactionView> response = publicInterfaceController.transactionSearchPublicInterface(request);
+        ResponseEntity<ExtractionTransactionView> response = publicInterfaceController.transactionSearchPublicInterface(request, 0, 100);
         assertTrue(response.getStatusCode().is4xxClientError());
     }
 
@@ -67,13 +67,11 @@ class PublicInterfaceControllerTest {
         when(request.getMinAmount()).thenReturn(Optional.empty());
         when(request.getMaxAmount()).thenReturn(Optional.empty());
         when(request.getTransactionHashes()).thenReturn(Set.of());
-        when(request.getPage()).thenReturn(0);
-        when(request.getLimit()).thenReturn(10);
         when(organisationPublicApi.findByOrganisationId("org-id")).thenReturn(Optional.of(organisation));
 
         when(extractionItemService.findTransactionItemsPublic("org-id", LocalDate.EPOCH, LocalDate.EPOCH, Set.of(), Set.of(), Optional.empty(), Optional.empty(), Set.of(), 0, 10)).thenReturn(extractionTransactionView);
 
-        ResponseEntity<ExtractionTransactionView> response = publicInterfaceController.transactionSearchPublicInterface(request);
+        ResponseEntity<ExtractionTransactionView> response = publicInterfaceController.transactionSearchPublicInterface(request, 0, 10);
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertTrue(response.getBody() instanceof ExtractionTransactionView);
     }
