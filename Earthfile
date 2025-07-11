@@ -4,8 +4,7 @@ ARG --global ALL_BUILD_TARGETS="platform-library-m2-cache follower-app"
 
 ARG --global DOCKER_IMAGE_PREFIX="cf-reeve"
 ARG --global DOCKER_IMAGES_EXTRA_TAGS=""
-ARG --global DOCKER_REGISTRIES="hub.docker.com"
-ARG --global HUB_DOCKER_COM_ORG=cardanofoundation
+ARG --global DOCKER_REGISTRIES="docker.io/cardanofoundation"
 ARG --global PUSH=false
 
 all:
@@ -21,10 +20,8 @@ docker-publish:
   ARG GITHUB_EVENT_NAME
   LOCALLY
   LET PUSH_PUBLIC = "false"
-  IF [ "$PUSH" = "true" ] 
-    IF [ ! "$GITHUB_EVENT_NAME" = "pull_request" ]
-      SET PUSH_PUBLIC = "true"
-    END
+  IF [ ! "$GITHUB_EVENT_NAME" = "pull_request" ]
+    SET PUSH_PUBLIC = "true"
   END
   RUN echo "push public is set to $PUSH_PUBLIC"
   WAIT
@@ -32,41 +29,43 @@ docker-publish:
   END
   LOCALLY
   LET IMAGE_NAME = ""
+  LET PUBLIC = "false"
+  LET PUSH_THIS_REPO = "$PUSH"
+  LET REGISTRY = ""
   FOR registry IN $DOCKER_REGISTRIES
     FOR image_target IN $ALL_BUILD_TARGETS
       SET IMAGE_NAME = ${DOCKER_IMAGE_PREFIX}-${image_target}
-      IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
-        FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
-          IF [ "$registry" = "hub.docker.com" ] 
-            IF [ "$PUSH_PUBLIC" = "true" ]
-              RUN docker tag ${IMAGE_NAME}:latest ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${image_tag}
-              RUN docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${image_tag}
-            END
-          ELSE IF [ "$registry" = "ghcr.io" ] 
-            IF [ "$PUSH_PUBLIC" = "true" ]
-              RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
-              RUN docker push ${registry}/${IMAGE_NAME}:${image_tag}
-            END
-          ELSE IF [ "$PUSH" = "true" ]
-            RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
-            RUN docker push ${registry}/${IMAGE_NAME}:${image_tag}
+      SET PUBLIC = "false"
+      SET REGISTRY = "$registry"
+      # TODO: include "docker.io/cardanofoundation" in github secret and remove this exception
+      IF [ "$registry" = "hub.docker.com" ] 
+        SET PUBLIC = "true"
+        SET REGISTRY = "docker.io/cardanofoundation"
+      END
+      IF [ "$registry" = "docker.io/cardanofoundation" ] 
+        SET PUBLIC = "true"
+      END
+      IF [ "$registry" = "ghcr.io/cardano-foundation" ] 
+        SET PUBLIC = "true"
+      END
+      SET PUSH_THIS_REPO = "$PUSH"
+      IF [ "$PUBLIC" = "true" ]
+        IF [ "$PUSH_PUBLIC" = "false" ]
+          SET PUSH_THIS_REPO = "false"
+        END
+      END
+
+      IF [ "$PUSH_THIS_REPO" = "true" ]
+        IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
+          FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
+            RUN docker tag ${IMAGE_NAME}:latest ${REGISTRY}/${IMAGE_NAME}:${image_tag}
+            RUN docker push ${REGISTRY}/${IMAGE_NAME}:${image_tag}
           END
         END
+        RUN docker tag ${IMAGE_NAME}:latest ${REGISTRY}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+        RUN docker push ${REGISTRY}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
       END
-      IF [ "$registry" = "hub.docker.com" ]
-        IF [ "$PUSH_PUBLIC" = "true" ]
-          RUN docker tag ${IMAGE_NAME}:latest ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-          RUN docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        END
-      ELSE IF [ "$registry" = "ghcr.io" ]
-        IF [ "$PUSH_PUBLIC" = "true" ]
-          RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-          RUN docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        END
-      ELSE IF [ "$PUSH" = "true"]
-        RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        RUN docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-      END
+
     END
   END
 
