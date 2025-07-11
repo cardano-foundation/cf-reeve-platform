@@ -37,7 +37,7 @@ jobs:
           PRIVATE_DOCKER_REGISTRY_PASS: ${{ env.PRIVATE_DOCKER_REGISTRY_PASS }}
           HUB_DOCKER_COM_USER: ${{ secrets.HUB_DOCKER_COM_USER }}
           HUB_DOCKER_COM_PASS: ${{ secrets.HUB_DOCKER_COM_PASS }}
-          DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES }}"
+          DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES_TEST }}"
 
       - name: Filter docker registries
         env: # Or as an environment variable
