@@ -29,12 +29,12 @@ docker-publish:
       IF [ "$PUSH" = "true" ]
         IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
           FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
-            RUN docker tag ${IMAGE_NAME}:latest ${REGISTRY}/${IMAGE_NAME}:${image_tag}
-            RUN docker push ${REGISTRY}/${IMAGE_NAME}:${image_tag}
+            RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
+            RUN docker push ${registry}/${IMAGE_NAME}:${image_tag}
           END
         END
-        RUN docker tag ${IMAGE_NAME}:latest ${REGISTRY}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        RUN docker push ${REGISTRY}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+        RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+        RUN docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
       END
     END
   END
