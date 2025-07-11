@@ -43,8 +43,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: docker.io
-          username: ${{ inputs.HUB_DOCKER_COM_USER }}
-          password: ${{ inputs.HUB_DOCKER_COM_PASS }}
+          username: ${{ secrets.HUB_DOCKER_COM_USER }}
+          password: ${{ secrets.HUB_DOCKER_COM_PASS }}
 
       - name: Filter docker registries
         env: # Or as an environment variable
