@@ -39,11 +39,35 @@ jobs:
           HUB_DOCKER_COM_PASS: ${{ secrets.HUB_DOCKER_COM_PASS }}
           DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES }}"
 
+      - name: Filter docker registries
+        run: |
+          PUSH_PUBLIC="true"
+
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]
+          then
+            PUSH_PUBLIC="false"
+          fi
+          FILTERED_DOCKER_REGISTRIES="" 
+          for docker_registry in $DOCKER_REGISTRIES
+          do
+            case $docker_registry in
+              ghcr.io*|docker.io*) IS_PUBLIC_REPO="true";;
+              hub.docker.com) IS_PUBLIC_REPO="true"; docker_registry="docker.io/cardanofoundation";;
+              *) IS_PUBLIC_REPO="false";;
+            esac
+            if [[ "$IS_PUBLIC_REPO" = "true" && "$PUSH_PUBLIC" = "false" ]]
+            then
+              continue
+            fi
+            FILTERED_DOCKER_REGISTRIES="$FILTERED_DOCKER_REGISTRIES $docker_registry"
+          done
+          echo "FILTERED_DOCKER_REGISTRIES=$FILTERED_DOCKER_REGISTRIES" >> "$GITHUB_ENV"
+
       - name:  🌍 earthly (docker build and push)
         run: |
           earthly +docker-publish \
             --PUSH=${DOCKER_PUSH} \
-            --DOCKER_REGISTRIES="${{ secrets.DOCKER_REGISTRIES }}" \
+            --DOCKER_REGISTRIES="${{ env.FILTERED_DOCKER_REGISTRIES }}" \
             --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}" \
             --GITHUB_EVENT_NAME="${GITHUB_EVENT_NAME}"
       - name: Generate SBOM
