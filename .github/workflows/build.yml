@@ -61,15 +61,14 @@ jobs:
             fi
             FILTERED_DOCKER_REGISTRIES="$FILTERED_DOCKER_REGISTRIES $docker_registry"
           done
-          echo "FILTERED_DOCKER_REGISTRIES=$FILTERED_DOCKER_REGISTRIES" >> "$GITHUB_ENV"
+          echo "FILTERED_DOCKER_REGISTRIES=${FILTERED_DOCKER_REGISTRIES}" | tee -a "$GITHUB_ENV"
 
       - name:  🌍 earthly (docker build and push)
         run: |
           earthly +docker-publish \
             --PUSH=${DOCKER_PUSH} \
             --DOCKER_REGISTRIES="${{ env.FILTERED_DOCKER_REGISTRIES }}" \
-            --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}" \
-            --GITHUB_EVENT_NAME="${GITHUB_EVENT_NAME}"
+            --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}"
       - name: Generate SBOM
         run: ./gradlew cyclonedxBom
       - name: Upload SBOM to GitHub
