@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -89,7 +90,9 @@ public class PublicInterfaceController {
                     })
             }
     )
-    public ResponseEntity<ExtractionTransactionView> transactionSearchPublicInterface(@Valid @RequestBody PublicInterfaceTransactionsRequest transactionsRequest) {
+    public ResponseEntity<ExtractionTransactionView> transactionSearchPublicInterface(@Valid @RequestBody PublicInterfaceTransactionsRequest transactionsRequest,
+                                                                                      @RequestParam(name = "page", defaultValue = "0") int page,
+                                                                                      @RequestParam(name = "limit", defaultValue = "100") int limit) {
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(transactionsRequest.getOrganisationId());
 
         if (orgM.isEmpty()) {
@@ -113,8 +116,8 @@ public class PublicInterfaceController {
                                 transactionsRequest.getMinAmount(),
                                 transactionsRequest.getMaxAmount(),
                                 transactionsRequest.getTransactionHashes(),
-                                transactionsRequest.getPage(),
-                                transactionsRequest.getLimit()
+                                page,
+                                limit
                         )
                 );
     }

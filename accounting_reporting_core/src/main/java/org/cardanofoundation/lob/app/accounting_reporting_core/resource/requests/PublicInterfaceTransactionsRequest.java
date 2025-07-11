@@ -40,7 +40,4 @@ public class PublicInterfaceTransactionsRequest extends BaseRequest {
     private Optional<BigDecimal> maxAmount;
 
     private Set<String> transactionHashes = Set.of();
-
-    private int page = 0;
-    private int limit = 100;
 }
