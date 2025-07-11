@@ -41,7 +41,6 @@ jobs:
 
       - name: Docker Login (docker.io)
         uses: docker/login-action@v3
-        if: contains(inputs.DOCKER_REGISTRIES_TEST, 'hub.docker.com')
         with:
           registry: docker.io
           username: ${{ inputs.HUB_DOCKER_COM_USER }}
