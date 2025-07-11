@@ -40,6 +40,8 @@ jobs:
           DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES }}"
 
       - name: Filter docker registries
+        env: # Or as an environment variable
+          DOCKER_REGISTRIES: ${{ secrets.DOCKER_REGISTRIES }}
         run: |
           PUSH_PUBLIC="true"
 
