@@ -90,19 +90,19 @@ public class API3MetadataSerialiser {
         balanceSheetData.getAssets().ifPresent(assets -> {
             assets.getNonCurrentAssets().ifPresent(nca -> {
                 MetadataMap nonCurrentAssetsMap = MetadataBuilder.createMap();
-                nca.getTangibleAssets().ifPresent(value -> nonCurrentAssetsMap.put("tangible_assets", BigDecimals.normaliseEngineeringString(value)));
-                nca.getIntangibleAssets().ifPresent(value -> nonCurrentAssetsMap.put("intangible_assets", BigDecimals.normaliseEngineeringString(value)));
-                nca.getInvestments().ifPresent(value -> nonCurrentAssetsMap.put("investments", BigDecimals.normaliseEngineeringString(value)));
-                nca.getFinancialAssets().ifPresent(value -> nonCurrentAssetsMap.put("financial_assets", BigDecimals.normaliseEngineeringString(value)));
+                nca.getTangibleAssets().ifPresent(value -> nonCurrentAssetsMap.put("tangible_assets", BigDecimals.normaliseString(value)));
+                nca.getIntangibleAssets().ifPresent(value -> nonCurrentAssetsMap.put("intangible_assets", BigDecimals.normaliseString(value)));
+                nca.getInvestments().ifPresent(value -> nonCurrentAssetsMap.put("investments", BigDecimals.normaliseString(value)));
+                nca.getFinancialAssets().ifPresent(value -> nonCurrentAssetsMap.put("financial_assets", BigDecimals.normaliseString(value)));
                 assetsMap.put("non_current_assets", nonCurrentAssetsMap);
             });
 
             assets.getCurrentAssets().ifPresent(ca -> {
                 MetadataMap currentAssetsMap = MetadataBuilder.createMap();
-                ca.getPrepaymentsAndOtherShortTermAssets().ifPresent(value -> currentAssetsMap.put("prepayments_and_other_short_term_assets", BigDecimals.normaliseEngineeringString(value)));
-                ca.getOtherReceivables().ifPresent(value -> currentAssetsMap.put("other_receivables", BigDecimals.normaliseEngineeringString(value)));
-                ca.getCryptoAssets().ifPresent(value -> currentAssetsMap.put("crypto_assets", BigDecimals.normaliseEngineeringString(value)));
-                ca.getCashAndCashEquivalents().ifPresent(value -> currentAssetsMap.put("cash_and_cash_equivalents", BigDecimals.normaliseEngineeringString(value)));
+                ca.getPrepaymentsAndOtherShortTermAssets().ifPresent(value -> currentAssetsMap.put("prepayments_and_other_short_term_assets", BigDecimals.normaliseString(value)));
+                ca.getOtherReceivables().ifPresent(value -> currentAssetsMap.put("other_receivables", BigDecimals.normaliseString(value)));
+                ca.getCryptoAssets().ifPresent(value -> currentAssetsMap.put("crypto_assets", BigDecimals.normaliseString(value)));
+                ca.getCashAndCashEquivalents().ifPresent(value -> currentAssetsMap.put("cash_and_cash_equivalents", BigDecimals.normaliseString(value)));
                 assetsMap.put("current_assets", currentAssetsMap);
             });
 
@@ -114,15 +114,15 @@ public class API3MetadataSerialiser {
         balanceSheetData.getLiabilities().ifPresent(liabilities -> {
             liabilities.getNonCurrentLiabilities().ifPresent(ncl -> {
                 MetadataMap nonCurrentLiabilitiesMap = MetadataBuilder.createMap();
-                ncl.getProvisions().ifPresent(value -> nonCurrentLiabilitiesMap.put("provisions", BigDecimals.normaliseEngineeringString(value)));
+                ncl.getProvisions().ifPresent(value -> nonCurrentLiabilitiesMap.put("provisions", BigDecimals.normaliseString(value)));
                 liabilitiesMap.put("non_current_liabilities", nonCurrentLiabilitiesMap);
             });
 
             liabilities.getCurrentLiabilities().ifPresent(cl -> {
                 MetadataMap currentLiabilitiesMap = MetadataBuilder.createMap();
-                cl.getTradeAccountsPayables().ifPresent(value -> currentLiabilitiesMap.put("trade_accounts_payables", BigDecimals.normaliseEngineeringString(value)));
-                cl.getOtherShortTermLiabilities().ifPresent(value -> currentLiabilitiesMap.put("other_short_term_liabilities", BigDecimals.normaliseEngineeringString(value)));
-                cl.getAccrualsAndShortTermProvisions().ifPresent(value -> currentLiabilitiesMap.put("accruals_and_short_term_provisions", BigDecimals.normaliseEngineeringString(value)));
+                cl.getTradeAccountsPayables().ifPresent(value -> currentLiabilitiesMap.put("trade_accounts_payables", BigDecimals.normaliseString(value)));
+                cl.getOtherShortTermLiabilities().ifPresent(value -> currentLiabilitiesMap.put("other_short_term_liabilities", BigDecimals.normaliseString(value)));
+                cl.getAccrualsAndShortTermProvisions().ifPresent(value -> currentLiabilitiesMap.put("accruals_and_short_term_provisions", BigDecimals.normaliseString(value)));
                 liabilitiesMap.put("current_liabilities", currentLiabilitiesMap);
             });
 
@@ -132,9 +132,9 @@ public class API3MetadataSerialiser {
         // Capital
         MetadataMap capitalMap = MetadataBuilder.createMap();
         balanceSheetData.getCapital().ifPresent(capital -> {
-            capital.getCapital().ifPresent(value -> capitalMap.put("capital", BigDecimals.normaliseEngineeringString(value)));
-            capital.getResultsCarriedForward().ifPresent(value -> capitalMap.put("results_carried_forward", BigDecimals.normaliseEngineeringString(value)));
-            capital.getProfitForTheYear().ifPresent(value -> capitalMap.put("profit_for_the_year", BigDecimals.normaliseEngineeringString(value)));
+            capital.getCapital().ifPresent(value -> capitalMap.put("capital", BigDecimals.normaliseString(value)));
+            capital.getResultsCarriedForward().ifPresent(value -> capitalMap.put("results_carried_forward", BigDecimals.normaliseString(value)));
+            capital.getProfitForTheYear().ifPresent(value -> capitalMap.put("profit_for_the_year", BigDecimals.normaliseString(value)));
         });
         dataMap.put("capital", capitalMap);
 
@@ -146,48 +146,48 @@ public class API3MetadataSerialiser {
 
         incomeStatementData.getRevenues().ifPresent(revenues -> {
             MetadataMap revenuesMap = MetadataBuilder.createMap();
-            revenues.getOtherIncome().ifPresent(value -> revenuesMap.put("other_income", BigDecimals.normaliseEngineeringString(value)));
-            revenues.getBuildOfLongTermProvision().ifPresent(value -> revenuesMap.put("build_of_long_term_provision", BigDecimals.normaliseEngineeringString(value)));
+            revenues.getOtherIncome().ifPresent(value -> revenuesMap.put("other_income", BigDecimals.normaliseString(value)));
+            revenues.getBuildOfLongTermProvision().ifPresent(value -> revenuesMap.put("build_of_long_term_provision", BigDecimals.normaliseString(value)));
             dataMap.put("revenues", revenuesMap);
         });
 
         incomeStatementData.getCostOfGoodsAndServices().ifPresent(cogs -> {
             MetadataMap cogsMap = MetadataBuilder.createMap();
-            cogs.getExternalServices().ifPresent(value -> cogsMap.put("external_services", BigDecimals.normaliseEngineeringString(value)));
+            cogs.getExternalServices().ifPresent(value -> cogsMap.put("external_services", BigDecimals.normaliseString(value)));
             dataMap.put("cost_of_goods_and_services", cogsMap);
         });
 
         incomeStatementData.getOperatingExpenses().ifPresent(opex -> {
             MetadataMap opexMap = MetadataBuilder.createMap();
-            opex.getPersonnelExpenses().ifPresent(value -> opexMap.put("personnel_expenses", BigDecimals.normaliseEngineeringString(value)));
-            opex.getGeneralAndAdministrativeExpenses().ifPresent(value -> opexMap.put("general_and_administrative_expenses", BigDecimals.normaliseEngineeringString(value)));
-            opex.getDepreciationAndImpairmentLossesOnTangibleAssets().ifPresent(value -> opexMap.put("depreciation_and_impairment_losses_on_tangible_assets", BigDecimals.normaliseEngineeringString(value)));
-            opex.getAmortizationOnIntangibleAssets().ifPresent(value -> opexMap.put("amortization_on_intangible_assets", BigDecimals.normaliseEngineeringString(value)));
-            opex.getRentExpenses().ifPresent(value -> opexMap.put("rent_expenses", BigDecimals.normaliseEngineeringString(value)));
+            opex.getPersonnelExpenses().ifPresent(value -> opexMap.put("personnel_expenses", BigDecimals.normaliseString(value)));
+            opex.getGeneralAndAdministrativeExpenses().ifPresent(value -> opexMap.put("general_and_administrative_expenses", BigDecimals.normaliseString(value)));
+            opex.getDepreciationAndImpairmentLossesOnTangibleAssets().ifPresent(value -> opexMap.put("depreciation_and_impairment_losses_on_tangible_assets", BigDecimals.normaliseString(value)));
+            opex.getAmortizationOnIntangibleAssets().ifPresent(value -> opexMap.put("amortization_on_intangible_assets", BigDecimals.normaliseString(value)));
+            opex.getRentExpenses().ifPresent(value -> opexMap.put("rent_expenses", BigDecimals.normaliseString(value)));
             dataMap.put("operating_expenses", opexMap);
         });
 
-        incomeStatementData.getProfitForTheYear().ifPresent(value -> dataMap.put("profit_for_the_year", BigDecimals.normaliseEngineeringString(value)));
+        incomeStatementData.getProfitForTheYear().ifPresent(value -> dataMap.put("profit_for_the_year", BigDecimals.normaliseString(value)));
 
         incomeStatementData.getExtraordinaryIncome().ifPresent(extraordinaryIncome -> {
             MetadataMap extraordinaryIncomeMap = MetadataBuilder.createMap();
-            extraordinaryIncome.getExtraordinaryExpenses().ifPresent(value -> extraordinaryIncomeMap.put("extraordinary_expenses", BigDecimals.normaliseEngineeringString(value)));
+            extraordinaryIncome.getExtraordinaryExpenses().ifPresent(value -> extraordinaryIncomeMap.put("extraordinary_expenses", BigDecimals.normaliseString(value)));
             dataMap.put("extraordinary_income", extraordinaryIncomeMap);
         });
 
         incomeStatementData.getFinancialIncome().ifPresent(financialIncome -> {
             MetadataMap financialIncomeMap = MetadataBuilder.createMap();
-            financialIncome.getFinancialExpenses().ifPresent(value -> financialIncomeMap.put("financial_expenses", BigDecimals.normaliseEngineeringString(value)));
-            financialIncome.getFinancialRevenues().ifPresent(value -> financialIncomeMap.put("financial_revenues", BigDecimals.normaliseEngineeringString(value)));
-            financialIncome.getStakingRewardsIncome().ifPresent(value -> financialIncomeMap.put("staking_rewards_income", BigDecimals.normaliseEngineeringString(value)));
-            financialIncome.getNetIncomeOptionsSale().ifPresent(value -> financialIncomeMap.put("net_income_options_sale", BigDecimals.normaliseEngineeringString(value)));
-            financialIncome.getRealisedGainsOnSaleOfCryptocurrencies().ifPresent(value -> financialIncomeMap.put("realised_gains_on_sale_of_cryptocurrencies", BigDecimals.normaliseEngineeringString(value)));
+            financialIncome.getFinancialExpenses().ifPresent(value -> financialIncomeMap.put("financial_expenses", BigDecimals.normaliseString(value)));
+            financialIncome.getFinancialRevenues().ifPresent(value -> financialIncomeMap.put("financial_revenues", BigDecimals.normaliseString(value)));
+            financialIncome.getStakingRewardsIncome().ifPresent(value -> financialIncomeMap.put("staking_rewards_income", BigDecimals.normaliseString(value)));
+            financialIncome.getNetIncomeOptionsSale().ifPresent(value -> financialIncomeMap.put("net_income_options_sale", BigDecimals.normaliseString(value)));
+            financialIncome.getRealisedGainsOnSaleOfCryptocurrencies().ifPresent(value -> financialIncomeMap.put("realised_gains_on_sale_of_cryptocurrencies", BigDecimals.normaliseString(value)));
             dataMap.put("financial_income", financialIncomeMap);
         });
 
         incomeStatementData.getTaxExpenses().ifPresent(taxExpenses -> {
             MetadataMap taxExpensesMap = MetadataBuilder.createMap();
-            taxExpenses.getDirectTaxes().ifPresent(value -> taxExpensesMap.put("direct_taxes", BigDecimals.normaliseEngineeringString(value)));
+            taxExpenses.getDirectTaxes().ifPresent(value -> taxExpensesMap.put("direct_taxes", BigDecimals.normaliseString(value)));
             dataMap.put("tax_expenses", taxExpensesMap);
         });
 
