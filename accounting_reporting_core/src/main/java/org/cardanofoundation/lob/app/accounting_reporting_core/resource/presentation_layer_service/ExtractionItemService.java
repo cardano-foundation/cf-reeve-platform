@@ -110,22 +110,22 @@ public class ExtractionItemService {
         );
     }
 
-//    private ExtractionTransactionItemView enrichTransactionItemViewBuilder(ExtractionTransactionItemView item) {
-//
-//        item.setCostCenterCustomerCode(item.getParentCostCenterCustomerCode());
-//        item.setCostCenterExternalCustomerCode(item.getParentCostCenterExternalCustomerCode());
-//        item.setCostCenterName(item.getParentCostCenterName());
-//        item.setProjectCustomerCode(item.getParentProjectCustomerCode());
-//        item.setProjectExternalCustomerCode(item.getParentProjectExternalCustomerCode());
-//        item.setProjectName(item.getParentProjectName());
-//
-//        item.setParentCostCenterName(null);
-//        item.setParentCostCenterCustomerCode(null);
-//        item.setParentCostCenterExternalCustomerCode(null);
-//        item.setParentProjectName(null);
-//        item.setParentProjectCustomerCode(null);
-//        item.setParentProjectExternalCustomerCode(null);
-//
-//        return item;
-//    }
+    private ExtractionTransactionItemView enrichTransactionItemViewBuilder(ExtractionTransactionItemView item) {
+
+        item.setCostCenterCustomerCode(item.getParentCostCenterCustomerCode());
+        item.setCostCenterExternalCustomerCode(item.getParentCostCenterExternalCustomerCode());
+        item.setCostCenterName(item.getParentCostCenterName());
+        item.setProjectCustomerCode(item.getParentProjectCustomerCode());
+        item.setProjectExternalCustomerCode(item.getParentProjectExternalCustomerCode());
+        item.setProjectName(item.getParentProjectName());
+
+        item.setParentCostCenterName(null);
+        item.setParentCostCenterCustomerCode(null);
+        item.setParentCostCenterExternalCustomerCode(null);
+        item.setParentProjectName(null);
+        item.setParentProjectCustomerCode(null);
+        item.setParentProjectExternalCustomerCode(null);
+
+        return item;
+    }
 }

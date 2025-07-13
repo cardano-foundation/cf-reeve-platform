@@ -30,11 +30,13 @@ class TransactionItemExtractionRepositoryTest {
 
     @Mock
     private EntityManager em;
+    @Mock
+    private TransactionItemRepository transactionItemRepository;
 
     @Test
     void findByItemAccountOnlyDates() {
         TypedQuery queryResult = Mockito.mock(TypedQuery.class);
-        TransactionItemExtractionRepository transactionItemExtractionRepository = new TransactionItemExtractionRepository(em);
+        TransactionItemExtractionRepository transactionItemExtractionRepository = new TransactionItemExtractionRepository(em, transactionItemRepository);
 
         Mockito.when(em.createQuery(anyString(), eq(TransactionItemEntity.class))).thenReturn(queryResult);
         transactionItemExtractionRepository.findByItemAccount(
@@ -97,7 +99,7 @@ class TransactionItemExtractionRepositoryTest {
     @Test
     void findByItemAccountDate() {
         jakarta.persistence.Query queryResult = Mockito.mock(Query.class);
-        TransactionItemExtractionRepository transactionItemExtractionRepository = new TransactionItemExtractionRepository(em);
+        TransactionItemExtractionRepository transactionItemExtractionRepository = new TransactionItemExtractionRepository(em, transactionItemRepository);
 
         Mockito.when(em.createQuery(anyString())).thenReturn(queryResult);
         transactionItemExtractionRepository.findByItemAccountDateAggregated(
@@ -108,7 +110,8 @@ class TransactionItemExtractionRepositoryTest {
                 Set.of("Currency2", "Currency1"),
                 Optional.of(BigDecimal.valueOf(100)),
                 Optional.of(BigDecimal.valueOf(1000)),
-                Set.of("TheHast2", "TheHast1")
+                Set.of("TheHast2", "TheHast1"),
+                0, 10
         );
         Mockito.verify(em, Mockito.times(1)).createQuery(anyString());
     }

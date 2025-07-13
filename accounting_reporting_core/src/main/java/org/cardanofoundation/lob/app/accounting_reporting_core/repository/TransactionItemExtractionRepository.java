@@ -124,7 +124,7 @@ public class TransactionItemExtractionRepository {
     public long countItemsByAccountDateAggregated(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
         String jpql = """
                 SELECT COUNT(1) FROM accounting_reporting_core.TransactionItemEntity ti
-                    INNER JOIN ti.transaction te INNER JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
+                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
@@ -140,9 +140,9 @@ public class TransactionItemExtractionRepository {
     public List<TransactionItemEntity> findByItemAccountDateAggregated(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
         String jpql = """
-                    SELECT NEW org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView(MIN(ti.id), SUM(ti.amountFcy), SUM(ti.amountLcy))
+                    SELECT NEW org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView(MIN(ti.id), SUM(ti.amountLcy), SUM(ti.amountFcy))
                     FROM accounting_reporting_core.TransactionItemEntity ti
-                    INNER JOIN ti.transaction te INNER JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
+                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
