@@ -100,7 +100,7 @@ class TransactionItemExtractionRepositoryTest {
         TransactionItemExtractionRepository transactionItemExtractionRepository = new TransactionItemExtractionRepository(em);
 
         Mockito.when(em.createQuery(anyString())).thenReturn(queryResult);
-        transactionItemExtractionRepository.findByItemAccountDate(
+        transactionItemExtractionRepository.findByItemAccountDateAggregated(
                 "OrgId",
                 LocalDate.of(2023, Month.JANUARY, 1),
                 LocalDate.of(2023, Month.JANUARY, 31),

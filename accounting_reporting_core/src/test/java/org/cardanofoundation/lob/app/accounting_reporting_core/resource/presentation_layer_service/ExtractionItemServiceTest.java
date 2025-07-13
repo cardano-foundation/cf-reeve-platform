@@ -94,7 +94,7 @@ class ExtractionItemServiceTest {
 
         item1.setTransaction(tx);
 
-        Mockito.when(transactionItemExtractionRepository.findByItemAccountDate(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(List.of(item1));
+        Mockito.when(transactionItemExtractionRepository.findByItemAccountDateAggregated(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(List.of(item1));
         Mockito.when(organisationPublicApi.findProject(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
         Mockito.when(organisationPublicApi.findCostCenter(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
         ExtractionItemService extractionItemService = new ExtractionItemService(transactionItemExtractionRepository, organisationPublicApi);

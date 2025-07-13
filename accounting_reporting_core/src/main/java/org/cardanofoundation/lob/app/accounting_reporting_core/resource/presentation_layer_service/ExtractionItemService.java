@@ -4,11 +4,9 @@ import static java.math.BigDecimal.ZERO;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,30 +45,23 @@ public class ExtractionItemService {
     @Transactional(readOnly = true)
     public ExtractionTransactionView findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
-        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
-//        long countTotalElements = transactionItemRepositoryImpl.countItemsByAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash);
+        List<ExtractionTransactionItemView> transactionItemViews = transactionItemRepositoryImpl.findByItemAccountDateAggregated(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash, page, limit).stream().map(this::extractionTransactionItemViewBuilder).toList();
+        long countTotalElements = transactionItemRepositoryImpl.countItemsByAccountDateAggregated(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash);
         // aggregating in case there are duplicate items due to the enrichment process it is possible to have newly duplicates
-        List<ExtractionTransactionItemView> transactionItemViews = list.stream()
-                .collect(Collectors.groupingBy(ExtractionTransactionItemView::aggregationHashCode, Collectors.toSet()))
-                .values().stream()
-                .map(itemSet -> {
-                    ExtractionTransactionItemView aggregatedItem = itemSet.iterator().next();
-                    aggregatedItem.setAmountFcy(itemSet.stream()
-                            .map(ExtractionTransactionItemView::getAmountFcy)
-                            .reduce(ZERO, BigDecimal::add));
-                    aggregatedItem.setAmountLcy(itemSet.stream()
-                            .map(ExtractionTransactionItemView::getAmountLcy)
-                            .reduce(ZERO, BigDecimal::add));
-                    return aggregatedItem;
-                })
-                .toList();
-        long countTotalElements = transactionItemViews.size();
-        int fromIndex = page * limit;
-        if(fromIndex >= transactionItemViews.size()) {
-            transactionItemViews = new ArrayList<>();
-        } else {
-            transactionItemViews = transactionItemViews.subList(fromIndex, Math.min(fromIndex + limit, transactionItemViews.size()));
-        }
+//        List<ExtractionTransactionItemView> transactionItemViews = list.stream()
+//                .collect(Collectors.groupingBy(ExtractionTransactionItemView::aggregationHashCode, Collectors.toSet()))
+//                .values().stream()
+//                .map(itemSet -> {
+//                    ExtractionTransactionItemView aggregatedItem = itemSet.iterator().next();
+//                    aggregatedItem.setAmountFcy(itemSet.stream()
+//                            .map(ExtractionTransactionItemView::getAmountFcy)
+//                            .reduce(ZERO, BigDecimal::add));
+//                    aggregatedItem.setAmountLcy(itemSet.stream()
+//                            .map(ExtractionTransactionItemView::getAmountLcy)
+//                            .reduce(ZERO, BigDecimal::add));
+//                    return aggregatedItem;
+//                })
+//                .toList();
         return ExtractionTransactionView.createSuccess(transactionItemViews, countTotalElements, page, limit);
     }
 
@@ -119,22 +110,22 @@ public class ExtractionItemService {
         );
     }
 
-    private ExtractionTransactionItemView enrichTransactionItemViewBuilder(ExtractionTransactionItemView item) {
-
-        item.setCostCenterCustomerCode(item.getParentCostCenterCustomerCode());
-        item.setCostCenterExternalCustomerCode(item.getParentCostCenterExternalCustomerCode());
-        item.setCostCenterName(item.getParentCostCenterName());
-        item.setProjectCustomerCode(item.getParentProjectCustomerCode());
-        item.setProjectExternalCustomerCode(item.getParentProjectExternalCustomerCode());
-        item.setProjectName(item.getParentProjectName());
-
-        item.setParentCostCenterName(null);
-        item.setParentCostCenterCustomerCode(null);
-        item.setParentCostCenterExternalCustomerCode(null);
-        item.setParentProjectName(null);
-        item.setParentProjectCustomerCode(null);
-        item.setParentProjectExternalCustomerCode(null);
-
-        return item;
-    }
+//    private ExtractionTransactionItemView enrichTransactionItemViewBuilder(ExtractionTransactionItemView item) {
+//
+//        item.setCostCenterCustomerCode(item.getParentCostCenterCustomerCode());
+//        item.setCostCenterExternalCustomerCode(item.getParentCostCenterExternalCustomerCode());
+//        item.setCostCenterName(item.getParentCostCenterName());
+//        item.setProjectCustomerCode(item.getParentProjectCustomerCode());
+//        item.setProjectExternalCustomerCode(item.getParentProjectExternalCustomerCode());
+//        item.setProjectName(item.getParentProjectName());
+//
+//        item.setParentCostCenterName(null);
+//        item.setParentCostCenterCustomerCode(null);
+//        item.setParentCostCenterExternalCustomerCode(null);
+//        item.setParentProjectName(null);
+//        item.setParentProjectCustomerCode(null);
+//        item.setParentProjectExternalCustomerCode(null);
+//
+//        return item;
+//    }
 }
