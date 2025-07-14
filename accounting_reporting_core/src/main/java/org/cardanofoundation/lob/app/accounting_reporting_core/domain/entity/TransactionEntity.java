@@ -41,6 +41,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @AllArgsConstructor
 @Audited
 @EntityListeners({ OverallStatusTransactionEntityListener.class, AuditingEntityListener.class })
+@Builder
 public class TransactionEntity extends CommonEntity implements Persistable<String> {
 
     @Id
