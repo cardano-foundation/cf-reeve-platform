@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 public class TransactionItemExtractionRepository {
 
     private final EntityManager em;
+    private final TransactionItemRepository transactionItemRepository;
 
     public List<TransactionItemEntity> findByItemAccount(LocalDate dateFrom, LocalDate dateTo,
                                                          List<String> accountCode, List<String> costCenter,
@@ -118,30 +121,34 @@ public class TransactionItemExtractionRepository {
         return query.getResultList();
     }
 
-    public long countItemsByAccountDate(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
+    public long countItemsByAccountDateAggregated(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
         String jpql = """
-                SELECT COUNT(ti) FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
+                SELECT COUNT(1) FROM accounting_reporting_core.TransactionItemEntity ti
+                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
-
-        Query resultQuery = em.createQuery(jpql + where);
+        String grouping = "GROUP BY ti.accountEvent.code, ti.fxRate, ti.project.customerCode, cc.parentCustomerCode, ti.document.num";
+        Query resultQuery = em.createQuery(jpql + where + grouping);
 
         resultQuery.setParameter("dateFrom", dateFrom);
         resultQuery.setParameter("dateTo", dateTo);
 
-        return (long) resultQuery.getSingleResult();
+        return resultQuery.getResultList().size();
     }
 
-    public List<TransactionItemEntity> findByItemAccountDate(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
+    public List<TransactionItemEntity> findByItemAccountDateAggregated(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
         String jpql = """
-                SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti INNER JOIN ti.transaction te
+                    SELECT NEW org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView(MIN(ti.id), SUM(ti.amountLcy), SUM(ti.amountFcy))
+                    FROM accounting_reporting_core.TransactionItemEntity ti
+                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
 
-        Query resultQuery = em.createQuery(jpql + where);
+        String grouping = "GROUP BY ti.accountEvent.code, ti.fxRate, ti.project.customerCode, cc.parentCustomerCode, ti.document.num";
+        Query resultQuery = em.createQuery(jpql + where + grouping);
 
         resultQuery.setParameter("dateFrom", dateFrom);
         resultQuery.setParameter("dateTo", dateTo);
@@ -149,8 +156,18 @@ public class TransactionItemExtractionRepository {
         // adding pagination
         resultQuery.setFirstResult(page * limit);
         resultQuery.setMaxResults(limit);
-
-        return resultQuery.getResultList();
+        List<TransactionItemAggregateView> itemAggregateViews = resultQuery.getResultList();
+        Map<String, TransactionItemAggregateView> collect =
+                itemAggregateViews.stream().collect(Collectors.toMap(TransactionItemAggregateView::getTxId, item -> item));
+        List<TransactionItemEntity> allById = transactionItemRepository.findAllById(collect.keySet());
+        allById.stream().forEach(item -> {
+            TransactionItemAggregateView aggregateView = collect.get(item.getId());
+            if (aggregateView != null) {
+                item.setAmountFcy(aggregateView.getAmountFcyAggregated());
+                item.setAmountLcy(aggregateView.getAmountLcyAggregated());
+            }
+        });
+        return allById;
     }
 
     private static String constructWhereClauseForExtraction(String orgId, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
