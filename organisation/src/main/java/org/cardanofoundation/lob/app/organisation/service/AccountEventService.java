@@ -48,7 +48,7 @@ public class AccountEventService {
     }
 
     @Transactional
-    public AccountEventView insertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
+    public AccountEventView insertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate, boolean isUpsert) {
 
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
@@ -82,7 +82,8 @@ public class AccountEventService {
         ReferenceCode creditReferenceG = creditReference.get();
         Optional<AccountEvent> accountEventOpt = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
-        if (accountEventOpt.isPresent()) {
+        // If the account event already exists and we are not upserting, return an error
+        if (accountEventOpt.isPresent() && !isUpsert) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("ACCOUNT_EVENT_ALREADY_EXISTS")
                     .withDetail("Account event already exists for debit reference code: %s and credit reference code: %s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
@@ -153,7 +154,7 @@ public class AccountEventService {
                 problem ->
                         Either.left(Set.of(problem)),
                 eventCodeUpdates ->
-                        Either.right(eventCodeUpdates.stream().map(eventCodeUpdate ->  insertAccountEvent(orgId, eventCodeUpdate)).collect(Collectors.toSet()))
+                        Either.right(eventCodeUpdates.stream().map(eventCodeUpdate ->  insertAccountEvent(orgId, eventCodeUpdate, true)).collect(Collectors.toSet()))
         );
     }
 }

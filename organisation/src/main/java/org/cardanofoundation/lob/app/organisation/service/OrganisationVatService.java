@@ -41,16 +41,21 @@ public class OrganisationVatService {
     }
 
     @Transactional
-    public VatView insert(String organisationId, VatUpdate vatUpdate) {
+    public VatView insert(String organisationId, VatUpdate vatUpdate, boolean isUpsert) {
 
-        Optional<OrganisationVat> organisationVat = vatRepository.findById(new OrganisationVat.Id(organisationId, vatUpdate.getCustomerCode()));
-
-        if (organisationVat.isPresent()) {
-            return VatView.createFail(vatUpdate.getCustomerCode(), Problem.builder()
-                    .withTitle("ORGANISATION_VAT_ALREADY_EXISTS")
-                    .withDetail("The organisation vat with code :%s already exists".formatted(vatUpdate.getCustomerCode()))
-                    .withStatus(Status.CONFLICT)
-                    .build());
+        Optional<OrganisationVat> foundEntity = vatRepository.findById(new OrganisationVat.Id(organisationId, vatUpdate.getCustomerCode()));
+        OrganisationVat vatEntity = new OrganisationVat();
+        vatEntity.setId(new OrganisationVat.Id(organisationId, vatUpdate.getCustomerCode()));
+        if (foundEntity.isPresent()) {
+            if(isUpsert) {
+                vatEntity = foundEntity.get();
+            } else {
+                return VatView.createFail(vatUpdate.getCustomerCode(), Problem.builder()
+                        .withTitle("ORGANISATION_VAT_ALREADY_EXISTS")
+                        .withDetail("The organisation vat with code :%s already exists".formatted(vatUpdate.getCustomerCode()))
+                        .withStatus(Status.CONFLICT)
+                        .build());
+            }
         }
 
         if (vatUpdate.getCountryCode() != null && !Locale.getISOCountries(Locale.IsoCountryCode.PART1_ALPHA2).contains(vatUpdate.getCountryCode())) {
@@ -60,16 +65,11 @@ public class OrganisationVatService {
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
+        vatEntity.setRate(vatUpdate.getRate());
+        vatEntity.setDescription(vatUpdate.getDescription());
+        vatEntity.setCountryCode(vatUpdate.getCountryCode() == null || vatUpdate.getCountryCode().isEmpty() ? null : vatUpdate.getCountryCode());
 
-        OrganisationVat organisationVatEntity = OrganisationVat.builder()
-                .id(new OrganisationVat.Id(organisationId, vatUpdate.getCustomerCode()))
-                .rate(vatUpdate.getRate())
-                .description(vatUpdate.getDescription())
-                .countryCode(vatUpdate.getCountryCode() == null || vatUpdate.getCountryCode().isEmpty() ? null : vatUpdate.getCountryCode())
-                .active(vatUpdate.getActive())
-                .build();
-
-        return VatView.convertFromEntity(vatRepository.save(organisationVatEntity));
+        return VatView.convertFromEntity(vatRepository.save(vatEntity));
     }
 
     @Transactional
@@ -107,7 +107,7 @@ public class OrganisationVatService {
     public Either<Problem, List<VatView>> insertVatCodesCsv(String organisationId, MultipartFile file) {
         return csvParser.parseCsv(file, VatUpdate.class).fold(
                 Either::left,
-                organisationVatUpdates -> Either.right(organisationVatUpdates.stream().map(vatUpdate -> insert(organisationId, vatUpdate)).toList())
+                organisationVatUpdates -> Either.right(organisationVatUpdates.stream().map(vatUpdate -> insert(organisationId, vatUpdate, true)).toList())
         );
     }
 

@@ -190,7 +190,7 @@ class ReferenceCodeServiceTest {
     @Test
     void testInsertReferenceCode_UpsertNoOrg() {
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.empty());
-        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate);
+        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
 
@@ -202,7 +202,7 @@ class ReferenceCodeServiceTest {
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
         referenceCode.setName("Updated Reference");
         when(referenceCodeRepository.save(any(ReferenceCode.class))).thenReturn(referenceCode);
-        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate);
+        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate, false);
 
 
         assertEquals("Updated Reference", result.getDescription());
@@ -217,7 +217,7 @@ class ReferenceCodeServiceTest {
         referenceCode.setParent(new ReferenceCode(new ReferenceCode.Id(ORG_ID, "0102"), null, "Parent Reference", "2", true));
         //when(referenceCodeRepository.save(any(ReferenceCode.class))).thenReturn(referenceCode);
 
-        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate);
+        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
         assertEquals("REFERENCE_CODE_ALREADY_EXIST", result.getError().get().getTitle());
@@ -230,7 +230,7 @@ class ReferenceCodeServiceTest {
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
         referenceCodeUpdate.setParentReferenceCode("0102");
-        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate);
+        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
     }

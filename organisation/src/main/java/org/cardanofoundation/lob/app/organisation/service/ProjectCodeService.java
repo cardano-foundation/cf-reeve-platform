@@ -39,40 +39,44 @@ public class ProjectCodeService {
     }
 
     @Transactional
-    public ProjectView insertProject(String orgId, ProjectUpdate projectUpdate) {
+    public ProjectView insertProject(String orgId, ProjectUpdate projectUpdate, boolean isUpsert) {
         Optional<Project> projectFound = getProject(orgId, projectUpdate.getCustomerCode());
+        Project project = new Project();
+        project.setId(new Project.Id(orgId, projectUpdate.getCustomerCode()));
         if(projectFound.isPresent()) {
-            return ProjectView.createFail(
-                    projectUpdate.getCustomerCode(),
-                    Problem.builder()
-                            .withTitle("PROJECT_CODE_ALREADY_EXISTS")
-                            .withDetail("Project code with customer code %s already exists.".formatted(projectUpdate.getCustomerCode()))
-                            .build()
-            );
-        } else {
-            Project.ProjectBuilder builder = Project.builder()
-                    .id(new Project.Id(orgId, projectUpdate.getCustomerCode()))
-                    .externalCustomerCode(projectUpdate.getExternalCustomerCode())
-                    .name(projectUpdate.getName());
-
-            // check if parent exists
-            if (projectUpdate.getParentCustomerCode() != null) {
-                Optional<Project> project = getProject(orgId, projectUpdate.getParentCustomerCode());
-                if(project.isPresent()) {
-                    builder.parentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
-                } else {
-                    return ProjectView.createFail(
-                            projectUpdate.getCustomerCode(),
-                            Problem.builder()
-                                    .withTitle("PARENT_PROJECT_CODE_NOT_FOUND")
-                                    .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
-                                    .build()
-                    );
-                }
+            if(isUpsert) {
+                project = projectFound.get();
+            } else {
+                return ProjectView.createFail(
+                        projectUpdate.getCustomerCode(),
+                        Problem.builder()
+                                .withTitle("PROJECT_CODE_ALREADY_EXISTS")
+                                .withDetail("Project code with customer code %s already exists.".formatted(projectUpdate.getCustomerCode()))
+                                .build()
+                );
             }
-            Project saved = projectMappingRepository.save(builder.build());
-            return ProjectView.fromEntity(saved);
         }
+        project.setExternalCustomerCode(Optional.ofNullable(projectUpdate.getExternalCustomerCode()).orElse(projectUpdate.getCustomerCode()));
+        project.setName(projectUpdate.getName());
+
+        // check if parent exists
+        if (projectUpdate.getParentCustomerCode() != null) {
+            Optional<Project> parent = getProject(orgId, projectUpdate.getParentCustomerCode());
+            if(parent.isPresent()) {
+                project.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
+            } else {
+                return ProjectView.createFail(
+                        projectUpdate.getCustomerCode(),
+                        Problem.builder()
+                                .withTitle("PARENT_PROJECT_CODE_NOT_FOUND")
+                                .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
+                                .build()
+                );
+            }
+        }
+        Project saved = projectMappingRepository.save(project);
+        return ProjectView.fromEntity(saved);
+
     }
 
     @Transactional
@@ -114,7 +118,7 @@ public class ProjectCodeService {
     public Either<Problem, List<ProjectView>> createProjectCodeFromCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, ProjectUpdate.class).fold(
                 Either::left,
-                projectUpdates -> Either.right(projectUpdates.stream().map(projectUpdate -> insertProject(orgId, projectUpdate)).toList())
+                projectUpdates -> Either.right(projectUpdates.stream().map(projectUpdate -> insertProject(orgId, projectUpdate, true)).toList())
         );
     }
 }

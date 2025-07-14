@@ -83,7 +83,7 @@ class AccountEventControllerTest {
     void testInsertReferenceCode_returnsOk() {
         EventCodeUpdate update = new EventCodeUpdate();
         AccountEventView view = mock(AccountEventView.class);
-        when(accountEventService.insertAccountEvent(orgId, update)).thenReturn(view);
+        when(accountEventService.insertAccountEvent(orgId, update, false)).thenReturn(view);
         when(view.getError()).thenReturn(Optional.empty());
         ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
 
@@ -99,7 +99,7 @@ class AccountEventControllerTest {
                 .withTitle("Error")
                 .withStatus(Status.NOT_FOUND)
                 .build()));
-        when(accountEventService.insertAccountEvent(orgId, update)).thenReturn(view);
+        when(accountEventService.insertAccountEvent(orgId, update, false)).thenReturn(view);
 
         ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
 

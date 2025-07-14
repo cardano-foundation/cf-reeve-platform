@@ -64,21 +64,24 @@ public class CurrencyService {
                 });
     }
 
-    public CurrencyView insertCurrency(String orgId, @Valid CurrencyUpdate currencyUpdate) {
-        return getCurrency(orgId, currencyUpdate.getCustomerCode())
-                .map(currencyView -> {
-                    Problem error = Problem.builder()
-                            .withStatus(Status.BAD_REQUEST)
-                            .withTitle("Currency already exists")
-                            .withDetail("Currency with customer code " + currencyView.getCustomerCode() + " already exists")
-                            .build();
-                    return CurrencyView.createFail(error, currencyUpdate.getCustomerCode());
-                })
-                .orElseGet(() -> {
-                    Currency currency = new Currency(new Currency.Id(orgId, currencyUpdate.getCustomerCode()), currencyUpdate.getCurrencyId());
-                    Currency save = currencyRepository.save(currency);
-                    return CurrencyView.createSuccess(save.getId().getCustomerCode(), save.getCurrencyId());
-                });
+    public CurrencyView insertCurrency(String orgId, @Valid CurrencyUpdate currencyUpdate, boolean isUpsert) {
+        Optional<Currency> currencyFound = currencyRepository.findById(new Currency.Id(orgId, currencyUpdate.getCustomerCode()));
+        Currency currency = new Currency(new Currency.Id(orgId, currencyUpdate.getCustomerCode()), currencyUpdate.getCurrencyId());
+        if(currencyFound.isPresent()) {
+            if(isUpsert) {
+                currency = currencyFound.get();
+                currency.setCurrencyId(currency.getCurrencyId());
+            } else {
+                Problem error = Problem.builder()
+                        .withStatus(Status.BAD_REQUEST)
+                        .withTitle("Currency already exists")
+                        .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " already exists")
+                        .build();
+                return CurrencyView.createFail(error, currencyUpdate.getCustomerCode());
+            }
+        }
+        Currency save = currencyRepository.save(currency);
+        return CurrencyView.createSuccess(save.getId().getCustomerCode(), save.getCurrencyId());
     }
 
     public Optional<CurrencyView> getCurrency(String orgId, String customerCode) {
@@ -89,7 +92,7 @@ public class CurrencyService {
     public Either<Problem, List<CurrencyView>> insertViaCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, CurrencyUpdate.class).fold(
                 Either::left,
-                    currencyUpdates -> Either.right(currencyUpdates.stream().map(currencyUpdate -> insertCurrency(orgId, currencyUpdate)).toList())
+                    currencyUpdates -> Either.right(currencyUpdates.stream().map(currencyUpdate -> insertCurrency(orgId, currencyUpdate, true)).toList())
         );
     }
 }

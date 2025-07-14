@@ -55,7 +55,7 @@ class ProjectCodeControllerTest {
         ProjectView projectView = mock(ProjectView.class);
         ProjectUpdate projectUpdate = mock(ProjectUpdate.class);
         // Mock the service call
-        when(projectCodeService.insertProject("org123", projectUpdate)).thenReturn(projectView);
+        when(projectCodeService.insertProject("org123", projectUpdate, false)).thenReturn(projectView);
 
         // Call the controller method
         ResponseEntity<ProjectView> response = projectCodeController.insertProject("org123", projectUpdate);

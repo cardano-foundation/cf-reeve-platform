@@ -110,7 +110,7 @@ public class ChartOfAccountsService {
     }
 
     private Either<ChartOfAccountView, Void> isReferenceCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
-        Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
+        Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode());
         if (referenceCode.isEmpty()) {
             return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
@@ -146,7 +146,7 @@ public class ChartOfAccountsService {
     }
 
     @Transactional
-    public ChartOfAccountView insertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+    public ChartOfAccountView insertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate, boolean isUpsert) {
 
         Either<ChartOfAccountView, Void> organisationAvaliable = isOrganisationAvaliable(orgId, chartOfAccountUpdate.getCustomerCode());
         if (organisationAvaliable.isLeft()) return organisationAvaliable.getLeft();
@@ -161,24 +161,27 @@ public class ChartOfAccountsService {
         if (subTypeAvailable.isLeft()) return subTypeAvailable.getLeft();
 
         Optional<ChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
-        if (chartOfAccountOpt.isPresent()) {
-            return ChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
-                    .withDetail("The chart of account with code :%s already exists".formatted(chartOfAccountUpdate.getCustomerCode()))
-                    .withStatus(Status.CONFLICT)
-                    .build(), chartOfAccountUpdate.getCustomerCode());
-        }
-
         ChartOfAccount chartOfAccount = ChartOfAccount.builder()
                 .id(new ChartOfAccount.Id(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .build();
+        if (chartOfAccountOpt.isPresent()) {
+            if(isUpsert) {
+                chartOfAccount = chartOfAccountOpt.get();
+            } else {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
+                        .withDetail("The chart of account with code :%s already exists".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withStatus(Status.CONFLICT)
+                        .build(), chartOfAccountUpdate.getCustomerCode());
+            }
+        }
 
         return updateAndSaveChartOfAccount(chartOfAccountUpdate, subTypeAvailable, chartOfAccount);
 
     }
 
     private ChartOfAccountView updateAndSaveChartOfAccount(ChartOfAccountUpdate chartOfAccountUpdate, Either<ChartOfAccountView, ChartOfAccountSubType> subType, ChartOfAccount chartOfAccount) {
-        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
+        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getRefCode());
         chartOfAccount.setName(chartOfAccountUpdate.getName());
         chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
         chartOfAccount.setSubType(subType.get());
@@ -241,7 +244,7 @@ public class ChartOfAccountsService {
                     }
             );
 
-            ChartOfAccountView accountEventView = insertChartOfAccount(orgId, chartOfAccountUpdateCsv);
+            ChartOfAccountView accountEventView = insertChartOfAccount(orgId, chartOfAccountUpdateCsv, true);
             accountEventViews.add(accountEventView);
         }
         return Either.right(accountEventViews);

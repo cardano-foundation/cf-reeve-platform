@@ -140,7 +140,7 @@ class CostCenterServiceTest {
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.of(costCenter));
 
-        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate, false);
 
         assertNotNull(costCenterView);
         assertEquals("customercode", costCenterView.getCustomerCode());
@@ -156,7 +156,7 @@ class CostCenterServiceTest {
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentcode");
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentcode"), true)).thenReturn(Optional.empty());
 
-        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate, false);
 
         assertNotNull(costCenterView);
         assertEquals("customercode", costCenterView.getCustomerCode());
@@ -171,12 +171,11 @@ class CostCenterServiceTest {
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.empty());
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentCustomerCode"), true)).thenReturn(Optional.of(parentMock));
-        when(parentMock.getId()).thenReturn(new CostCenter.Id(organisationId, "parentCustomerCode"));
         when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
-        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate);
+        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate, false);
 
         assertNotNull(costCenterView);
         assertEquals(costCenter.getId().getCustomerCode(), costCenterView.getCustomerCode());

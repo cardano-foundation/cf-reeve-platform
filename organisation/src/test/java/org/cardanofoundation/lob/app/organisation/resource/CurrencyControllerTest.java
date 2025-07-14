@@ -71,7 +71,7 @@ class CurrencyControllerTest {
         CurrencyView view = mock(CurrencyView.class);
         CurrencyUpdate update = mock(CurrencyUpdate.class);
 
-        when(currencyService.insertCurrency("org123", update)).thenReturn(view);
+        when(currencyService.insertCurrency("org123", update, false)).thenReturn(view);
         ResponseEntity<CurrencyView> response = currencyController.insertCurrency("org123", update);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());

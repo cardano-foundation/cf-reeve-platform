@@ -45,7 +45,7 @@ public class ReferenceCodeService {
     }
 
     @Transactional
-    public ReferenceCodeView insertReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate) {
+    public ReferenceCodeView insertReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate, boolean isUpsert) {
 
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
@@ -70,18 +70,23 @@ public class ReferenceCodeService {
         }
 
         Optional<ReferenceCode> referenceCodeOpt = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode());
-        if(referenceCodeOpt.isPresent()){
-            return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_ALREADY_EXIST")
-                    .withDetail("The reference code with code :%s already exists".formatted(referenceCodeUpdate.getReferenceCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(),
-                    referenceCodeUpdate.getReferenceCode());
-        }
-
         ReferenceCode referenceCode = ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCodeUpdate.getReferenceCode()))
                 .build();
+        if(referenceCodeOpt.isPresent()){
+            if(isUpsert) {
+                referenceCode = referenceCodeOpt.get();
+            } else {
+                return ReferenceCodeView.createFail(Problem.builder()
+                                .withTitle("REFERENCE_CODE_ALREADY_EXIST")
+                                .withDetail("The reference code with code :%s already exists".formatted(referenceCodeUpdate.getReferenceCode()))
+                                .withStatus(Status.NOT_FOUND)
+                                .build(),
+                        referenceCodeUpdate.getReferenceCode());
+            }
+        }
+
+
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
@@ -140,7 +145,7 @@ public class ReferenceCodeService {
         return csvParser.parseCsv(file, ReferenceCodeUpdate.class).fold(
                 problem -> Either.left(Set.of(problem)),
                 referenceCodeUpdates -> Either.right(referenceCodeUpdates.stream().map(
-                        refCodeUpdate -> insertReferenceCode(orgId, refCodeUpdate)).collect(Collectors.toSet()))
+                        refCodeUpdate -> insertReferenceCode(orgId, refCodeUpdate, true)).collect(Collectors.toSet()))
         );
     }
 }

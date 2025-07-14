@@ -56,7 +56,7 @@ class OrganisationVatServiceTest {
         when(vatUpdate.getCustomerCode()).thenReturn("customerCode");
         when(vatRepository.findById(id)).thenReturn(Optional.of(mock(OrganisationVat.class)));
 
-        VatView result = organisationVatService.insert("organisationId", vatUpdate);
+        VatView result = organisationVatService.insert("organisationId", vatUpdate, false);
 
         assertTrue(result.getError().isPresent());
         assertEquals("ORGANISATION_VAT_ALREADY_EXISTS", result.getError().get().getTitle());
@@ -70,7 +70,7 @@ class OrganisationVatServiceTest {
         when(update.getCountryCode()).thenReturn("CHs");
         when(vatRepository.findById(any())).thenReturn(Optional.empty());
 
-        VatView result = organisationVatService.insert("organisationId", update);
+        VatView result = organisationVatService.insert("organisationId", update, false);
 
         assertTrue(result.getError().isPresent());
         assertEquals("COUNTRY_CODE_NOT_FOUND", result.getError().get().getTitle());
@@ -93,7 +93,7 @@ class OrganisationVatServiceTest {
         when(vatRepository.save(any(OrganisationVat.class)))
                 .thenReturn(saved);
 
-        VatView result = organisationVatService.insert("organisationId", update);
+        VatView result = organisationVatService.insert("organisationId", update, false);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("customerCode", result.getCustomerCode());

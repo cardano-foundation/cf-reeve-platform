@@ -54,7 +54,7 @@ class CostCenterControllerTest {
     void insertCostCenters_success() {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         // Mock the service call
-        when(costCenterService.insertCostCenter("org123", costCenterUpdate))
+        when(costCenterService.insertCostCenter("org123", costCenterUpdate, false))
                 .thenReturn(mock(CostCenterView.class));
 
         // Call the controller method
