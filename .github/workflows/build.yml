@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: ⛮ cf-gha-baseline
-        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@main
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@chore/filter-docker-repositories
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_DOCKER_REGISTRY_URL: ${{ env.PRIVATE_DOCKER_REGISTRY_URL }}
@@ -38,32 +38,6 @@ jobs:
           HUB_DOCKER_COM_USER: ${{ secrets.HUB_DOCKER_COM_USER }}
           HUB_DOCKER_COM_PASS: ${{ secrets.HUB_DOCKER_COM_PASS }}
           DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES_TEST }}"
-
-      - name: Filter docker registries
-        env: # Or as an environment variable
-          DOCKER_REGISTRIES: ${{ secrets.DOCKER_REGISTRIES_TEST }}
-        run: |
-          PUSH_PUBLIC="true"
-
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]
-          then
-            PUSH_PUBLIC="false"
-          fi
-          FILTERED_DOCKER_REGISTRIES="" 
-          for docker_registry in $DOCKER_REGISTRIES
-          do
-            case $docker_registry in
-              ghcr.io*|docker.io*) IS_PUBLIC_REPO="true";;
-              hub.docker.com) IS_PUBLIC_REPO="true"; docker_registry="docker.io/cardanofoundation";;
-              *) IS_PUBLIC_REPO="false";;
-            esac
-            if [[ "$IS_PUBLIC_REPO" = "true" && "$PUSH_PUBLIC" = "false" ]]
-            then
-              continue
-            fi
-            FILTERED_DOCKER_REGISTRIES="$FILTERED_DOCKER_REGISTRIES $docker_registry"
-          done
-          echo "FILTERED_DOCKER_REGISTRIES=${FILTERED_DOCKER_REGISTRIES}" | tee -a "$GITHUB_ENV"
 
       - name:  🌍 earthly (docker build and push)
         run: |
