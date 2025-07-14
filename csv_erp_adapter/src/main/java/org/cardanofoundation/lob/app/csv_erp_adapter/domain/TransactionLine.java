@@ -10,19 +10,19 @@ import com.opencsv.bean.CsvBindByName;
 @Data
 public class TransactionLine {
 
-    @CsvBindByName(column = "Transaction Number", required = true)
+    @CsvBindByName(column = "Transaction Number")
     @NotNull
     @NotBlank
     private String txNumber;
-    @CsvBindByName(column = "Transaction Date", required = true)
+    @CsvBindByName(column = "Transaction Date")
     @NotNull
     @NotBlank
     private String date;
-    @CsvBindByName(column = "Transaction Type", required = true)
+    @CsvBindByName(column = "Transaction Type")
     @NotNull
     @NotBlank
     private String type;
-    @CsvBindByName(column = "Fx Rate", required = true)
+    @CsvBindByName(column = "Fx Rate")
     @NotNull
     @NotBlank
     private String fxRate;
@@ -34,11 +34,11 @@ public class TransactionLine {
     private String amountFCYDebit;
     @CsvBindByName(column = "AmountFCY Credit")
     private String amountFCYCredit;
-    @CsvBindByName(column = "Debit Code", required = true)
+    @CsvBindByName(column = "Debit Code")
     private String debitCode;
     @CsvBindByName(column = "Debit Name")
     private String debitName;
-    @CsvBindByName(column = "Credit Code", required = true)
+    @CsvBindByName(column = "Credit Code")
     private String creditCode;
     @CsvBindByName(column = "Credit Name")
     private String creditName;
@@ -46,9 +46,9 @@ public class TransactionLine {
     @CsvBindByName(column = "Project Code")
     private String projectCode;
 
-    @CsvBindByName(column = "Document Name", required = true)
+    @CsvBindByName(column = "Document Name")
     private String documentNumber;
-    @CsvBindByName(column = "Currency", required = true)
+    @CsvBindByName(column = "Currency")
     @NotNull
     @NotBlank
     private String currency;

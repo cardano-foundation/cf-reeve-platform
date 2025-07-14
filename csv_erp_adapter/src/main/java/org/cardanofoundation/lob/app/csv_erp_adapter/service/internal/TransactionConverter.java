@@ -32,13 +32,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Docum
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
 import org.cardanofoundation.lob.app.support.calc.MoreBigDecimal;
 import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
@@ -48,10 +45,8 @@ import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 @RequiredArgsConstructor
 public class TransactionConverter {
 
-    private final Validator validator;
-
     public Either<Problem, List<Transaction>> convertToTransaction(String organisationId, String batchId, List<TransactionLine> lines) {
-        Map<String, List<TransactionLine>> collect = lines.stream().collect(groupingBy(TransactionLine::getTxNumber));
+        Map<String, List<TransactionLine>> collect = lines.stream().collect(groupingBy(transactionLine -> Optional.ofNullable(transactionLine.getTxNumber()).orElse("")));
         List<Transaction> transactions = new ArrayList<>();
         for (Map.Entry<String, List<TransactionLine>> entry : collect.entrySet()) {
             List<TransactionLine> transactionLines = entry.getValue();
@@ -60,14 +55,9 @@ public class TransactionConverter {
             }
             String transactionId = Transaction.id(organisationId, entry.getKey());
 
-            // failing the batch if there are any violations
-            Either<Problem, Void> violations = getViolations(organisationId, transactionLines, transactionId);
-            if (violations.isLeft()) {
-                return Either.left(violations.getLeft());
-            }
             TransactionType transactionType;
             try {
-                transactionType = TransactionType.valueOf(transactionLines.getFirst().getType());
+                transactionType = Optional.ofNullable(transactionLines.getFirst().getType()).map(TransactionType::valueOf).orElse(TransactionType.Unknown);
             } catch (IllegalArgumentException e) {
                 log.error("Transaction type not found for transaction number {}", entry.getKey(), e);
                 return Either.left(Problem.builder()
@@ -77,6 +67,9 @@ public class TransactionConverter {
             }
             LocalDate entryDate;
             try {
+                if (Optional.ofNullable(transactionLines.getFirst().getDate()).isEmpty()) {
+                    continue; // skipping transactions without date
+                }
                 entryDate = FlexibleDateParser.parse(transactionLines.getFirst().getDate());
             } catch (IllegalArgumentException e) {
                 log.error("Transaction date parse error {}", entry.getKey(), e);
@@ -104,7 +97,6 @@ public class TransactionConverter {
                 return Either.left(convertItems.getLeft());
             }
 
-
             transactions.add(Transaction.builder()
                     .id(transactionId)
                     .internalTransactionNumber(entry.getKey())
@@ -119,55 +111,26 @@ public class TransactionConverter {
         return Either.right(transactions);
     }
 
-    private Either<Problem, Void> getViolations(String organisationId, List<TransactionLine> transactionLines, String transactionId) {
-        Set<Violation> violations = new HashSet<>();
-
-        for (int i = 0; i < transactionLines.size(); i++) {
-            TransactionLine line = transactionLines.get(i);
-            Set<ConstraintViolation<TransactionLine>> validationIssues = validator.validate(line);
-
-            if (!validationIssues.isEmpty()) {
-                Map<String, Object> bag = Map.of("organisationId", organisationId,
-                        "txId", transactionId,
-                        "internalTransactionNumber", i,
-                        "validationIssues", humanReadable(validationIssues));
-
-                violations.add(Violation.create(Violation.Severity.ERROR,
-                        Source.ERP,
-                        transactionId,
-                        TransactionViolationCode.TX_VALIDATION_ERROR,
-                        this.getClass().getSimpleName(),
-                        bag));
-            }
-        }
-        if (violations.isEmpty()) {
-            return Either.right(null);
-        }
-        // If there are violations, we need to return them
-        return Either.left(Problem.builder()
-                .withTitle("Transaction validation failed")
-                .withDetail("Transaction validation failed for transaction: " + transactionId)
-                .with("violations", violations)
-                .build());
-    }
-
     private Either<Problem, Set<TransactionItem>> convertToTransactionItem(List<TransactionLine> transactionLines) {
         Set<TransactionItem> items = new HashSet<>();
         int lineNumber = 0;
         for (TransactionLine line : transactionLines) {
             TransactionItem.TransactionItemBuilder builder = TransactionItem.builder()
-                    .id(TransactionItem.id(line.getTxNumber(), String.valueOf(lineNumber++)))
-                    .fxRate(MoreBigDecimal.zeroForNull(BigDecimal.valueOf(Double.parseDouble(line.getFxRate()))))
+                    .id(TransactionItem.id(Optional.ofNullable(line.getTxNumber()).orElse(""),
+                            String.valueOf(lineNumber++)))
+                    .fxRate(Optional.ofNullable(line.getFxRate())
+                            .map(rate -> BigDecimal.valueOf(Double.parseDouble(rate)))
+                            .orElse(null))
                     .costCenter(Optional.ofNullable(line.getCostCenterCode())
                             .map(costCenterCode -> CostCenter.builder()
                                     .customerCode(costCenterCode).build()))
-                    .accountDebit(Optional.of(Account.builder()
-                            .code(line.getDebitCode())
+                    .accountDebit(Optional.ofNullable(line.getDebitCode()).map(code -> Account.builder()
+                            .code(code)
                             .name(Optional.ofNullable(line.getDebitName()))
                             .build())
                     )
-                    .accountCredit(Optional.of(Account.builder()
-                            .code(line.getCreditCode())
+                    .accountCredit(Optional.ofNullable(line.getCreditCode()).map(code -> Account.builder()
+                            .code(code)
                             .name(Optional.ofNullable(line.getCreditName()))
                             .build())
                     )
@@ -230,10 +193,10 @@ public class TransactionConverter {
 
     private Optional<Document> getDocument(TransactionLine line) {
         return Optional.of(Document.builder()
-                .currency(Currency.builder().customerCode(line.getCurrency()).build())
+                .currency(Optional.ofNullable(line.getCurrency()).map(curr -> Currency.builder().customerCode(curr).build()).orElse(null))
                 .number(line.getDocumentNumber())
-                .vat(Optional.of(Vat.builder()
-                        .customerCode(line.getVatCode())
+                .vat(Optional.ofNullable(line.getVatCode()).map(vatCode -> Vat.builder()
+                        .customerCode(vatCode)
                         .rate(Optional.of(BigDecimal.valueOf(Double.parseDouble(line.getVatRate()))))
                         .build()))
                 .counterparty(Optional.ofNullable(line.getCounterPartyCode()).map(counterPartyCode ->
@@ -242,16 +205,6 @@ public class TransactionConverter {
                                 .name(Optional.ofNullable(line.getCounterPartyName()))
                                 .build()))
                 .build());
-    }
-
-    private static List<Map<String, Object>> humanReadable(Set<ConstraintViolation<TransactionLine>> validationIssues) {
-        return validationIssues.stream().map(c -> {
-            String propertyPath = c.getPropertyPath() != null ? c.getPropertyPath().toString() : "null";
-            String message = c.getMessage() != null ? c.getMessage() : "null";
-            Object invalidValue = c.getInvalidValue() != null ? c.getInvalidValue() : "null"; // can be null, but that's OK in a Map
-
-            return Map.of("propertyPath", propertyPath, "message", message, "invalidValue", invalidValue);
-        }).toList();
     }
 
 }
