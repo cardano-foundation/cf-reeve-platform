@@ -61,7 +61,7 @@ jobs:
           do
             case $docker_registry in
               ghcr.io*|docker.io*) IS_PUBLIC_REPO="true";;
-              hub.docker.com) IS_PUBLIC_REPO="true"; docker_registry="docker.io/cardanofoundation";;
+              hub.docker.com) IS_PUBLIC_REPO="true"; docker_registry="cardanofoundation";;
               *) IS_PUBLIC_REPO="false";;
             esac
             if [[ "$IS_PUBLIC_REPO" = "true" && "$PUSH_PUBLIC" = "false" ]]
