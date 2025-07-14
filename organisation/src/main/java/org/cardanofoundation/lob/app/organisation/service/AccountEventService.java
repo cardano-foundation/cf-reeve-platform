@@ -39,7 +39,7 @@ public class AccountEventService {
     private final CsvParser<EventCodeUpdate> csvParser;
 
     public Optional<AccountEvent> findByIdAndActive(String organisationId, String debitReferenceCode, String creditReferenceCode) {
-        return accountEventRepository.findByIdAndActive(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode),true );
+        return accountEventRepository.findByIdAndActive(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode), true);
     }
 
     public List<AccountEventView> getAllAccountEvent(String orgId) {
@@ -99,7 +99,7 @@ public class AccountEventService {
                 .build();
 
         accountEvent.setName(eventCodeUpdate.getName());
-        accountEvent.setActive(eventCodeUpdate.getActive());
+        accountEvent.setActive(isActive(debitReference.get(), creditReference.get()));
 
         return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
     }
@@ -145,7 +145,7 @@ public class AccountEventService {
         }
         AccountEvent accountEvent = accountEventOpt.get();
         accountEvent.setName(eventCodeUpdate.getName());
-        accountEvent.setActive(eventCodeUpdate.getActive());
+        accountEvent.setActive(isActive(debitReference.get(), creditReference.get()));
 
         return AccountEventView.convertFromEntity(accountEventRepository.save(accountEvent));
     }
@@ -158,5 +158,29 @@ public class AccountEventService {
                 eventCodeUpdates ->
                         Either.right(eventCodeUpdates.stream().map(eventCodeUpdate ->  insertAccountEvent(orgId, eventCodeUpdate, true)).collect(Collectors.toSet()))
         );
+    }
+
+    public void updateStatus(String orgId, String refCode) {
+        accountEventRepository.findByOrgIdAndRefCodeAccount(orgId, refCode).forEach(accountEvent -> {
+
+            ReferenceCode debitReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, accountEvent.getId().getDebitReferenceCode()).get();
+            ReferenceCode creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, accountEvent.getId().getCreditReferenceCode()).get();
+            accountEvent.setActive(isActive(debitReference,creditReference));
+            accountEventRepository.save(accountEvent);
+        });
+    }
+
+    public boolean isActive(ReferenceCode debitReference, ReferenceCode creditReference) {
+        if (debitReference.isActive() && creditReference.isActive()) {
+            if (debitReference.getParent().isPresent() && !debitReference.getParent().get().isActive()) {
+                return false;
+            }
+            if (creditReference.getParent().isPresent() && !creditReference.getParent().get().isActive()) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+
     }
 }

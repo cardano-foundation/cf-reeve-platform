@@ -30,25 +30,25 @@ public class CostCenterService {
     private final CsvParser<CostCenterUpdate> csvParser;
 
     public Optional<CostCenter> getCostCenter(String organisationId, String customerCode) {
-        return costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, customerCode),true);
+        return costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, customerCode), true);
     }
 
-    public Set<CostCenter> getAllCostCenter(String organisationId){
+    public Set<CostCenter> getAllCostCenter(String organisationId) {
         return costCenterRepository.findAllByOrganisationId(organisationId);
     }
 
     @Transactional
     public CostCenterView updateCostCenter(String orgId, CostCenterUpdate costCenterUpdate) {
-        Optional<CostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
-        if(costCenterFound.isPresent()) {
+        Optional<CostCenter> costCenterFound = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getCustomerCode()));
+        if (costCenterFound.isPresent()) {
             CostCenter costCenter = costCenterFound.get();
             costCenter.setExternalCustomerCode(Optional.ofNullable(costCenterUpdate.getExternalCustomerCode()).orElse(costCenterUpdate.getCustomerCode()));
             costCenter.setName(costCenterUpdate.getName());
-            costCenter.setActive(costCenterUpdate.isActive());
+
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-                Optional<CostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
-                if(project.isEmpty()) {
+                Optional<CostCenter> costCenterOptional = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
+                if (costCenterOptional.isEmpty()) {
                     return CostCenterView.createFail(
                             costCenterUpdate,
                             Problem.builder()
@@ -59,25 +59,26 @@ public class CostCenterService {
                 }
             }
             costCenter.setParentCustomerCode(Optional.ofNullable(costCenterUpdate.getParentCustomerCode()));
+            costCenter.setActive(costCenterUpdate.isActive());
             return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
-        } else {
-            return CostCenterView.createFail(
-                    costCenterUpdate,
-                    Problem.builder()
-                            .withTitle("COST_CENTER_CODE_NOT_FOUND")
-                            .withDetail("Cost Center with customer code %s not found.".formatted(costCenterUpdate.getCustomerCode()))
-                            .build()
-            );
         }
+        return CostCenterView.createFail(
+                costCenterUpdate,
+                Problem.builder()
+                        .withTitle("COST_CENTER_CODE_NOT_FOUND")
+                        .withDetail("Cost Center with customer code %s not found.".formatted(costCenterUpdate.getCustomerCode()))
+                        .build()
+        );
+
     }
 
     @Transactional
     public CostCenterView insertCostCenter(String orgId, CostCenterUpdate costCenterUpdate, boolean isUpsert) {
-        Optional<CostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
+        Optional<CostCenter> costCenterFound = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getCustomerCode()));
         CostCenter costCenter = new CostCenter();
         costCenter.setId(new CostCenter.Id(orgId, costCenterUpdate.getCustomerCode()));
-        if(costCenterFound.isPresent()) {
-            if(isUpsert) {
+        if (costCenterFound.isPresent()) {
+            if (isUpsert) {
                 costCenter = costCenterFound.get();
             } else {
                 return CostCenterView.createFail(
@@ -94,8 +95,9 @@ public class CostCenterService {
         costCenter.setActive(costCenterUpdate.isActive());
 
         // check if parent exists
+        Optional<CostCenter> parent = Optional.empty();
         if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-            Optional<CostCenter> parent = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
+            parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
             if(parent.isPresent()) {
                 costCenter.setParent(parent.get());
             } else {
@@ -108,6 +110,7 @@ public class CostCenterService {
                 );
             }
         }
+
         return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
     }
 

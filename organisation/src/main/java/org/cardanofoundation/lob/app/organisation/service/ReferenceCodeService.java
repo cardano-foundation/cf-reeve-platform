@@ -32,6 +32,7 @@ public class ReferenceCodeService {
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
     private final CsvParser<ReferenceCodeUpdate> csvParser;
+    private final AccountEventService accountEventService;
 
     public List<ReferenceCodeView> getAllReferenceCodes(String orgId) {
         return referenceCodeRepository.findAllByOrgId(orgId).stream()
@@ -135,7 +136,12 @@ public class ReferenceCodeService {
 
         referenceCode.setActive(referenceCodeUpdate.isActive());
         // The reference code returning is not the latest version after save
-        return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
+        referenceCode = referenceCodeRepository.save(referenceCode);
+        accountEventService.updateStatus(orgId, referenceCode.getId().getReferenceCode());
+        referenceCodeRepository.findChildrenByOrgIdAndReferenceCode(referenceCode.getId().getOrganisationId(), referenceCode.getId().getReferenceCode()).forEach(childReferenceCode -> {
+            accountEventService.updateStatus(orgId, childReferenceCode.getId().getReferenceCode());
+        });
+        return ReferenceCodeView.fromEntity(referenceCode);
     }
 
     @Transactional
@@ -146,4 +152,5 @@ public class ReferenceCodeService {
                         refCodeUpdate -> insertReferenceCode(orgId, refCodeUpdate, true)).collect(Collectors.toSet()))
         );
     }
+
 }
