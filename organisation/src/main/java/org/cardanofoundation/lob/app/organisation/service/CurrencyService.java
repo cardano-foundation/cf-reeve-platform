@@ -60,7 +60,7 @@ public class CurrencyService {
                             .withTitle("Currency not found")
                             .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " not found")
                             .build();
-                    return CurrencyView.createFail(error, currencyUpdate.getCustomerCode());
+                    return CurrencyView.createFail(error, currencyUpdate);
                 });
     }
 
@@ -77,7 +77,7 @@ public class CurrencyService {
                         .withTitle("Currency already exists")
                         .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " already exists")
                         .build();
-                return CurrencyView.createFail(error, currencyUpdate.getCustomerCode());
+                return CurrencyView.createFail(error, currencyUpdate);
             }
         }
         Currency save = currencyRepository.save(currency);

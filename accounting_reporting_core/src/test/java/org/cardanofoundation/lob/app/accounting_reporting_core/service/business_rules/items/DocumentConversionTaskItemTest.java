@@ -23,7 +23,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.CoreCurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 
 @ExtendWith(MockitoExtension.class)
 class DocumentConversionTaskItemTest {
@@ -49,7 +49,7 @@ class DocumentConversionTaskItemTest {
         String customerCode = "custCode";
 
         Document document = Document.builder()
-                .vat(Vat.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerCode)
                         .build())
                 .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
@@ -127,7 +127,7 @@ class DocumentConversionTaskItemTest {
         String currencyId = "ISO_4217:USD";
 
         Document document = Document.builder()
-                .vat(Vat.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
                 .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
@@ -150,8 +150,8 @@ class DocumentConversionTaskItemTest {
         transaction.setItems(items);
 
         when(organisationPublicApi.findOrganisationByVatAndCode(organisationId, customerVatCode))
-                .thenReturn(Optional.of(OrganisationVat.builder()
-                                .id(new OrganisationVat.Id(organisationId, customerVatCode))
+                .thenReturn(Optional.of(Vat.builder()
+                                .id(new Vat.Id(organisationId, customerVatCode))
                                 .rate(BigDecimal.valueOf(0.2))
                         .build()));
 
@@ -183,7 +183,7 @@ class DocumentConversionTaskItemTest {
         String customerVatCode = "UNKNOWN_VAT";
 
         Document document = Document.builder()
-                .vat(Vat.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
                 .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
@@ -226,7 +226,7 @@ class DocumentConversionTaskItemTest {
         String customerVatCode = "UNKNOWN_VAT";
 
         Document document = Document.builder()
-                .vat(Vat.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
                 .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()

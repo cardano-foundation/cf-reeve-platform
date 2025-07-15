@@ -48,7 +48,7 @@ public class ProjectCodeService {
                 project = projectFound.get();
             } else {
                 return ProjectView.createFail(
-                        projectUpdate.getCustomerCode(),
+                        projectUpdate,
                         Problem.builder()
                                 .withTitle("PROJECT_CODE_ALREADY_EXISTS")
                                 .withDetail("Project code with customer code %s already exists.".formatted(projectUpdate.getCustomerCode()))
@@ -66,7 +66,7 @@ public class ProjectCodeService {
                 project.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
             } else {
                 return ProjectView.createFail(
-                        projectUpdate.getCustomerCode(),
+                        projectUpdate,
                         Problem.builder()
                                 .withTitle("PARENT_PROJECT_CODE_NOT_FOUND")
                                 .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
@@ -93,7 +93,7 @@ public class ProjectCodeService {
                     projectEntityUpdated.setParentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
                 } else {
                     return ProjectView.createFail(
-                            projectUpdate.getCustomerCode(),
+                            projectUpdate,
                             Problem.builder()
                                     .withTitle("PARENT_PROJECT_CODE_NOT_FOUND")
                                     .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
@@ -105,7 +105,7 @@ public class ProjectCodeService {
             return ProjectView.fromEntity(projectMappingRepository.save(projectEntityUpdated));
         } else {
             return ProjectView.createFail(
-                    projectUpdate.getCustomerCode(),
+                    projectUpdate,
                     Problem.builder()
                             .withTitle("PROJECT_CODE_NOT_FOUND")
                             .withDetail("Project code with customer code %s not found.".formatted(projectUpdate.getCustomerCode()))

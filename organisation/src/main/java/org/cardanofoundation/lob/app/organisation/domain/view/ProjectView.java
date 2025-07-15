@@ -6,6 +6,7 @@ import lombok.Getter;
 
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 
 @Getter
@@ -19,7 +20,9 @@ public class ProjectView {
 
     private String name;
 
-    private ProjectView parentCustomerCode;
+    private ProjectView parent;
+
+    private String parentCustomerCode;
 
     private Problem error;
 
@@ -29,14 +32,17 @@ public class ProjectView {
                 .externalCustomerCode(costCenter.getExternalCustomerCode())
                 .name(costCenter.getName());
         if (costCenter.getParent().isPresent()) {
-            builder.parentCustomerCode(ProjectView.fromEntity(costCenter.getParent().get()));
+            builder.parent(ProjectView.fromEntity(costCenter.getParent().get()));
         }
         return builder.build();
     }
 
-    public static ProjectView createFail(String customerCode, Problem error) {
+    public static ProjectView createFail(ProjectUpdate projectUpdate, Problem error) {
         return ProjectView.builder()
-                .customerCode(customerCode)
+                .customerCode(projectUpdate.getCustomerCode())
+                .externalCustomerCode(projectUpdate.getExternalCustomerCode())
+                .name(projectUpdate.getName())
+                .parentCustomerCode(projectUpdate.getParentCustomerCode())
                 .error(error)
                 .build();
     }

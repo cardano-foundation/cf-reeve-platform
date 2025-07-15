@@ -9,6 +9,7 @@ import lombok.Getter;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
+import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
 
 
 @Getter
@@ -38,13 +39,11 @@ public class AccountEventView {
                 .build();
     }
 
-    public static AccountEventView createFail(Problem error, String debitReferenceCode, String creditReferenceCode) {
+    public static AccountEventView createFail(Problem error, EventCodeUpdate eventCodeUpdate) {
         return AccountEventView.builder()
-                .debitReferenceCode(debitReferenceCode)
-                .creditReferenceCode(creditReferenceCode)
-                //.name(error.getTitle())
-                //.subType(chartOfAccount.getSubType().getId())
-                //.type(chartOfAccount.getSubType().getType().getId())
+                .debitReferenceCode(eventCodeUpdate.getDebitReferenceCode())
+                .creditReferenceCode(eventCodeUpdate.getCreditReferenceCode())
+                .description(eventCodeUpdate.getName())
                 .error(Optional.of(error))
                 .build();
     }

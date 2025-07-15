@@ -6,6 +6,7 @@ import lombok.Getter;
 
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 
 
@@ -38,9 +39,12 @@ public class CostCenterView {
         return builder.build();
     }
 
-    public static CostCenterView createFail(String customerCode, Problem error) {
+    public static CostCenterView createFail(CostCenterUpdate costCenterUpdate, Problem error) {
         return CostCenterView.builder()
-                .customerCode(customerCode)
+                .customerCode(costCenterUpdate.getCustomerCode())
+                .externalCustomerCode(costCenterUpdate.getExternalCustomerCode())
+                .name(costCenterUpdate.getName())
+                .active(costCenterUpdate.isActive())
                 .error(error)
                 .build();
     }

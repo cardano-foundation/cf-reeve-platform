@@ -54,7 +54,7 @@ public class ReferenceCodeService {
                     .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(),
-                    referenceCodeUpdate.getReferenceCode());
+                    referenceCodeUpdate);
         }
         Optional<ReferenceCode> parentReferenceCode = Optional.empty();
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
@@ -65,7 +65,7 @@ public class ReferenceCodeService {
                         .withDetail("Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()))
                         .withStatus(Status.NOT_FOUND)
                         .build(),
-                        referenceCodeUpdate.getReferenceCode());
+                        referenceCodeUpdate);
             }
         }
 
@@ -82,7 +82,7 @@ public class ReferenceCodeService {
                                 .withDetail("The reference code with code :%s already exists".formatted(referenceCodeUpdate.getReferenceCode()))
                                 .withStatus(Status.NOT_FOUND)
                                 .build(),
-                        referenceCodeUpdate.getReferenceCode());
+                        referenceCodeUpdate);
             }
         }
 
@@ -105,7 +105,7 @@ public class ReferenceCodeService {
                     .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(),
-                    referenceCodeUpdate.getReferenceCode());
+                    referenceCodeUpdate);
         }
         Optional<ReferenceCode> parentReferenceCode = Optional.empty();
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
@@ -116,7 +116,7 @@ public class ReferenceCodeService {
                         .withDetail("Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()))
                         .withStatus(Status.NOT_FOUND)
                         .build(),
-                        referenceCodeUpdate.getReferenceCode());
+                        referenceCodeUpdate);
             }
         }
 
@@ -128,7 +128,7 @@ public class ReferenceCodeService {
                     .withDetail("Unable to find reference Id: %s".formatted(referenceCodeUpdate.getReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(),
-                    referenceCodeUpdate.getReferenceCode());
+                    referenceCodeUpdate);
         }
 
         ReferenceCode referenceCode = referenceCodeOpt.get();

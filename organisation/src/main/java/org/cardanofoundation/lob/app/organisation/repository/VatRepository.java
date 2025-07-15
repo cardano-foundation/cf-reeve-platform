@@ -7,13 +7,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 
-public interface VatRepository extends JpaRepository<OrganisationVat, OrganisationVat.Id> {
+public interface VatRepository extends JpaRepository<Vat, Vat.Id> {
 
-    @Query("SELECT t FROM OrganisationVat t WHERE t.id.organisationId = :organisationId")
-    List<OrganisationVat> findAllByOrganisationId(@Param("organisationId") String organisationId);
+    @Query("SELECT t FROM Vat t WHERE t.id.organisationId = :organisationId")
+    List<Vat> findAllByOrganisationId(@Param("organisationId") String organisationId);
 
-    @Query("SELECT t FROM OrganisationVat t WHERE t.id = :Id AND t.active = :active ")
-    Optional<OrganisationVat> findByIdAndActive(@Param("Id") OrganisationVat.Id Id, @Param("active") boolean active);
+    @Query("SELECT t FROM Vat t WHERE t.id = :Id AND t.active = :active ")
+    Optional<Vat> findByIdAndActive(@Param("Id") Vat.Id Id, @Param("active") boolean active);
 }

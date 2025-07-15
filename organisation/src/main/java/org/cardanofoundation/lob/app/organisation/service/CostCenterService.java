@@ -50,7 +50,7 @@ public class CostCenterService {
                 Optional<CostCenter> project = getCostCenter(orgId, costCenterUpdate.getParentCustomerCode());
                 if(project.isEmpty()) {
                     return CostCenterView.createFail(
-                            costCenterUpdate.getCustomerCode(),
+                            costCenterUpdate,
                             Problem.builder()
                                     .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
                                     .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
@@ -62,7 +62,7 @@ public class CostCenterService {
             return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
         } else {
             return CostCenterView.createFail(
-                    costCenterUpdate.getCustomerCode(),
+                    costCenterUpdate,
                     Problem.builder()
                             .withTitle("COST_CENTER_CODE_NOT_FOUND")
                             .withDetail("Cost Center with customer code %s not found.".formatted(costCenterUpdate.getCustomerCode()))
@@ -81,7 +81,7 @@ public class CostCenterService {
                 costCenter = costCenterFound.get();
             } else {
                 return CostCenterView.createFail(
-                        costCenterUpdate.getCustomerCode(),
+                        costCenterUpdate,
                         Problem.builder()
                                 .withTitle("COST_CENTER_CODE_ALREADY_EXISTS")
                                 .withDetail("Cost Center with customer code %s already exists.".formatted(costCenterUpdate.getCustomerCode()))
@@ -100,7 +100,7 @@ public class CostCenterService {
                 costCenter.setParent(parent.get());
             } else {
                 return CostCenterView.createFail(
-                        costCenterUpdate.getCustomerCode(),
+                        costCenterUpdate,
                         Problem.builder()
                                 .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
                                 .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
