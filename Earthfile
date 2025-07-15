@@ -4,8 +4,7 @@ ARG --global ALL_BUILD_TARGETS="platform-library-m2-cache follower-app"
 
 ARG --global DOCKER_IMAGE_PREFIX="cf-reeve"
 ARG --global DOCKER_IMAGES_EXTRA_TAGS=""
-ARG --global DOCKER_REGISTRIES="hub.docker.com"
-ARG --global HUB_DOCKER_COM_ORG=cardanofoundation
+ARG --global DOCKER_REGISTRIES="docker.io/cardanofoundation"
 ARG --global PUSH=false
 
 all:
@@ -28,22 +27,14 @@ docker-publish:
       SET IMAGE_NAME = ${DOCKER_IMAGE_PREFIX}-${image_target}
       IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
         FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
-          IF [ "$registry" = "hub.docker.com" ]
-            RUN docker tag ${IMAGE_NAME}:latest ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${image_tag}
-            RUN if [ "$PUSH" = "true" ]; then docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${image_tag}; fi
-          ELSE
-            RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
-            RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${image_tag}; fi
-          END
+          RUN echo docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag} && \
+            docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
+          RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${image_tag}; fi
         END
       END
-      IF [ "$registry" = "hub.docker.com" ]
-        RUN docker tag ${IMAGE_NAME}:latest ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        RUN if [ "$PUSH" = "true" ]; then docker push ${HUB_DOCKER_COM_ORG}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
-      ELSE
-        RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
-      END
+      RUN echo docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH} && \
+        docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+      RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
     END
   END
 
