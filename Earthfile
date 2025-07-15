@@ -17,7 +17,6 @@ all:
 docker-publish:
   ARG EARTHLY_GIT_SHORT_HASH
   ARG RELEASE_TAG
-  LOCALLY
   WAIT
     BUILD +all --RELEASE_TAG=${RELEASE_TAG}
   END
