@@ -26,16 +26,16 @@ docker-publish:
   FOR registry IN $DOCKER_REGISTRIES
     FOR image_target IN $ALL_BUILD_TARGETS
       SET IMAGE_NAME = ${DOCKER_IMAGE_PREFIX}-${image_target}
-      IF [ "$PUSH" = "true" ]
-        IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
-          FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
-            RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
-            RUN docker push ${registry}/${IMAGE_NAME}:${image_tag}
-          END
+      IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
+        FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
+          RUN echo docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag} && \
+            docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${image_tag}
+          RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${image_tag}; fi
         END
-        RUN docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-        RUN docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
       END
+      RUN echo docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH} && \
+        docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
+      RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
     END
   END
 
