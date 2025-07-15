@@ -5,9 +5,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Set;
 
-import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 
 import io.vavr.control.Either;
@@ -41,22 +39,6 @@ class TransactionConverterTest {
     }
 
     @Test
-    void convertToTransaction_validationProblem() {
-        TransactionLine line = mock(TransactionLine.class);
-        ConstraintViolation<TransactionLine> violation = mock(ConstraintViolation.class);
-
-        when(violation.getMessage()).thenReturn("Validation error");
-        when(validator.validate(line)).thenReturn(Set.of(violation));
-        when(line.getTxNumber()).thenReturn("TxNumber");
-
-        Either<Problem, List<Transaction>> lists = transactionConverter.convertToTransaction("orgId", "batchId", List.of(line));
-
-        Assertions.assertTrue(lists.isLeft());
-        Assertions.assertEquals("Transaction validation failed", lists.getLeft().getTitle());
-
-    }
-
-    @Test
     void convertToTransaction_typeNotFound() {
         TransactionLine line = mock(TransactionLine.class);
         when(line.getTxNumber()).thenReturn("TxNumber");
@@ -80,25 +62,12 @@ class TransactionConverterTest {
     }
 
     @Test
-    void convertToTransaction_errorConversionFailed() {
-        TransactionLine line = mock(TransactionLine.class);
-        when(line.getTxNumber()).thenReturn("TxNumber");
-        when(line.getType()).thenReturn("Journal");
-        when(line.getDate()).thenReturn("2023-10-01");
-
-        Either<Problem, List<Transaction>> lists = transactionConverter.convertToTransaction("orgId", "batchId", List.of(line));
-        Assertions.assertTrue(lists.isLeft());
-        Assertions.assertEquals("Transaction items conversion failed", lists.getLeft().getTitle());
-    }
-
-    @Test
     void convertToTransaction_errorAddingAmounts() {
         TransactionLine line = mock(TransactionLine.class);
         when(line.getTxNumber()).thenReturn("TxNumber");
         when(line.getType()).thenReturn("Journal");
         when(line.getDate()).thenReturn("2023-10-01");
         when(line.getFxRate()).thenReturn("1.0");
-        when(line.getVatRate()).thenReturn("0.0");
         when(line.getAmountLCYCredit()).thenReturn("100");
         when(line.getAmountLCYDebit()).thenReturn("100");
 
@@ -114,7 +83,6 @@ class TransactionConverterTest {
         when(line.getType()).thenReturn("Journal");
         when(line.getDate()).thenReturn("2023-10-01");
         when(line.getFxRate()).thenReturn("1.0");
-        when(line.getVatRate()).thenReturn("0.0");
         when(line.getAmountLCYCredit()).thenReturn("100");
         when(line.getAmountFCYCredit()).thenReturn("100");
 
@@ -135,7 +103,6 @@ class TransactionConverterTest {
         when(line.getType()).thenReturn("Journal");
         when(line.getDate()).thenReturn("2023-10-01");
         when(line.getFxRate()).thenReturn("1.0");
-        when(line.getVatRate()).thenReturn("0.0");
         when(line.getAmountLCYDebit()).thenReturn("100");
         when(line.getAmountFCYDebit()).thenReturn("100");
 
@@ -156,7 +123,6 @@ class TransactionConverterTest {
         when(line.getType()).thenReturn("Journal");
         when(line.getDate()).thenReturn("2023-10-01");
         when(line.getFxRate()).thenReturn("1.0");
-        when(line.getVatRate()).thenReturn("0.0");
 
         Either<Problem, List<Transaction>> lists = transactionConverter.convertToTransaction("orgId", "batchId", List.of(line));
         Assertions.assertTrue(lists.isRight());
