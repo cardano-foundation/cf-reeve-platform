@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: ⛮ cf-gha-baseline
-        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@chore/filter-docker-repositories
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@main
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_DOCKER_REGISTRY_URL: ${{ env.PRIVATE_DOCKER_REGISTRY_URL }}
