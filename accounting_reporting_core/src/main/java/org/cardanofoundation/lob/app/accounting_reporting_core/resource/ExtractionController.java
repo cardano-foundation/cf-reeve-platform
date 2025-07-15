@@ -67,7 +67,6 @@ public class ExtractionController {
                     })
             }
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ExtractionTransactionView> transactionSearch(@Valid @RequestBody ExtractionTransactionsRequest transactionsRequest) {
         try {
             LocalDate dateFrom = FlexibleDateParser.parse(transactionsRequest.getDateFrom());
