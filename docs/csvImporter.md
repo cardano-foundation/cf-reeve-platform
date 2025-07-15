@@ -46,7 +46,6 @@ The following columns are needed:
 - `Debit Reference Code`: Reference code of the debit account (e.g. `1000`)
 - `Credit Reference Code`: Reference code of the credit account (e.g. `2000`)
 - `Name`: Name of the account event (e.g. `Invoice 1`)
-- `Active`: Active status of the account event (e.g. `true`)
 
 ### Chart of Accounts data structure
 An example can be found here: [Chart of Accounts CSV Example](./examples/chart_of_account_csv_example.csv)

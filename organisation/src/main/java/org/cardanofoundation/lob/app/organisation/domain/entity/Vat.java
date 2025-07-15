@@ -22,7 +22,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Audited
 @Builder
 @EntityListeners({AuditingEntityListener.class})
-public class OrganisationVat extends CommonEntity implements Persistable<OrganisationVat.Id> {
+public class Vat extends CommonEntity implements Persistable<Vat.Id> {
 
     @EmbeddedId
     @AttributeOverrides({

@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.domain.view;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 import lombok.AllArgsConstructor;
@@ -8,7 +9,8 @@ import lombok.Getter;
 
 import org.zalando.problem.Problem;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
+import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
 
 
 
@@ -31,23 +33,24 @@ public class VatView {
     }
 
 
-    public static VatView convertFromEntity(OrganisationVat organisationVat) {
+    public static VatView convertFromEntity(Vat vat) {
         return VatView.builder()
-                .customerCode(organisationVat.getId().getCustomerCode())
-                .organisationId(organisationVat.getId().getOrganisationId())
-                .rate(organisationVat.getRate().toString())
-                .countryCode(organisationVat.getCountryCode())
-                .description(organisationVat.getDescription())
-                .active(organisationVat.getActive())
+                .customerCode(vat.getId().getCustomerCode())
+                .organisationId(vat.getId().getOrganisationId())
+                .rate(vat.getRate().toString())
+                .countryCode(vat.getCountryCode())
+                .description(vat.getDescription())
+                .active(vat.getActive())
                 .build();
     }
 
-    public static VatView createFail(String customerCode, Problem error) {
+    public static VatView createFail(VatUpdate vatUpdate, Problem error) {
         return VatView.builder()
-                .customerCode(customerCode)
-                //.name(error.getTitle())
-                //.subType(chartOfAccount.getSubType().getId())
-                //.type(chartOfAccount.getSubType().getType().getId())
+                .customerCode(vatUpdate.getCustomerCode())
+                .rate(Optional.ofNullable(vatUpdate.getRate()).map(BigDecimal::toPlainString).orElse(null))
+                .countryCode(vatUpdate.getCountryCode())
+                .description(vatUpdate.getDescription())
+                .active(vatUpdate.getActive())
                 .error(error)
                 .build();
     }

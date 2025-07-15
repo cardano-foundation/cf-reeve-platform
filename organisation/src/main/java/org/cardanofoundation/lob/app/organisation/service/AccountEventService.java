@@ -48,7 +48,7 @@ public class AccountEventService {
     }
 
     @Transactional
-    public AccountEventView insertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate) {
+    public AccountEventView insertAccountEvent(String orgId, EventCodeUpdate eventCodeUpdate, boolean isUpsert) {
 
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
@@ -56,7 +56,7 @@ public class AccountEventService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
 
         }
 
@@ -66,7 +66,7 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail("Unable to find refernce code by Id: %s:%s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
         }
 
         Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
@@ -75,19 +75,20 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail("Unable to find refernce code by Id: %s:%s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
         }
 
         ReferenceCode debitReferenceG = debitReference.get();
         ReferenceCode creditReferenceG = creditReference.get();
         Optional<AccountEvent> accountEventOpt = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
 
-        if (accountEventOpt.isPresent()) {
+        // If the account event already exists and we are not upserting, return an error
+        if (accountEventOpt.isPresent() && !isUpsert) {
             return AccountEventView.createFail(Problem.builder()
                     .withTitle("ACCOUNT_EVENT_ALREADY_EXISTS")
                     .withDetail("Account event already exists for debit reference code: %s and credit reference code: %s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.CONFLICT)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
         }
 
         AccountEvent accountEvent = AccountEvent.builder()
@@ -110,7 +111,7 @@ public class AccountEventService {
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
 
         }
 
@@ -120,7 +121,7 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail("Unable to find refernce code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
         }
 
         Optional<ReferenceCode> creditReference = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, eventCodeUpdate.getCreditReferenceCode());
@@ -129,7 +130,7 @@ public class AccountEventService {
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
                     .withDetail("Unable to find refernce code by Id: %s and %s:%s".formatted(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
         }
 
         Optional<AccountEvent> accountEventOpt = accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(orgId, eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
@@ -138,7 +139,7 @@ public class AccountEventService {
                     .withTitle("ACCOUNT_EVENT_NOT_FOUND")
                     .withDetail("Account event not found for debit reference code: %s and credit reference code: %s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build(), eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode());
+                    .build(), eventCodeUpdate);
         }
         AccountEvent accountEvent = accountEventOpt.get();
         accountEvent.setName(eventCodeUpdate.getName());
@@ -153,7 +154,7 @@ public class AccountEventService {
                 problem ->
                         Either.left(Set.of(problem)),
                 eventCodeUpdates ->
-                        Either.right(eventCodeUpdates.stream().map(eventCodeUpdate ->  insertAccountEvent(orgId, eventCodeUpdate)).collect(Collectors.toSet()))
+                        Either.right(eventCodeUpdates.stream().map(eventCodeUpdate ->  insertAccountEvent(orgId, eventCodeUpdate, true)).collect(Collectors.toSet()))
         );
     }
 }

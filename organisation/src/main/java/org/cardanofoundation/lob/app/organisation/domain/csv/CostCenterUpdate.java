@@ -13,7 +13,6 @@ public class CostCenterUpdate {
 
     @CsvBindByName(column = "Customer code", required = true)
     private String customerCode;
-    @CsvBindByName(column = "external customer code")
     private String externalCustomerCode;
     @CsvBindByName(column = "Name", required = true)
     private String name;

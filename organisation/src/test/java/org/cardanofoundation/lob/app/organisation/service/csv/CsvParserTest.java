@@ -86,7 +86,6 @@ class CsvParserTest {
         Assertions.assertEquals("234", second.getDebitReferenceCode());
         Assertions.assertEquals("567", second.getCreditReferenceCode());
         Assertions.assertEquals("Test Dummy2", second.getName());
-        Assertions.assertFalse(second.getActive());
     }
 
     @Test

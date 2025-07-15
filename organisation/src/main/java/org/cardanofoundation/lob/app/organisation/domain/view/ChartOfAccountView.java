@@ -11,6 +11,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OpeningBalance;
+import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 
 
 @Getter
@@ -27,8 +28,10 @@ public class ChartOfAccountView {
     private String name;
 
     private Long subType;
+    private String subTypeName;
 
     private Long type;
+    private String typeName;
 
     private String currency;
 
@@ -76,12 +79,19 @@ public class ChartOfAccountView {
                 .build();
     }
 
-    public static ChartOfAccountView createFail(Problem error, String customerCode) {
+    public static ChartOfAccountView createFail(Problem error, ChartOfAccountUpdate chartOfAccountUpdate) {
         return ChartOfAccountView.builder()
-                .customerCode(customerCode)
-                //.name(error.getTitle())
-                //.subType(chartOfAccount.getSubType().getId())
-                //.type(chartOfAccount.getSubType().getType().getId())
+                .customerCode(chartOfAccountUpdate.getCustomerCode())
+                .eventRefCode(chartOfAccountUpdate.getEventRefCode())
+                .refCode(chartOfAccountUpdate.getRefCode())
+                .name(chartOfAccountUpdate.getName())
+                .typeName(chartOfAccountUpdate.getType())
+                .subTypeName(chartOfAccountUpdate.getSubType())
+                .currency(chartOfAccountUpdate.getCurrency())
+                .counterParty(chartOfAccountUpdate.getCounterParty())
+                .active(chartOfAccountUpdate.getActive())
+                .parentCustomerCode(chartOfAccountUpdate.getParentCustomerCode())
+                .openingBalance(chartOfAccountUpdate.getOpeningBalance())
                 .error(Optional.of(error))
                 .build();
     }

@@ -138,34 +138,6 @@ class ChartOfAccountsServiceTest {
     }
 
     @Test
-    void insertChartOfAccountByCsv_alreadyExists() {
-        MultipartFile file = mock(MultipartFile.class);
-        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
-        ChartOfAccountType typeMock = mock(ChartOfAccountType.class);
-        ChartOfAccountSubType subTypeMock = mock(ChartOfAccountSubType.class);
-        when(subTypeMock.getId()).thenReturn(3L);
-        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
-        when(updateCsv.getSubType()).thenReturn("SUBTYPE");
-        when(updateCsv.getEventRefCode()).thenReturn(chartOfAccount.getEventRefCode());
-        when(updateCsv.getType()).thenReturn("12345");
-
-        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
-                .thenReturn(Optional.of(referenceCode));
-        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, "SUBTYPE"))
-                .thenReturn(Optional.of(subTypeMock));
-        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, null))
-                .thenReturn(Optional.of(chartOfAccount));
-        when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(eq(orgId), anyString())).thenReturn(Optional.of(typeMock));
-        when(chartOfAccountSubTypeRepository.save(any(ChartOfAccountSubType.class))).thenReturn(subTypeMock);
-        when(subTypeMock.getId()).thenReturn(1L);
-        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
-        assertTrue(sets.isRight());
-        assertEquals(1, sets.get().size());
-        assertEquals("CHART_OF_ACCOUNT_ALREADY_EXISTS", sets.get().iterator().next().getError().get().getTitle());
-    }
-
-    @Test
     void insertChartOfAccountByCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
         ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
@@ -178,10 +150,10 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, "TYPE")).thenReturn(Optional.of(typeMock));
         when(typeMock.getSubTypes()).thenReturn(Set.of(subTypeMock));
         when(subTypeMock.getName()).thenReturn("SUBTYPE");
-        when(updateCsv.getEventRefCode()).thenReturn(chartOfAccount.getEventRefCode());
+        when(updateCsv.getRefCode()).thenReturn(chartOfAccountUpdate.getRefCode());
 
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, "SUBTYPE"))
                 .thenReturn(Optional.of(subTypeMock));
@@ -206,11 +178,11 @@ class ChartOfAccountsServiceTest {
         when(updateCsv.getType()).thenReturn("TYPE");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, "TYPE")).thenReturn(Optional.of(typeMock));
         when(typeMock.getSubTypes()).thenReturn(Set.of());
-        when(updateCsv.getEventRefCode()).thenReturn(chartOfAccount.getEventRefCode());
+        when(updateCsv.getRefCode()).thenReturn(chartOfAccountUpdate.getRefCode());
         when(chartOfAccountSubTypeRepository.save(any(ChartOfAccountSubType.class))).thenReturn(subTypeMock);
 
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, "SUBTYPE"))
                 .thenReturn(Optional.of(subTypeMock));
@@ -230,19 +202,19 @@ class ChartOfAccountsServiceTest {
         ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
         ChartOfAccountType typeMock = mock(ChartOfAccountType.class);
         ChartOfAccountSubType subTypeMock = mock(ChartOfAccountSubType.class);
-        when(updateCsv.getEventRefCode()).thenReturn(chartOfAccountUpdate.getEventRefCode());
         when(typeMock.getSubTypes()).thenReturn(Set.of(subTypeMock));
         when(subTypeMock.getId()).thenReturn(3L);
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         when(updateCsv.getSubType()).thenReturn("SUBTYPE");
         when(updateCsv.getType()).thenReturn("TYPE");
+        when(updateCsv.getRefCode()).thenReturn(chartOfAccountUpdate.getRefCode());
 
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, "TYPE")).thenReturn(Optional.empty());
 
         when(chartOfAccountTypeRepository.save(any(ChartOfAccountType.class))).thenReturn(typeMock);
 
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, "SUBTYPE"))
                 .thenReturn(Optional.of(subTypeMock));
@@ -309,7 +281,7 @@ class ChartOfAccountsServiceTest {
     @Test
     void testUpdateChartOfAccount_Success() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.of(subType));
@@ -337,7 +309,7 @@ class ChartOfAccountsServiceTest {
     @Test
     void testUpdateChartOfAccount_ReferenceCodeNotFound() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.empty());
 
         ChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
@@ -350,7 +322,7 @@ class ChartOfAccountsServiceTest {
     @Test
     void testUpdateChartOfAccount_SubTypeNotFound() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.empty());
@@ -366,7 +338,7 @@ class ChartOfAccountsServiceTest {
     void testUpdateChartOfAccount_ParentAccountNotFound() {
         chartOfAccountUpdate.setParentCustomerCode("PARENT001");
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.of(subType));
@@ -383,7 +355,7 @@ class ChartOfAccountsServiceTest {
     @Test
     void testUpdateChartOfAccount_NoExist() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.of(subType));
@@ -402,14 +374,14 @@ class ChartOfAccountsServiceTest {
     @Test
     void testInsertChartOfAccount_Exist() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.of(subType));
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .thenReturn(Optional.of(chartOfAccount));
 
-        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertFalse(response.getError().isEmpty());
@@ -419,7 +391,7 @@ class ChartOfAccountsServiceTest {
     @Test
     void testInsertChartOfAccount_Success() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.of(subType));
@@ -427,7 +399,7 @@ class ChartOfAccountsServiceTest {
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
 
-        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertTrue(response.getError().isEmpty());
@@ -437,7 +409,7 @@ class ChartOfAccountsServiceTest {
     void testInsertChartOfAccount_OrganisationNotFound() {
         when(organisationService.findById(orgId)).thenReturn(Optional.empty());
 
-        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertFalse(response.getError().isEmpty());
@@ -447,10 +419,10 @@ class ChartOfAccountsServiceTest {
     @Test
     void testInsertChartOfAccount_ReferenceCodeNotFound() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.empty());
 
-        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertFalse(response.getError().isEmpty());
@@ -460,12 +432,12 @@ class ChartOfAccountsServiceTest {
     @Test
     void testInsertChartOfAccount_SubTypeNotFound() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.empty());
 
-        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertFalse(response.getError().isEmpty());
@@ -476,12 +448,12 @@ class ChartOfAccountsServiceTest {
     void testInsertChartOfAccount_ParentAccountNotFound() {
         chartOfAccountUpdate.setParentCustomerCode("PARENT001");
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode()))
                 .thenReturn(Optional.empty());
 
-        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertFalse(response.getError().isEmpty());
@@ -494,7 +466,7 @@ class ChartOfAccountsServiceTest {
         ChartOfAccount newAccount = ChartOfAccount.builder().id(accountId).subType(subType).build();
 
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
                 .thenReturn(Optional.of(subType));
@@ -502,7 +474,7 @@ class ChartOfAccountsServiceTest {
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(newAccount);
 
-        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertTrue(response.getError().isEmpty());

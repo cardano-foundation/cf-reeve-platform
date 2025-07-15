@@ -89,7 +89,7 @@ public class ChartOfAccountController {
     public ResponseEntity<?> insertChartOfAccount(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
 
-        ChartOfAccountView chartOfAccountView = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate);
+        ChartOfAccountView chartOfAccountView = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
         if(chartOfAccountView.getError().isPresent()){
             return ResponseEntity.status(chartOfAccountView.getError().get().getStatus().getStatusCode()).body(chartOfAccountView);
         }

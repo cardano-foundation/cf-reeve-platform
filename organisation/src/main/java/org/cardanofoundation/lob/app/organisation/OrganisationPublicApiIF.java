@@ -14,7 +14,7 @@ public interface OrganisationPublicApiIF {
     Optional<Currency> findCurrencyByCustomerCurrencyCode(String organisationId,
                                                           String customerCurrencyCode);
 
-    Optional<OrganisationVat> findOrganisationByVatAndCode(String organisationId, String customerCode);
+    Optional<Vat> findOrganisationByVatAndCode(String organisationId, String customerCode);
 
     Optional<CostCenter> findCostCenter(String organisationId, String customerCode);
 

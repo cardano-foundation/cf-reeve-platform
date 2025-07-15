@@ -97,10 +97,7 @@ class AccountEventServiceTest {
         when(update.getDebitReferenceCode()).thenReturn(DEBIT_REF_CODE);
         when(update.getCreditReferenceCode()).thenReturn(CREDIT_REF_CODE);
         when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.right(List.of(update)));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.of(mockDebitReference));
-        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.of(mockCreditReference));
-        when(accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE))
-                .thenReturn(Optional.of(mockAccountEvent));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
         Either<Set<Problem>, Set<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
@@ -236,7 +233,7 @@ class AccountEventServiceTest {
         when(accountEventRepository.save(any(AccountEvent.class))).thenReturn(mockAccountEvent);
 
 
-        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate, false);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("Test Event", result.getDescription());
@@ -251,7 +248,7 @@ class AccountEventServiceTest {
                 .thenReturn(Optional.of(mockAccountEvent));
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
         assertEquals("ACCOUNT_EVENT_ALREADY_EXISTS", result.getError().get().getTitle());
@@ -263,7 +260,7 @@ class AccountEventServiceTest {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
         assertEquals("REFERENCE_CODE_NOT_FOUND", result.getError().get().getTitle());
@@ -276,7 +273,7 @@ class AccountEventServiceTest {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
         assertEquals("REFERENCE_CODE_NOT_FOUND", result.getError().get().getTitle());
@@ -287,7 +284,7 @@ class AccountEventServiceTest {
     void testInsertReferenceCode_FailsWhenOrganisationMissing() {
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.empty());
 
-        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate);
+        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
         verify(accountEventRepository, never()).save(any());

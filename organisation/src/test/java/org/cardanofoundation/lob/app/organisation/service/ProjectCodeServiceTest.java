@@ -90,7 +90,7 @@ class ProjectCodeServiceTest {
         when(update.getCustomerCode()).thenReturn(customerCode);
         when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
 
-        ProjectView projectView = projectCodeService.insertProject(organisationId, update);
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
         assertEquals("PROJECT_CODE_ALREADY_EXISTS", projectView.getError().getTitle());
     }
@@ -103,7 +103,7 @@ class ProjectCodeServiceTest {
         when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.empty());
         when(projectMappingRepository.findById(new Project.Id(organisationId, "parentCode"))).thenReturn(Optional.empty());
 
-        ProjectView projectView = projectCodeService.insertProject(organisationId, update);
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
         assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", projectView.getError().getTitle());
     }
@@ -120,7 +120,7 @@ class ProjectCodeServiceTest {
         when(parent.getId()).thenReturn(new Project.Id(organisationId, "parentCode"));
         when(projectMappingRepository.save(any(Project.class))).thenReturn(project);
 
-        ProjectView projectView = projectCodeService.insertProject(organisationId, update);
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
         assertEquals(customerCode, projectView.getCustomerCode());
         assertNull(projectView.getError());
