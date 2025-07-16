@@ -42,7 +42,6 @@ public class CostCenterService {
         Optional<CostCenter> costCenterFound = getCostCenter(orgId, costCenterUpdate.getCustomerCode());
         if(costCenterFound.isPresent()) {
             CostCenter costCenter = costCenterFound.get();
-            costCenter.setExternalCustomerCode(Optional.ofNullable(costCenterUpdate.getExternalCustomerCode()).orElse(costCenterUpdate.getCustomerCode()));
             costCenter.setName(costCenterUpdate.getName());
             costCenter.setActive(costCenterUpdate.isActive());
             // check if parent exists
@@ -89,7 +88,6 @@ public class CostCenterService {
                 );
             }
         }
-        costCenter.setExternalCustomerCode(Optional.ofNullable(costCenterUpdate.getExternalCustomerCode()).orElse(costCenterUpdate.getCustomerCode()));
         costCenter.setName(costCenterUpdate.getName());
         costCenter.setActive(costCenterUpdate.isActive());
 

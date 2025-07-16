@@ -122,7 +122,6 @@ class CostCenterServiceTest {
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.of(costCenter));
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentCustomerCode"), true)).thenReturn(Optional.of(parentMock));
-        when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
@@ -171,7 +170,6 @@ class CostCenterServiceTest {
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.empty());
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentCustomerCode"), true)).thenReturn(Optional.of(parentMock));
-        when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
@@ -200,7 +198,6 @@ class CostCenterServiceTest {
         when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.empty());
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
         when(costCenterUpdate.getParentCustomerCode()).thenReturn(null);
-        when(costCenterUpdate.getExternalCustomerCode()).thenReturn("externalCustomerCode");
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.right(List.of(costCenterUpdate)));
         when(costCenterRepository.save(any())).thenReturn(costCenter);

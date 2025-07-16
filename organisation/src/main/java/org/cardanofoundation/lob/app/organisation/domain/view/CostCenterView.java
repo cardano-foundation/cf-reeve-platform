@@ -17,8 +17,6 @@ public class CostCenterView {
 
     private String customerCode;
 
-    private String externalCustomerCode;
-
     private String name;
 
     private CostCenterView parentCustomerCode;
@@ -30,7 +28,6 @@ public class CostCenterView {
     public static CostCenterView fromEntity(CostCenter costCenter) {
         CostCenterViewBuilder builder = CostCenterView.builder()
                 .customerCode(costCenter.getId() == null ? null : costCenter.getId().getCustomerCode())
-                .externalCustomerCode(costCenter.getExternalCustomerCode())
                 .name(costCenter.getName())
                 .active(costCenter.isActive());
         if (costCenter.getParent().isPresent()) {
@@ -42,7 +39,6 @@ public class CostCenterView {
     public static CostCenterView createFail(CostCenterUpdate costCenterUpdate, Problem error) {
         return CostCenterView.builder()
                 .customerCode(costCenterUpdate.getCustomerCode())
-                .externalCustomerCode(costCenterUpdate.getExternalCustomerCode())
                 .name(costCenterUpdate.getName())
                 .active(costCenterUpdate.isActive())
                 .error(error)

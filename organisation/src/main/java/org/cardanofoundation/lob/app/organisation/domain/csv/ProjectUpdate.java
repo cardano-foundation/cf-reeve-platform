@@ -13,7 +13,6 @@ public class ProjectUpdate {
 
     @CsvBindByName(column = "Customer code", required = true)
     private String customerCode;
-    private String externalCustomerCode;
     @CsvBindByName(column = "Name", required = true)
     private String name;
     @CsvBindByName(column = "Parent customer code")

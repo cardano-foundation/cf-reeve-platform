@@ -56,7 +56,6 @@ public class ProjectCodeService {
                 );
             }
         }
-        project.setExternalCustomerCode(Optional.ofNullable(projectUpdate.getExternalCustomerCode()).orElse(projectUpdate.getCustomerCode()));
         project.setName(projectUpdate.getName());
 
         // check if parent exists
@@ -84,7 +83,6 @@ public class ProjectCodeService {
         Optional<Project> projectFound = getProject(orgId, projectUpdate.getCustomerCode());
         if(projectFound.isPresent()) {
             Project projectEntityUpdated = projectFound.get();
-            projectEntityUpdated.setExternalCustomerCode(projectUpdate.getExternalCustomerCode());
             projectEntityUpdated.setName(projectUpdate.getName());
             // check if parent exists
             if (projectUpdate.getParentCustomerCode() != null) {

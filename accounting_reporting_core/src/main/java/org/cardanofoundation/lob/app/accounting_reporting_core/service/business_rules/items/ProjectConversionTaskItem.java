@@ -62,7 +62,6 @@ public class ProjectConversionTaskItem implements PipelineTaskItem {
 
             txItem.setProject(Optional.of(project.toBuilder()
                     .customerCode(projectMapping.getId().getCustomerCode())
-                    .externalCustomerCode(projectMapping.getExternalCustomerCode())
                     .name(projectMapping.getName())
                     .build()));
         }
