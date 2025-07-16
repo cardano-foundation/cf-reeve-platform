@@ -3,8 +3,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 
-import java.util.stream.Collectors;
-
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
