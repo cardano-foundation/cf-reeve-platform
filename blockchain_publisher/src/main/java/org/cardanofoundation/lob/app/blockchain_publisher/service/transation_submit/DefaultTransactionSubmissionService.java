@@ -91,7 +91,10 @@ public class DefaultTransactionSubmissionService implements TransactionSubmissio
 
             try {
                 Thread.sleep(5000);
-            } catch (InterruptedException e) {}
+            } catch (InterruptedException e) {
+                log.error("Thread interrupted while waiting for UTXO availability", e);
+                Thread.currentThread().interrupt(); // Restore interrupted status
+            }
         }
     }
 
