@@ -1,6 +1,11 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
 
 public class Constants {
+
+    private Constants() {
+        // Utility class, no instantiation
+    }
+
     public static final String ORGANISATION_WITH_ID_S_DOES_NOT_EXIST = "Organisation with ID %s does not exist.";
     public static final String ORGANISATION_NOT_FOUND = "ORGANISATION_NOT_FOUND";
     public static final String ORGANISATION_ID = "organisationId";
