@@ -99,7 +99,7 @@ class ReportControllerFullflowTest extends WebBaseIntegrationTest {
 
     @Test
     @Order(3)
-    @Disabled // Disabled because due to the report generation this must be adjusted
+    @Disabled("Disabled because due to the report generation this must be adjusted")
     void publishReport() {
         given()
                 .contentType("application/json")

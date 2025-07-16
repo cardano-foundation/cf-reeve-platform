@@ -137,7 +137,7 @@ class API1MetadataSerialiserTest {
         assertThat(result.get("data")).isInstanceOf(CBORMetadataList.class);
         CBORMetadataList txsList = (CBORMetadataList) result.get("data");
 
-        assertThat(txsList.size() == 1).isTrue();
+        assertThat(txsList.size()).isSameAs(1);
         MetadataMap txMap = (MetadataMap) txsList.getValueAt(0);
 
         assertThat(txMap.get("id")).isEqualTo(transaction.getId());
@@ -150,7 +150,7 @@ class API1MetadataSerialiserTest {
         assertThat(txMap.get("items")).isInstanceOf(CBORMetadataList.class);
         CBORMetadataList itemsList = (CBORMetadataList) txMap.get("items");
 
-        assertThat(itemsList.size() == 3).isTrue();
+        assertThat(itemsList.size()).isSameAs(3);
 
         for (int i = 0; i < itemsList.size(); i++) {
             MetadataMap itemMap = (MetadataMap) itemsList.getValueAt(i);
