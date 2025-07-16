@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 class ReportControllerTest extends WebBaseIntegrationTest {
 
     @BeforeEach
-    public void clearDatabase(@Autowired Flyway flyway){
+    void clearDatabase(@Autowired Flyway flyway){
         flyway.clean();
         flyway.migrate();
     }
@@ -104,7 +104,7 @@ class ReportControllerTest extends WebBaseIntegrationTest {
     }
 
     @Test
-    @Disabled
+    @Disabled("Disabled since the report generation requires a rewrite of these tests")
     void testReportCreateBalanceSheet() {
 
         given()
@@ -170,7 +170,7 @@ class ReportControllerTest extends WebBaseIntegrationTest {
     }
 
     @Test
-    @Disabled
+    @Disabled("Disabled since the report generation requires a rewrite of these tests")
     void testReportCreateBalanceSheetWrongData() {
 
         given()

@@ -94,7 +94,7 @@ public class ReportService {
         Either<Problem, Boolean> isReportReadyToPublish = canPublish(report);
         if (isReportReadyToPublish.isLeft()) {
             return Either.left(isReportReadyToPublish.getLeft());
-        } else if (!isReportReadyToPublish.get()) {
+        } else if (Boolean.FALSE.equals(isReportReadyToPublish.get())) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_READY_FOR_PUBLISHING)
                     .withDetail(Constants.REPORT_WITH_ID_S_IS_NOT_READY_FOR_PUBLISHING.formatted(reportId))
@@ -316,7 +316,7 @@ public class ReportService {
 
             return newReport();
         }, success -> {
-            if (success.getLedgerDispatchApproved()) {
+            if (Boolean.TRUE.equals(success.getLedgerDispatchApproved())) {
                 return newReport(success.getVer());
             }
             return success;
@@ -442,7 +442,7 @@ public class ReportService {
         if (existingReportM.isPresent()) {
             reportEntity = existingReportM.orElseThrow();
             // Prevent overwriting approved reports
-            if (reportEntity.getLedgerDispatchApproved()) {
+            if (Boolean.TRUE.equals(reportEntity.getLedgerDispatchApproved())) {
                 return Either.left(Problem.builder()
                         .withTitle(Constants.REPORT_ALREADY_APPROVED)
                         .withDetail(Constants.REPORT_WITH_ID_S_HAS_ALREADY_BEEN_APPROVED_FOR_LEDGER_DISPATCH.formatted(reportId))
@@ -849,12 +849,12 @@ public class ReportService {
         // check if object is null
         if (currentObject == null) {
             return BigDecimal.ZERO;
-        } else if (currentObject instanceof BigDecimal) {
-            return (BigDecimal) currentObject;
-        } else if (currentObject instanceof Number) {
-            return BigDecimal.valueOf(((Number) currentObject).doubleValue());
-        } else if (currentObject instanceof String) {
-            return new BigDecimal((String) currentObject);
+        } else if (currentObject instanceof BigDecimal bigDecimalObject) {
+            return bigDecimalObject;
+        } else if (currentObject instanceof Number numberObject) {
+            return BigDecimal.valueOf((numberObject).doubleValue());
+        } else if (currentObject instanceof String stringObject) {
+            return new BigDecimal(stringObject);
         } else {
             log.error("Field %s is not a number, returning 0".formatted(mappedTypeField.getName()));
             return BigDecimal.ZERO;

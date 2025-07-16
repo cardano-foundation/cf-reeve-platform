@@ -104,7 +104,7 @@ public class TransactionRepositoryGateway {
             return transactionRejectedResponse(transactionId);
         }
 
-        if (!tx.getTransactionApproved()) {
+        if (Boolean.FALSE.equals(tx.getTransactionApproved())) {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("TX_NOT_APPROVED")
                     .withDetail("Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId))
@@ -126,7 +126,7 @@ public class TransactionRepositoryGateway {
     public List<Either<IdentifiableProblem, TransactionEntity>> approveTransactions(TransactionsRequest transactionsRequest) {
         Set<TransactionsRequest.TransactionId> transactionIds = transactionsRequest.getTransactionIds();
 
-        ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
+        ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<>();
         Set<String> batchIds = new HashSet<>();
         for (TransactionsRequest.TransactionId transactionId : transactionIds) {
             try {
@@ -154,7 +154,7 @@ public class TransactionRepositoryGateway {
     public List<Either<IdentifiableProblem, TransactionEntity>> approveTransactionsDispatch(TransactionsRequest transactionsRequest) {
         Set<TransactionsRequest.TransactionId> transactionIds = transactionsRequest.getTransactionIds();
 
-        ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<Either<IdentifiableProblem, TransactionEntity>>();
+        ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<>();
 
         for (TransactionsRequest.TransactionId transactionId : transactionIds) {
             try {
@@ -181,7 +181,7 @@ public class TransactionRepositoryGateway {
     public List<Either<IdentifiableProblem, TransactionItemEntity>> rejectTransactionItems(TransactionEntity tx, Set<TxItemRejectionRequest> transactionItemsRejections) {
         log.info("Rejecting transaction items: {}", transactionItemsRejections);
 
-        ArrayList<Either<IdentifiableProblem, TransactionItemEntity>> transactionItemEntitiesE = new ArrayList<Either<IdentifiableProblem, TransactionItemEntity>>();
+        ArrayList<Either<IdentifiableProblem, TransactionItemEntity>> transactionItemEntitiesE = new ArrayList<>();
 
         for (TxItemRejectionRequest txItemRejection : transactionItemsRejections) {
             String txItemId = txItemRejection.getTxItemId();
@@ -195,7 +195,7 @@ public class TransactionRepositoryGateway {
             }
 
             TransactionItemEntity txItem = txItemM.orElseThrow();
-            if (tx.getLedgerDispatchApproved()) {
+            if (Boolean.TRUE.equals(tx.getLedgerDispatchApproved())) {
                 transactionItemEntitiesE.add(transactionItemCannotRejectAlreadyApprovedForDispatchResponse(tx.getId(), txItemId));
                 continue;
             }
