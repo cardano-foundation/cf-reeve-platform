@@ -253,6 +253,17 @@ subprojects {
                 name = "localM2"
                 url = uri("${System.getProperty("user.home")}/.m2/repository")
             }
+            maven {
+                name = "gitlab"
+                url = uri(System.getenv("MVN_PRIVATE_REGISTRY_URL") ?: "")
+                credentials(HttpHeaderCredentials::class) {
+                    name = "PRIVATE-TOKEN"
+                    value = System.getenv("MVN_PRIVATE_REGISTRY_TOKEN") ?: ""
+                }
+                authentication {
+                    val header by registering(HttpHeaderAuthentication::class)
+                }
+            }
         }
     }
 }
