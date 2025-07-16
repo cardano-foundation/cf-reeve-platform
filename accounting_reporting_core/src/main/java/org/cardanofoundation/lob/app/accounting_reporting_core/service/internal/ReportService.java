@@ -28,6 +28,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,12 +69,12 @@ import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 @Transactional(readOnly = true)
 public class ReportService {
 
+
     private final ReportRepository reportRepository;
     private final PublicReportRepository publicReportRepository;
     private final OrganisationPublicApi organisationPublicApi;
     private final Clock clock;
     private final AuthenticationUserService authenticationUserService;
-    private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final ReportTypeRepository reportTypeRepository;
     private final TransactionItemRepository transactionItemRepository;
@@ -84,10 +85,10 @@ public class ReportService {
 
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_NOT_FOUND")
-                    .withDetail("Report with ID %s does not exist.".formatted(reportId))
+                    .withTitle(Constants.REPORT_NOT_FOUND)
+                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(reportId))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("reportId", reportId)
+                    .with(Constants.REPORT_ID, reportId)
                     .build());
         }
         ReportEntity report = reportM.orElseThrow();
@@ -96,10 +97,10 @@ public class ReportService {
             return Either.left(isReportReadyToPublish.getLeft());
         } else if (!isReportReadyToPublish.get()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_NOT_READY_FOR_PUBLISHING")
-                    .withDetail("Report with ID %s is not ready for publishing.".formatted(reportId))
+                    .withTitle(Constants.REPORT_NOT_READY_FOR_PUBLISHING)
+                    .withDetail(Constants.REPORT_WITH_ID_S_IS_NOT_READY_FOR_PUBLISHING.formatted(reportId))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("reportId", reportId)
+                    .with(Constants.REPORT_ID, reportId)
                     .build());
         }
         report.setLedgerDispatchApproved(true);
@@ -127,10 +128,10 @@ public class ReportService {
         Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.ORGANISATION_WITH_ID_S_DOES_NOT_EXIST.formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("organisationId", organisationId)
+                    .with(Constants.ORGANISATION_ID, organisationId)
                     .build());
         }
         org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
@@ -202,10 +203,10 @@ public class ReportService {
         Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.ORGANISATION_WITH_ID_S_DOES_NOT_EXIST.formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("organisationId", organisationId)
+                    .with(Constants.ORGANISATION_ID, organisationId)
                     .build());
         }
         org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
@@ -267,11 +268,11 @@ public class ReportService {
 
         if (!reportExample.isValid()) {
             return Either.left(Problem.builder()
-                    .withTitle("INVALID_REPORT")
-                    .withDetail("Report is not valid since it didn't pass through business checks.")
+                    .withTitle(Constants.INVALID_REPORT)
+                    .withDetail(Constants.REPORT_IS_NOT_VALID_SINCE_IT_DIDN_T_PASS_THROUGH_BUSINESS_CHECKS)
                     .withStatus(Status.BAD_REQUEST)
-                    .with("reportId", reportExample.getReportId())
-                    .with("reportType", reportExample.getType())
+                    .with(Constants.REPORT_ID, reportExample.getReportId())
+                    .with(Constants.REPORT_TYPE, reportExample.getType())
                     .build());
         }
 
@@ -292,20 +293,20 @@ public class ReportService {
         if (reportType == BALANCE_SHEET && createReportView.getBalanceSheetData().isEmpty() ||
                 reportType == INCOME_STATEMENT && createReportView.getIncomeStatementData().isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("INVALID_REPORT_TYPE")
-                    .withDetail("Report type is not valid. Expected BALANCE_SHEET but got %s.".formatted(reportType))
+                    .withTitle(Constants.INVALID_REPORT_TYPE)
+                    .withDetail(Constants.REPORT_TYPE_IS_NOT_VALID_EXPECTED_BALANCE_SHEET_BUT_GOT_S.formatted(reportType))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("reportType", reportType)
+                    .with(Constants.REPORT_TYPE, reportType)
                     .build());
         }
         String organisationId = createReportView.getOrganisationId();
         Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.ORGANISATION_WITH_ID_S_DOES_NOT_EXIST.formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("organisationId", organisationId)
+                    .with(Constants.ORGANISATION_ID, organisationId)
                     .build());
         }
         org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
@@ -387,10 +388,10 @@ public class ReportService {
 
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_NOT_FOUND")
-                    .withDetail("Report with ID %s does not exist.".formatted(reportId))
+                    .withTitle(Constants.REPORT_NOT_FOUND)
+                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(reportId))
                     .withStatus(Status.NOT_FOUND)
-                    .with("reportId", reportId)
+                    .with(Constants.REPORT_ID, reportId)
                     .build());
         }
 
@@ -404,10 +405,10 @@ public class ReportService {
 
         if (reportM.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_NOT_FOUND")
-                    .withDetail("Report with ID %s does not exist.".formatted(reportId))
+                    .withTitle(Constants.REPORT_NOT_FOUND)
+                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(reportId))
                     .withStatus(Status.NOT_FOUND)
-                    .with("reportId", reportId)
+                    .with(Constants.REPORT_ID, reportId)
                     .build());
         }
 
@@ -425,10 +426,10 @@ public class ReportService {
         Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
         if (orgM.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Organisation with ID %s does not exist.".formatted(organisationId))
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.ORGANISATION_WITH_ID_S_DOES_NOT_EXIST.formatted(organisationId))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("organisationId", organisationId)
+                    .with(Constants.ORGANISATION_ID, organisationId)
                     .build());
         }
         org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = orgM.orElseThrow();
@@ -444,10 +445,10 @@ public class ReportService {
             // Prevent overwriting approved reports
             if (reportEntity.getLedgerDispatchApproved()) {
                 return Either.left(Problem.builder()
-                        .withTitle("REPORT_ALREADY_APPROVED")
-                        .withDetail("Report with ID %s has already been approved for ledger dispatch.".formatted(reportId))
+                        .withTitle(Constants.REPORT_ALREADY_APPROVED)
+                        .withDetail(Constants.REPORT_WITH_ID_S_HAS_ALREADY_BEEN_APPROVED_FOR_LEDGER_DISPATCH.formatted(reportId))
                         .withStatus(Status.BAD_REQUEST)
-                        .with("reportId", reportId)
+                        .with(Constants.REPORT_ID, reportId)
                         .build());
             }
         } else {
@@ -487,10 +488,10 @@ public class ReportService {
 
                 if (!newProfit.equals(relatedProfit.get().orElse(BigDecimal.ZERO))) {
                     return Either.left(Problem.builder()
-                            .withTitle("PROFIT_FOR_THE_YEAR_MISMATCH")
-                            .withDetail("Profit for the year does not match the related report.")
+                            .withTitle(Constants.PROFIT_FOR_THE_YEAR_MISMATCH)
+                            .withDetail(Constants.PROFIT_FOR_THE_YEAR_DOES_NOT_MATCH_THE_RELATED_REPORT)
                             .withStatus(Status.BAD_REQUEST)
-                            .with("reportId", reportId)
+                            .with(Constants.REPORT_ID, reportId)
                             .build());
                 }
             }
@@ -506,10 +507,10 @@ public class ReportService {
 
             if (!reportDataLeft.isValid()) {
                 return Either.left(Problem.builder()
-                        .withTitle("INVALID_REPORT_DATA")
-                        .withDetail("Income Statement report data is not valid. Business Checks failed.")
+                        .withTitle(Constants.INVALID_REPORT_DATA)
+                        .withDetail(Constants.INCOME_STATEMENT_REPORT_DATA_IS_NOT_VALID_BUSINESS_CHECKS_FAILED)
                         .withStatus(Status.BAD_REQUEST)
-                        .with("reportId", reportId)
+                        .with(Constants.REPORT_ID, reportId)
                         .build());
             }
 
@@ -517,10 +518,10 @@ public class ReportService {
         } else {
             if (!reportData.get().isValid()) {
                 return Either.left(Problem.builder()
-                        .withTitle("INVALID_REPORT_DATA")
-                        .withDetail("Balance Sheet report data is not valid. Business Checks failed.")
+                        .withTitle(Constants.INVALID_REPORT_DATA)
+                        .withDetail(Constants.BALANCE_SHEET_REPORT_DATA_IS_NOT_VALID_BUSINESS_CHECKS_FAILED)
                         .withStatus(Status.BAD_REQUEST)
-                        .with("reportId", reportId)
+                        .with(Constants.REPORT_ID, reportId)
                         .build());
             }
 
@@ -550,10 +551,10 @@ public class ReportService {
 
     private static Either<Problem, Void> emptyReportData(String reportId) {
         return Either.left(Problem.builder()
-                .withTitle("EMPTY_REPORT_DATA")
-                .withDetail("Report is empty.")
+                .withTitle(Constants.EMPTY_REPORT_DATA)
+                .withDetail(Constants.REPORT_IS_EMPTY)
                 .withStatus(Status.BAD_REQUEST)
-                .with("reportId", reportId)
+                .with(Constants.REPORT_ID, reportId)
                 .build());
     }
 
@@ -565,10 +566,10 @@ public class ReportService {
 
         if (!reportEntity.isValid()) {
             return Either.left(Problem.builder()
-                    .withTitle("INVALID_REPORT_DATA")
-                    .withDetail("Report data is not valid. Business Checks failed.")
+                    .withTitle(Constants.INVALID_REPORT_DATA)
+                    .withDetail(Constants.REPORT_DATA_IS_NOT_VALID_BUSINESS_CHECKS_FAILED)
                     .withStatus(Status.BAD_REQUEST)
-                    .with("reportId", reportEntity.getReportId())
+                    .with(Constants.REPORT_ID, reportEntity.getReportId())
                     .build());
         }
 
@@ -576,10 +577,10 @@ public class ReportService {
             ReportEntity relatedReport = relatedReportM.orElseThrow();
             if (!relatedReport.isValid()) {
                 return Either.left(Problem.builder()
-                        .withTitle("INVALID_REPORT_DATA")
-                        .withDetail("Report data is not valid. Business Checks failed.")
+                        .withTitle(Constants.INVALID_REPORT_DATA)
+                        .withDetail(Constants.REPORT_DATA_IS_NOT_VALID_BUSINESS_CHECKS_FAILED)
                         .withStatus(Status.BAD_REQUEST)
-                        .with("reportId", reportEntity.getReportId())
+                        .with(Constants.REPORT_ID, reportEntity.getReportId())
                         .build());
             }
 
@@ -593,10 +594,10 @@ public class ReportService {
 
             if (0 != newProfit.compareTo(relatedProfit)) {
                 return Either.left(Problem.builder()
-                        .withTitle("PROFIT_FOR_THE_YEAR_MISMATCH")
-                        .withDetail("Profit for the year does not match the related report. %s != %s".formatted(newProfit, relatedProfit))
+                        .withTitle(Constants.PROFIT_FOR_THE_YEAR_MISMATCH)
+                        .withDetail(Constants.PROFIT_FOR_THE_YEAR_DOES_NOT_MATCH_THE_RELATED_REPORT_S_S.formatted(newProfit, relatedProfit))
                         .withStatus(Status.BAD_REQUEST)
-                        .with("reportId", reportEntity.getReportId())
+                        .with(Constants.REPORT_ID, reportEntity.getReportId())
                         .build());
             }
         }
@@ -710,10 +711,10 @@ public class ReportService {
 
         if (optionalReportSetupEntity.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_SETUP_NOT_FOUND")
-                    .withDetail(String.format("Report setup for %s not found.", reportGenerateRequest.getReportType().name()))
+                    .withTitle(Constants.REPORT_SETUP_NOT_FOUND)
+                    .withDetail(String.format(Constants.REPORT_SETUP_FOR_S_NOT_FOUND, reportGenerateRequest.getReportType().name()))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("reportType", reportGenerateRequest.getReportType().name())
+                    .with(Constants.REPORT_TYPE, reportGenerateRequest.getReportType().name())
                     .build());
         }
         ReportTypeEntity reportTypeEntity = optionalReportSetupEntity.get();
@@ -730,10 +731,10 @@ public class ReportService {
             }
             default -> {
                 return Either.left(Problem.builder()
-                        .withTitle("INVALID_REPORT_TYPE")
-                        .withDetail(String.format("Report type is not valid. Expected BALANCE_SHEET or INCOME_STATEMENT but got %s.", reportGenerateRequest.getReportType()))
+                        .withTitle(Constants.INVALID_REPORT_TYPE)
+                        .withDetail(String.format(Constants.REPORT_TYPE_IS_NOT_VALID_EXPECTED_BALANCE_SHEET_OR_INCOME_STATEMENT_BUT_GOT_S, reportGenerateRequest.getReportType()))
                         .withStatus(Status.BAD_REQUEST)
-                        .with("reportType", reportGenerateRequest.getReportType())
+                        .with(Constants.REPORT_TYPE, reportGenerateRequest.getReportType())
                         .build());
             }
         }
@@ -1039,19 +1040,19 @@ public class ReportService {
         Optional<ReportEntity> firstByOrganisationIdAndReportId = reportRepository.findFirstByOrganisationIdAndReportId(reportReprocessRequest.getOrganisationId(), reportReprocessRequest.getReportId());
         if (firstByOrganisationIdAndReportId.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_NOT_FOUND")
-                    .withDetail("Report with ID %s does not exist.".formatted(reportReprocessRequest.getReportId()))
+                    .withTitle(Constants.REPORT_NOT_FOUND)
+                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(reportReprocessRequest.getReportId()))
                     .withStatus(Status.NOT_FOUND)
-                    .with("reportId", reportReprocessRequest.getReportId())
+                    .with(Constants.REPORT_ID, reportReprocessRequest.getReportId())
                     .build());
         }
         ReportEntity reportEntity = firstByOrganisationIdAndReportId.get();
         if (reportEntity.getLedgerDispatchStatus() != LedgerDispatchStatus.NOT_DISPATCHED) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_ALREADY_DISPATCHED")
-                    .withDetail("Report with ID %s has already been dispatched.".formatted(reportReprocessRequest.getReportId()))
+                    .withTitle(Constants.REPORT_ALREADY_DISPATCHED)
+                    .withDetail(Constants.REPORT_WITH_ID_S_HAS_ALREADY_BEEN_DISPATCHED.formatted(reportReprocessRequest.getReportId()))
                     .withStatus(Status.BAD_REQUEST)
-                    .with("reportId", reportReprocessRequest.getReportId())
+                    .with(Constants.REPORT_ID, reportReprocessRequest.getReportId())
                     .build());
         }
         Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);

@@ -104,6 +104,7 @@ class AccountingCoreServiceTest {
         when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
         when(file.getBytes()).thenThrow(new IOException());
+        when(file.isEmpty()).thenReturn(false);
 
         UserExtractionParameters userParams = UserExtractionParameters.builder()
                 .organisationId("org-123")
@@ -111,7 +112,7 @@ class AccountingCoreServiceTest {
                 .to(LocalDate.of(2023, 12, 31))
                 .transactionNumbers(mockList)
                 .build();
-        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, file, null);
+        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, Optional.of(file), null);
         assertThat(voids.isLeft()).isTrue();
         assertThat(voids.getLeft().getTitle()).isEqualTo("FILE_READ_ERROR");
     }
@@ -125,8 +126,9 @@ class AccountingCoreServiceTest {
         when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
         when(file.getBytes()).thenThrow(new IOException());
+        when(file.isEmpty()).thenReturn(false);
 
-        Either<Problem, Void> voids = accountingCoreService.scheduleReconcilation("org-123", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31), ExtractorType.NETSUITE, file, null);
+        Either<Problem, Void> voids = accountingCoreService.scheduleReconcilation("org-123", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31), ExtractorType.NETSUITE, Optional.of(file), null);
         assertThat(voids.isLeft()).isTrue();
         assertThat(voids.getLeft().getTitle()).isEqualTo("FILE_READ_ERROR");
     }
@@ -138,7 +140,7 @@ class AccountingCoreServiceTest {
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, null, null);
+        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, Optional.empty(), null);
 
         // Then
         assertThat(result.isRight()).isTrue();
@@ -203,7 +205,7 @@ class AccountingCoreServiceTest {
                 .build();
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
+        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, Optional.empty(), null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
@@ -221,7 +223,7 @@ class AccountingCoreServiceTest {
         given(organisationPublicApi.findByOrganisationId(eq(organisationId))).willReturn(Optional.of(mock(Organisation.class)));
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, null, null);
+        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, Optional.empty(), null);
 
         // Then
         assertThat(result.isRight()).isTrue();

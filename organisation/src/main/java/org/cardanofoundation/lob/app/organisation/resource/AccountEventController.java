@@ -66,6 +66,7 @@ public class AccountEventController {
         if (eventCode.getError().isPresent()) {
             return ResponseEntity.status(eventCode.getError().get().getStatus().getStatusCode()).body(eventCode);
         }
+
         return ResponseEntity.ok(eventCode);
     }
 

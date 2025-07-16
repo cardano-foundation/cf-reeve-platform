@@ -85,7 +85,7 @@ public class TransactionRepositoryGateway {
 
     @Transactional
     // TODO optimise performance because we have to load transaction from db each time and we don't save it in bulk
-    private Either<IdentifiableProblem, TransactionEntity> approveTransactionsDispatch(String transactionId) {
+    protected Either<IdentifiableProblem, TransactionEntity> approveTransactionsDispatch(String transactionId) {
         log.info("Approving transaction to dispatch: {}", transactionId);
 
         Optional<TransactionEntity> txM = accountingCoreTransactionRepository.findById(transactionId);
