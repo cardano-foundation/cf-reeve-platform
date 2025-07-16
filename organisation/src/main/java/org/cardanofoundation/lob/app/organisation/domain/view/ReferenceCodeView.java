@@ -19,8 +19,7 @@ public class ReferenceCodeView {
 
     String referenceCode;
     String description;
-    ReferenceCodeView parent;
-    String parentReferenceCode;
+    ReferenceCodeView parentReferenceCode;
     boolean isActive;
 
     private Optional<Problem> error;
@@ -32,7 +31,7 @@ public class ReferenceCodeView {
                 .isActive(referenceCode.isActive())
                 .error(Optional.empty());
         if(referenceCode.getParent().isPresent()) {
-            builder.parent(ReferenceCodeView.fromEntity(referenceCode.getParent().get()));
+            builder.parentReferenceCode(ReferenceCodeView.fromEntity(referenceCode.getParent().get()));
         }
         return builder.build();
     }
@@ -41,7 +40,7 @@ public class ReferenceCodeView {
         return ReferenceCodeView.builder()
                 .referenceCode(referenceCodeUpdate.getReferenceCode())
                 .description(referenceCodeUpdate.getName())
-                .parentReferenceCode(referenceCodeUpdate.getParentReferenceCode())
+                //.parentReferenceCode(referenceCodeUpdate.getParentReferenceCode())
                 .isActive(referenceCodeUpdate.isActive())
                 .error(Optional.of(error))
                 .build();
