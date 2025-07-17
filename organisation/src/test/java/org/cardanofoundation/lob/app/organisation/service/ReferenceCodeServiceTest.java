@@ -38,6 +38,9 @@ class ReferenceCodeServiceTest {
     @Mock
     private CsvParser<ReferenceCodeUpdate> csvParser;
 
+    @Mock
+    private AccountEventService accountEventService;
+
     @InjectMocks
     private ReferenceCodeService referenceCodeService;
 
