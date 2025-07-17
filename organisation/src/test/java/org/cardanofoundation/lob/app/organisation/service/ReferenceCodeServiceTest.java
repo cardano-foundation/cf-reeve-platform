@@ -170,7 +170,7 @@ class ReferenceCodeServiceTest {
 
         assertTrue(result.getError().isEmpty());
         assertEquals("Updated Reference", result.getDescription());
-        assertEquals("0102", result.getParentReferenceCode().getReferenceCode());
+        assertEquals("0102", result.getParent().getReferenceCode());
         verify(referenceCodeRepository).save(referenceCode);
     }
 

@@ -19,7 +19,8 @@ public class ReferenceCodeView {
 
     String referenceCode;
     String description;
-    ReferenceCodeView parentReferenceCode;
+    ReferenceCodeView parent;
+    String parentReferenceCode;
     boolean isActive;
 
     private Optional<Problem> error;
@@ -31,18 +32,18 @@ public class ReferenceCodeView {
                 .isActive(referenceCode.isActive())
                 .error(Optional.empty());
         if(referenceCode.getParent().isPresent()) {
-            builder.parentReferenceCode(ReferenceCodeView.fromEntity(referenceCode.getParent().get()));
+            builder.parent(ReferenceCodeView.fromEntity(referenceCode.getParent().get()));
         }
         return builder.build();
     }
 
-    public static ReferenceCodeView createFail(Problem error, ReferenceCodeUpdate referenceCodeUpdate, Optional<ReferenceCodeView> parentReferenceCode) {
-        ReferenceCodeViewBuilder builder = ReferenceCodeView.builder()
+    public static ReferenceCodeView createFail(Problem error, ReferenceCodeUpdate referenceCodeUpdate) {
+        return ReferenceCodeView.builder()
                 .referenceCode(referenceCodeUpdate.getReferenceCode())
                 .description(referenceCodeUpdate.getName())
+                .parentReferenceCode(referenceCodeUpdate.getParentReferenceCode())
                 .isActive(referenceCodeUpdate.isActive())
-                .error(Optional.of(error));
-        parentReferenceCode.ifPresent(builder::parentReferenceCode);
-        return builder.build();
+                .error(Optional.of(error))
+                .build();
     }
 }

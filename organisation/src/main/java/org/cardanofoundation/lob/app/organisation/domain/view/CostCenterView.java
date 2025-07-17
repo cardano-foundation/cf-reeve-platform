@@ -22,6 +22,7 @@ public class CostCenterView {
     private String name;
 
     private CostCenterView parent;
+
     private String parentCustomerCode;
 
     private boolean active;
