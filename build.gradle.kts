@@ -255,10 +255,10 @@ subprojects {
             }
             maven {
                 name = "gitlabPrivate"
-                url = uri(System.getenv("MVN_GITLAB_PRIVATE_REGISTRY_URL") ?: "")
+                url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
                 credentials(HttpHeaderCredentials::class) {
                     name = "PRIVATE-TOKEN"
-                    value = System.getenv("MVN_GITLAB_PRIVATE_REGISTRY_TOKEN") ?: ""
+                    value = System.getenv("PRIVATE_DOCKER_REGISTRY_PASS") ?: ""
                 }
                 authentication {
                     val header by registering(HttpHeaderAuthentication::class)
