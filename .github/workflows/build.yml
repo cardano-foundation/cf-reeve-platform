@@ -16,6 +16,8 @@ env:
   PRIVATE_DOCKER_REGISTRY_URL: ${{ secrets.GITLAB_DOCKER_REGISTRY_URL }}
   PRIVATE_DOCKER_REGISTRY_USER: Deploy-Token
   PRIVATE_DOCKER_REGISTRY_PASS: ${{ secrets.GITLAB_PKG_REGISTRY_TOKEN }}
+  MVN_GITLAB_PRIVATE_REGISTRY_URL: ${{ secrets.MVN_GITLAB_PRIVATE_REGISTRY_URL }}
+  MVN_GITLAB_PRIVATE_REGISTRY_TOKEN: ${{ secrets.MVN_GITLAB_PRIVATE_REGISTRY_TOKEN }}
   DOCKER_PUSH: true
 
 jobs:
@@ -39,14 +41,27 @@ jobs:
           HUB_DOCKER_COM_PASS: ${{ secrets.HUB_DOCKER_COM_PASS }}
           DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES }}"
 
+      - name: Gradle build
+        run: |
+          case "${TRIGGERIN_REF}" in 
+            pr|branch)
+              VERSION_PUBLISH=${DOCKER_VERSIONED_COMMIT_GHRUNID_TAG}
+              ;;
+            tag)
+              VERSION_PUBLISH=${TAG_NAME}
+              ;;
+          ./gradlew clean build -Pversion=${VERSION_PUBLISH} publishMavenJavaPublicationToGitlabPrivateRepository -x test
+
       - name:  🌍 earthly (docker build and push)
         run: |
           earthly +docker-publish \
             --PUSH=${DOCKER_PUSH} \
             --DOCKER_REGISTRIES="${{ env.DOCKER_REGISTRIES_FILTERED }}" \
             --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}"
+
       - name: Generate SBOM
         run: ./gradlew cyclonedxBom
+
       - name: Upload SBOM to GitHub
         uses: actions/upload-artifact@v4
         with:
