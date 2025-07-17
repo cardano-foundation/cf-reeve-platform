@@ -56,7 +56,7 @@ public class ReferenceCodeService {
                     .build(),
                     referenceCodeUpdate);
         }
-        Optional<ReferenceCode> parentReferenceCode = Optional.empty();
+        Optional<ReferenceCode> parentReferenceCode;
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
             parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
@@ -107,7 +107,7 @@ public class ReferenceCodeService {
                     .build(),
                     referenceCodeUpdate);
         }
-        Optional<ReferenceCode> parentReferenceCode = Optional.empty();
+        Optional<ReferenceCode> parentReferenceCode;
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
             parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {

@@ -23,12 +23,12 @@ class API1MetadataSerialiserTest {
 
     private Clock fixedClock;
 
-    private API1MetadataSerialiser API1MetadataSerialiser;
+    private API1MetadataSerialiser api1MetadataSerialiser;
 
     @BeforeEach
     void setUp() {
         fixedClock = Clock.fixed(Instant.parse("2023-06-01T10:15:30.00Z"), ZoneId.of("UTC"));
-        API1MetadataSerialiser = new API1MetadataSerialiser(fixedClock);
+        api1MetadataSerialiser = new API1MetadataSerialiser(fixedClock);
     }
 
     @Test
@@ -114,7 +114,7 @@ class API1MetadataSerialiserTest {
         long creationSlot = 12345;
 
         // When
-        MetadataMap result = API1MetadataSerialiser.serialiseToMetadataMap(organisationId, transactions, creationSlot);
+        MetadataMap result = api1MetadataSerialiser.serialiseToMetadataMap(organisationId, transactions, creationSlot);
 
         // Then
         assertThat(result).isNotNull();
@@ -137,7 +137,7 @@ class API1MetadataSerialiserTest {
         assertThat(result.get("data")).isInstanceOf(CBORMetadataList.class);
         CBORMetadataList txsList = (CBORMetadataList) result.get("data");
 
-        assertThat(txsList.size() == 1).isEqualTo(true);
+        assertThat(txsList.size()).isSameAs(1);
         MetadataMap txMap = (MetadataMap) txsList.getValueAt(0);
 
         assertThat(txMap.get("id")).isEqualTo(transaction.getId());
@@ -150,7 +150,7 @@ class API1MetadataSerialiserTest {
         assertThat(txMap.get("items")).isInstanceOf(CBORMetadataList.class);
         CBORMetadataList itemsList = (CBORMetadataList) txMap.get("items");
 
-        assertThat(itemsList.size() == 3).isEqualTo(true);
+        assertThat(itemsList.size()).isSameAs(3);
 
         for (int i = 0; i < itemsList.size(); i++) {
             MetadataMap itemMap = (MetadataMap) itemsList.getValueAt(i);

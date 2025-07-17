@@ -85,10 +85,10 @@ class ProjectCodeServiceTest {
     @Test
     void insertProject_AlreadyExists() {
         ProjectUpdate update = mock(ProjectUpdate.class);
-        Project project = mock(Project.class);
+        Project projectMock = mock(Project.class);
 
         when(update.getCustomerCode()).thenReturn(customerCode);
-        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(projectMock));
 
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 

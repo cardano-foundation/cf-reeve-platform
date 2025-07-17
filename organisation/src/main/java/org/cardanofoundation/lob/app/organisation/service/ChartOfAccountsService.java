@@ -231,8 +231,6 @@ public class ChartOfAccountsService {
                                             .name(chartOfAccountUpdateCsv.getSubType())
                                             .organisationId(orgId)
                                             .build();
-                                    // currently needed, since we are
-//                                    resetOrganisationChartOfAccountSubTypeSequence();
                                     ChartOfAccountSubType save = chartOfAccountSubTypeRepository.save(subType);
                                     chartOfAccountUpdateCsv.setSubType(String.valueOf(save.getId()));
                                 }

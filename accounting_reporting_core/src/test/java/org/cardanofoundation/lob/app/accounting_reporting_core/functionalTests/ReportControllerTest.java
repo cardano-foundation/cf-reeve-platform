@@ -5,8 +5,6 @@ import static org.hamcrest.core.IsEqual.equalTo;
 
 import java.util.ArrayList;
 
-import lombok.val;
-
 import org.springframework.beans.factory.annotation.Autowired;
 
 import io.restassured.http.Header;
@@ -22,7 +20,7 @@ import org.junit.jupiter.api.Test;
 class ReportControllerTest extends WebBaseIntegrationTest {
 
     @BeforeEach
-    public void clearDatabase(@Autowired Flyway flyway){
+    void clearDatabase(@Autowired Flyway flyway){
         flyway.clean();
         flyway.migrate();
     }
@@ -56,7 +54,7 @@ class ReportControllerTest extends WebBaseIntegrationTest {
                 .body("report", equalTo(new ArrayList<>()));
 
 
-        val inputRequestJson = """
+        String inputRequestJson = """
                 {
                    "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                    "reportType": "INCOME_STATEMENT",
@@ -104,7 +102,7 @@ class ReportControllerTest extends WebBaseIntegrationTest {
     }
 
     @Test
-    @Disabled
+    @Disabled("Disabled since the report generation requires a rewrite of these tests")
     void testReportCreateBalanceSheet() {
 
         given()
@@ -119,7 +117,7 @@ class ReportControllerTest extends WebBaseIntegrationTest {
                 .body("report", equalTo(new ArrayList<>()));
 
 
-        val inputRequestJson = """
+        String inputRequestJson = """
                 {
                 "organisationID": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                 "reportType": "BALANCE_SHEET",
@@ -170,7 +168,7 @@ class ReportControllerTest extends WebBaseIntegrationTest {
     }
 
     @Test
-    @Disabled
+    @Disabled("Disabled since the report generation requires a rewrite of these tests")
     void testReportCreateBalanceSheetWrongData() {
 
         given()
@@ -185,7 +183,7 @@ class ReportControllerTest extends WebBaseIntegrationTest {
                 .body("report", equalTo(new ArrayList<>()));
 
 
-        val inputRequestJson = """
+        String inputRequestJson = """
                 {
                 "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                 "reportType": "BALANCE_SHEET",
