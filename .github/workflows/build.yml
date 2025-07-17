@@ -50,7 +50,7 @@ jobs:
             tag)
               VERSION_PUBLISH=${TAG_NAME}
               ;;
-          ./gradlew clean build -Pversion=${VERSION_PUBLISH} publishMavenJavaPublicationToGitlabPrivateRepository -x test
+          ./gradlew clean build -Pversion=${VERSION_PUBLISH} publishMavenJavaPublicationToGitlabPrivateRepository 
 
       - name:  🌍 earthly (docker build and push)
         run: |
