@@ -36,13 +36,13 @@ public class ReferenceCodeView {
         return builder.build();
     }
 
-    public static ReferenceCodeView createFail(Problem error, ReferenceCodeUpdate referenceCodeUpdate) {
-        return ReferenceCodeView.builder()
+    public static ReferenceCodeView createFail(Problem error, ReferenceCodeUpdate referenceCodeUpdate, Optional<ReferenceCodeView> parentReferenceCode) {
+        ReferenceCodeViewBuilder builder = ReferenceCodeView.builder()
                 .referenceCode(referenceCodeUpdate.getReferenceCode())
                 .description(referenceCodeUpdate.getName())
-                //.parentReferenceCode(referenceCodeUpdate.getParentReferenceCode())
                 .isActive(referenceCodeUpdate.isActive())
-                .error(Optional.of(error))
-                .build();
+                .error(Optional.of(error));
+        parentReferenceCode.ifPresent(builder::parentReferenceCode);
+        return builder.build();
     }
 }

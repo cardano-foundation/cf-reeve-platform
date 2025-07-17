@@ -26,13 +26,13 @@ public class ProjectView {
 
     private Problem error;
 
-    public static ProjectView fromEntity(Project costCenter) {
+    public static ProjectView fromEntity(Project project) {
         ProjectView.ProjectViewBuilder builder = ProjectView.builder()
-                .customerCode(costCenter.getId() == null ? null : costCenter.getId().getCustomerCode())
-                .externalCustomerCode(costCenter.getExternalCustomerCode())
-                .name(costCenter.getName());
-        if (costCenter.getParent().isPresent()) {
-            builder.parent(ProjectView.fromEntity(costCenter.getParent().get()));
+                .customerCode(project.getId() == null ? null : project.getId().getCustomerCode())
+                .externalCustomerCode(project.getExternalCustomerCode())
+                .name(project.getName());
+        if (project.getParent().isPresent()) {
+            builder.parent(ProjectView.fromEntity(project.getParent().get()));
         }
         return builder.build();
     }
