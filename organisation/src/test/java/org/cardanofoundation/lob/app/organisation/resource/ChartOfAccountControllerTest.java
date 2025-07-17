@@ -80,7 +80,7 @@ class ChartOfAccountControllerTest {
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
         ChartOfAccountView view = mock(ChartOfAccountView.class);
         when(view.getError()).thenReturn(Optional.empty());
-        when(chartOfAccountsService.insertChartOfAccount(orgId, update)).thenReturn(view);
+        when(chartOfAccountsService.insertChartOfAccount(orgId, update, false)).thenReturn(view);
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 
@@ -99,7 +99,7 @@ class ChartOfAccountControllerTest {
                 .withDetail("Invalid")
                 .withStatus(Status.BAD_REQUEST)
                 .build()));
-        when(chartOfAccountsService.insertChartOfAccount(orgId, update)).thenReturn(view);
+        when(chartOfAccountsService.insertChartOfAccount(orgId, update, false)).thenReturn(view);
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 

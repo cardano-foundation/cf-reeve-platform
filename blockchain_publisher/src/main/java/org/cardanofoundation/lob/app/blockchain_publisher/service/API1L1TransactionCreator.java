@@ -51,6 +51,7 @@ import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApi
 public class API1L1TransactionCreator {
 
     private static final int CARDANO_MAX_TRANSACTION_SIZE_BYTES = 16000;
+    public static final String ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE = "Error serialising transaction, abort processing, issue: {}";
 
     private final BackendService backendService;
     private final API1MetadataSerialiser api1MetadataSerialiser;
@@ -111,7 +112,7 @@ public class API1L1TransactionCreator {
 
             Either<Problem, SerializedCardanoL1Transaction> serializedTransactionsE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
             if (serializedTransactionsE.isLeft()) {
-                log.error("Error serialising transaction, abort processing, issue: {}", serializedTransactionsE.getLeft().getDetail());
+                log.error(ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE, serializedTransactionsE.getLeft().getDetail());
 
                 return Either.left(serializedTransactionsE.getLeft());
             }
@@ -127,7 +128,7 @@ public class API1L1TransactionCreator {
                     .collect(Collectors.toSet()), creationSlot);
 
             if (newChunkTxBytesE.isLeft()) {
-                log.error("Error serialising transaction, abort processing, issue: {}", newChunkTxBytesE.getLeft().getDetail());
+                log.error(ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE, newChunkTxBytesE.getLeft().getDetail());
 
                 return Either.left(newChunkTxBytesE.getLeft());
             }
@@ -153,7 +154,7 @@ public class API1L1TransactionCreator {
             Either<Problem, SerializedCardanoL1Transaction> serializedTxE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
 
             if (serializedTxE.isEmpty()) {
-                log.error("Error serialising transaction, abort processing, issue: {}", serializedTxE.getLeft().getDetail());
+                log.error(ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE, serializedTxE.getLeft().getDetail());
 
                 return Either.left(serializedTxE.getLeft());
             }

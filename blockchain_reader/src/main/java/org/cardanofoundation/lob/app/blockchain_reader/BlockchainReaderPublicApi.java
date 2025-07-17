@@ -4,6 +4,7 @@ import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -31,6 +32,10 @@ import org.cardanofoundation.lob.app.blockchain_reader.domain.LOBOnChainTxStatus
 @Slf4j
 public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
 
+    public static final String NETWORK_MISMATCH_S_S = "Network mismatch: %s != %s";
+    public static final String NETWORK_MISMATCH = "NETWORK_MISMATCH";
+    public static final String ERROR_FROM_THE_CLIENT_S = "Error from the client: %s";
+    public static final String INTERNAL_SERVER_ERROR_REASON_S = "Internal server error, reason: %s";
     private final RestClient restClient;
     private final CardanoNetwork network;
 
@@ -52,9 +57,9 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
 
             if (chainTip.getNetwork() != network) {
                 ThrowableProblem problem = Problem.builder()
-                        .withTitle("NETWORK_MISMATCH")
+                        .withTitle(NETWORK_MISMATCH)
                         .withStatus(BAD_REQUEST)
-                        .withDetail("Network mismatch: %s != %s".formatted(chainTip.getNetwork(), network))
+                        .withDetail(NETWORK_MISMATCH_S_S.formatted(chainTip.getNetwork(), network))
                         .build();
 
                 return Either.left(problem);
@@ -65,7 +70,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("CHAIN_TIP_ERROR")
                     .withStatus(BAD_REQUEST)
-                    .withDetail("Error from the client: %s".formatted(ex.getResponseBodyAsString()))
+                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
                     .build();
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
@@ -73,7 +78,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("CHAIN_TIP_ERROR")
                     .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail("Internal server error, reason: %s".formatted(ex.getMessage()))
+                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
                     .build();
 
             return Either.left(problem);
@@ -88,11 +93,11 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
                     .retrieve()
                     .body(OnChainTxDetails.class);
 
-            if (txDetails.getNetwork() != network) {
+            if (Objects.requireNonNull(txDetails).getNetwork() != network) {
                 ThrowableProblem problem = Problem.builder()
-                        .withTitle("NETWORK_MISMATCH")
+                        .withTitle(NETWORK_MISMATCH)
                         .withStatus(BAD_REQUEST)
-                        .withDetail("Network mismatch: %s != %s".formatted(txDetails.getNetwork(), network))
+                        .withDetail(NETWORK_MISMATCH_S_S.formatted(txDetails.getNetwork(), network))
                         .build();
 
                 return Either.left(problem);
@@ -111,7 +116,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("TX_DETAILS_ERROR")
                     .withStatus(BAD_REQUEST)
-                    .withDetail("Error from the client: %s".formatted(ex.getResponseBodyAsString()))
+                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
                     .build();
 
             return Either.left(problem);  // Return as Either.left
@@ -121,7 +126,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("TX_DETAILS_ERROR")
                     .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail("Internal server error, reason: %s".formatted(ex.getMessage()))
+                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
                     .build();
 
             return Either.left(problem);
@@ -139,9 +144,9 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
 
             if (lobOnChainDetailsResponse.getNetwork() != network) {
                 ThrowableProblem problem = Problem.builder()
-                        .withTitle("NETWORK_MISMATCH")
+                        .withTitle(NETWORK_MISMATCH)
                         .withStatus(BAD_REQUEST)
-                        .withDetail("Network mismatch: %s != %s".formatted(lobOnChainDetailsResponse.getNetwork(), network))
+                        .withDetail(NETWORK_MISMATCH_S_S.formatted(lobOnChainDetailsResponse.getNetwork(), network))
                         .build();
 
                 return Either.left(problem);
@@ -152,7 +157,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("LOB_TX_STATUSES_ERROR")
                     .withStatus(BAD_REQUEST)
-                    .withDetail("Error from the client: %s".formatted(ex.getResponseBodyAsString()))
+                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
                     .build();
 
             return Either.left(problem);  // Return as Either.left
@@ -162,7 +167,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
             ThrowableProblem problem = Problem.builder()
                     .withTitle("LOB_TX_STATUSES_ERROR")
                     .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail("Internal server error, reason: %s".formatted(ex.getMessage()))
+                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
                     .build();
 
             return Either.left(problem);

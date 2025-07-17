@@ -9,6 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class FileUtils {
 
+    private FileUtils() {
+        // Utility class, no instantiation allowed
+    }
+
     public static void writeTmpFile(String prefix, String content, String suffix) {
         String filePath = "/tmp/%s-%s.%s".formatted(prefix, System.currentTimeMillis(), suffix);
 

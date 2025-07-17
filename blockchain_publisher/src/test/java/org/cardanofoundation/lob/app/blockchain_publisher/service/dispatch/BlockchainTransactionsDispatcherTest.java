@@ -170,7 +170,7 @@ class BlockchainTransactionsDispatcherTest {
     }
 
     @Test
-    void dispatchTransactionsSuccess() throws ApiException {
+    void dispatchTransactionsSuccess() throws ApiException, InterruptedException {
         Organisation organisation = new Organisation();
         organisation.setId("organisationId");
         TransactionEntity transactionEntity = mock(TransactionEntity.class);

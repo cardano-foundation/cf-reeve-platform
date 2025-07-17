@@ -27,6 +27,5 @@ public class EventCodeUpdate {
     @CsvBindByName(column = "Name", required = true)
     private String name;
 
-    @CsvBindByName(column = "Active")
     private Boolean active = true;
 }

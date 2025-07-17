@@ -77,7 +77,7 @@ public class PublicInterfaceController {
                         reportSearchRequest.getIntervalType(),
                         reportSearchRequest.getYear(),
                         reportSearchRequest.getPeriod()
-                ).stream().map(reportViewService::responseView).collect(Collectors.toList()))
+                ).stream().map(reportViewService::responseView).toList())
         );
     }
 

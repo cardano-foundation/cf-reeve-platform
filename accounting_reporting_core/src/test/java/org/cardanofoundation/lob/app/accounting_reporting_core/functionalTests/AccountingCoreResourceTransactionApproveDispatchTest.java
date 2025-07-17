@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegrationTest {
 
     @BeforeAll
-    void clearDatabase(@Autowired Flyway flyway){
+    void clearDatabase(@Autowired Flyway flyway) {
         flyway.clean();
         flyway.migrate();
     }
@@ -34,14 +34,16 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
 
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"PublishTx\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                        "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                        "transactionIds": [
+                          {
+                            "id": "PublishTx"
+                          }
+                        ]
+                        }
+                        """)
                 .when()
                 .post("/api/v1/transactions/publish")
                 .then()
@@ -72,14 +74,16 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
 
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"PublishTx\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                            "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                            "transactionIds": [
+                            {
+                              "id": "PublishTx"
+                            }
+                            ]
+                        }
+                        """)
                 .when()
                 .post("/api/v1/transactions/publish")
                 .then()
@@ -112,14 +116,16 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
 
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"PublishTx\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                          "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                          "transactionIds": [
+                          {
+                            "id": "PublishTx"
+                          }
+                          ]
+                        }
+                        """)
                 .when()
                 .post("/api/v1/transactions/publish")
                 .then()
@@ -142,14 +148,16 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
     void testApproveDispatchTransactionNotReadyToPublish() {
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"ApproveTx\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                          "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                          "transactionIds": [
+                          {
+                            "id": "ApproveTx"
+                          }
+                          ]
+                        }
+                        """)
                 .when()
                 .post("/api/v1/transactions/publish")
                 .then()
@@ -166,14 +174,15 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
     void testApproveDispatchTransactionTransactionNotFound() {
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"ReadyToApprove_1_8a283b41eab57add98278561ab51d23f3f3daa461b84aca\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                         "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                          "transactionIds": [
+                          {
+                          "id": "ReadyToApprove_1_8a283b41eab57add98278561ab51d23f3f3daa461b84aca"
+                          }
+                          ]
+                          }""")
                 .when()
                 .post("/api/v1/transactions/publish")
                 .then()
@@ -189,14 +198,15 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
     void testApproveDispatchTransactionFailedTransactionViolation() {
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"InvalidTx\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                          "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                          "transactionIds": [
+                            {
+                              "id": "InvalidTx"
+                            }
+                          ]
+                        }""")
                 .when()
                 .post("/api/v1/transactions/publish")
                 .then()
@@ -212,14 +222,15 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
     void testApproveDispatchTransactionFailedTransactionItemRejected() {
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "  \"transactionIds\": [\n" +
-                        "    {\n" +
-                        "      \"id\": \"InvalidTx\"\n" +
-                        "    }\n" +
-                        "  ]\n" +
-                        "}")
+                .body("""
+                        {
+                          "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                          "transactionIds": [
+                            {
+                              "id": "InvalidTx"
+                            }
+                          ]
+                        }""")
                 .when()
                 .post("/api/v1/transactions/publish")
                 .then()

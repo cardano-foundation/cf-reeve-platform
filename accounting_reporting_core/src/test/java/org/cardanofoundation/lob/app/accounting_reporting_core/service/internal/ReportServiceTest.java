@@ -73,6 +73,79 @@ class ReportServiceTest {
     }
 
     @Test
+    void approveReportForLedgerDispatch_reportNotFound() {
+        when(reportRepository.findById(REPORT_ID)).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> reportEntities = reportService.approveReportForLedgerDispatch(REPORT_ID);
+
+        assertThat(reportEntities.isLeft()).isTrue();
+        assertThat(reportEntities.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void storeIncomeStatementAsExample_orgNotFound() {
+        when(organisationPublicApi.findByOrganisationId("orgId")).thenReturn(Optional.empty());
+
+        Either<Problem, Void> storeIncomeStatementAsExample = reportService.storeIncomeStatementAsExample("orgId");
+        assertThat(storeIncomeStatementAsExample.isLeft()).isTrue();
+        assertThat(storeIncomeStatementAsExample.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
+    void storeBalancesheetAsExample_orgNotFound() {
+        when(organisationPublicApi.findByOrganisationId("orgId")).thenReturn(Optional.empty());
+
+        Either<Problem, Void> storeBalancesheetAsExample = reportService.storeBalanceSheetAsExample("orgId");
+
+        assertThat(storeBalancesheetAsExample.isLeft()).isTrue();
+        assertThat(storeBalancesheetAsExample.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
+    void storeReport_invalidReportType() {
+        CreateReportView createReportView = mock(CreateReportView.class);
+        when(createReportView.getBalanceSheetData()).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> reportEntities = reportService.storeReport(BALANCE_SHEET, createReportView, IntervalType.YEAR, (short) 2023, (short) 1);
+        assertThat(reportEntities.isLeft()).isTrue();
+        assertThat(reportEntities.getLeft().getTitle()).isEqualTo("INVALID_REPORT_TYPE");
+    }
+
+    @Test
+    void exists_reportNotFound() {
+        when(reportRepository.findLatestByIdControl("orgId", REPORT_ID)).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> exists = reportService.exist("orgId", BALANCE_SHEET, IntervalType.YEAR, (short) 2023, (short) 1);
+
+        assertThat(exists.isLeft()).isTrue();
+        assertThat(exists.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void isReportValid_reportNotFound() {
+        when(reportRepository.findById(REPORT_ID)).thenReturn(Optional.empty());
+
+        Either<Problem, Boolean> isReportValid = reportService.isReportValid(REPORT_ID);
+
+        assertThat(isReportValid.isLeft()).isTrue();
+        assertThat(isReportValid.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void storeReport_orgNotFound() {
+        CreateReportView createReportView = mock(CreateReportView.class);
+        BalanceSheetData balanceSheetData = mock(BalanceSheetData.class);
+        when(createReportView.getBalanceSheetData()).thenReturn(Optional.of(balanceSheetData));
+        when(createReportView.getOrganisationId()).thenReturn("orgId");
+
+        when(organisationPublicApi.findByOrganisationId("orgId")).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> reportEntities = reportService.storeReport(BALANCE_SHEET, createReportView, IntervalType.YEAR, (short) 2023, (short) 1);
+        assertThat(reportEntities.isLeft()).isTrue();
+        assertThat(reportEntities.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
     void approveReportForLedgerDispatch_whenReportExists_shouldNotSetLedgerDispatchApproved() {
         // Arrange
         ReportEntity reportEntity = new ReportEntity();

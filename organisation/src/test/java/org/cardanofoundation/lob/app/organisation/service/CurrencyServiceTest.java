@@ -107,7 +107,7 @@ class CurrencyServiceTest {
 
         CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
-        CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate);
+        CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate, false);
 
         assertNotNull(response.getError());
         assertEquals("Currency with customer code USD already exists", response.getError().get().getDetail());
@@ -121,7 +121,7 @@ class CurrencyServiceTest {
 
         CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
-        CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate);
+        CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate, false);
 
         verify(currencyRepository).findById(new Currency.Id("org123", "USD"));
         verify(currencyRepository).save(any(Currency.class));

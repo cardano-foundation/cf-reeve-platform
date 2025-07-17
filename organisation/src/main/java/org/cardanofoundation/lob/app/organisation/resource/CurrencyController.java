@@ -74,7 +74,7 @@ public class CurrencyController {
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
-        return ResponseEntity.ok().body(currencyService.insertCurrency(orgId, currencyUpdate));
+        return ResponseEntity.ok().body(currencyService.insertCurrency(orgId, currencyUpdate, false));
     }
 
     @Operation(description = "Currency Update", responses = {

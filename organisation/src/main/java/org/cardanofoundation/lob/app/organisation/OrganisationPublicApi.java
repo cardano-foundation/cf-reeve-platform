@@ -18,7 +18,7 @@ public class OrganisationPublicApi implements OrganisationPublicApiIF {
 
     private final OrganisationService organisationService;
     private final CurrencyService currencyService;
-    private final OrganisationVatService organisationVatService;
+    private final VatService vatService;
     private final CostCenterService costCenterService;
     private final ProjectCodeService projectCodeService;
     private final ChartOfAccountsService chartOfAccountsService;
@@ -37,8 +37,8 @@ public class OrganisationPublicApi implements OrganisationPublicApiIF {
         return currencyService.findByOrganisationIdAndCode(organisationId, customerCurrencyCode);
     }
 
-    public Optional<OrganisationVat> findOrganisationByVatAndCode(String organisationId, String customerCode) {
-        return organisationVatService.findByOrganisationAndCode(organisationId, customerCode);
+    public Optional<Vat> findOrganisationByVatAndCode(String organisationId, String customerCode) {
+        return vatService.findByOrganisationAndCode(organisationId, customerCode);
     }
 
     public Optional<CostCenter> findCostCenter(String organisationId, String customerCode) {
