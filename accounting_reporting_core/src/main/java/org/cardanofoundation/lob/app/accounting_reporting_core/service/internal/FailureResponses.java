@@ -19,11 +19,17 @@ import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem
 
 public final class FailureResponses {
 
+    private FailureResponses() {
+        // Utility class, no instantiation
+    }
+
+    private static final String TRANSACTION_ID = "transactionId";
+
     public static Either<IdentifiableProblem, TransactionEntity> transactionFailedResponse(String transactionId) {
         ThrowableProblem problem = Problem.builder()
                 .withTitle("CANNOT_APPROVE_FAILED_TX")
                 .withDetail("Cannot approve a failed transaction, transactionId: %s".formatted(transactionId))
-                .with("transactionId", transactionId)
+                .with(TRANSACTION_ID, transactionId)
                 .build();
 
         return Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
@@ -34,7 +40,7 @@ public final class FailureResponses {
                 .withTitle("CANNOT_APPROVE_REJECTED_TX")
                 .withDetail("Cannot approve a rejected transaction, transactionId: %s".formatted(transactionId))
                 .withStatus(METHOD_NOT_ALLOWED)
-                .with("transactionId", transactionId)
+                .with(TRANSACTION_ID, transactionId)
                 .build();
 
         return Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
@@ -44,20 +50,19 @@ public final class FailureResponses {
         ThrowableProblem problem = Problem.builder()
                 .withTitle("TX_NOT_FOUND")
                 .withDetail("Transaction with id %s not found".formatted(txId))
-                .with("txId", txId)
+                .with(TRANSACTION_ID, txId)
                 .build();
 
         return Either.left(new IdentifiableProblem(txId, problem, TRANSACTION));
     }
 
     public static ThrowableProblem createTransactionDBError(String transactionId, DataAccessException dae) {
-        ThrowableProblem problem = Problem.builder()
+        return Problem.builder()
                 .withTitle("DB_ERROR")
                 .withDetail("DB error approving transaction publish:%s".formatted(transactionId))
-                .with("transactionId", transactionId)
+                .with(TRANSACTION_ID, transactionId)
                 .with("error", dae.getMessage())
                 .build();
-        return problem;
     }
 
     public static List<Either<IdentifiableProblem, TransactionItemEntity>> transactionNotFoundResponse(TransactionItemsRejectionRequest transactionItemsRejectionRequest,
@@ -68,7 +73,7 @@ public final class FailureResponses {
                     ThrowableProblem problem = Problem.builder()
                             .withTitle("TX_NOT_FOUND")
                             .withDetail("Transaction with id %s not found".formatted(transactionId))
-                            .with("transactionId", transactionId)
+                            .with(TRANSACTION_ID, transactionId)
                             .build();
 
                     return Either.<IdentifiableProblem, TransactionItemEntity>left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
@@ -80,7 +85,7 @@ public final class FailureResponses {
         ThrowableProblem problem = Problem.builder()
                 .withTitle("TX_ALREADY_APPROVED_CANNOT_REJECT_TX_ITEM")
                 .withDetail("Cannot reject transaction item %s because transaction %s has already been approved for dispatch".formatted(txItemId, transactionId))
-                .with("transactionId", transactionId)
+                .with(TRANSACTION_ID, transactionId)
                 .with("transactionItemId", txItemId)
                 .build();
 
@@ -92,7 +97,7 @@ public final class FailureResponses {
         ThrowableProblem problem = Problem.builder()
                 .withTitle("TX_ITEM_NOT_FOUND")
                 .withDetail("Transaction item with id %s not found".formatted(txItemId))
-                .with("transactionId", transactionId)
+                .with(TRANSACTION_ID, transactionId)
                 .with("transactionItemId", txItemId)
                 .build();
 

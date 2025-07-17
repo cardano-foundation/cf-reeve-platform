@@ -41,9 +41,7 @@ public class CardanoSubmitApiBlockchainTransactionSubmissionService implements B
             String json = r.body();
 
             JsonNode jNode = JsonUtil.parseJson(json);
-            String txId  = jNode.asText();
-
-            return txId;
+            return jNode.asText();
         }
 
         throw new BlockchainException("Error submitting transaction: %s to CardanoSubmitApi. Response: %s - %s".formatted(TransactionUtil.getTxHash(txData), r.statusCode(), r.body()));

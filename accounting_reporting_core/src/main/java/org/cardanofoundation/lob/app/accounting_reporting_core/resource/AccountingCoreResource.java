@@ -52,7 +52,6 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
-// TODO Should this endpoint be only accessible for registered users? If so, we should add the @PreAuthorize("authenticated()") annotation
 public class AccountingCoreResource {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;

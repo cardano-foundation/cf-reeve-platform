@@ -103,9 +103,7 @@ public class NetSuiteParser {
         netSuiteIngestion.setCreatedAt(LocalDateTime.now(clock));
         netSuiteIngestion.setUpdatedAt(LocalDateTime.now(clock));
         this.addLinesToNetsuiteIngestion(bodyM, netSuiteIngestion, batchId, isNetSuiteInstanceDebugMode, user);
-        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
-
-        return storedNetsuiteIngestion;
+        return ingestionRepository.saveAndFlush(netSuiteIngestion);
     }
 
 }

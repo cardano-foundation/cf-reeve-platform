@@ -3,8 +3,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 
-import java.util.stream.Collectors;
-
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
@@ -74,7 +72,7 @@ public class PublicInterfaceController {
                         reportSearchRequest.getIntervalType(),
                         reportSearchRequest.getYear(),
                         reportSearchRequest.getPeriod()
-                ).stream().map(reportViewService::responseView).collect(Collectors.toList()))
+                ).stream().map(reportViewService::responseView).toList())
         );
     }
 

@@ -79,7 +79,6 @@ class VatServiceTest {
     @Test
     void insert_success() {
         VatUpdate update = mock(VatUpdate.class);
-        Vat parent = mock(Vat.class);
         Vat saved = mock(Vat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CH");
@@ -133,7 +132,6 @@ class VatServiceTest {
     @Test
     void update_success() {
         VatUpdate update = mock(VatUpdate.class);
-        Vat parent = mock(Vat.class);
         Vat saved = mock(Vat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CH");
@@ -177,7 +175,6 @@ class VatServiceTest {
         VatUpdate update = mock(VatUpdate.class);
         List<VatUpdate> updates = List.of(update);
         when(csvParser.parseCsv(file, VatUpdate.class)).thenReturn(Either.right(updates));
-        Vat parent = mock(Vat.class);
         Vat saved = mock(Vat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CH");

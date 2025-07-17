@@ -184,7 +184,7 @@ public class AccountingCorePresentationViewService {
     public Either<Problem, Void> extractionTrigger(ExtractionRequest body) {
         UserExtractionParameters fp = getUserExtractionParameters(body);
 
-        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), body.getFile(), body.getParameters());
+        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
     }
 
     private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
@@ -202,7 +202,7 @@ public class AccountingCorePresentationViewService {
 
     public Either<List<Problem>, Void> extractionValidation(ExtractionRequest body) {
         UserExtractionParameters userExtractionParameters = getUserExtractionParameters(body);
-        return accountingCoreService.validateIngestion(userExtractionParameters, body.getExtractorType(), body.getFile(), body.getParameters());
+        return accountingCoreService.validateIngestion(userExtractionParameters, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
     }
 
     @Transactional
