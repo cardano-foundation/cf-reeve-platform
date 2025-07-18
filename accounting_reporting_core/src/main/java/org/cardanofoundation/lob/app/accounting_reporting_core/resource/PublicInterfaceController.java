@@ -3,16 +3,18 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 
+import java.util.Optional;
+
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,6 +24,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.zalando.problem.Problem;
+import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ExtractionItemService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
@@ -31,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ex
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @RestController
 @RequestMapping("/api/v1/public")
@@ -54,10 +58,10 @@ public class PublicInterfaceController {
     @PostMapping(value = "/reports", produces = "application/json")
     public ResponseEntity<ReportResponseView> reportSearchPublicInterface(@Valid @RequestBody PublicReportSearchRequest reportSearchRequest) {
 
-        val orgM = organisationPublicApi.findByOrganisationId(reportSearchRequest.getOrganisationId());
+        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(reportSearchRequest.getOrganisationId());
 
         if (orgM.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail("Unable to find Organisation by Id: %s".formatted(reportSearchRequest.getOrganisationId()))
                     .withStatus(NOT_FOUND)
@@ -85,11 +89,13 @@ public class PublicInterfaceController {
                     })
             }
     )
-    public ResponseEntity<ExtractionTransactionView> transactionSearchPublicInterface(@Valid @RequestBody PublicInterfaceTransactionsRequest transactionsRequest) {
-        val orgM = organisationPublicApi.findByOrganisationId(transactionsRequest.getOrganisationId());
+    public ResponseEntity<ExtractionTransactionView> transactionSearchPublicInterface(@Valid @RequestBody PublicInterfaceTransactionsRequest transactionsRequest,
+                                                                                      @RequestParam(name = "page", defaultValue = "0") int page,
+                                                                                      @RequestParam(name = "limit", defaultValue = "100") int limit) {
+        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(transactionsRequest.getOrganisationId());
 
         if (orgM.isEmpty()) {
-            val issue = Problem.builder()
+            ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
                     .withDetail("Unable to find Organisation by Id: %s".formatted(transactionsRequest.getOrganisationId()))
                     .withStatus(NOT_FOUND)
@@ -100,7 +106,7 @@ public class PublicInterfaceController {
 
         return ResponseEntity
                 .ok()
-                .body(ExtractionTransactionView.createSuccess(extractionItemService.findTransactionItemsPublic(
+                .body(extractionItemService.findTransactionItemsPublic(
                                 transactionsRequest.getOrganisationId(),
                                 transactionsRequest.getDateFrom(),
                                 transactionsRequest.getDateTo(),
@@ -108,8 +114,10 @@ public class PublicInterfaceController {
                                 transactionsRequest.getCurrency(),
                                 transactionsRequest.getMinAmount(),
                                 transactionsRequest.getMaxAmount(),
-                                transactionsRequest.getTransactionHashes()
-                        ))
+                                transactionsRequest.getTransactionHashes(),
+                                page,
+                                limit
+                        )
                 );
     }
 }
