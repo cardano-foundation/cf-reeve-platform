@@ -49,7 +49,7 @@ jobs:
 
       - name: Gradle build
         run: |
-          case "${TRIGGERIN_REF}" in 
+          case "${TRIGGERING_REF}" in 
             pr|branch)
               VERSION_PUBLISH=${DOCKER_VERSIONED_COMMIT_GHRUNID_TAG}
               ;;
