@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.Constants.VALIDATION_ERROR;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +16,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -42,6 +47,7 @@ public class ChartOfAccountsService {
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
     private final CsvParser<ChartOfAccountUpdateCsv> csvParser;
+    private final Validator validator;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -208,6 +214,18 @@ public class ChartOfAccountsService {
         List<ChartOfAccountUpdateCsv> chartOfAccountUpdates = lists.get();
         Set<ChartOfAccountView> accountEventViews = new HashSet<>();
         for (ChartOfAccountUpdateCsv chartOfAccountUpdateCsv : chartOfAccountUpdates) {
+            Errors errors = validator.validateObject(chartOfAccountUpdateCsv);
+            List<ObjectError> allErrors = errors.getAllErrors();
+            if (!allErrors.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle(VALIDATION_ERROR)
+                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
+                continue;
+            }
+
             // A workAround to fill the nested object
             try {
                 chartOfAccountUpdateCsv.fillOpeningBalance();

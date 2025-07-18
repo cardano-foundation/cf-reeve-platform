@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -50,6 +53,8 @@ class ChartOfAccountsServiceTest {
     private OrganisationService organisationService;
     @Mock
     private CsvParser<ChartOfAccountUpdateCsv> csvParser;
+    @Mock
+    private Validator validator;
 
     private ChartOfAccountsService chartOfAccountsService;
 
@@ -71,7 +76,8 @@ class ChartOfAccountsServiceTest {
                 chartOfAccountSubTypeRepository,
                 referenceCodeRepository,
                 organisationService,
-                csvParser
+                csvParser,
+                validator
         );
         chartOfAccountId = new ChartOfAccount.Id(orgId, customerCode);
         chartOfAccount = ChartOfAccount.builder()
@@ -107,8 +113,11 @@ class ChartOfAccountsServiceTest {
     @Test
     void insertChartOfAccountByCsv_openingBalanceConvertError() {
         MultipartFile file = mock(MultipartFile.class);
-        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
 
+        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(updateCsv)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         doThrow(new IllegalArgumentException("Error")).when(updateCsv).fillOpeningBalance();
         Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
@@ -118,12 +127,33 @@ class ChartOfAccountsServiceTest {
     }
 
     @Test
+    void insertChartOfAccountByCsv_validationError() {
+        MultipartFile file = mock(MultipartFile.class);
+
+        ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(updateCsv)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
+
+        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        assertTrue(sets.isRight());
+        assertEquals(1, sets.get().size());
+        assertEquals("VALIDATION_ERROR", sets.get().iterator().next().getError().get().getTitle());
+    }
+
+    @Test
     void insertChartOfAccountByCsv_organisationNotFound() {
         MultipartFile file = mock(MultipartFile.class);
         ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
         ChartOfAccountType typeMock = mock(ChartOfAccountType.class);
         ChartOfAccountSubType subTypeMock = mock(ChartOfAccountSubType.class);
 
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(updateCsv)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         when(updateCsv.getSubType()).thenReturn("SUBTYPE");
         when(updateCsv.getType()).thenReturn("TYPE");
@@ -143,6 +173,10 @@ class ChartOfAccountsServiceTest {
         ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
         ChartOfAccountType typeMock = mock(ChartOfAccountType.class);
         ChartOfAccountSubType subTypeMock = mock(ChartOfAccountSubType.class);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(updateCsv)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
         when(subTypeMock.getId()).thenReturn(3L);
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         when(updateCsv.getSubType()).thenReturn("SUBTYPE");
@@ -172,6 +206,10 @@ class ChartOfAccountsServiceTest {
         ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
         ChartOfAccountType typeMock = mock(ChartOfAccountType.class);
         ChartOfAccountSubType subTypeMock = mock(ChartOfAccountSubType.class);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(updateCsv)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
         when(subTypeMock.getId()).thenReturn(3L);
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         when(updateCsv.getSubType()).thenReturn("SUBTYPE");
@@ -202,6 +240,10 @@ class ChartOfAccountsServiceTest {
         ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
         ChartOfAccountType typeMock = mock(ChartOfAccountType.class);
         ChartOfAccountSubType subTypeMock = mock(ChartOfAccountSubType.class);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(updateCsv)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
         when(typeMock.getSubTypes()).thenReturn(Set.of(subTypeMock));
         when(subTypeMock.getId()).thenReturn(3L);
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));

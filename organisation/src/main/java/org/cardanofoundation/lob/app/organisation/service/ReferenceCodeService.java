@@ -10,6 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -22,6 +25,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.Constants;
 
 @Service
 @Slf4j
@@ -33,6 +37,7 @@ public class ReferenceCodeService {
     private final OrganisationService organisationService;
     private final CsvParser<ReferenceCodeUpdate> csvParser;
     private final AccountEventService accountEventService;
+    private final Validator validator;
 
     public List<ReferenceCodeView> getAllReferenceCodes(String orgId) {
         return referenceCodeRepository.findAllByOrgId(orgId).stream()
@@ -149,7 +154,18 @@ public class ReferenceCodeService {
         return csvParser.parseCsv(file, ReferenceCodeUpdate.class).fold(
                 problem -> Either.left(Set.of(problem)),
                 referenceCodeUpdates -> Either.right(referenceCodeUpdates.stream().map(
-                        refCodeUpdate -> insertReferenceCode(orgId, refCodeUpdate, true)).collect(Collectors.toSet()))
+                        refCodeUpdate -> {
+                            Errors errors = validator.validateObject(refCodeUpdate);
+                            List<ObjectError> allErrors = errors.getAllErrors();
+                            if (!allErrors.isEmpty()) {
+                                return ReferenceCodeView.createFail(Problem.builder()
+                                        .withTitle(Constants.VALIDATION_ERROR)
+                                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                                        .withStatus(Status.BAD_REQUEST)
+                                        .build(), refCodeUpdate);
+                            }
+                            return insertReferenceCode(orgId, refCodeUpdate, true);
+                        }).collect(Collectors.toSet()))
         );
     }
 

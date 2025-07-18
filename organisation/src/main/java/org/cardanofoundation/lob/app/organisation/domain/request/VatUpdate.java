@@ -4,6 +4,8 @@ import static java.lang.Boolean.TRUE;
 
 import java.math.BigDecimal;
 
+import jakarta.validation.constraints.NotNull;
+
 import javax.annotation.Nullable;
 
 import lombok.AllArgsConstructor;
@@ -21,11 +23,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class VatUpdate {
 
     @Schema(example = "CH-N")
-    @CsvBindByName(column = "Code", required = true)
+    @CsvBindByName(column = "Code")
+    @NotNull(message = "Customer Code is required")
     private String customerCode;
 
     @Schema(example = "0000")
-    @CsvBindByName(column = "Rate", required = true)
+    @CsvBindByName(column = "Rate")
+    @NotNull(message = "Rate is required")
     private BigDecimal rate;
 
     @Nullable
@@ -34,7 +38,8 @@ public class VatUpdate {
     private String countryCode;
 
     @Schema(example = "Example Vat code")
-    @CsvBindByName(column = "Description", required = true)
+    @CsvBindByName(column = "Description")
+    @NotNull(message = "Description is required")
     private String description;
 
     @CsvBindByName(column = "Active")
