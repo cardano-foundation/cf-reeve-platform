@@ -1,6 +1,6 @@
 VERSION 0.8
 
-ARG --global ALL_BUILD_TARGETS="platform-library-m2-cache follower-app"
+ARG --global ALL_BUILD_TARGETS="follower-app"
 
 ARG --global DOCKER_IMAGE_PREFIX="cf-reeve"
 ARG --global DOCKER_IMAGES_EXTRA_TAGS=""
@@ -37,11 +37,6 @@ docker-publish:
       RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
     END
   END
-
-platform-library-m2-cache:
-  ARG EARTHLY_TARGET_NAME
-  FROM DOCKERFILE -f Dockerfile --target ${EARTHLY_TARGET_NAME} .
-  SAVE IMAGE ${DOCKER_IMAGE_PREFIX}-${EARTHLY_TARGET_NAME}:latest
 
 follower-app:
    ARG EARTHLY_TARGET_NAME
