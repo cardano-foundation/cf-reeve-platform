@@ -58,7 +58,7 @@ public class CostCenterService {
                     );
                 }
             }
-            costCenter.setParentCustomerCode(Optional.ofNullable(costCenterUpdate.getParentCustomerCode()));
+            costCenter.setParentCustomerCode(costCenterUpdate.getParentCustomerCode() == null || costCenterUpdate.getParentCustomerCode().isBlank() ? null : costCenterUpdate.getParentCustomerCode());
             costCenter.setActive(costCenterUpdate.isActive());
             return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
         }
@@ -78,9 +78,7 @@ public class CostCenterService {
         CostCenter costCenter = new CostCenter();
         costCenter.setId(new CostCenter.Id(orgId, costCenterUpdate.getCustomerCode()));
         if (costCenterFound.isPresent()) {
-            if (isUpsert) {
-                costCenter = costCenterFound.get();
-            } else {
+            if (!isUpsert) {
                 return CostCenterView.createFail(
                         costCenterUpdate,
                         Problem.builder()
@@ -89,6 +87,7 @@ public class CostCenterService {
                                 .build()
                 );
             }
+            costCenter = costCenterFound.get();
         }
         costCenter.setExternalCustomerCode(Optional.ofNullable(costCenterUpdate.getExternalCustomerCode()).orElse(costCenterUpdate.getCustomerCode()));
         costCenter.setName(costCenterUpdate.getName());
@@ -98,9 +97,7 @@ public class CostCenterService {
         Optional<CostCenter> parent = Optional.empty();
         if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
             parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
-            if(parent.isPresent()) {
-                costCenter.setParent(parent.get());
-            } else {
+            if (parent.isEmpty()) {
                 return CostCenterView.createFail(
                         costCenterUpdate,
                         Problem.builder()
@@ -109,6 +106,7 @@ public class CostCenterService {
                                 .build()
                 );
             }
+            costCenter.setParent(parent.get());
         }
 
         return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
