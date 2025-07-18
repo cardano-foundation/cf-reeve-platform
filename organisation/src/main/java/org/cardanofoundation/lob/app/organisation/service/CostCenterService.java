@@ -3,22 +3,28 @@ package org.cardanofoundation.lob.app.organisation.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.Constants;
 
 @Service
 @Slf4j
@@ -28,6 +34,7 @@ public class CostCenterService {
 
     private final CostCenterRepository costCenterRepository;
     private final CsvParser<CostCenterUpdate> csvParser;
+    private final Validator validator;
 
     public Optional<CostCenter> getCostCenter(String organisationId, String customerCode) {
         return costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, customerCode), true);
@@ -118,7 +125,18 @@ public class CostCenterService {
     public Either<Problem, List<CostCenterView>> createCostCenterFromCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, CostCenterUpdate.class).fold(
                 Either::left,
-                costCenterUpdates -> Either.right(costCenterUpdates.stream().map(costCenterUpdate -> insertCostCenter(orgId, costCenterUpdate, true)).toList())
+                costCenterUpdates -> Either.right(costCenterUpdates.stream().map(costCenterUpdate -> {
+                    Errors errors = validator.validateObject(costCenterUpdate);
+                    List<ObjectError> allErrors = errors.getAllErrors();
+                    if (!allErrors.isEmpty()) {
+                        return CostCenterView.createFail(costCenterUpdate,Problem.builder()
+                                .withTitle(Constants.VALIDATION_ERROR)
+                                .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                                .withStatus(Status.BAD_REQUEST)
+                                .build());
+                    }
+                    return insertCostCenter(orgId, costCenterUpdate, true);
+                }).toList())
         );
     }
 

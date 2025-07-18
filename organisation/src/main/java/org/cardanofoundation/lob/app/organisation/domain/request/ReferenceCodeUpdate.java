@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.request;
 
+import jakarta.validation.constraints.NotNull;
+
 import javax.annotation.Nullable;
 
 import lombok.AllArgsConstructor;
@@ -20,10 +22,12 @@ public class ReferenceCodeUpdate {
 
     @Schema(example = "0000")
     @CsvBindByName(column = "Reference Code")
+    @NotNull(message = "Reference Code is required")
     private String referenceCode;
 
     @Schema(example = "Example reference code")
     @CsvBindByName(column = "Name")
+    @NotNull(message = "Name is required")
     private String name;
 
     @Nullable

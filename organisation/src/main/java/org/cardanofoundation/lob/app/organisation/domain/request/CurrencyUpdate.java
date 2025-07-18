@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.request;
 
+import jakarta.validation.constraints.NotNull;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -15,10 +17,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class CurrencyUpdate {
 
     @Schema(example = "CHF")
-    @CsvBindByName(column = "Customer Code", required = true)
+    @CsvBindByName(column = "Customer Code")
+    @NotNull(message = "Customer Code is required")
     private String customerCode;
     @Schema(example = "ISO_4217:CHF")
-    @CsvBindByName(column = "Currency ID", required = true)
+    @CsvBindByName(column = "Currency ID")
+    @NotNull(message = "Currency ID is required")
     private String currencyId;
     @CsvBindByName(column = "Active")
     private boolean active = true;

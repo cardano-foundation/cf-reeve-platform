@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.organisation.util;
 
 public class Constants {
 
+    public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
+
     private Constants() {
         // Prevent instantiation
     }

@@ -3,12 +3,16 @@ package org.cardanofoundation.lob.app.organisation.service;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -20,6 +24,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
 import org.cardanofoundation.lob.app.organisation.repository.VatRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.Constants;
 
 @Slf4j
 @Service
@@ -29,6 +34,7 @@ public class VatService {
 
     private final VatRepository vatRepository;
     private final CsvParser<VatUpdate> csvParser;
+    private final Validator validator;
 
     public Optional<Vat> findByOrganisationAndCode(String organisationId, String customerCode) {
         return vatRepository.findByIdAndActive(new Vat.Id(organisationId, customerCode),true);
@@ -107,7 +113,18 @@ public class VatService {
     public Either<Problem, List<VatView>> insertVatCodesCsv(String organisationId, MultipartFile file) {
         return csvParser.parseCsv(file, VatUpdate.class).fold(
                 Either::left,
-                organisationVatUpdates -> Either.right(organisationVatUpdates.stream().map(vatUpdate -> insert(organisationId, vatUpdate, true)).toList())
+                organisationVatUpdates -> Either.right(organisationVatUpdates.stream().map(vatUpdate -> {
+                    Errors errors = validator.validateObject(vatUpdate);
+                    List<ObjectError> allErrors = errors.getAllErrors();
+                    if (!allErrors.isEmpty()) {
+                        return VatView.createFail(vatUpdate,Problem.builder()
+                                .withTitle(Constants.VALIDATION_ERROR)
+                                .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                                .withStatus(Status.BAD_REQUEST)
+                                .build());
+                    }
+                    return insert(organisationId, vatUpdate, true);
+                }).toList())
         );
     }
 

@@ -11,6 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -37,6 +40,7 @@ public class AccountEventService {
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
     private final CsvParser<EventCodeUpdate> csvParser;
+    private final Validator validator;
 
     public Optional<AccountEvent> findByIdAndActive(String organisationId, String debitReferenceCode, String creditReferenceCode) {
         return accountEventRepository.findByIdAndActive(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode), true);
@@ -156,7 +160,18 @@ public class AccountEventService {
                 problem ->
                         Either.left(Set.of(problem)),
                 eventCodeUpdates ->
-                        Either.right(eventCodeUpdates.stream().map(eventCodeUpdate ->  insertAccountEvent(orgId, eventCodeUpdate, true)).collect(Collectors.toSet()))
+                        Either.right(eventCodeUpdates.stream().map(eventCodeUpdate -> {
+                            Errors errors = validator.validateObject(eventCodeUpdate);
+                            List<ObjectError> allErrors = errors.getAllErrors();
+                            if (!allErrors.isEmpty()) {
+                                return AccountEventView.createFail(Problem.builder()
+                                        .withTitle(Constants.VALIDATION_ERROR)
+                                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                                        .withStatus(Status.BAD_REQUEST)
+                                        .build(), eventCodeUpdate);
+                            }
+                             return insertAccountEvent(orgId, eventCodeUpdate, true);
+                        }).collect(Collectors.toSet()))
         );
     }
 

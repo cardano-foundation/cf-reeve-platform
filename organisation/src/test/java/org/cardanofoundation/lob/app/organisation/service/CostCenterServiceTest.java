@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -32,6 +35,8 @@ class CostCenterServiceTest {
     private CostCenterRepository costCenterRepository;
     @Mock
     private CsvParser<CostCenterUpdate> csvParser;
+    @Mock
+    private Validator validator;
 
     @InjectMocks
     private CostCenterService costCenterService;
@@ -197,6 +202,10 @@ class CostCenterServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(costCenterUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
         when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
         when(costCenterUpdate.getParentCustomerCode()).thenReturn(null);
@@ -209,5 +218,24 @@ class CostCenterServiceTest {
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals(costCenter.getName(), result.get().get(0).getName());
+    }
+
+    @Test
+    void createCostCenterFromCsv_validationError() {
+        MultipartFile file = mock(MultipartFile.class);
+        CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
+
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(costCenterUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.right(List.of(costCenterUpdate)));
+
+        Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        assertEquals("Default Message", result.get().get(0).getError().getDetail());
     }
 }
