@@ -190,10 +190,7 @@ public class AccountEventService {
             if (debitReference.getParent().isPresent() && !debitReference.getParent().get().isActive()) {
                 return false;
             }
-            if (creditReference.getParent().isPresent() && !creditReference.getParent().get().isActive()) {
-                return false;
-            }
-            return true;
+            return creditReference.getParent().isEmpty() || creditReference.getParent().get().isActive();
         }
         return false;
 

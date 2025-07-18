@@ -102,9 +102,8 @@ public class CostCenterService {
         costCenter.setActive(costCenterUpdate.isActive());
 
         // check if parent exists
-        Optional<CostCenter> parent = Optional.empty();
         if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-            parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
+            Optional<CostCenter> parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
             if(parent.isPresent()) {
                 costCenter.setParent(parent.get());
             } else {
