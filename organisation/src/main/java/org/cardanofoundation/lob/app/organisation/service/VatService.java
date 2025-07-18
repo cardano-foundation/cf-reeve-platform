@@ -68,7 +68,7 @@ public class VatService {
         vatEntity.setRate(vatUpdate.getRate());
         vatEntity.setDescription(vatUpdate.getDescription());
         vatEntity.setCountryCode(vatUpdate.getCountryCode() == null || vatUpdate.getCountryCode().isEmpty() ? null : vatUpdate.getCountryCode());
-
+        vatEntity.setActive(Optional.ofNullable(vatUpdate.getActive()).orElse(true));
         return VatView.convertFromEntity(vatRepository.save(vatEntity));
     }
 
