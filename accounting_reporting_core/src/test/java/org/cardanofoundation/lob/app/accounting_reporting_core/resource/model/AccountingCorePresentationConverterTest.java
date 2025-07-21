@@ -16,6 +16,7 @@ import java.util.*;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -288,11 +289,14 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setUpdatedAt(LocalDateTime.now());
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setBatchStatistics(batchStatistics);
+        Sort sort = Sort.unsorted(); // Default
 
-        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest)).thenReturn(List.of(transactionBatchEntity));
+        sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
+
+        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, sort)).thenReturn(List.of(transactionBatchEntity));
         when(transactionBatchRepositoryGateway.findByFilterCount(batchSearchRequest)).thenReturn(Long.valueOf(1));
 
-        BatchsDetailView batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest);
+        BatchsDetailView batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, sort);
         List<BatchView> result = batchsDetailView.getBatchs();
 
         assertEquals(1, result.size());

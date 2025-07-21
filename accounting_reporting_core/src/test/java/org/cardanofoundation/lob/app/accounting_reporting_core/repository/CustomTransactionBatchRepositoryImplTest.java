@@ -6,6 +6,8 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.*;
 
+import org.springframework.data.domain.Sort;
+
 import org.mockito.Mockito;
 
 import org.junit.jupiter.api.Test;
@@ -83,14 +85,19 @@ class CustomTransactionBatchRepositoryImplTest {
         Mockito.when(rootEntry.join("transactions", JoinType.INNER)).thenReturn(transactionEntityJoin);
         Mockito.when(builder.in(transactionEntityJoin.get("status"))).thenReturn(inResult);
 
+        Sort sort = Sort.unsorted(); // Default
+
+        sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
+
+
         Mockito.when(em.createQuery(criteriaQuery)).thenReturn(theQuery);
         CustomTransactionBatchRepositoryImpl customTransactionBatchRepository = new CustomTransactionBatchRepositoryImpl(em);
 
-        List<TransactionBatchEntity> result = customTransactionBatchRepository.findByFilter(body);
+        List<TransactionBatchEntity> result = customTransactionBatchRepository.findByFilter(body,sort);
 
-        Mockito.verify(transactionEntityJoin,Mockito.times(0)).get("ledgerDispatchStatus");
-        Mockito.verify(transactionEntityJoin,Mockito.times(0)).get("automatedValidationStatus");
-        Mockito.verify(theQuery,Mockito.times(1)).setFirstResult(10);
+        Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("ledgerDispatchStatus");
+        Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("automatedValidationStatus");
+        Mockito.verify(theQuery, Mockito.times(1)).setFirstResult(10);
 
     }
 }

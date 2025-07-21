@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -148,10 +149,12 @@ public class AccountingCorePresentationViewService {
                 }
         );
     }
-
-    public BatchsDetailView listAllBatch(BatchSearchRequest body) {
+//Sort sort = Sort.unsorted(); // Default
+//
+//        sort = Sort.by(Sort.Direction.ASC, "createdBy");
+    public BatchsDetailView listAllBatch(BatchSearchRequest body, Sort sort) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body);
+        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body, sort);
         List<BatchView> batches = transactionBatchEntities
                 .stream()
                 .map(
@@ -185,6 +188,14 @@ public class AccountingCorePresentationViewService {
         UserExtractionParameters fp = getUserExtractionParameters(body);
 
         return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
+    }
+
+    public List<BatchsUserListView> getBatchUserList(String orgId) {
+
+        return transactionBatchRepositoryGateway.findBatchUsersList(orgId).stream().map(userName -> {
+            return new BatchsUserListView(userName);
+        }).toList();
+
     }
 
     private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {

@@ -15,10 +15,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
+import org.springframework.data.domain.Sort;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.sort.TransactionFieldSortRequest;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -27,7 +30,7 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
     private final EntityManager em;
 
     @Override
-    public List<TransactionBatchEntity> findByFilter(BatchSearchRequest body) {
+    public List<TransactionBatchEntity> findByFilter(BatchSearchRequest body, Sort sort) {
         val builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionBatchEntity> criteriaQuery = builder.createQuery(TransactionBatchEntity.class);
         Root<TransactionBatchEntity> rootEntry = criteriaQuery.from(TransactionBatchEntity.class);
@@ -37,6 +40,20 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
         criteriaQuery.select(rootEntry);
         criteriaQuery.where(andPredicates.toArray(new Predicate[0]));
         criteriaQuery.orderBy(builder.desc(rootEntry.get("createdAt")));
+        List<Order> jpaOrders = new ArrayList<>();
+
+        if (sort.isSorted()) {
+            sort.get().forEach(consumer -> {
+                if (consumer.isAscending()) {
+                    jpaOrders.add(builder.asc(getPath(rootEntry, TransactionFieldSortRequest.valueOf(consumer.getProperty()).getCode())));
+                }
+                if (consumer.isDescending()) {
+                    jpaOrders.add(builder.desc(getPath(rootEntry, TransactionFieldSortRequest.valueOf(consumer.getProperty()).getCode())));
+                }
+            });
+            criteriaQuery.orderBy(jpaOrders);
+        }
+
         // Without this line the query only returns one row.
         criteriaQuery.groupBy(rootEntry.get("id"));
 
@@ -103,6 +120,11 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
             andPredicates.add(builder.notEqual(bitwiseAnd, 0));
         }
 
+        if (body.getCreatedBy() != null && !body.getCreatedBy().isEmpty()) {
+            andPredicates.add(builder.equal(rootEntry.get("createdBy"), body.getCreatedBy()));
+        }
+
+
         if (null != body.getFrom()) {
             LocalDateTime localDateTime1 = body.getFrom().atStartOfDay();
             andPredicates.add(builder.greaterThanOrEqualTo(rootEntry.get("createdAt"), localDateTime1));
@@ -119,7 +141,22 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
             andPredicates.add(builder.in(transactionEntityJoin.get("overallStatus")).value(body.getTxStatus()));
         }
 
+        if (body.getBatchId() != null && !body.getBatchId().isEmpty()) {
+            andPredicates.add(builder.and(builder.equal(rootEntry.get("id"), body.getBatchId())));
+            // if the batchId is set then we search only for batchId and organisationId
+            //andPredicates = Collections.singleton(builder.and(builder.equal(rootEntry.get("id"), body.getBatchId()), builder.equal(rootEntry.get("filteringParameters").get("organisationId"), body.getOrganisationId())));
+        }
+
         return andPredicates;
     }
 
+    // Helper method to get a Path for a dot-separated property
+    private <T> Path<T> getPath(Root<?> root, String propertyPath) {
+        String[] pathParts = propertyPath.split("\\.");
+        Path<?> path = root;
+        for (String part : pathParts) {
+            path = path.get(part);
+        }
+        return (Path<T>) path;
+    }
 }
