@@ -47,7 +47,20 @@ jobs:
           HUB_DOCKER_COM_PASS: ${{ secrets.HUB_DOCKER_COM_PASS }}
           DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES }}"
 
-      - name: Gradle build
+      - name: GPG checks
+        run: |
+          which gpg
+          gpg --version
+
+      - name: Decode GPG Key
+        run: |
+          mkdir -p ~/.gradle/
+          echo "${{ secrets.MAVEN_CENTRAL_GPG_KEY_BASE64 }}" > ~/.gradle/secring.gpg.b64
+          base64 -d ~/.gradle/secring.gpg.b64 > ~/.gradle/secring.gpg
+          echo "${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}" | gpg --batch --yes --passphrase-fd 0 --import ~/.gradle/secring.gpg
+          gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
+
+      - name: Gradle publish
         run: |
           case "${TRIGGERING_REF}" in 
             pr|branch)
@@ -57,7 +70,11 @@ jobs:
               VERSION_PUBLISH=${TAG_NAME}
               ;;
           esac
-          ./gradlew clean build -Pversion=${VERSION_PUBLISH} publishMavenJavaPublicationToGitlabPrivateRepository 
+          ./gradlew clean build -Pversion=${VERSION_PUBLISH} \
+            -Psigning.gnupg.keyId="BEFB6B63A980310BB92A65365E362818AF79A015" \
+            -Psigning.gnupg.passphrase="${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}" \
+            -Psigning.secretKeyRingFile="${HOME}/.gradle/secring.gpg" \
+            publishMavenJavaPublicationToGitlabPrivateRepository 
 
       - name:  🌍 earthly (docker build and push)
         run: |
