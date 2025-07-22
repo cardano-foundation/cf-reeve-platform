@@ -186,13 +186,7 @@ public class AccountEventService {
     }
 
     public boolean isActive(ReferenceCode debitReference, ReferenceCode creditReference) {
-        if (debitReference.isActive() && creditReference.isActive()) {
-            if (debitReference.getParent().isPresent() && !debitReference.getParent().get().isActive()) {
-                return false;
-            }
-            return creditReference.getParent().isEmpty() || creditReference.getParent().get().isActive();
-        }
-        return false;
+        return debitReference.isActive() && creditReference.isActive();
 
     }
 }

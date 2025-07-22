@@ -143,9 +143,7 @@ public class ReferenceCodeService {
         // The reference code returning is not the latest version after save
         referenceCode = referenceCodeRepository.save(referenceCode);
         accountEventService.updateStatus(orgId, referenceCode.getId().getReferenceCode());
-        referenceCodeRepository.findChildrenByOrgIdAndReferenceCode(referenceCode.getId().getOrganisationId(), referenceCode.getId().getReferenceCode()).forEach(childReferenceCode -> {
-            accountEventService.updateStatus(orgId, childReferenceCode.getId().getReferenceCode());
-        });
+
         return ReferenceCodeView.fromEntity(referenceCode);
     }
 
