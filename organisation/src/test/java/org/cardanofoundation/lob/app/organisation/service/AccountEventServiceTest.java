@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -40,6 +43,8 @@ class AccountEventServiceTest {
     private OrganisationService organisationService;
     @Mock
     private CsvParser<EventCodeUpdate> csvParser;
+    @Mock
+    private Validator validator;
     @InjectMocks
     private AccountEventService accountEventService;
 
@@ -94,6 +99,11 @@ class AccountEventServiceTest {
     void insertAccountEventByCsv_insertError() {
         MultipartFile file = mock(MultipartFile.class);
         EventCodeUpdate update = mock(EventCodeUpdate.class);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(update)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
         when(update.getDebitReferenceCode()).thenReturn(DEBIT_REF_CODE);
         when(update.getCreditReferenceCode()).thenReturn(CREDIT_REF_CODE);
         when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.right(List.of(update)));
@@ -107,9 +117,35 @@ class AccountEventServiceTest {
     }
 
     @Test
+    void insertAccountEventByCsv_validationError() {
+        MultipartFile file = mock(MultipartFile.class);
+        EventCodeUpdate update = mock(EventCodeUpdate.class);
+
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(update)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.right(List.of(update)));
+
+        Either<Set<Problem>, Set<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+
+        assertTrue(sets.isRight());
+        assertEquals(1, sets.get().size());
+        assertTrue(sets.get().iterator().next().getError().isPresent());
+        assertEquals("Default Message", sets.get().iterator().next().getError().get().getDetail());
+    }
+
+    @Test
     void insertAccountEventByCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
         EventCodeUpdate update = mock(EventCodeUpdate.class);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(update)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
         when(update.getDebitReferenceCode()).thenReturn(DEBIT_REF_CODE);
         when(update.getCreditReferenceCode()).thenReturn(CREDIT_REF_CODE);
         when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.right(List.of(update)));

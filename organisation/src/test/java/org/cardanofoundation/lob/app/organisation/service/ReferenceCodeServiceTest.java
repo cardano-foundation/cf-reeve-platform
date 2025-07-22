@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -40,6 +43,8 @@ class ReferenceCodeServiceTest {
 
     @Mock
     private AccountEventService accountEventService;
+    @Mock
+    private Validator validator;
 
     @InjectMocks
     private ReferenceCodeService referenceCodeService;
@@ -85,6 +90,10 @@ class ReferenceCodeServiceTest {
         ReferenceCodeUpdate refCodeUpdate = new ReferenceCodeUpdate("ref001", "Test Reference", null, true);
         when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(refCodeUpdate)));
 
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(refCodeUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
         Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
 
         assertTrue(result.isRight());
@@ -97,6 +106,11 @@ class ReferenceCodeServiceTest {
         String orgId = "org123";
         MultipartFile file = mock(MultipartFile.class);
         ReferenceCodeUpdate refCodeUpdate = new ReferenceCodeUpdate(REF_CODE, "Test Reference", null, true);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(refCodeUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
         when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(refCodeUpdate)));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrganisation));
@@ -105,6 +119,25 @@ class ReferenceCodeServiceTest {
         Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
+    }
+
+    @Test
+    void insertReferencCodeByCsv_validationError() {
+        String orgId = "org123";
+        MultipartFile file = mock(MultipartFile.class);
+        ReferenceCodeUpdate refCodeUpdate = new ReferenceCodeUpdate(REF_CODE, "Test Reference", null, true);
+
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(refCodeUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(refCodeUpdate)));
+        Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        assertEquals("Default Message", result.get().iterator().next().getError().get().getDetail());
     }
 
     @Test

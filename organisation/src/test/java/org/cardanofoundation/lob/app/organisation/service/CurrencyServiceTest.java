@@ -14,6 +14,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -40,6 +43,8 @@ class CurrencyServiceTest {
     private CurrencyRepository currencyRepository;
     @Mock
     private CsvParser<CurrencyUpdate> csvParser;
+    @Mock
+    private Validator validator;
 
     @InjectMocks
     private CurrencyService currencyService;
@@ -160,6 +165,11 @@ class CurrencyServiceTest {
     void insertViaCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
         CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(currencyUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
         when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.right(List.of(currencyUpdate)));
 
         Currency savedCurrency = new Currency(new Currency.Id("org123", "USD"), "USD123");
@@ -172,6 +182,29 @@ class CurrencyServiceTest {
         assertEquals(1, response.get().size());
         assertEquals("USD", response.get().getFirst().getCustomerCode());
         assertEquals("USD123", response.get().getFirst().getCurrencyId());
+    }
+
+    @Test
+    void insertViaCsv_validationError() {
+        MultipartFile file = mock(MultipartFile.class);
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
+
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(currencyUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.right(List.of(currencyUpdate)));
+
+
+        Either<Problem, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
+
+        assertNotNull(response);
+        assertTrue(response.isRight());
+        assertEquals(1, response.get().size());
+        assertNotNull(response.get().getFirst().getError());
+        assertEquals("Default Message", response.get().getFirst().getError().get().getDetail());
     }
 
     @Test
