@@ -45,7 +45,7 @@ class AccountingCoreResourceReconcilationTest {
 
     @Test
     void testReconciliationTrigger_shouldReturnProblem() {
-        when(accountingCoreService.scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, null, Map.of()))
+        when(accountingCoreService.scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of()))
                 .thenReturn(Either.left(Problem.builder().withStatus(Status.BAD_REQUEST).build()));
         ReconciliationRequest request = mock(ReconciliationRequest.class);
         when(request.getOrganisationId()).thenReturn("orgId");
@@ -57,7 +57,7 @@ class AccountingCoreResourceReconcilationTest {
         ResponseEntity<ReconcileResponseView> reconcileResponseViewResponseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(request);
         Assertions.assertEquals(Status.BAD_REQUEST.getStatusCode(), reconcileResponseViewResponseEntity.getStatusCode().value());
 
-        verify(accountingCoreService).scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, null, Map.of());
+        verify(accountingCoreService).scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of());
         verifyNoMoreInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationService);
 
@@ -65,7 +65,7 @@ class AccountingCoreResourceReconcilationTest {
 
     @Test
     void testReconciliationTrigger_successFull() {
-        when(accountingCoreService.scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, null, Map.of()))
+        when(accountingCoreService.scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of()))
                 .thenReturn(Either.right(null));
         ReconciliationRequest request = mock(ReconciliationRequest.class);
         when(request.getOrganisationId()).thenReturn("orgId");
@@ -77,7 +77,7 @@ class AccountingCoreResourceReconcilationTest {
         ResponseEntity<ReconcileResponseView> reconcileResponseViewResponseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(request);
         Assertions.assertEquals(200, reconcileResponseViewResponseEntity.getStatusCode().value());
 
-        verify(accountingCoreService).scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, null, Map.of());
+        verify(accountingCoreService).scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of());
         verifyNoMoreInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationService);
     }

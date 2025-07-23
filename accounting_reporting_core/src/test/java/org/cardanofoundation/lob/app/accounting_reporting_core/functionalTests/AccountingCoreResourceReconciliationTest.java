@@ -23,13 +23,15 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
 
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "\"filter\": \"UNRECONCILED\",\n" +
-                        "\"dateFrom\": \"2024-11-05\"," +
-                        "  \"reconciliationRejectionCode\": " +
-                        "[\n\"MISSING_IN_ERP\",  \"IN_PROCESSING\",  \"NEW_IN_ERP\",   \"NEW_VERSION_NOT_PUBLISHED\", \"NEW_VERSION\"\n]" +
-                        "}")
+                .body("""
+                        {
+                            "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                            "filter": "UNRECONCILED",
+                            "dateFrom": "2024-11-05",
+                            "reconciliationRejectionCode":
+                            ["MISSING_IN_ERP",  "IN_PROCESSING",  "NEW_IN_ERP",   "NEW_VERSION_NOT_PUBLISHED", "NEW_VERSION"]
+                        }
+                        """)
                 .when()
                 .post("/api/v1/transactions-reconcile")
                 .then()
@@ -52,11 +54,13 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
 
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "\"dateFrom\": \"2014-11-05\",\n" +
-                        "\"dateTo\": \"2024-11-01\"" +
-                        "}")
+                .body("""
+                        {
+                            "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                            "dateFrom": "2014-11-05",
+                            "dateTo": "2024-11-01"
+                        }
+                        """)
                 .when()
                 .post("/api/v1/reconcile/trigger")
                 .then()
@@ -76,11 +80,13 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
 
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "\"dateFrom\": \"2001-11-05\",\n" +
-                        "\"dateTo\": \"2024-11-05\"" +
-                        "}")
+                .body("""
+                        {
+                          "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                          "dateFrom": "2001-11-05",
+                          "dateTo": "2024-11-05"
+                        }
+                        """)
                 .when()
                 .post("/api/v1/reconcile/trigger")
                 .then()
@@ -98,11 +104,13 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
 
         given()
                 .contentType("application/json")
-                .body("{\n" +
-                        "  \"organisationId\": \"75f95560c1d883ee7228993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n" +
-                        "\"dateFrom\": \"2001-11-05\",\n" +
-                        "\"dateTo\": \"2024-11-05\"" +
-                        "}")
+                .body("""
+                        {
+                          "organisationId": "75f95560c1d883ee7228993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                          "dateFrom": "2001-11-05",
+                          "dateTo": "2024-11-05"
+                        }
+                        """)
                 .when()
                 .post("/api/v1/reconcile/trigger")
                 .then()

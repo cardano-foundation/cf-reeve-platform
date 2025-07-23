@@ -69,7 +69,7 @@ public class AccountingCoreService {
     private int maxTransactionNumbersPerBatch = 600;
 
     @Transactional(readOnly = true)
-    public Either<Problem, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, MultipartFile file, Map<String, Object> parameters) {
+    public Either<Problem, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
         log.info("scheduleIngestion, parameters: {}", userExtractionParameters);
 
         Either<Problem, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(
@@ -105,11 +105,11 @@ public class AccountingCoreService {
         return Either.right(null); // all fine
     }
 
-    private Either<Problem, byte[]> readFileBytes(MultipartFile file) {
+    private Either<Problem, byte[]> readFileBytes(Optional<MultipartFile> file) {
         byte[] fileBytes;
         try {
-            if(file != null && !file.isEmpty()) {
-                fileBytes = file.getBytes();
+            if(file.isPresent() && file.map(f -> !f.isEmpty()).orElse(false)) {
+                fileBytes = file.get().getBytes();
                 if (!antiVirusScanner.isFileSafe(fileBytes)) {
                     return Either.left(Problem.builder()
                             .withTitle("FILE_VIRUS_DETECTED")
@@ -131,7 +131,7 @@ public class AccountingCoreService {
         }
     }
 
-    public Either<List<Problem>, Void> validateIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, MultipartFile file, Map<String, Object> parameters) {
+    public Either<List<Problem>, Void> validateIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
         Either<Problem, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(
                 userExtractionParameters.getOrganisationId(),
                 userExtractionParameters.getFrom(),
@@ -191,7 +191,7 @@ public class AccountingCoreService {
     @Transactional(readOnly = true)
     public Either<Problem, Void> scheduleReconcilation(String organisationId,
                                                        LocalDate fromDate,
-                                                       LocalDate toDate, ExtractorType extractorType, MultipartFile file, Map<String, Object> parameters) {
+                                                       LocalDate toDate, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
         log.info("scheduleReconilation, organisationId: {}, from: {}, to: {}", organisationId, fromDate, toDate);
 
         Either<Problem, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(organisationId, fromDate, toDate);
@@ -243,7 +243,7 @@ public class AccountingCoreService {
 
     private void processReIngestionForFailed(String batchId) {
         Optional<TransactionBatchEntity> txBatchM = transactionBatchRepository.findById(batchId);
-        TransactionBatchEntity txBatch = txBatchM.get();
+        TransactionBatchEntity txBatch = txBatchM.orElseThrow();
 
         Set<TransactionEntity> txs = txBatch.getTransactions().stream()
                 //.filter(tx -> tx.getAutomatedValidationStatus() == FAILED)

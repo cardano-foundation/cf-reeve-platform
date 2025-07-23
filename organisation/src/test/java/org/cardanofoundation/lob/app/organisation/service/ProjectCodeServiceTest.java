@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -33,6 +36,8 @@ class ProjectCodeServiceTest {
     private ProjectMappingRepository projectMappingRepository;
     @Mock
     private CsvParser<ProjectUpdate> csvParser;
+    @Mock
+    private Validator validator;
 
     @InjectMocks
     private ProjectCodeService projectCodeService;
@@ -85,10 +90,10 @@ class ProjectCodeServiceTest {
     @Test
     void insertProject_AlreadyExists() {
         ProjectUpdate update = mock(ProjectUpdate.class);
-        Project project = mock(Project.class);
+        Project projectMock = mock(Project.class);
 
         when(update.getCustomerCode()).thenReturn(customerCode);
-        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
+        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(projectMock));
 
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
@@ -181,6 +186,26 @@ class ProjectCodeServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals("CSV_PARSE_ERROR", result.getLeft().getTitle());
+    }
+
+    @Test
+    void createProjectCodeFromCsv_validationError() {
+        ProjectUpdate projectUpdate = mock(ProjectUpdate.class);
+        MultipartFile file = mock(MultipartFile.class);
+        when(csvParser.parseCsv(file, ProjectUpdate.class)).thenReturn(Either.right(List.of(projectUpdate)));
+
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(projectUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        Either<Problem, List<ProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        assertNotNull(result.get().get(0).getError());
+        assertEquals("Default Message", result.get().get(0).getError().getDetail());
+
     }
 
 }

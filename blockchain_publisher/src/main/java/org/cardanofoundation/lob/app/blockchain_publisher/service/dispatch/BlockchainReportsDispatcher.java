@@ -103,7 +103,7 @@ public class BlockchainReportsDispatcher {
             sendTransactionOnChainAndUpdateDb(serialisedTx);
 
             return Optional.of(serialisedTx);
-        } catch (ApiException e) {
+        } catch (ApiException | InterruptedException e) {
             log.error("Error sending transaction on chain and / or updating db", e);
         }
 
@@ -111,7 +111,7 @@ public class BlockchainReportsDispatcher {
     }
 
     @Transactional
-    public void sendTransactionOnChainAndUpdateDb(API3BlockchainTransaction api3BlockchainTransaction) throws ApiException {
+    public void sendTransactionOnChainAndUpdateDb(API3BlockchainTransaction api3BlockchainTransaction) throws ApiException, InterruptedException {
         byte[] reportTxData = api3BlockchainTransaction.serialisedTxData();
 
         L1Submission l1SubmissionData = transactionSubmissionService.submitTransactionWithPossibleConfirmation(reportTxData, api3BlockchainTransaction.receiverAddress());

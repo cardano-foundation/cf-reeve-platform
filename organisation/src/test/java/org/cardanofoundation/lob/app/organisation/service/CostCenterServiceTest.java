@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -32,6 +35,8 @@ class CostCenterServiceTest {
     private CostCenterRepository costCenterRepository;
     @Mock
     private CsvParser<CostCenterUpdate> csvParser;
+    @Mock
+    private Validator validator;
 
     @InjectMocks
     private CostCenterService costCenterService;
@@ -89,7 +94,7 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customerCode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customerCode"), true)).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customerCode"))).thenReturn(Optional.empty());
 
         CostCenterView costCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
 
@@ -103,9 +108,9 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.of(costCenter));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentcode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentcode"), true)).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentcode"))).thenReturn(Optional.empty());
 
         CostCenterView costCenterView = costCenterService.updateCostCenter(organisationId, costCenterUpdate);
 
@@ -119,9 +124,9 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         CostCenter parentMock = mock(CostCenter.class);
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.of(costCenter));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentCustomerCode"), true)).thenReturn(Optional.of(parentMock));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
@@ -137,7 +142,7 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.of(costCenter));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
 
         CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate, false);
 
@@ -151,9 +156,9 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentcode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentcode"), true)).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentcode"))).thenReturn(Optional.empty());
 
         CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate, false);
 
@@ -167,9 +172,9 @@ class CostCenterServiceTest {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         CostCenter parentMock = mock(CostCenter.class);
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.empty());
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "parentCustomerCode"), true)).thenReturn(Optional.of(parentMock));
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
@@ -195,7 +200,11 @@ class CostCenterServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 
-        when(costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, "customercode"), true)).thenReturn(Optional.empty());
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(costCenterUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
         when(costCenterUpdate.getParentCustomerCode()).thenReturn(null);
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
@@ -206,5 +215,24 @@ class CostCenterServiceTest {
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals(costCenter.getName(), result.get().get(0).getName());
+    }
+
+    @Test
+    void createCostCenterFromCsv_validationError() {
+        MultipartFile file = mock(MultipartFile.class);
+        CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
+
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(costCenterUpdate)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.right(List.of(costCenterUpdate)));
+
+        Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        assertEquals("Default Message", result.get().get(0).getError().getDetail());
     }
 }

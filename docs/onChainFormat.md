@@ -7,7 +7,7 @@ The general structure contains the definition of the organisation and general me
 The type is an identifier for the specific transaction type. From this type more fields can be derived. 
 ```json
 {
-  "1517": {
+  "1447": {
     "org": {
       "id": "string",
       "name": "string",

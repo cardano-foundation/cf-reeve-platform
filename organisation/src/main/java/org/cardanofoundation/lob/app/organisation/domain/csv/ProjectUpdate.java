@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.csv;
 
+import jakarta.validation.constraints.NotNull;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -11,9 +13,11 @@ import com.opencsv.bean.CsvBindByName;
 @RequiredArgsConstructor
 public class ProjectUpdate {
 
-    @CsvBindByName(column = "Customer code", required = true)
+    @CsvBindByName(column = "Customer code")
+    @NotNull(message = "Customer Code is required")
     private String customerCode;
-    @CsvBindByName(column = "Name", required = true)
+    @CsvBindByName(column = "Name")
+    @NotNull(message = "Name is required")
     private String name;
     @CsvBindByName(column = "Parent customer code")
     private String parentCustomerCode;

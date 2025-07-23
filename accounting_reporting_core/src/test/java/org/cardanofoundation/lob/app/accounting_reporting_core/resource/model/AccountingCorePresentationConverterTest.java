@@ -314,7 +314,7 @@ class AccountingCorePresentationConverterTest {
         extractionRequest.setTransactionNumbers(List.of("num1", "num2"));
 
         accountingCorePresentationConverter.extractionTrigger(extractionRequest);
-        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleIngestion(Mockito.any(UserExtractionParameters.class), eq(ExtractorType.NETSUITE), eq(null), eq(Map.of()));
+        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleIngestion(Mockito.any(UserExtractionParameters.class), eq(ExtractorType.NETSUITE), eq(Optional.empty()), eq(Map.of()));
 
     }
 

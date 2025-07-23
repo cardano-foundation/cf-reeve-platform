@@ -16,4 +16,5 @@ public interface ReferenceCodeRepository extends JpaRepository<ReferenceCode, Re
 
     @Query("SELECT rc FROM ReferenceCode rc WHERE rc.id.organisationId = :orgId AND rc.id.referenceCode = :referenceCode")
     Optional<ReferenceCode> findByOrgIdAndReferenceCode(@Param("orgId") String orgId, @Param("referenceCode") String referenceCode);
+
 }

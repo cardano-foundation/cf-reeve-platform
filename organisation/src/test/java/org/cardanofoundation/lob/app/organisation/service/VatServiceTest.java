@@ -9,6 +9,9 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.util.*;
 
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -33,6 +36,8 @@ class VatServiceTest {
     private VatRepository vatRepository;
     @Mock
     private CsvParser<VatUpdate> csvParser;
+    @Mock
+    private Validator validator;
 
     @InjectMocks
     private VatService vatService;
@@ -79,7 +84,6 @@ class VatServiceTest {
     @Test
     void insert_success() {
         VatUpdate update = mock(VatUpdate.class);
-        Vat parent = mock(Vat.class);
         Vat saved = mock(Vat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CH");
@@ -133,7 +137,6 @@ class VatServiceTest {
     @Test
     void update_success() {
         VatUpdate update = mock(VatUpdate.class);
-        Vat parent = mock(Vat.class);
         Vat saved = mock(Vat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CH");
@@ -177,7 +180,11 @@ class VatServiceTest {
         VatUpdate update = mock(VatUpdate.class);
         List<VatUpdate> updates = List.of(update);
         when(csvParser.parseCsv(file, VatUpdate.class)).thenReturn(Either.right(updates));
-        Vat parent = mock(Vat.class);
+
+        Errors errors = mock(Errors.class);
+        when(validator.validateObject(update)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+
         Vat saved = mock(Vat.class);
         when(update.getCustomerCode()).thenReturn("customerCode");
         when(update.getCountryCode()).thenReturn("CH");
@@ -194,5 +201,24 @@ class VatServiceTest {
 
         assertTrue(response.isRight());
         assertEquals(updates.size(), response.get().size());
+    }
+
+    @Test
+    void insertVatCodesCsv_validationError() {
+        MultipartFile file = mock(MultipartFile.class);
+        VatUpdate update = mock(VatUpdate.class);
+        List<VatUpdate> updates = List.of(update);
+        when(csvParser.parseCsv(file, VatUpdate.class)).thenReturn(Either.right(updates));
+
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(validator.validateObject(update)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        Either<Problem, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
+        assertTrue(response.isRight());
+        assertEquals(1, response.get().size());
+        assertEquals("Default Message", response.get().get(0).getError().get().getDetail());
     }
 }

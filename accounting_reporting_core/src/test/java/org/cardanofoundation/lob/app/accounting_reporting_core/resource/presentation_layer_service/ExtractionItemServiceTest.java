@@ -94,12 +94,14 @@ class ExtractionItemServiceTest {
 
         item1.setTransaction(tx);
 
-        Mockito.when(transactionItemExtractionRepository.findByItemAccountDate(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(List.of(item1));
+        Mockito.when(transactionItemExtractionRepository.findByItemAccountDateAggregated(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt())).thenReturn(List.of(item1));
+        Mockito.when(transactionItemExtractionRepository.countItemsByAccountDateAggregated(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(1L);
+
         Mockito.when(organisationPublicApi.findProject(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
         Mockito.when(organisationPublicApi.findCostCenter(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
         ExtractionItemService extractionItemService = new ExtractionItemService(transactionItemExtractionRepository, organisationPublicApi);
 
-        ExtractionTransactionView result = ExtractionTransactionView.createSuccess(extractionItemService.findTransactionItemsPublic(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()));
+        ExtractionTransactionView result = extractionItemService.findTransactionItemsPublic(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.eq(0), Mockito.eq(10));
         assertInstanceOf(ExtractionTransactionView.class, result);
         assertEquals(1L, result.getTotal());
         assertEquals("item1", result.getTransactions().getFirst().getId());

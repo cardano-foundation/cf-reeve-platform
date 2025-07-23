@@ -7,7 +7,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,29 +39,15 @@ public class ExtractionItemService {
         List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType)
                 .stream().map(this::extractionTransactionItemViewBuilder).toList();
 
-        return ExtractionTransactionView.createSuccess(transactionItem);
+        return ExtractionTransactionView.createSuccess(transactionItem, transactionItem.size(), 0, transactionItem.size());
     }
 
     @Transactional(readOnly = true)
-    public List<ExtractionTransactionItemView> findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
+    public ExtractionTransactionView findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
 
-        List<ExtractionTransactionItemView> list = transactionItemRepositoryImpl.findByItemAccountDate(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
-
-        // aggregating in case there are duplicate items due to the enrichment process it is possible to have newly duplicates
-        return list.stream()
-                .collect(Collectors.groupingBy(ExtractionTransactionItemView::aggregationHashCode, Collectors.toSet()))
-                .values().stream()
-                .map(itemSet -> {
-                    ExtractionTransactionItemView aggregatedItem = itemSet.iterator().next();
-                    aggregatedItem.setAmountFcy(itemSet.stream()
-                            .map(ExtractionTransactionItemView::getAmountFcy)
-                            .reduce(ZERO, BigDecimal::add));
-                    aggregatedItem.setAmountLcy(itemSet.stream()
-                            .map(ExtractionTransactionItemView::getAmountLcy)
-                            .reduce(ZERO, BigDecimal::add));
-                    return aggregatedItem;
-                })
-                .toList();
+        List<ExtractionTransactionItemView> transactionItemViews = transactionItemRepositoryImpl.findByItemAccountDateAggregated(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash, page, limit).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
+        long countTotalElements = transactionItemRepositoryImpl.countItemsByAccountDateAggregated(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash);
+        return ExtractionTransactionView.createSuccess(transactionItemViews, countTotalElements, page, limit);
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {

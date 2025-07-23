@@ -26,6 +26,7 @@ import com.opencsv.enums.CSVReaderNullFieldIndicator;
 import com.opencsv.exceptions.CsvValidationException;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 
@@ -44,6 +45,7 @@ public class CsvParser<T> {
             String fileIsNullLog = "File is null";
             log.error(fileIsNullLog);
             return Either.left(Problem.builder()
+                    .withStatus(Status.BAD_REQUEST)
                     .withTitle("FILE_IS_EMPTY_ERROR")
                     .withDetail(fileIsNullLog)
                     .build());
@@ -52,6 +54,7 @@ public class CsvParser<T> {
             return parseCsv(file.getBytes(), type);
         } catch (Exception e) {
             return Either.left(Problem.builder()
+                    .withStatus(Status.BAD_REQUEST)
                     .withTitle("CSV_PARSING_ERROR")
                     .withDetail(e.getMessage())
                     .build());
@@ -76,6 +79,7 @@ public class CsvParser<T> {
         if (!missingHeaders.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("CSV_HEADER_ERROR")
+                    .withStatus(Status.BAD_REQUEST)
                     .withDetail("Missing required headers: " + String.join(", ", missingHeaders))
                     .build());
         }
@@ -99,6 +103,7 @@ public class CsvParser<T> {
             if (!antiVirusScanner.isFileSafe(file)) {
                 return Either.left(Problem.builder()
                         .withTitle("MALICIOUS_FILE_DETECTED")
+                        .withStatus(Status.BAD_REQUEST)
                         .withDetail("The uploaded file contains malicious content and has been rejected.")
                         .build());
             }
@@ -110,6 +115,7 @@ public class CsvParser<T> {
             } catch (CsvValidationException | IOException e) {
                 return Either.left(Problem.builder()
                         .withTitle("CSV_HEADER_ERROR")
+                        .withStatus(Status.BAD_REQUEST)
                         .withDetail(e.getMessage())
                         .build());
             }
@@ -126,6 +132,7 @@ public class CsvParser<T> {
         } catch (Exception e) {
             return Either.left(Problem.builder()
                     .withTitle("CSV_PARSING_ERROR")
+                    .withStatus(Status.BAD_REQUEST)
                     .withDetail(e.getMessage())
                     .build());
         }
@@ -150,7 +157,9 @@ public class CsvParser<T> {
                 try {
                     String value = (String) field.get(bean);
                     field.set(bean, sanitizeCell(value));
-                } catch (IllegalAccessException ignored) {}
+                } catch (IllegalAccessException ignored) {
+                    log.debug("Failed to access field {} in bean {}: {}", field.getName(), bean.getClass().getSimpleName(), ignored.getMessage());
+                }
             }
         }
         return bean;
