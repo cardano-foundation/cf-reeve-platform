@@ -83,7 +83,7 @@ class ChartOfAccountsServiceTest {
         chartOfAccount = ChartOfAccount.builder()
                 .id(chartOfAccountId)
                 .name("Test Account")
-                .eventRefCode("EVT123")
+                .refCode("EVT123")
                 .build();
 
         referenceCode = new ReferenceCode(new ReferenceCode.Id(orgId, "EVT123"), null, null, "RefCode", true);
@@ -93,7 +93,7 @@ class ChartOfAccountsServiceTest {
 
         chartOfAccount.setSubType(subType);
 
-        chartOfAccountUpdate = new ChartOfAccountUpdate(customerCode, "EVT123", "REF123", "Description", "3", "USD", "CounterParty", "2", null, Boolean.TRUE, new OpeningBalance(BigDecimal.valueOf(1000), BigDecimal.valueOf(1000), "USD", "USD", OperationType.DEBIT, LocalDate.now()));
+        chartOfAccountUpdate = new ChartOfAccountUpdate(customerCode, "REF123", "Description", "3", "USD", "CounterParty", "2", null, Boolean.TRUE, new OpeningBalance(BigDecimal.valueOf(1000), BigDecimal.valueOf(1000), "USD", "USD", OperationType.DEBIT, LocalDate.now()));
     }
 
     @Test

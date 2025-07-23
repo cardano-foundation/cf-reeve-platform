@@ -52,10 +52,10 @@ class AccountEventCodesConversionTaskItemTest {
 
         ChartOfAccountSubType chartOfAccountSubType = mock(ChartOfAccountSubType.class);
         when(organisationPublicApiIF.getChartOfAccounts(eq(organisationId), eq(accountCodeCredit)))
-                .thenReturn(Optional.of(new ChartOfAccount(new ChartOfAccount.Id(organisationId, accountCodeCredit), accountCodeCredit, accountCreditRefCode, "name1", "USD", "couterParty",null, true, chartOfAccountSubType, new OpeningBalance())));
+                .thenReturn(Optional.of(new ChartOfAccount(new ChartOfAccount.Id(organisationId, accountCodeCredit), accountCreditRefCode, "name1", "USD", "couterParty",null, true, chartOfAccountSubType, new OpeningBalance())));
 
         when(organisationPublicApiIF.getChartOfAccounts(eq(organisationId), eq(accountCodeDebit)))
-                .thenReturn(Optional.of(new ChartOfAccount(new ChartOfAccount.Id(organisationId, accountCodeDebit), accountCodeDebit, accountDebitRefCode, "name2", "USD", "couterParty", null,true, chartOfAccountSubType, new OpeningBalance())));
+                .thenReturn(Optional.of(new ChartOfAccount(new ChartOfAccount.Id(organisationId, accountCodeDebit), accountDebitRefCode, "name2", "USD", "couterParty", null,true, chartOfAccountSubType, new OpeningBalance())));
 
         when(organisationPublicApiIF.findEventCode(eq(organisationId), eq("DR_REF"), eq("CR_REF"))).thenReturn(Optional.of(AccountEvent.builder()
                 .name("name")
