@@ -18,6 +18,8 @@ env:
   PRIVATE_DOCKER_REGISTRY_PASS: ${{ secrets.GITLAB_PKG_REGISTRY_TOKEN }}
   GITLAB_MAVEN_REGISTRY_URL: ${{ secrets.GITLAB_MAVEN_REGISTRY_URL }}
   GITLAB_MAVEN_REGISTRY_PASS: ${{ secrets.GITLAB_MAVEN_REGISTRY_PASS }}
+  MAVEN_CENTRAL_OSSRH_USERNAME: ${{ secrets.MAVEN_CENTRAL_OSSRH_USERNAME }}
+  MAVEN_CENTRAL_OSSRH_TOKEN: ${{ secrets.MAVEN_CENTRAL_OSSRH_TOKEN }}
   DOCKER_PUSH: true
 
 jobs:
@@ -71,10 +73,11 @@ jobs:
               ;;
           esac
           ./gradlew clean build -Pversion=${VERSION_PUBLISH} \
+            -Psign \
             -Psigning.gnupg.keyId="BEFB6B63A980310BB92A65365E362818AF79A015" \
             -Psigning.gnupg.passphrase="${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}" \
             -Psigning.secretKeyRingFile="${HOME}/.gradle/secring.gpg" \
-            publishMavenJavaPublicationToGitlabPrivateRepository 
+            publish
 
       - name:  🌍 earthly (docker build and push)
         run: |

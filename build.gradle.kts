@@ -3,6 +3,7 @@ import org.gradle.api.JavaVersion.VERSION_21
 
 plugins {
     java
+    signing
     id("io.spring.dependency-management") version "1.1.5"
     id("com.github.ben-manes.versions") version "0.51.0"
     id("info.solidsoft.pitest") version "1.15.0"
@@ -32,6 +33,7 @@ allprojects {
 
 subprojects {
     apply(plugin = "java")
+    apply(plugin = "signing")
     apply(plugin = "java-library")
     apply(plugin = "io.spring.dependency-management")
     apply(plugin = "com.github.ben-manes.versions")
@@ -240,11 +242,29 @@ subprojects {
         //mutationThreshold.set(20)
     }
 
+    val isSnapshot = (version as String).contains("SNAPSHOT")
+
     publishing {
         publications {
             create<MavenPublication>("mavenJava") {
                 from(components["java"])
                 artifactId = "cf-lob-platform-" + project.name
+                pom {
+                    name = project.name
+                    description = ""
+                    url = "https://github.com/cardano-foundation/cf-reeve-platform/"
+                    licenses {
+                        license {
+                            name = "Apache License 2.0"
+                            url = "https://www.apache.org/licenses/LICENSE-2.0"
+                        }
+                    }
+                    scm {
+                        connection = "scm:git:git://github.com/cardano-foundation/cf-reeve-platform/"
+                        developerConnection = "scm:git:ssh://git@github.com:cardano-foundation/cf-reeve-platform.git"
+                        url = "https://github.com/cardanofoundation/cf-signify-java"
+                    }
+                }
             }
         }
 
@@ -253,6 +273,7 @@ subprojects {
                 name = "localM2"
                 url = uri("${System.getProperty("user.home")}/.m2/repository")
             }
+            
             maven {
                 name = "gitlabPrivate"
                 url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
@@ -264,6 +285,27 @@ subprojects {
                     val header by registering(HttpHeaderAuthentication::class)
                 }
             }
+
+            maven {
+                name = "mavenCentral"
+                // val releasesRepoUrl = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2"
+                // val snapshotsRepoUrl = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+                
+                val releasesRepoUrl = "https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/"
+                val snapshotsRepoUrl = "https://central.sonatype.com/repository/maven-snapshots/"
+                url = uri(if (isSnapshot) snapshotsRepoUrl else releasesRepoUrl)
+                credentials {
+                    username = System.getenv("MAVEN_CENTRAL_OSSRH_USERNAME") ?: ""
+                    password = System.getenv("MAVEN_CENTRAL_OSSRH_TOKEN") ?: ""
+                }
+            }
         }
     }
+
+    if (!isSnapshot && project.hasProperty("sign")) {
+        signing {
+            useGpgCmd()
+            sign(publishing.publications["mavenJava"])
+        }
+    } 
 }
