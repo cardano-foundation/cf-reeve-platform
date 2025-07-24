@@ -32,9 +32,6 @@ public class CostCenter extends CommonEntity implements Persistable<CostCenter.I
     })
     private Id id;
 
-    @Column(name = "external_customer_code", nullable = false)
-    private String externalCustomerCode;
-
     @Column(name = "name", nullable = false)
     private String name;
 

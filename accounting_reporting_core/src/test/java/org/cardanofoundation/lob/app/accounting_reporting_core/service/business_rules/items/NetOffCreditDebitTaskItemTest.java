@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.business
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.NET_OFF_TX;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.OK;
-import static org.junit.jupiter.api.Assertions.*;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
@@ -35,7 +34,7 @@ class NetOffCreditDebitTaskItemTest {
 
 
     @BeforeEach
-    public void setup() {
+    void setup() {
         this.taskItem = new NetOffCreditDebitTaskItem(organisationPublicApiIF);
     }
 
@@ -54,7 +53,6 @@ class NetOffCreditDebitTaskItemTest {
         txItem1.setAccountDebit(Optional.ofNullable(Account.builder().code("0000000000").build()));
         txItem1.setAccountCredit(Optional.ofNullable(Account.builder().code("Test1").build()));
         txItem1.setStatus(OK);
-        ;
 
         TransactionItemEntity txItem2 = new TransactionItemEntity();
         txItem2.setId(TransactionItem.id(txId, "1"));
@@ -100,7 +98,6 @@ class NetOffCreditDebitTaskItemTest {
         txItem1.setAccountDebit(Optional.ofNullable(Account.builder().code("0000000000").build()));
         txItem1.setAccountCredit(Optional.ofNullable(Account.builder().code("Test1").build()));
         txItem1.setStatus(OK);
-        ;
 
         TransactionItemEntity txItem2 = new TransactionItemEntity();
         txItem2.setId(TransactionItem.id(txId, "1"));
