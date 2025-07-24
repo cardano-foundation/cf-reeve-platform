@@ -56,13 +56,14 @@ public class ProjectConversionTaskItemTest {
         transaction.setItems(items);
 
         when(organisationPublicApiIF.findProject("1", "cust_code1"))
-                .thenReturn(Optional.of(new Project(new Project.Id("1", "cust_code1"), "name1", null, null)));
+                .thenReturn(Optional.of(new Project(new Project.Id("1", "cust_code1"), "ext_cust_code1", "name1", null, null)));
 
         projectConversionTaskItem.run(transaction);
 
         assertThat(transaction.getViolations()).isEmpty();
         assertThat(transaction.getItems()).anyMatch(i -> i.getProject().map(p -> p.getCustomerCode().equals("cust_code1")).orElse(false));
         assertThat(transaction.getItems()).anyMatch(i -> i.getProject().map(p -> p.getName().orElseThrow().equals("name1")).orElse(false));
+        assertThat(transaction.getItems()).anyMatch(i -> i.getProject().map(p -> p.getExternalCustomerCode().orElseThrow().equals("ext_cust_code1")).orElse(false));
     }
 
     @Test

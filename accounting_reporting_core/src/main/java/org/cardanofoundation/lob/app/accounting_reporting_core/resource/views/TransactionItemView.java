@@ -35,6 +35,8 @@ public class TransactionItemView {
 
     private String costCenterCustomerCode;
 
+    private String costCenterExternalCustomerCode;
+
     private String costCenterName;
 
     private String parentCostCenterCustomerCode;
@@ -44,6 +46,8 @@ public class TransactionItemView {
     private String projectCustomerCode;
 
     private String projectName;
+
+    private String projectExternalCustomerCode;
 
     private String parentProjectCustomerCode;
 

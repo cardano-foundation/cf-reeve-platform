@@ -120,7 +120,7 @@ public class ChartOfAccountsService {
         if (referenceCode.isEmpty()) {
             return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail("Unable to find event ref code: %s".formatted(chartOfAccountUpdate.getRefCode()))
+                    .withDetail("Unable to find event ref code: %s".formatted(chartOfAccountUpdate.getEventRefCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), chartOfAccountUpdate));
         }
@@ -187,6 +187,7 @@ public class ChartOfAccountsService {
     }
 
     private ChartOfAccountView updateAndSaveChartOfAccount(ChartOfAccountUpdate chartOfAccountUpdate, Either<ChartOfAccountView, ChartOfAccountSubType> subType, ChartOfAccount chartOfAccount) {
+        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getRefCode());
         chartOfAccount.setName(chartOfAccountUpdate.getName());
         chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
         chartOfAccount.setSubType(subType.get());

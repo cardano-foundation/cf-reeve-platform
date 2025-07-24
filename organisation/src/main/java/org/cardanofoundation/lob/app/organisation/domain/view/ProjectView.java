@@ -16,6 +16,8 @@ public class ProjectView {
 
     private String customerCode;
 
+    private String externalCustomerCode;
+
     private String name;
 
     private ProjectView parent;
@@ -27,6 +29,7 @@ public class ProjectView {
     public static ProjectView fromEntity(Project project) {
         ProjectView.ProjectViewBuilder builder = ProjectView.builder()
                 .customerCode(project.getId() == null ? null : project.getId().getCustomerCode())
+                .externalCustomerCode(project.getExternalCustomerCode())
                 .name(project.getName());
         if (project.getParent().isPresent()) {
             builder.parent(ProjectView.fromEntity(project.getParent().get()));
@@ -37,6 +40,7 @@ public class ProjectView {
     public static ProjectView createFail(ProjectUpdate projectUpdate, Problem error) {
         return ProjectView.builder()
                 .customerCode(projectUpdate.getCustomerCode())
+                .externalCustomerCode(projectUpdate.getExternalCustomerCode())
                 .name(projectUpdate.getName())
                 .parentCustomerCode(projectUpdate.getParentCustomerCode())
                 .error(error)

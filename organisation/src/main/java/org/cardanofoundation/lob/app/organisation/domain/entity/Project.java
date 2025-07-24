@@ -33,6 +33,9 @@ public class Project extends CommonEntity implements Persistable<Project.Id> {
     })
     private Id id;
 
+    @Column(name = "external_customer_code", nullable = false)
+    private String externalCustomerCode;
+
     @Column(name = "name", nullable = false)
     private String name;
 

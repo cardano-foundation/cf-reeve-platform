@@ -30,8 +30,15 @@ public class Project {
     @Nullable
     private String name;
 
+    @Nullable
+    private String externalCustomerCode;
+
     public Optional<String> getName() {
         return Optional.ofNullable(name);
+    }
+
+    public Optional<String> getExternalCustomerCode() {
+        return Optional.ofNullable(externalCustomerCode);
     }
 
 }

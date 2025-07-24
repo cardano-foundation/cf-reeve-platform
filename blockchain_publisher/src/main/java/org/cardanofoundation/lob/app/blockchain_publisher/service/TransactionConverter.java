@@ -143,13 +143,14 @@ public class TransactionConverter {
                     return ccBuilder.build();
                 }
             }
+            cc.getExternalCustomerCode().ifPresent(ccBuilder::customerCode);
             cc.getName().ifPresent(ccBuilder::name);
 
             return ccBuilder.build();
         }).orElse(null));
 
         txItemEntity.setProject(txItem.getProject().map(pc -> Project.builder()
-                .customerCode(pc.getCustomerCode())
+                .customerCode(pc.getExternalCustomerCode().orElseThrow())
                 .name(pc.getName().orElseThrow())
                 .build()).orElse(null)
         );

@@ -16,6 +16,7 @@ public class CostCenterUpdate {
     @CsvBindByName(column = "Customer code")
     @NotNull(message = "Customer Code is required")
     private String customerCode;
+    private String externalCustomerCode;
     @CsvBindByName(column = "Name")
     @NotNull(message = "Name is required")
     private String name;

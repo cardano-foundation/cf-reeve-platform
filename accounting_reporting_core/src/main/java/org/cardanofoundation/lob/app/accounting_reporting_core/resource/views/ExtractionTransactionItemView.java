@@ -57,11 +57,15 @@ public class ExtractionTransactionItemView {
 
     private String costCenterCustomerCode;
 
+    private String costCenterExternalCustomerCode;
+
     private String costCenterName;
 
     private String projectCustomerCode;
 
     private String projectName;
+
+    private String projectExternalCustomerCode;
 
     private String accountEventCode;
 
@@ -85,9 +89,13 @@ public class ExtractionTransactionItemView {
 
     private String parentCostCenterCustomerCode;
 
+    private String parentCostCenterExternalCustomerCode;
+
     private String parentCostCenterName;
 
     private String parentProjectCustomerCode;
+
+    private String parentProjectExternalCustomerCode;
 
     private String parentProjectName;
 

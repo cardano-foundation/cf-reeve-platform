@@ -34,6 +34,9 @@ public class ChartOfAccount extends CommonEntity implements Persistable<ChartOfA
     @Column(name = "ref_code", nullable = false)
     private String refCode;
 
+    @Column(name = "event_ref_code", nullable = false)
+    private String eventRefCode;
+
     @Column(name = "name", nullable = false)
     private String name;
 
