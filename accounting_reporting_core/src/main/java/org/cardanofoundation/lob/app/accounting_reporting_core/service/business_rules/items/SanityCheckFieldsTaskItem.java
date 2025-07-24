@@ -49,7 +49,7 @@ public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
 
             tx.addViolation(v);
         }
-        if(tx.getTransactionInternalNumber().isEmpty()) {
+        if(Optional.ofNullable(tx.getTransactionInternalNumber()).orElse("").isEmpty()) {
             TransactionViolation v = TransactionViolation.builder()
                     .code(TX_INTERNAL_NUMBER_MUST_BE_PRESENT)
                     .severity(ERROR)
