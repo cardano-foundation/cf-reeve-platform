@@ -294,7 +294,6 @@ subprojects {
                 val releasesRepoUrl = "https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/"
                 val snapshotsRepoUrl = "https://central.sonatype.com/repository/maven-snapshots/"
                 url = uri(if (isSnapshot) snapshotsRepoUrl else releasesRepoUrl)
-                url = uri(releasesRepoUrl)
                 credentials {
                     username = System.getenv("MAVEN_CENTRAL_OSSRH_USERNAME") ?: ""
                     password = System.getenv("MAVEN_CENTRAL_OSSRH_TOKEN") ?: ""
