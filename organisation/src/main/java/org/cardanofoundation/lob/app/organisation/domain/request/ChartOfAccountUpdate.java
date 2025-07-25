@@ -27,8 +27,8 @@ public class ChartOfAccountUpdate {
 
     @Schema(example = "0000")
     @CsvBindByName(column = "Reference Code")
-    @NotNull(message = "Reference Code is required")
-    private String refCode;
+    @NotNull(message = "Event Reference Code is required")
+    private String eventRefCode;
 
     @Schema(example = "description")
     @CsvBindByName(column = "Name")

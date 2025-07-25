@@ -65,11 +65,11 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
         switch (type) {
             case DEBIT:
                 item.setAccountDebit(Optional.of(account.toBuilder()
-                        .refCode(chartOfAccount.getRefCode())
+                        .refCode(chartOfAccount.getEventRefCode())
                         .build()));
                 break;
             case CREDIT:
-                item.setAccountCredit(Optional.of(account.toBuilder().refCode(chartOfAccount.getRefCode()).build()));
+                item.setAccountCredit(Optional.of(account.toBuilder().refCode(chartOfAccount.getEventRefCode()).build()));
                 break;
         }
     }

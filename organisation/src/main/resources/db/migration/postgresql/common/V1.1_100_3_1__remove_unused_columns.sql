@@ -2,5 +2,5 @@ ALTER TABLE organisation_cost_center DROP COLUMN external_customer_code;
 ALTER TABLE organisation_cost_center_aud DROP COLUMN external_customer_code;
 ALTER TABLE organisation_project DROP COLUMN external_customer_code;
 ALTER TABLE organisation_project_aud DROP COLUMN external_customer_code;
-ALTER TABLE organisation_chart_of_account DROP COLUMN event_ref_code;
-ALTER TABLE organisation_chart_of_account_aud DROP COLUMN event_ref_code;
+ALTER TABLE organisation_chart_of_account DROP COLUMN ref_code;
+ALTER TABLE organisation_chart_of_account_aud DROP COLUMN ref_code;
