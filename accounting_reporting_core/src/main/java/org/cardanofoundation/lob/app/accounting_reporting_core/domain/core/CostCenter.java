@@ -20,9 +20,6 @@ public class CostCenter {
     private @Size(min = 1, max =  255) String customerCode;
 
     @Builder.Default
-    private Optional<@Size(min = 1, max =  255) String> externalCustomerCode = Optional.empty();
-
-    @Builder.Default
     private Optional<@Size(min = 1, max =  255) String> name = Optional.empty();
 
 }

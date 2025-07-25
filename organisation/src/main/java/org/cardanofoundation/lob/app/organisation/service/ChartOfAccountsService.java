@@ -116,7 +116,7 @@ public class ChartOfAccountsService {
     }
 
     private Either<ChartOfAccountView, Void> isReferenceCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
-        Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getRefCode());
+        Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
         if (referenceCode.isEmpty()) {
             return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
@@ -187,9 +187,8 @@ public class ChartOfAccountsService {
     }
 
     private ChartOfAccountView updateAndSaveChartOfAccount(ChartOfAccountUpdate chartOfAccountUpdate, Either<ChartOfAccountView, ChartOfAccountSubType> subType, ChartOfAccount chartOfAccount) {
-        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getRefCode());
         chartOfAccount.setName(chartOfAccountUpdate.getName());
-        chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
+        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
         chartOfAccount.setSubType(subType.get());
         chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode() == null || chartOfAccountUpdate.getParentCustomerCode().isEmpty() ? null : chartOfAccountUpdate.getParentCustomerCode());
         chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());

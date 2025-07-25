@@ -68,11 +68,11 @@ class CostCenterConversionTaskItemTest {
     @Test
     void testCostCenterConversionSuccess() {
         val txId = Transaction.id("1", "1");
-        when(organisationPublicApiIF.findCostCenter("1", "1")).thenReturn(Optional.of(new CostCenter(new CostCenter.Id("1", "1"), "Cost Center 1", "2", null, null, true)));
+        when(organisationPublicApiIF.findCostCenter("1", "1")).thenReturn(Optional.of(new CostCenter(new CostCenter.Id("1", "1"), "Cost Center 1", null, null, true)));
 
         val txItem1 = new TransactionItemEntity();
         txItem1.setId(TransactionItem.id(txId, "0"));
-        txItem1.setCostCenter(Optional.of(new org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter("1", "2", "Cost Center 1")));
+        txItem1.setCostCenter(Optional.of(new org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter("1", "Cost Center 1")));
 
         val tx = new TransactionEntity();
         tx.setId(txId);
@@ -118,7 +118,7 @@ class CostCenterConversionTaskItemTest {
 
         val txItem1 = new TransactionItemEntity();
         txItem1.setId(TransactionItem.id(txId, "0"));
-        txItem1.setCostCenter(Optional.of(new org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter("1", "2", "Cost Center 1")));
+        txItem1.setCostCenter(Optional.of(new org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter("1","Cost Center 1")));
 
         val txItem2 = new TransactionItemEntity();
         txItem2.setId(TransactionItem.id(txId, "1"));
