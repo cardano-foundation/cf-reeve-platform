@@ -63,6 +63,11 @@ jobs:
           gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
 
       - name: Gradle publish
+        env:
+          JRELEASER_GPG_SECRET_KEY: "BEFB6B63A980310BB92A65365E362818AF79A015"
+          JRELEASER_GPG_PASSPHRASE: "${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}"
+          JRELEASER_MAVENCENTRAL_USERNAME: "${{ secrets.MAVEN_CENTRAL_OSSRH_USERNAME }}"
+          JRELEASER_MAVENCENTRAL_PASSWORD: "${{ secrets.MAVEN_CENTRAL_OSSRH_TOKEN }}"
         run: |
           case "${TRIGGERING_REF}" in 
             pr|branch)
@@ -72,12 +77,7 @@ jobs:
               VERSION_PUBLISH=${TAG_NAME}
               ;;
           esac
-          ./gradlew clean build -Pversion=${VERSION_PUBLISH} \
-            -Psign \
-            -Psigning.gnupg.keyId="BEFB6B63A980310BB92A65365E362818AF79A015" \
-            -Psigning.gnupg.passphrase="${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}" \
-            -Psigning.secretKeyRingFile="${HOME}/.gradle/secring.gpg" \
-            publish
+          ./gradlew clean publish jreleaserDeploy -Pversion=${VERSION_PUBLISH} -x test 
 
       - name:  🌍 earthly (docker build and push)
         run: |

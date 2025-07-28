@@ -1,5 +1,6 @@
 import info.solidsoft.gradle.pitest.PitestTask
 import org.gradle.api.JavaVersion.VERSION_21
+import org.jreleaser.model.Active
 
 plugins {
     java
@@ -12,6 +13,7 @@ plugins {
     id("jacoco")
     id("org.sonarqube") version "6.1.0.5360"
     id("org.cyclonedx.bom") version "2.2.0"
+    id("org.jreleaser") version "1.19.0"
 }
 
 allprojects {
@@ -42,6 +44,7 @@ subprojects {
     apply(plugin = "maven-publish")
     apply(plugin = "jacoco")
     apply(plugin = "org.sonarqube")
+    apply(plugin = "org.jreleaser")
 
     sourceSets {
         named("main") {
@@ -297,6 +300,25 @@ subprojects {
                 credentials {
                     username = System.getenv("MAVEN_CENTRAL_OSSRH_USERNAME") ?: ""
                     password = System.getenv("MAVEN_CENTRAL_OSSRH_TOKEN") ?: ""
+                }
+            }
+        }
+    }
+
+    jreleaser {
+        signing {
+            active.set(Active.RELEASE)
+            armored.set(true)
+        }
+        deploy {
+            maven {
+                mavenCentral {
+                    create("release-deploy") {
+                        active.set(Active.ALWAYS)
+                        url.set("https://central.sonatype.com/api/v1/publisher")
+                        snapshotSupported.set(true)
+                        stagingRepository("target/staging-deploy")
+                    }
                 }
             }
         }
