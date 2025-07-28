@@ -61,13 +61,11 @@ jobs:
           base64 -d ~/.gradle/secring.gpg.b64 > ~/.gradle/secring.gpg
           echo "${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}" | gpg --batch --yes --passphrase-fd 0 --import ~/.gradle/secring.gpg
           gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
-          gpg --export --armor BEFB6B63A980310BB92A65365E362818AF79A015 > ~/.gradle/maven-central-pub-key
 
       - name: Gradle publish
         env:
-          JRELEASER_GPG_SECRET_KEY: "BEFB6B63A980310BB92A65365E362818AF79A015"
+          JRELEASER_GPG_KEYNAME: "BEFB6B63A980310BB92A65365E362818AF79A015"
           JRELEASER_GPG_PASSPHRASE: "${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}"
-          JRELEASER_GPG_PUBLIC_KEY: "~/.gradle/maven-central-pub-key"
           JRELEASER_MAVENCENTRAL_USERNAME: "${{ secrets.MAVEN_CENTRAL_OSSRH_USERNAME }}"
           JRELEASER_MAVENCENTRAL_PASSWORD: "${{ secrets.MAVEN_CENTRAL_OSSRH_TOKEN }}"
         run: |
