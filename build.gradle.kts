@@ -265,6 +265,12 @@ subprojects {
                             url = "https://www.apache.org/licenses/LICENSE-2.0"
                         }
                     }
+                    developers {
+                        developer {
+                            id = "CF"
+                            name = "CF"
+                        }
+                    }
                     scm {
                         connection = "scm:git:git://github.com/cardano-foundation/cf-reeve-platform/"
                         developerConnection = "scm:git:ssh://git@github.com:cardano-foundation/cf-reeve-platform.git"
@@ -314,7 +320,7 @@ subprojects {
                         sourceJar.set(true)
                         javadocJar.set(true)
                         snapshotSupported.set(true)
-                        verifyPom.set(false)
+                        verifyPom.set(true)
                         stagingRepository("build/staging-deploy")
                     }
                 }
