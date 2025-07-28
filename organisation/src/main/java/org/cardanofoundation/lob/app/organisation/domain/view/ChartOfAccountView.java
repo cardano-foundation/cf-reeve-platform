@@ -21,8 +21,6 @@ public class ChartOfAccountView {
 
     private String customerCode;
 
-    private String refCode;
-
     private String eventRefCode;
 
     private String name;
@@ -51,7 +49,6 @@ public class ChartOfAccountView {
             return ChartOfAccountView.builder()
                     .customerCode(chartOfAccount.getId().getCustomerCode())
                     .eventRefCode(chartOfAccount.getEventRefCode())
-                    .refCode(chartOfAccount.getRefCode())
                     .name(chartOfAccount.getName())
                     .subType(chartOfAccount.getSubType().getId())
                     .type(chartOfAccount.getSubType().getType().getId())
@@ -67,7 +64,6 @@ public class ChartOfAccountView {
         return ChartOfAccountView.builder()
                 .customerCode(chartOfAccount.getId().getCustomerCode())
                 .eventRefCode(chartOfAccount.getEventRefCode())
-                .refCode(chartOfAccount.getRefCode())
                 .name(chartOfAccount.getName())
                 //.subType(chartOfAccount.getSubType().getId())
                 //.type(chartOfAccount.getSubType().getType().getId())
@@ -83,7 +79,6 @@ public class ChartOfAccountView {
         return ChartOfAccountView.builder()
                 .customerCode(chartOfAccountUpdate.getCustomerCode())
                 .eventRefCode(chartOfAccountUpdate.getEventRefCode())
-                .refCode(chartOfAccountUpdate.getRefCode())
                 .name(chartOfAccountUpdate.getName())
                 .typeName(chartOfAccountUpdate.getType())
                 .subTypeName(chartOfAccountUpdate.getSubType())
