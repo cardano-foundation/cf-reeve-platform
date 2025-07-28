@@ -311,6 +311,8 @@ subprojects {
                         active.set(Active.ALWAYS)
                         url.set("https://central.sonatype.com/api/v1/publisher")
                         sign.set(true)
+                        sourcesJar.set(true)
+                        javadocJar.set(true)
                         snapshotSupported.set(true)
                         verifyPom.set(false)
                         stagingRepository("build/staging-deploy")
