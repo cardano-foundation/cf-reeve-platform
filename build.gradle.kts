@@ -17,6 +17,29 @@ plugins {
     id("org.jreleaser") version "1.19.0"
 }
 
+jreleaser {
+    signing {
+        active = Active.ALWAYS
+        mode = Mode.COMMAND
+    }
+    deploy {
+        maven {
+            mavenCentral {
+                create("release-deploy") {
+                    active = (Active.ALWAYS)
+                    url = "https://central.sonatype.com/api/v1/publisher"
+                    sign = true
+                    sourceJar = true
+                    javadocJar = true
+                    snapshotSupported = true
+                    verifyPom = true
+                    stagingRepository("build/staging-deploy")
+                }
+            }
+        }
+    }
+}
+
 allprojects {
     repositories {
         mavenLocal()
@@ -45,7 +68,6 @@ subprojects {
     apply(plugin = "maven-publish")
     apply(plugin = "jacoco")
     apply(plugin = "org.sonarqube")
-    apply(plugin = "org.jreleaser")
 
     sourceSets {
         named("main") {
@@ -281,16 +303,15 @@ subprojects {
         }
 
         repositories {
-            // jreleaser requires a valid maven staging repository structure
+            // Aggregate release in local build directory which jrelease uses to deploy to Maven Central.
             maven {
                 name = "build"
-                url = uri(layout.buildDirectory.dir("staging-deploy"))
+                url = uri(File(rootProject.projectDir.path, "build/staging-deploy"))
             }
             maven {
                 name = "localM2"
                 url = uri("${System.getProperty("user.home")}/.m2/repository")
             }
-            
             maven {
                 name = "gitlabPrivate"
                 url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
@@ -300,29 +321,6 @@ subprojects {
                 }
                 authentication {
                     val header by registering(HttpHeaderAuthentication::class)
-                }
-            }
-        }
-    }
-
-    jreleaser {
-        signing {
-            active.set(Active.ALWAYS)
-            mode.set(Mode.COMMAND)
-        }
-        deploy {
-            maven {
-                mavenCentral {
-                    create("release-deploy") {
-                        active.set(Active.ALWAYS)
-                        url.set("https://central.sonatype.com/api/v1/publisher")
-                        sign.set(true)
-                        sourceJar.set(true)
-                        javadocJar.set(true)
-                        snapshotSupported.set(true)
-                        verifyPom.set(true)
-                        stagingRepository("build/staging-deploy")
-                    }
                 }
             }
         }
