@@ -1,6 +1,7 @@
 import info.solidsoft.gradle.pitest.PitestTask
 import org.gradle.api.JavaVersion.VERSION_21
 import org.jreleaser.model.Active
+import org.jreleaser.model.Signing.Mode
 
 plugins {
     java
@@ -72,6 +73,8 @@ subprojects {
 
     java {
         sourceCompatibility = VERSION_21
+        withJavadocJar()
+        withSourcesJar()
     }
 
     configurations {
@@ -254,7 +257,7 @@ subprojects {
                 artifactId = "cf-lob-platform-" + project.name
                 pom {
                     name = project.name
-                    description = ""
+                    description = "Reeve, also known as Ledger on the Blockchain (LOB), empowers organizations to securely record and share critical financial data on the Cardano blockchain, ensuring its integrity and verifiability for all stakeholders."
                     url = "https://github.com/cardano-foundation/cf-reeve-platform/"
                     licenses {
                         license {
@@ -272,6 +275,11 @@ subprojects {
         }
 
         repositories {
+            // jreleaser requires a valid maven staging repository structure
+            maven {
+                name = "build"
+                url = uri(layout.buildDirectory.dir("staging-deploy"))
+            }
             maven {
                 name = "localM2"
                 url = uri("${System.getProperty("user.home")}/.m2/repository")
@@ -293,8 +301,8 @@ subprojects {
 
     jreleaser {
         signing {
-            active.set(Active.RELEASE)
-            armored.set(true)
+            active.set(Active.ALWAYS)
+            mode.set(Mode.COMMAND)
         }
         deploy {
             maven {
@@ -302,8 +310,11 @@ subprojects {
                     create("release-deploy") {
                         active.set(Active.ALWAYS)
                         url.set("https://central.sonatype.com/api/v1/publisher")
+
+                        sign.set(true)
                         snapshotSupported.set(true)
-                        stagingRepository("target/staging-deploy")
+                        verifyPom.set(false)
+                        stagingRepository("build/staging-deploy")
                     }
                 }
             }
