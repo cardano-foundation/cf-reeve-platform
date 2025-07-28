@@ -190,7 +190,10 @@ public class TransactionConverter {
 
     private Optional<Document> getDocument(TransactionLine line) {
         return Optional.of(Document.builder()
-                .currency(Optional.ofNullable(line.getCurrency()).map(curr -> Currency.builder().customerCode(curr).build()).orElse(null))
+                .currency(Currency.builder()
+                        .customerCode(Optional.ofNullable(line.getCurrency())
+                                .orElse(""))
+                        .build())
                 .number(line.getDocumentNumber())
                 .vat(Optional.ofNullable(line.getVatCode()).map(vatCode -> Vat.builder()
                         .customerCode(vatCode)

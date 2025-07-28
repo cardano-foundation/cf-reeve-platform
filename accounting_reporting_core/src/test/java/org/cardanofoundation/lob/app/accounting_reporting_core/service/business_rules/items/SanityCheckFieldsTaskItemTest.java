@@ -6,12 +6,11 @@ import static org.mockito.Mockito.*;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
-
-import lombok.val;
 
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,8 +19,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 
 @ExtendWith(MockitoExtension.class)
 class SanityCheckFieldsTaskItemTest {
@@ -38,8 +41,9 @@ class SanityCheckFieldsTaskItemTest {
 
     @Test
     void testTransactionPassesSanityCheck() {
-        TransactionEntity tx = new TransactionEntity();
+        TransactionEntity tx = mock(TransactionEntity.class);
         when(validator.validate(tx)).thenReturn(Collections.emptySet());
+        when(tx.getTransactionInternalNumber()).thenReturn("1");
 
         taskItem.run(tx);
 
@@ -49,12 +53,12 @@ class SanityCheckFieldsTaskItemTest {
 
     @Test
     void testTransactionFailsSanityCheck() {
-        val organisation = Organisation.builder()
+        Organisation organisation = Organisation.builder()
                 .id("org1")
                 .currencyId("ISO_4217:USD")
                 .build();
 
-        val transaction = new TransactionEntity();
+        TransactionEntity transaction = new TransactionEntity();
         transaction.setOrganisation(organisation);
         transaction.setTransactionInternalNumber("1");
 
@@ -69,6 +73,38 @@ class SanityCheckFieldsTaskItemTest {
 
         assertThat(transaction.getViolations()).isNotEmpty();
         assertThat(transaction.getViolations()).anyMatch(v -> v.getCode() == TX_VALIDATION_ERROR);
+    }
+
+    @Test
+    void testRun_internalNumberMustBePresent() {
+        TransactionEntity tx = new TransactionEntity();
+        tx.setTransactionInternalNumber("");
+        when(validator.validate(tx)).thenReturn(Collections.emptySet());
+
+        taskItem.run(tx);
+
+        assertThat(tx.getViolations()).hasSize(1);
+        assertThat(tx.getViolations().iterator().next().getCode())
+                .isEqualTo(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_INTERNAL_NUMBER_MUST_BE_PRESENT);
+    }
+
+    @Test
+    void testRun_documentNameMustBeSet() {
+        TransactionEntity tx = new TransactionEntity();
+        tx.setTransactionInternalNumber("1");
+        TransactionItemEntity itemEntity = mock(TransactionItemEntity.class);
+        Document document = mock(Document.class);
+
+        when(itemEntity.getDocument()).thenReturn(Optional.of(document));
+        when(itemEntity.getId()).thenReturn("item1");
+        when(itemEntity.getStatus()).thenReturn(TxItemValidationStatus.OK);
+
+        tx.setItems(Set.of(itemEntity));
+        taskItem.run(tx);
+
+        assertThat(tx.getViolations()).hasSize(1);
+        assertThat(tx.getViolations().iterator().next().getCode())
+                .isEqualTo(TransactionViolationCode.DOCUMENT_NAME_MUST_BE_SET);
     }
 
 }
