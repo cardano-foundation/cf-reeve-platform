@@ -5,7 +5,6 @@ import org.jreleaser.model.Signing.Mode
 
 plugins {
     java
-    signing
     id("io.spring.dependency-management") version "1.1.5"
     id("com.github.ben-manes.versions") version "0.51.0"
     id("info.solidsoft.pitest") version "1.15.0"
@@ -59,7 +58,6 @@ allprojects {
 
 subprojects {
     apply(plugin = "java")
-    apply(plugin = "signing")
     apply(plugin = "java-library")
     apply(plugin = "io.spring.dependency-management")
     apply(plugin = "com.github.ben-manes.versions")
