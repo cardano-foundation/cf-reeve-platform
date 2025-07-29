@@ -42,7 +42,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(500);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isInstanceOf(Set.class);
         assertThat(((Set<?>) response.getBody())).hasSize(1);
     }

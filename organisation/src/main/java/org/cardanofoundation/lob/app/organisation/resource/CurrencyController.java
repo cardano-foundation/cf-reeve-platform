@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
-import java.util.Objects;
 
 import jakarta.validation.Valid;
 
@@ -29,6 +28,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
@@ -97,7 +97,7 @@ public class CurrencyController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         return currencyService.insertViaCsv(orgId, file).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(problem),
                 ResponseEntity::ok
         );
     }

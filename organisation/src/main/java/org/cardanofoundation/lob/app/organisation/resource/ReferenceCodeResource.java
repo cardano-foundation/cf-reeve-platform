@@ -31,6 +31,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
@@ -102,7 +103,7 @@ public class ReferenceCodeResource {
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
         ReferenceCodeView referenceCode = referenceCodeService.updateReferenceCode(orgId, referenceCodeUpdate);
         if (referenceCode.getError().isPresent()) {
-            return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
+            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(referenceCode);
         }
         return ResponseEntity.ok(referenceCode);
     }
