@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.organisation.service.ReferenceCodeService;
+import org.zalando.problem.Status;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -102,7 +103,7 @@ public class ReferenceCodeResource {
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
         ReferenceCodeView referenceCode = referenceCodeService.updateReferenceCode(orgId, referenceCodeUpdate);
         if (referenceCode.getError().isPresent()) {
-            return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
+            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(referenceCode);
         }
         return ResponseEntity.ok(referenceCode);
     }

@@ -29,6 +29,7 @@ import org.zalando.problem.Problem;
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
+import org.zalando.problem.Status;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -109,7 +110,7 @@ public class ChartOfAccountController {
 
         Either<Set<Problem>, Set<ChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         if (chartOfAccountE.isEmpty()) {
-            return ResponseEntity.status(500).body(chartOfAccountE.getLeft());
+            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(chartOfAccountE.getLeft());
         }
         return ResponseEntity.ok(chartOfAccountE.get());
     }

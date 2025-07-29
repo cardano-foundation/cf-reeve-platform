@@ -33,6 +33,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
+import org.zalando.problem.Status;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -97,7 +98,7 @@ public class CurrencyController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         return currencyService.insertViaCsv(orgId, file).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(problem),
                 ResponseEntity::ok
         );
     }
