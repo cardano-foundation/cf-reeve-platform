@@ -287,14 +287,14 @@ subprojects {
                     }
                     developers {
                         developer {
-                            id = "CF"
-                            name = "CF"
+                            id = "Cardano Foundation"
+                            name = "Cardano Foundation"
                         }
                     }
                     scm {
                         connection = "scm:git:git://github.com/cardano-foundation/cf-reeve-platform/"
                         developerConnection = "scm:git:ssh://git@github.com:cardano-foundation/cf-reeve-platform.git"
-                        url = "https://github.com/cardanofoundation/cf-signify-java"
+                        url = "https://github.com/cardano-foundation/cf-reeve-platform/"
                     }
                 }
             }
