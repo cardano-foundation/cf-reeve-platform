@@ -25,11 +25,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
-import org.zalando.problem.Status;
 
 @RestController
 @RequestMapping("/api/v1/organisations")

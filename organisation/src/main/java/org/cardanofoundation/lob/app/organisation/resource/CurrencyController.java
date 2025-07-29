@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
-import java.util.Objects;
 
 import jakarta.validation.Valid;
 
@@ -29,11 +28,11 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
-import org.zalando.problem.Status;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
