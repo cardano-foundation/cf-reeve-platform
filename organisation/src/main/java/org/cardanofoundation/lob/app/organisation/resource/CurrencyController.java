@@ -74,7 +74,11 @@ public class CurrencyController {
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
-        return ResponseEntity.ok().body(currencyService.insertCurrency(orgId, currencyUpdate, false));
+        CurrencyView currencyView = currencyService.insertCurrency(orgId, currencyUpdate, false);
+        if (currencyView.getError().isPresent()) {
+            return ResponseEntity.status(currencyView.getError().get().getStatus().getStatusCode()).body(currencyView);
+        }
+        return ResponseEntity.ok(currencyView);
     }
 
     @Operation(description = "Currency Update", responses = {
@@ -85,7 +89,11 @@ public class CurrencyController {
     @PutMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
-        return ResponseEntity.ok().body(currencyService.updateCurrency(orgId, currencyUpdate));
+        CurrencyView currencyView = currencyService.updateCurrency(orgId, currencyUpdate);
+        if (currencyView.getError().isPresent()) {
+            return ResponseEntity.status(currencyView.getError().get().getStatus().getStatusCode()).body(currencyView);
+        }
+        return ResponseEntity.ok(currencyView);
     }
 
     @Operation(description = "Currency Upload", responses = {

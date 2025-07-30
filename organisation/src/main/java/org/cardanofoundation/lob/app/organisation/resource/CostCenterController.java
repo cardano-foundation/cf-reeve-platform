@@ -4,6 +4,7 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -66,7 +67,11 @@ public class CostCenterController {
     @PostMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CostCenterView> insertCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
-        return ResponseEntity.ok(costCenterService.insertCostCenter(orgId, costCenterUpdate, false));
+        CostCenterView costCenterView = costCenterService.insertCostCenter(orgId, costCenterUpdate, false);
+        if(costCenterView.getError().isPresent()) {
+            return ResponseEntity.status(Objects.requireNonNull(costCenterView.getError().get().getStatus()).getStatusCode()).body(costCenterView);
+        }
+        return ResponseEntity.ok(costCenterView);
     }
 
     @Operation(description = "Organisation cost center update", responses = {
@@ -77,7 +82,11 @@ public class CostCenterController {
     @PutMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CostCenterView> updateCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
-        return ResponseEntity.ok(costCenterService.updateCostCenter(orgId, costCenterUpdate));
+        CostCenterView costCenterView = costCenterService.updateCostCenter(orgId, costCenterUpdate);
+        if (costCenterView.getError().isPresent()) {
+            return ResponseEntity.status(Objects.requireNonNull(costCenterView.getError().get().getStatus()).getStatusCode()).body(costCenterView);
+        }
+        return ResponseEntity.ok(costCenterView);
     }
 
     @Operation(description = "Organisation cost center creation csv", responses = {

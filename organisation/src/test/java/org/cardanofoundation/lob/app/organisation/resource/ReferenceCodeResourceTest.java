@@ -43,7 +43,7 @@ class ReferenceCodeResourceTest {
 
         ResponseEntity<?> response = controller.insertRefCodeByCsv("orgId", null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(500);
+        assertThat(response.getStatusCode().value()).isEqualTo(Status.BAD_REQUEST.getStatusCode());
         assertThat(response.getBody()).isInstanceOf(Set.class);
         assertThat(((Set<?>) response.getBody())).hasSize(1);
     }

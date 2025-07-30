@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.view;
 
+import java.util.Optional;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -25,7 +27,7 @@ public class CostCenterView {
 
     private boolean active;
 
-    private Problem error;
+    private Optional<Problem> error;
 
     public static CostCenterView fromEntity(CostCenter costCenter) {
         CostCenterViewBuilder builder = CostCenterView.builder()
@@ -44,7 +46,7 @@ public class CostCenterView {
                 .name(costCenterUpdate.getName())
                 .active(costCenterUpdate.isActive())
                 .parentCustomerCode(costCenterUpdate.getParentCustomerCode())
-                .error(error)
+                .error(Optional.of(error))
                 .build();
     }
 }

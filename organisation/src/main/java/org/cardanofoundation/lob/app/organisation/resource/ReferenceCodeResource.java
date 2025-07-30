@@ -86,7 +86,7 @@ public class ReferenceCodeResource {
                                                        @RequestParam(value = "file") MultipartFile file) {
         Either<Set<Problem>, Set<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         if (refCodeE.isLeft()) {
-            return ResponseEntity.status(500).body(refCodeE.getLeft());
+            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(refCodeE.getLeft());
         }
         Set<ReferenceCodeView> referenceCodeViews = refCodeE.get();
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(referenceCodeViews);
@@ -103,7 +103,7 @@ public class ReferenceCodeResource {
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
         ReferenceCodeView referenceCode = referenceCodeService.updateReferenceCode(orgId, referenceCodeUpdate);
         if (referenceCode.getError().isPresent()) {
-            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(referenceCode);
+            return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
         }
         return ResponseEntity.ok(referenceCode);
     }
