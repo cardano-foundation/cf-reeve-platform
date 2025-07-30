@@ -4,7 +4,7 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
-import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -33,6 +33,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.zalando.problem.Status;
+import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
@@ -68,10 +70,9 @@ public class CostCenterController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CostCenterView> insertCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         CostCenterView costCenterView = costCenterService.insertCostCenter(orgId, costCenterUpdate, false);
-        if(costCenterView.getError().isPresent()) {
-            return ResponseEntity.status(Objects.requireNonNull(costCenterView.getError().get().getStatus()).getStatusCode()).body(costCenterView);
-        }
-        return ResponseEntity.ok(costCenterView);
+        return costCenterView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        .body(costCenterView))
+                .orElse(ResponseEntity.ok(costCenterView));
     }
 
     @Operation(description = "Organisation cost center update", responses = {
@@ -83,10 +84,10 @@ public class CostCenterController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CostCenterView> updateCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         CostCenterView costCenterView = costCenterService.updateCostCenter(orgId, costCenterUpdate);
-        if (costCenterView.getError().isPresent()) {
-            return ResponseEntity.status(Objects.requireNonNull(costCenterView.getError().get().getStatus()).getStatusCode()).body(costCenterView);
-        }
-        return ResponseEntity.ok(costCenterView);
+
+        return costCenterView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        .body(costCenterView))
+                .orElse(ResponseEntity.ok(costCenterView));
     }
 
     @Operation(description = "Organisation cost center creation csv", responses = {
