@@ -131,7 +131,8 @@ public class TransactionConverter {
 
         txItemEntity.setCostCenter(txItem.getCostCenter().map(cc -> {
             org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.CostCenterBuilder ccBuilder = org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.builder();
-
+            cc.getName().ifPresent(ccBuilder::name);
+            ccBuilder.customerCode(cc.getCustomerCode());
             // If the cost center is not associated with the parent organisation, we do not set it.
             // Note: Only one parent level.
             Optional<CostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
@@ -143,8 +144,6 @@ public class TransactionConverter {
                     return ccBuilder.build();
                 }
             }
-            cc.getName().ifPresent(ccBuilder::name);
-
             return ccBuilder.build();
         }).orElse(null));
 
