@@ -24,7 +24,7 @@ public class ProjectView {
 
     private String parentCustomerCode;
 
-    private Optional<Problem> error = Optional.empty();
+    private Optional<Problem> error;
 
     public static ProjectView fromEntity(Project project) {
         ProjectView.ProjectViewBuilder builder = ProjectView.builder()

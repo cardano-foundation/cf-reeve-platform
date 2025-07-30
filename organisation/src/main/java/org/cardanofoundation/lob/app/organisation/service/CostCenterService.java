@@ -58,6 +58,7 @@ public class CostCenterService {
                     return CostCenterView.createFail(
                             costCenterUpdate,
                             Problem.builder()
+                                    .withStatus(Status.NOT_FOUND)
                                     .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
                                     .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
                                     .build()
@@ -71,6 +72,7 @@ public class CostCenterService {
         return CostCenterView.createFail(
                 costCenterUpdate,
                 Problem.builder()
+                        .withStatus(Status.NOT_FOUND)
                         .withTitle("COST_CENTER_CODE_NOT_FOUND")
                         .withDetail("Cost Center with customer code %s not found.".formatted(costCenterUpdate.getCustomerCode()))
                         .build()
@@ -88,6 +90,7 @@ public class CostCenterService {
                 return CostCenterView.createFail(
                         costCenterUpdate,
                         Problem.builder()
+                                .withStatus(Status.CONFLICT)
                                 .withTitle("COST_CENTER_CODE_ALREADY_EXISTS")
                                 .withDetail("Cost Center with customer code %s already exists.".formatted(costCenterUpdate.getCustomerCode()))
                                 .build()

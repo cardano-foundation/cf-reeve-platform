@@ -128,7 +128,7 @@ class ProjectCodeServiceTest {
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
         assertEquals(customerCode, projectView.getCustomerCode());
-        assertNull(projectView.getError());
+        assertEquals(Optional.empty(), projectView.getError());
         assertEquals("Test Project", projectView.getName());
         verify(projectMappingRepository).save(any(Project.class));
     }
@@ -172,7 +172,7 @@ class ProjectCodeServiceTest {
         ProjectView projectView = projectCodeService.updateProject(organisationId, update);
 
         assertEquals(customerCode, projectView.getCustomerCode());
-        assertNull(projectView.getError());
+        assertEquals(Optional.empty(), projectView.getError());
         verify(projectMappingRepository).save(any(Project.class));
     }
 
