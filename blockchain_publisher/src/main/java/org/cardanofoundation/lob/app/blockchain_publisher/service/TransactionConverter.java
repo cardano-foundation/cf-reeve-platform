@@ -130,6 +130,9 @@ public class TransactionConverter {
         txItemEntity.setDocument(convertDocument(txItem.getDocument().orElseThrow()));
 
         txItemEntity.setCostCenter(txItem.getCostCenter().map(cc -> {
+            if(Optional.ofNullable(cc.getCustomerCode()).isEmpty()) {
+                return null;
+            }
             org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.CostCenterBuilder ccBuilder = org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.builder();
             cc.getName().ifPresent(ccBuilder::name);
             ccBuilder.customerCode(cc.getCustomerCode());
