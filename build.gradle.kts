@@ -287,7 +287,7 @@ subprojects {
                     }
                     developers {
                         developer {
-                            id = "Cardano Foundation"
+                            id = "CF"
                             name = "Cardano Foundation"
                         }
                     }
