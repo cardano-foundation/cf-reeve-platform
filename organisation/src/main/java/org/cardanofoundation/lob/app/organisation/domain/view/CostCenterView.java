@@ -33,7 +33,8 @@ public class CostCenterView {
         CostCenterViewBuilder builder = CostCenterView.builder()
                 .customerCode(costCenter.getId() == null ? null : costCenter.getId().getCustomerCode())
                 .name(costCenter.getName())
-                .active(costCenter.isActive());
+                .active(costCenter.isActive())
+                .error(Optional.empty());
         if (costCenter.getParent().isPresent()) {
             builder.parent(CostCenterView.fromEntity(costCenter.getParent().get()));
         }

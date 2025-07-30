@@ -24,12 +24,13 @@ public class ProjectView {
 
     private String parentCustomerCode;
 
-    private Optional<Problem> error;
+    private Optional<Problem> error = Optional.empty();
 
     public static ProjectView fromEntity(Project project) {
         ProjectView.ProjectViewBuilder builder = ProjectView.builder()
                 .customerCode(project.getId() == null ? null : project.getId().getCustomerCode())
-                .name(project.getName());
+                .name(project.getName())
+                .error(Optional.empty());
         if (project.getParent().isPresent()) {
             builder.parent(ProjectView.fromEntity(project.getParent().get()));
         }
