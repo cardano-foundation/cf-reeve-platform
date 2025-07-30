@@ -268,8 +268,6 @@ subprojects {
         //mutationThreshold.set(20)
     }
 
-    val isSnapshot = (version as String).contains("SNAPSHOT")
-
     publishing {
         publications {
             create<MavenPublication>("mavenJava") {
