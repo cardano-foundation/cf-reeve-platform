@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.validation.Valid;
 
@@ -29,6 +30,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.zalando.problem.Status;
+import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
@@ -74,7 +76,10 @@ public class CurrencyController {
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
-        return ResponseEntity.ok().body(currencyService.insertCurrency(orgId, currencyUpdate, false));
+        CurrencyView currencyView = currencyService.insertCurrency(orgId, currencyUpdate, false);
+        return currencyView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        .body(currencyView))
+                .orElse(ResponseEntity.ok(currencyView));
     }
 
     @Operation(description = "Currency Update", responses = {
@@ -85,7 +90,10 @@ public class CurrencyController {
     @PutMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
-        return ResponseEntity.ok().body(currencyService.updateCurrency(orgId, currencyUpdate));
+        CurrencyView currencyView = currencyService.updateCurrency(orgId, currencyUpdate);
+        return currencyView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        .body(currencyView))
+                .orElse(ResponseEntity.ok(currencyView));
     }
 
     @Operation(description = "Currency Upload", responses = {

@@ -85,7 +85,7 @@ public class ReferenceCodeService {
                 return ReferenceCodeView.createFail(Problem.builder()
                                 .withTitle("REFERENCE_CODE_ALREADY_EXIST")
                                 .withDetail("The reference code with code :%s already exists".formatted(referenceCodeUpdate.getReferenceCode()))
-                                .withStatus(Status.NOT_FOUND)
+                                .withStatus(Status.CONFLICT)
                                 .build(),
                         referenceCodeUpdate);
             }
