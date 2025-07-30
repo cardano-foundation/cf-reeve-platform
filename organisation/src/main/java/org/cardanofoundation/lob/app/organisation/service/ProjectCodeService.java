@@ -100,6 +100,7 @@ public class ProjectCodeService {
                     return ProjectView.createFail(
                             projectUpdate,
                             Problem.builder()
+                                    .withStatus(Status.NOT_FOUND)
                                     .withTitle("PARENT_PROJECT_CODE_NOT_FOUND")
                                     .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
                                     .build()
@@ -112,6 +113,7 @@ public class ProjectCodeService {
             return ProjectView.createFail(
                     projectUpdate,
                     Problem.builder()
+                            .withStatus(Status.NOT_FOUND)
                             .withTitle("PROJECT_CODE_NOT_FOUND")
                             .withDetail("Project code with customer code %s not found.".formatted(projectUpdate.getCustomerCode()))
                             .build()
