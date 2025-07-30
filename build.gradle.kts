@@ -325,3 +325,5 @@ subprojects {
     }
 
 }
+
+project.logger.lifecycle("*** Build version: " + version)
