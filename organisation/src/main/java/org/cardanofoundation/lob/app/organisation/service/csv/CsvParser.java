@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -95,6 +96,9 @@ public class CsvParser<T> {
                 requiredHeaders.add(header);
             }
         }
+        // adding the required headers of the superclass as well
+        Optional.ofNullable(type.getSuperclass())
+                .ifPresent(superClass -> requiredHeaders.addAll(getRequiredHeaders(superClass)));
         return requiredHeaders;
     }
 
