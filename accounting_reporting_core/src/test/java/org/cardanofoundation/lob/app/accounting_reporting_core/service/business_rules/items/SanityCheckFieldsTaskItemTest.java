@@ -56,7 +56,7 @@ class SanityCheckFieldsTaskItemTest {
 
         val transaction = new TransactionEntity();
         transaction.setOrganisation(organisation);
-        transaction.setTransactionInternalNumber("1");
+        transaction.setInternalTransactionNumber("1");
 
         Set<ConstraintViolation<TransactionEntity>> violations = new HashSet<>();
         ConstraintViolation<TransactionEntity> violation = mock(ConstraintViolation.class);

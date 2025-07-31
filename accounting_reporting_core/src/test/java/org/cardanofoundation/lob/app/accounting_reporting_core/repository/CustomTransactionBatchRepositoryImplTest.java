@@ -8,7 +8,9 @@ import jakarta.persistence.criteria.*;
 
 import org.springframework.data.domain.Sort;
 
+import io.vavr.control.Either;
 import org.mockito.Mockito;
+import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 
@@ -87,13 +89,10 @@ class CustomTransactionBatchRepositoryImplTest {
 
         Sort sort = Sort.unsorted(); // Default
 
-        sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
-
-
         Mockito.when(em.createQuery(criteriaQuery)).thenReturn(theQuery);
         CustomTransactionBatchRepositoryImpl customTransactionBatchRepository = new CustomTransactionBatchRepositoryImpl(em);
 
-        List<TransactionBatchEntity> result = customTransactionBatchRepository.findByFilter(body,sort);
+        Either<Problem, List<TransactionBatchEntity>> result = customTransactionBatchRepository.findByFilter(body,sort);
 
         Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("ledgerDispatchStatus");
         Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("automatedValidationStatus");

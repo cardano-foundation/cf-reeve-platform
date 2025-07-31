@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -29,7 +30,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.SearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionItemsRejectionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionsRequest;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.sort.TransactionFieldSortRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchReprocessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
@@ -146,10 +146,10 @@ class AccountingCoreResourceTest {
         BatchSearchRequest body = mock(BatchSearchRequest.class);
         BatchsDetailView batchsDetailView = mock(BatchsDetailView.class);
         Sort sort = Sort.unsorted(); // Default
-        sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
-        when(accountingCorePresentationViewService.listAllBatch(body, sort)).thenReturn(batchsDetailView);
+        when(accountingCorePresentationViewService.listAllBatch(body, sort)).thenReturn(Either.right(batchsDetailView));
+        Pageable pageable = Pageable.ofSize(10).withPage(0);
 
-        ResponseEntity<BatchsDetailView> listResponseEntity = accountingCoreResource.listAllBatches(body, TransactionFieldSortRequest.IMPORTED_BY, Sort.Direction.ASC, 0, 0);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
     }
@@ -167,9 +167,10 @@ class AccountingCoreResourceTest {
 
     @Test
     void batchesDetailTest_error() {
-        when(accountingCorePresentationViewService.batchDetail("123", List.of(), Pageable.unpaged())).thenReturn(Optional.empty());
+        Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        when(accountingCorePresentationViewService.batchDetail("123", List.of(), createdBy)).thenReturn(Either.right(Optional.empty()));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", Optional.empty(), Optional.empty(), TransactionFieldSortRequest.IMPORTED_BY, Sort.Direction.DESC, List.of());
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
@@ -177,9 +178,10 @@ class AccountingCoreResourceTest {
     @Test
     void batchesDetailTest_success() {
         BatchView mock = mock(BatchView.class);
-        when(accountingCorePresentationViewService.batchDetail("123", List.of(), Pageable.unpaged())).thenReturn(Optional.of(mock));
+        Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        when(accountingCorePresentationViewService.batchDetail("123", List.of(), createdBy)).thenReturn(Either.right(Optional.of(mock)));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", Optional.empty(), Optional.empty(),  TransactionFieldSortRequest.IMPORTED_BY, Sort.Direction.DESC,List.of());
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(responseEntity.getBody());
     }

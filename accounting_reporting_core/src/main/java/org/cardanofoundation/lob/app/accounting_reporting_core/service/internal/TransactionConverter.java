@@ -130,7 +130,7 @@ public class TransactionConverter {
         TransactionEntity txEntity = new TransactionEntity();
         txEntity.setId(transaction.getId());
         txEntity.setBatchId(transaction.getBatchId());
-        txEntity.setTransactionInternalNumber(transaction.getInternalTransactionNumber());
+        txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber());
         txEntity.setTransactionType(transaction.getTransactionType());
         txEntity.setEntryDate(transaction.getEntryDate());
         txEntity.setOrganisation(organisationConverter.convert(transaction.getOrganisation()));
@@ -258,7 +258,7 @@ public class TransactionConverter {
                 .entryDate(transactionEntity.getEntryDate())
                 .txValidationStatus(transactionEntity.getAutomatedValidationStatus())
                 .transactionType(transactionEntity.getTransactionType())
-                .internalTransactionNumber(transactionEntity.getTransactionInternalNumber())
+                .internalTransactionNumber(transactionEntity.getInternalTransactionNumber())
 
                 .transactionApproved(transactionEntity.getTransactionApproved())
                 .ledgerDispatchStatus(transactionEntity.getLedgerDispatchStatus())
@@ -302,7 +302,7 @@ public class TransactionConverter {
         attached.setAutomatedValidationStatus(detached.getAutomatedValidationStatus());
         attached.setLedgerDispatchStatus(detached.getLedgerDispatchStatus());
         attached.setAccountingPeriod(detached.getAccountingPeriod());
-        attached.setTransactionInternalNumber(detached.getTransactionInternalNumber());
+        attached.setInternalTransactionNumber(detached.getInternalTransactionNumber());
 
         attached.getViolations().clear();
         attached.getViolations().addAll(detached.getViolations());

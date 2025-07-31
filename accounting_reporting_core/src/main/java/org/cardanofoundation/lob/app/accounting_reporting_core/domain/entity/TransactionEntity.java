@@ -54,7 +54,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @LOBVersionSourceRelevant
     @Getter
     @Setter
-    private String transactionInternalNumber;
+    private String internalTransactionNumber;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -396,6 +396,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Override
     public String toString() {
         return "TransactionEntity{id='%s, transactionInternalNumber='%s, batchId='%s'}".formatted(
-                id, transactionInternalNumber, batchId);
+                id, internalTransactionNumber, batchId);
     }
 }

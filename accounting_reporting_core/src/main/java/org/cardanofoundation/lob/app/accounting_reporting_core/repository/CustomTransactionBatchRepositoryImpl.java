@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
@@ -17,11 +18,15 @@ import lombok.val;
 
 import org.springframework.data.domain.Sort;
 
+import io.vavr.control.Either;
+import org.hibernate.query.sqm.PathElementException;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.sort.TransactionFieldSortRequest;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -30,7 +35,7 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
     private final EntityManager em;
 
     @Override
-    public List<TransactionBatchEntity> findByFilter(BatchSearchRequest body, Sort sort) {
+    public Either<Problem, List<TransactionBatchEntity>> findByFilter(BatchSearchRequest body, Sort sort) {
         val builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionBatchEntity> criteriaQuery = builder.createQuery(TransactionBatchEntity.class);
         Root<TransactionBatchEntity> rootEntry = criteriaQuery.from(TransactionBatchEntity.class);
@@ -43,14 +48,23 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
         List<Order> jpaOrders = new ArrayList<>();
 
         if (sort.isSorted()) {
-            sort.get().forEach(consumer -> {
+            for(Sort.Order consumer : sort) {
+                Path<Object> path = getPath(rootEntry, consumer.getProperty());
+                if(Optional.ofNullable(path).isEmpty()) {
+                    log.error("Invalid property path: {}", consumer.getProperty());
+                    return Either.left(Problem.builder()
+                            .withStatus(Status.BAD_REQUEST)
+                            .withDetail("Invalid sort: " + consumer.getProperty())
+                            .withTitle("Invalid Sort Property")
+                            .build());
+                }
                 if (consumer.isAscending()) {
-                    jpaOrders.add(builder.asc(getPath(rootEntry, TransactionFieldSortRequest.valueOf(consumer.getProperty()).getCode())));
+                    jpaOrders.add(builder.asc(path));
                 }
                 if (consumer.isDescending()) {
-                    jpaOrders.add(builder.desc(getPath(rootEntry, TransactionFieldSortRequest.valueOf(consumer.getProperty()).getCode())));
+                    jpaOrders.add(builder.desc(path));
                 }
-            });
+            }
             criteriaQuery.orderBy(jpaOrders);
         }
 
@@ -64,7 +78,7 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
             theQuery.setFirstResult(body.getPage() * body.getLimit());
         }
 
-        return theQuery.getResultList();
+        return Either.right(theQuery.getResultList());
     }
 
     @Override
@@ -155,7 +169,12 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
         String[] pathParts = propertyPath.split("\\.");
         Path<?> path = root;
         for (String part : pathParts) {
-            path = path.get(part);
+            try {
+                path = path.get(part);
+            } catch (PathElementException e) {
+                log.error("Invalid path element: {} in property path: {}", part, propertyPath, e);
+                return null;
+            }
         }
         return (Path<T>) path;
     }

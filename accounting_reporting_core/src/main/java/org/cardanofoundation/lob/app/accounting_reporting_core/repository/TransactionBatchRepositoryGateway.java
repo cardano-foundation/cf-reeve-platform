@@ -12,6 +12,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.vavr.control.Either;
+import org.zalando.problem.Problem;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
@@ -35,7 +38,7 @@ public class TransactionBatchRepositoryGateway {
         return transactionBatchRepository.findAllByFilteringParametersOrganisationId(organisationId);
     }
 
-    public List<TransactionBatchEntity> findByFilter(BatchSearchRequest body, Sort sort) {
+    public Either<Problem, List<TransactionBatchEntity>> findByFilter(BatchSearchRequest body, Sort sort) {
         return transactionBatchRepository.findByFilter(body, sort);
     }
 

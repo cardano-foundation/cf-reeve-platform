@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
@@ -60,6 +61,7 @@ public class AccountingCorePresentationViewService {
     private final CostCenterRepository costCenterRepository;
     private final ProjectMappingRepository projectMappingRepository;
     private final OrganisationPublicApiIF organisationPublicApiIF;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     /**
      * TODO: waiting for refactoring the layer to remove this
@@ -126,8 +128,15 @@ public class AccountingCorePresentationViewService {
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Optional<BatchView> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
-        return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
+    public Either<Problem, Optional<BatchView>> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
+        Optional<Sort.Order> notSortableProperty = page.getSort().get().filter(order -> !jpaSortFieldValidator.isSortable(TransactionEntity.class, order.getProperty())).findFirst();
+        if (notSortableProperty.isPresent()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Invalid Sort Property")
+                    .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
+                    .build());
+        }
+        return Either.right(transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
                     Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, page);
 
                     BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
@@ -147,14 +156,18 @@ public class AccountingCorePresentationViewService {
                             transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
                     );
                 }
-        );
+        ));
     }
 //Sort sort = Sort.unsorted(); // Default
 //
 //        sort = Sort.by(Sort.Direction.ASC, "createdBy");
-    public BatchsDetailView listAllBatch(BatchSearchRequest body, Sort sort) {
+    public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Sort sort) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body, sort);
+        Either<Problem, List<TransactionBatchEntity>> transactionBatchEntitiesE = transactionBatchRepositoryGateway.findByFilter(body, sort);
+        if(transactionBatchEntitiesE.isLeft()) {
+            return Either.left(transactionBatchEntitiesE.getLeft());
+        }
+        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchEntitiesE.get();
         List<BatchView> batches = transactionBatchEntities
                 .stream()
                 .map(
@@ -180,7 +193,7 @@ public class AccountingCorePresentationViewService {
         batchDetailView.setBatchs(batches);
         batchDetailView.setTotal(transactionBatchRepositoryGateway.findByFilterCount(body));
 
-        return batchDetailView;
+        return Either.right(batchDetailView);
     }
 
     @Transactional
@@ -294,7 +307,7 @@ public class AccountingCorePresentationViewService {
     private TransactionReconciliationTransactionsView getTransactionReconciliationView(TransactionEntity transactionEntity) {
         return new TransactionReconciliationTransactionsView(
                 transactionEntity.getId(),
-                transactionEntity.getTransactionInternalNumber(),
+                transactionEntity.getInternalTransactionNumber(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(),
                 DataSourceView.NETSUITE,
@@ -377,7 +390,7 @@ public class AccountingCorePresentationViewService {
     private TransactionView getTransactionView(TransactionEntity transactionEntity) {
         return new TransactionView(
                 transactionEntity.getId(),
-                transactionEntity.getTransactionInternalNumber(),
+                transactionEntity.getInternalTransactionNumber(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(),
                 DataSourceView.NETSUITE,
