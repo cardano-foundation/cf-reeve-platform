@@ -23,6 +23,7 @@ public class JpaSortFieldValidator {
             // Navigate through the property path (e.g., "reconcilation.source")
             for (String part : parts) {
                 // Get the attribute for the current part. Fails if 'part' isn't a valid attribute.
+
                 Attribute<?, ?> attribute = currentType.getAttribute(part);
 
                 // Update the currentType for the next iteration if it's a traversable type (entity or embedded).
@@ -30,7 +31,7 @@ public class JpaSortFieldValidator {
                         attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.MANY_TO_ONE ||
                         attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_ONE) {
 
-                    currentType = attribute.getDeclaringType();
+                    currentType = entityManager.getMetamodel().managedType(attribute.getJavaType());
                 }
             }
             return true; // If the loop completes without exception, the path is valid.

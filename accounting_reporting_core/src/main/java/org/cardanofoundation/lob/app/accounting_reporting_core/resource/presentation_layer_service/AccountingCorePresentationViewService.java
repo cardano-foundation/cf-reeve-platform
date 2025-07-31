@@ -6,6 +6,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -129,15 +130,26 @@ public class AccountingCorePresentationViewService {
     }
 
     public Either<Problem, Optional<BatchView>> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
-        Optional<Sort.Order> notSortableProperty = page.getSort().get().filter(order -> !jpaSortFieldValidator.isSortable(TransactionEntity.class, order.getProperty())).findFirst();
-        if (notSortableProperty.isPresent()) {
-            return Either.left(Problem.builder()
-                    .withTitle("Invalid Sort Property")
-                    .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
-                    .build());
+        if (page.getSort().isSorted()) {
+            Optional<Sort.Order> notSortableProperty = page.getSort().get().filter(order -> {
+                String property = Optional.ofNullable(TRANSACTION_ENTITY_FIELD_MAPPINGS.get(order.getProperty())).orElse(order.getProperty());
+
+                return !jpaSortFieldValidator.isSortable(TransactionEntity.class, property);
+
+            }).findFirst();
+            if (notSortableProperty.isPresent()) {
+                return Either.left(Problem.builder()
+                        .withTitle("Invalid Sort Property")
+                        .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
+                        .build());
+            }
+            page = PageRequest.of(page.getPageNumber(), page.getPageSize(),
+                    Sort.by(page.getSort().get().map(order -> new Sort.Order(order.getDirection(),
+                    Optional.ofNullable(TRANSACTION_ENTITY_FIELD_MAPPINGS.get(order.getProperty())).orElse(order.getProperty()))).toList()));
         }
+        Pageable finalPage = page;
         return Either.right(transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, page);
+                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage);
 
                     BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
@@ -158,13 +170,14 @@ public class AccountingCorePresentationViewService {
                 }
         ));
     }
-//Sort sort = Sort.unsorted(); // Default
+
+    //Sort sort = Sort.unsorted(); // Default
 //
 //        sort = Sort.by(Sort.Direction.ASC, "createdBy");
     public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Sort sort) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
         Either<Problem, List<TransactionBatchEntity>> transactionBatchEntitiesE = transactionBatchRepositoryGateway.findByFilter(body, sort);
-        if(transactionBatchEntitiesE.isLeft()) {
+        if (transactionBatchEntitiesE.isLeft()) {
             return Either.left(transactionBatchEntitiesE.getLeft());
         }
         List<TransactionBatchEntity> transactionBatchEntities = transactionBatchEntitiesE.get();
