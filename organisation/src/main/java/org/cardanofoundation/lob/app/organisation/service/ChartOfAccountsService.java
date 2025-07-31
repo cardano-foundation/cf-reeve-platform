@@ -213,7 +213,6 @@ public class ChartOfAccountsService {
         // If opening balance and fcy currency is set then it must be equal to the currency
         if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance()).isPresent()
                 && Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY()).isPresent()
-                && Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getBalanceFCY()).orElse(BigDecimal.ZERO).compareTo(BigDecimal.ZERO) > 0
                 && !chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
