@@ -25,6 +25,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
@@ -109,7 +110,7 @@ public class ChartOfAccountController {
 
         Either<Set<Problem>, Set<ChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         if (chartOfAccountE.isEmpty()) {
-            return ResponseEntity.status(500).body(chartOfAccountE.getLeft());
+            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(chartOfAccountE.getLeft());
         }
         return ResponseEntity.ok(chartOfAccountE.get());
     }

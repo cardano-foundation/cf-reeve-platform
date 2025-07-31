@@ -100,7 +100,7 @@ class CostCenterServiceTest {
 
         assertNotNull(costCenterView);
         assertEquals("customerCode", costCenterView.getCustomerCode());
-        assertEquals("COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().getTitle());
+        assertEquals("COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().get().getTitle());
     }
 
     @Test
@@ -116,7 +116,7 @@ class CostCenterServiceTest {
 
         assertNotNull(costCenterView);
         assertEquals("customercode", costCenterView.getCustomerCode());
-        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().getTitle());
+        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().get().getTitle());
     }
 
     @Test
@@ -148,7 +148,7 @@ class CostCenterServiceTest {
 
         assertNotNull(costCenterView);
         assertEquals("customercode", costCenterView.getCustomerCode());
-        assertEquals("COST_CENTER_CODE_ALREADY_EXISTS", costCenterView.getError().getTitle());
+        assertEquals("COST_CENTER_CODE_ALREADY_EXISTS", costCenterView.getError().get().getTitle());
     }
 
     @Test
@@ -164,7 +164,7 @@ class CostCenterServiceTest {
 
         assertNotNull(costCenterView);
         assertEquals("customercode", costCenterView.getCustomerCode());
-        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().getTitle());
+        assertEquals("PARENT_COST_CENTER_CODE_NOT_FOUND", costCenterView.getError().get().getTitle());
     }
 
     @Test
@@ -233,6 +233,6 @@ class CostCenterServiceTest {
         Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
-        assertEquals("Default Message", result.get().get(0).getError().getDetail());
+        assertEquals("Default Message", result.get().get(0).getError().get().getDetail());
     }
 }

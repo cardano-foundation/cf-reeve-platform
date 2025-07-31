@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.domain.core;
 public enum TransactionViolationCode {
 
     DOCUMENT_MUST_BE_PRESENT,
+    DOCUMENT_NAME_MUST_BE_SET,
     TX_CANNOT_BE_ALTERED,
     ACCOUNT_CODE_CREDIT_IS_EMPTY,
     ACCOUNT_CODE_DEBIT_IS_EMPTY,
@@ -23,5 +24,6 @@ public enum TransactionViolationCode {
     JOURNAL_DUMMY_ACCOUNT_MISSING,
     TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE,
     TRANSACTION_TYPE_UNKNOWN,
-    NET_OFF_TX
+    NET_OFF_TX,
+    TX_INTERNAL_NUMBER_MUST_BE_PRESENT
 }

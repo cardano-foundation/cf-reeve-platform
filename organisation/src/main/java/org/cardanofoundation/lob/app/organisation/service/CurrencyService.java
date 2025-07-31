@@ -79,7 +79,7 @@ public class CurrencyService {
                 currency.setCurrencyId(currency.getCurrencyId());
             } else {
                 Problem error = Problem.builder()
-                        .withStatus(Status.BAD_REQUEST)
+                        .withStatus(Status.CONFLICT)
                         .withTitle("Currency already exists")
                         .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " already exists")
                         .build();

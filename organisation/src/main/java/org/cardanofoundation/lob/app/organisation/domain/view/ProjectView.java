@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.view;
 
+import java.util.Optional;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,12 +24,13 @@ public class ProjectView {
 
     private String parentCustomerCode;
 
-    private Problem error;
+    private Optional<Problem> error;
 
     public static ProjectView fromEntity(Project project) {
         ProjectView.ProjectViewBuilder builder = ProjectView.builder()
                 .customerCode(project.getId() == null ? null : project.getId().getCustomerCode())
-                .name(project.getName());
+                .name(project.getName())
+                .error(Optional.empty());
         if (project.getParent().isPresent()) {
             builder.parent(ProjectView.fromEntity(project.getParent().get()));
         }
@@ -39,7 +42,7 @@ public class ProjectView {
                 .customerCode(projectUpdate.getCustomerCode())
                 .name(projectUpdate.getName())
                 .parentCustomerCode(projectUpdate.getParentCustomerCode())
-                .error(error)
+                .error(Optional.of(error))
                 .build();
     }
 }

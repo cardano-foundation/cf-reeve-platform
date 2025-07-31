@@ -4,6 +4,7 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -33,6 +34,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.zalando.problem.Status;
+import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
@@ -68,7 +71,11 @@ public class ProjectCodeController {
     @PostMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
-        return ResponseEntity.ok(projectCodeService.insertProject(orgId, projectUpdate, false));
+        ProjectView projectView = projectCodeService.insertProject(orgId, projectUpdate, false);
+        return projectView.getError().map(error ->
+                        ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                                .body(projectView))
+                .orElseGet(() -> ResponseEntity.ok(projectView));
     }
 
     @Operation(description = "Organisation project update", responses = {
@@ -79,7 +86,11 @@ public class ProjectCodeController {
     @PutMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
-        return ResponseEntity.ok(projectCodeService.updateProject(orgId, projectUpdate));
+        ProjectView projectView = projectCodeService.updateProject(orgId, projectUpdate);
+        return projectView.getError().map(error ->
+                        ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                                .body(projectView))
+                .orElseGet(() -> ResponseEntity.ok(projectView));
     }
 
     @Operation(description = "Organisation project creation csv", responses = {

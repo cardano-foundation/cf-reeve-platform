@@ -97,7 +97,7 @@ class ProjectCodeServiceTest {
 
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
-        assertEquals("PROJECT_CODE_ALREADY_EXISTS", projectView.getError().getTitle());
+        assertEquals("PROJECT_CODE_ALREADY_EXISTS", projectView.getError().get().getTitle());
     }
 
     @Test
@@ -110,7 +110,7 @@ class ProjectCodeServiceTest {
 
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
-        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", projectView.getError().getTitle());
+        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", projectView.getError().get().getTitle());
     }
 
     @Test
@@ -128,7 +128,7 @@ class ProjectCodeServiceTest {
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
         assertEquals(customerCode, projectView.getCustomerCode());
-        assertNull(projectView.getError());
+        assertEquals(Optional.empty(), projectView.getError());
         assertEquals("Test Project", projectView.getName());
         verify(projectMappingRepository).save(any(Project.class));
     }
@@ -141,7 +141,7 @@ class ProjectCodeServiceTest {
 
         ProjectView projectView = projectCodeService.updateProject(organisationId, update);
 
-        assertEquals("PROJECT_CODE_NOT_FOUND", projectView.getError().getTitle());
+        assertEquals("PROJECT_CODE_NOT_FOUND", projectView.getError().get().getTitle());
     }
 
     @Test
@@ -154,7 +154,7 @@ class ProjectCodeServiceTest {
 
         ProjectView projectView = projectCodeService.updateProject(organisationId, update);
 
-        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", projectView.getError().getTitle());
+        assertEquals("PARENT_PROJECT_CODE_NOT_FOUND", projectView.getError().get().getTitle());
     }
 
     @Test
@@ -172,7 +172,7 @@ class ProjectCodeServiceTest {
         ProjectView projectView = projectCodeService.updateProject(organisationId, update);
 
         assertEquals(customerCode, projectView.getCustomerCode());
-        assertNull(projectView.getError());
+        assertEquals(Optional.empty(), projectView.getError());
         verify(projectMappingRepository).save(any(Project.class));
     }
 
@@ -204,7 +204,7 @@ class ProjectCodeServiceTest {
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertNotNull(result.get().get(0).getError());
-        assertEquals("Default Message", result.get().get(0).getError().getDetail());
+        assertEquals("Default Message", result.get().get(0).getError().get().getDetail());
 
     }
 

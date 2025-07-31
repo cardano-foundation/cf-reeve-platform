@@ -1,5 +1,7 @@
 import info.solidsoft.gradle.pitest.PitestTask
 import org.gradle.api.JavaVersion.VERSION_21
+import org.jreleaser.model.Active
+import org.jreleaser.model.Signing.Mode
 
 plugins {
     java
@@ -11,6 +13,30 @@ plugins {
     id("jacoco")
     id("org.sonarqube") version "6.1.0.5360"
     id("org.cyclonedx.bom") version "2.2.0"
+    id("org.jreleaser") version "1.19.0"
+}
+
+jreleaser {
+    signing {
+        active = Active.ALWAYS
+        mode = Mode.COMMAND
+    }
+    deploy {
+        maven {
+            mavenCentral {
+                create("release-deploy") {
+                    active = (Active.ALWAYS)
+                    url = "https://central.sonatype.com/api/v1/publisher"
+                    sign = true
+                    sourceJar = true
+                    javadocJar = true
+                    snapshotSupported = true
+                    verifyPom = true
+                    stagingRepository("build/staging-deploy")
+                }
+            }
+        }
+    }
 }
 
 allprojects {
@@ -67,6 +93,8 @@ subprojects {
 
     java {
         sourceCompatibility = VERSION_21
+        withJavadocJar()
+        withSourcesJar()
     }
 
     configurations {
@@ -245,14 +273,55 @@ subprojects {
             create<MavenPublication>("mavenJava") {
                 from(components["java"])
                 artifactId = "cf-lob-platform-" + project.name
+                pom {
+                    name = project.name
+                    description = "Reeve, also known as Ledger on the Blockchain (LOB), empowers organizations to securely record and share critical financial data on the Cardano blockchain, ensuring its integrity and verifiability for all stakeholders."
+                    url = "https://github.com/cardano-foundation/cf-reeve-platform/"
+                    licenses {
+                        license {
+                            name = "Apache License 2.0"
+                            url = "https://www.apache.org/licenses/LICENSE-2.0"
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = "CF"
+                            name = "Cardano Foundation"
+                        }
+                    }
+                    scm {
+                        connection = "scm:git:git://github.com/cardano-foundation/cf-reeve-platform/"
+                        developerConnection = "scm:git:ssh://git@github.com:cardano-foundation/cf-reeve-platform.git"
+                        url = "https://github.com/cardano-foundation/cf-reeve-platform/"
+                    }
+                }
             }
         }
 
         repositories {
+            // Aggregate release in local build directory which jrelease uses to deploy to Maven Central.
+            maven {
+                name = "build"
+                url = uri(File(rootProject.projectDir.path, "build/staging-deploy"))
+            }
             maven {
                 name = "localM2"
                 url = uri("${System.getProperty("user.home")}/.m2/repository")
             }
+            maven {
+                name = "gitlabPrivate"
+                url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
+                credentials(HttpHeaderCredentials::class) {
+                    name = "PRIVATE-TOKEN"
+                    value = System.getenv("GITLAB_MAVEN_REGISTRY_PASS") ?: ""
+                }
+                authentication {
+                    val header by registering(HttpHeaderAuthentication::class)
+                }
+            }
         }
     }
+
 }
+
+project.logger.lifecycle("*** Build version: " + version)
