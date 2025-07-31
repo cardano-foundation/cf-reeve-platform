@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.util.List;
 
 import jakarta.persistence.EntityManager;
@@ -94,6 +96,7 @@ class CustomTransactionBatchRepositoryImplTest {
 
         Either<Problem, List<TransactionBatchEntity>> result = customTransactionBatchRepository.findByFilter(body,sort);
 
+        assertTrue(result.isRight());
         Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("ledgerDispatchStatus");
         Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("automatedValidationStatus");
         Mockito.verify(theQuery, Mockito.times(1)).setFirstResult(10);

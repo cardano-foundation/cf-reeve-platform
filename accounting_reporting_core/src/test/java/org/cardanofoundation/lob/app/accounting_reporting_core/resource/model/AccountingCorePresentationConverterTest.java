@@ -291,9 +291,8 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setUpdatedAt(LocalDateTime.now());
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setBatchStatistics(batchStatistics);
-        Sort sort = Sort.unsorted(); // Default
 
-        sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
+        Sort sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
 
         when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, sort)).thenReturn(Either.right(List.of(transactionBatchEntity)));
         when(transactionBatchRepositoryGateway.findByFilterCount(batchSearchRequest)).thenReturn(Long.valueOf(1));

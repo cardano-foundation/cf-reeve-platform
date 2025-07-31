@@ -171,9 +171,6 @@ public class AccountingCorePresentationViewService {
         ));
     }
 
-    //Sort sort = Sort.unsorted(); // Default
-//
-//        sort = Sort.by(Sort.Direction.ASC, "createdBy");
     public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Sort sort) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
         Either<Problem, List<TransactionBatchEntity>> transactionBatchEntitiesE = transactionBatchRepositoryGateway.findByFilter(body, sort);
@@ -217,11 +214,7 @@ public class AccountingCorePresentationViewService {
     }
 
     public List<BatchsUserListView> getBatchUserList(String orgId) {
-
-        return transactionBatchRepositoryGateway.findBatchUsersList(orgId).stream().map(userName -> {
-            return new BatchsUserListView(userName);
-        }).toList();
-
+        return transactionBatchRepositoryGateway.findBatchUsersList(orgId).stream().map(BatchsUserListView::new).toList();
     }
 
     private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
