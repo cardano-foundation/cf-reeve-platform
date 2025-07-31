@@ -43,7 +43,7 @@ class SanityCheckFieldsTaskItemTest {
     void testTransactionPassesSanityCheck() {
         TransactionEntity tx = mock(TransactionEntity.class);
         when(validator.validate(tx)).thenReturn(Collections.emptySet());
-        when(tx.getTransactionInternalNumber()).thenReturn("1");
+        when(tx.getInternalTransactionNumber()).thenReturn("1");
 
         taskItem.run(tx);
 
@@ -78,7 +78,7 @@ class SanityCheckFieldsTaskItemTest {
     @Test
     void testRun_internalNumberMustBePresent() {
         TransactionEntity tx = new TransactionEntity();
-        tx.setTransactionInternalNumber("");
+        tx.setInternalTransactionNumber("");
         when(validator.validate(tx)).thenReturn(Collections.emptySet());
 
         taskItem.run(tx);
@@ -91,7 +91,7 @@ class SanityCheckFieldsTaskItemTest {
     @Test
     void testRun_documentNameMustBeSet() {
         TransactionEntity tx = new TransactionEntity();
-        tx.setTransactionInternalNumber("1");
+        tx.setInternalTransactionNumber("1");
         TransactionItemEntity itemEntity = mock(TransactionItemEntity.class);
         Document document = mock(Document.class);
 
