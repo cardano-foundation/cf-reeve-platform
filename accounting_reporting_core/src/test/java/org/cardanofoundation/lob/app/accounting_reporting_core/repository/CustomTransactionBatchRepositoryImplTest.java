@@ -1,12 +1,18 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.util.List;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.*;
 
+import org.springframework.data.domain.Sort;
+
+import io.vavr.control.Either;
 import org.mockito.Mockito;
+import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 
@@ -83,14 +89,17 @@ class CustomTransactionBatchRepositoryImplTest {
         Mockito.when(rootEntry.join("transactions", JoinType.INNER)).thenReturn(transactionEntityJoin);
         Mockito.when(builder.in(transactionEntityJoin.get("status"))).thenReturn(inResult);
 
+        Sort sort = Sort.unsorted(); // Default
+
         Mockito.when(em.createQuery(criteriaQuery)).thenReturn(theQuery);
         CustomTransactionBatchRepositoryImpl customTransactionBatchRepository = new CustomTransactionBatchRepositoryImpl(em);
 
-        List<TransactionBatchEntity> result = customTransactionBatchRepository.findByFilter(body);
+        Either<Problem, List<TransactionBatchEntity>> result = customTransactionBatchRepository.findByFilter(body,sort);
 
-        Mockito.verify(transactionEntityJoin,Mockito.times(0)).get("ledgerDispatchStatus");
-        Mockito.verify(transactionEntityJoin,Mockito.times(0)).get("automatedValidationStatus");
-        Mockito.verify(theQuery,Mockito.times(1)).setFirstResult(10);
+        assertTrue(result.isRight());
+        Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("ledgerDispatchStatus");
+        Mockito.verify(transactionEntityJoin, Mockito.times(0)).get("automatedValidationStatus");
+        Mockito.verify(theQuery, Mockito.times(1)).setFirstResult(10);
 
     }
 }

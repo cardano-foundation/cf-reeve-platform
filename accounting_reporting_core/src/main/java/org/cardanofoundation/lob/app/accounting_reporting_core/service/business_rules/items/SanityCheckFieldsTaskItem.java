@@ -42,14 +42,14 @@ public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
                     .processorModule(this.getClass().getSimpleName())
                     .bag(
                             Map.of(
-                                    "transactionNumber", tx.getTransactionInternalNumber()
+                                    "transactionNumber", tx.getInternalTransactionNumber()
                             )
                     )
                     .build();
 
             tx.addViolation(v);
         }
-        if(Optional.ofNullable(tx.getTransactionInternalNumber()).orElse("").isEmpty()) {
+        if(Optional.ofNullable(tx.getInternalTransactionNumber()).orElse("").isEmpty()) {
             TransactionViolation v = TransactionViolation.builder()
                     .code(TX_INTERNAL_NUMBER_MUST_BE_PRESENT)
                     .severity(ERROR)
@@ -69,7 +69,7 @@ public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
                            .processorModule(this.getClass().getSimpleName())
                             .bag(
                                       Map.of(
-                                             "transactionNumber", tx.getTransactionInternalNumber()
+                                             "transactionNumber", tx.getInternalTransactionNumber()
                                       )
                             )
                            .build();

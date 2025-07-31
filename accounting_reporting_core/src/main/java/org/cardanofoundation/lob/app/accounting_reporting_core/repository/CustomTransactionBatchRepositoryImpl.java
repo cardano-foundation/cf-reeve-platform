@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
@@ -14,6 +15,13 @@ import jakarta.persistence.criteria.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
+
+import org.springframework.data.domain.Sort;
+
+import io.vavr.control.Either;
+import org.hibernate.query.sqm.PathElementException;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -27,7 +35,7 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
     private final EntityManager em;
 
     @Override
-    public List<TransactionBatchEntity> findByFilter(BatchSearchRequest body) {
+    public Either<Problem, List<TransactionBatchEntity>> findByFilter(BatchSearchRequest body, Sort sort) {
         val builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionBatchEntity> criteriaQuery = builder.createQuery(TransactionBatchEntity.class);
         Root<TransactionBatchEntity> rootEntry = criteriaQuery.from(TransactionBatchEntity.class);
@@ -37,6 +45,29 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
         criteriaQuery.select(rootEntry);
         criteriaQuery.where(andPredicates.toArray(new Predicate[0]));
         criteriaQuery.orderBy(builder.desc(rootEntry.get("createdAt")));
+        List<Order> jpaOrders = new ArrayList<>();
+
+        if (sort.isSorted()) {
+            for(Sort.Order consumer : sort) {
+                Path<Object> path = getPath(rootEntry, consumer.getProperty());
+                if(Optional.ofNullable(path).isEmpty()) {
+                    log.error("Invalid property path: {}", consumer.getProperty());
+                    return Either.left(Problem.builder()
+                            .withStatus(Status.BAD_REQUEST)
+                            .withDetail("Invalid sort: " + consumer.getProperty())
+                            .withTitle("Invalid Sort Property")
+                            .build());
+                }
+                if (consumer.isAscending()) {
+                    jpaOrders.add(builder.asc(path));
+                }
+                if (consumer.isDescending()) {
+                    jpaOrders.add(builder.desc(path));
+                }
+            }
+            criteriaQuery.orderBy(jpaOrders);
+        }
+
         // Without this line the query only returns one row.
         criteriaQuery.groupBy(rootEntry.get("id"));
 
@@ -47,7 +78,7 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
             theQuery.setFirstResult(body.getPage() * body.getLimit());
         }
 
-        return theQuery.getResultList();
+        return Either.right(theQuery.getResultList());
     }
 
     @Override
@@ -103,6 +134,11 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
             andPredicates.add(builder.notEqual(bitwiseAnd, 0));
         }
 
+        if (body.getCreatedBy() != null && !body.getCreatedBy().isEmpty()) {
+            andPredicates.add(builder.equal(rootEntry.get("createdBy"), body.getCreatedBy()));
+        }
+
+
         if (null != body.getFrom()) {
             LocalDateTime localDateTime1 = body.getFrom().atStartOfDay();
             andPredicates.add(builder.greaterThanOrEqualTo(rootEntry.get("createdAt"), localDateTime1));
@@ -119,7 +155,27 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
             andPredicates.add(builder.in(transactionEntityJoin.get("overallStatus")).value(body.getTxStatus()));
         }
 
+        if (body.getBatchId() != null && !body.getBatchId().isEmpty()) {
+            andPredicates.add(builder.and(builder.equal(rootEntry.get("id"), body.getBatchId())));
+            // if the batchId is set then we search only for batchId and organisationId
+            //andPredicates = Collections.singleton(builder.and(builder.equal(rootEntry.get("id"), body.getBatchId()), builder.equal(rootEntry.get("filteringParameters").get("organisationId"), body.getOrganisationId())));
+        }
+
         return andPredicates;
     }
 
+    // Helper method to get a Path for a dot-separated property
+    private <T> Path<T> getPath(Root<?> root, String propertyPath) {
+        String[] pathParts = propertyPath.split("\\.");
+        Path<?> path = root;
+        for (String part : pathParts) {
+            try {
+                path = path.get(part);
+            } catch (PathElementException e) {
+                log.error("Invalid path element: {} in property path: {}", part, propertyPath, e);
+                return null;
+            }
+        }
+        return (Path<T>) path;
+    }
 }

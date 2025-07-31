@@ -41,7 +41,7 @@ class ExtractionItemServiceTest {
                 .build();
         val tx = new TransactionEntity();
         tx.setId("TxId1");
-        tx.setTransactionInternalNumber("1");
+        tx.setInternalTransactionNumber("1");
         tx.setOrganisation(Organisation.builder().id("orgId1").build());
         tx.setTransactionType(TransactionType.FxRevaluation);
         tx.setLedgerDispatchReceipt(new LedgerDispatchReceipt());
@@ -78,7 +78,7 @@ class ExtractionItemServiceTest {
                 .build();
         val tx = new TransactionEntity();
         tx.setId("TxId1");
-        tx.setTransactionInternalNumber("1");
+        tx.setInternalTransactionNumber("1");
         tx.setOrganisation(Organisation.builder().id("orgId1").build());
         tx.setTransactionType(TransactionType.FxRevaluation);
         tx.setLedgerDispatchReceipt(new LedgerDispatchReceipt());

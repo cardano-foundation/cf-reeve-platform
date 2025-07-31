@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.model;
 
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.CORE_CURRENCY_NOT_FOUND;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -16,6 +17,7 @@ import java.util.*;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -132,7 +134,7 @@ class AccountingCorePresentationConverterTest {
 
 
         transactionEntity2.setId("tx-id2");
-        transactionEntity2.setTransactionInternalNumber("tx-id2-internal");
+        transactionEntity2.setInternalTransactionNumber("tx-id2-internal");
         LocalDate localDate = LocalDate.now();
         transactionEntity2.setEntryDate(localDate);
         transactionEntity2.setTransactionType(TransactionType.CardCharge);
@@ -244,8 +246,9 @@ class AccountingCorePresentationConverterTest {
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(batchId, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
-        Optional<BatchView> result = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged());
-
+        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged());
+        assertTrue(resultE.isRight());
+        Optional<BatchView> result = resultE.get();
         assertEquals(true, result.isPresent());
         assertEquals(batchId, result.get().getId());
         assertEquals(2, result.get().getBatchStatistics().getTotal());
@@ -289,15 +292,17 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setBatchStatistics(batchStatistics);
 
-        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest)).thenReturn(List.of(transactionBatchEntity));
+        Sort sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
+
+        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, sort)).thenReturn(Either.right(List.of(transactionBatchEntity)));
         when(transactionBatchRepositoryGateway.findByFilterCount(batchSearchRequest)).thenReturn(Long.valueOf(1));
 
-        BatchsDetailView batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest);
-        List<BatchView> result = batchsDetailView.getBatchs();
+        Either<Problem, BatchsDetailView> batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, sort);
+        List<BatchView> result = batchsDetailView.get().getBatchs();
 
         assertEquals(1, result.size());
-        assertEquals(1, batchsDetailView.getTotal());
-        assertEquals(1, batchsDetailView.getBatchs().stream().count());
+        assertEquals(1, batchsDetailView.get().getTotal());
+        assertEquals(1, batchsDetailView.get().getBatchs().stream().count());
         assertEquals("batch-id", result.iterator().next().getId());
         assertEquals(TransactionBatchStatus.CREATED, result.iterator().next().getStatus());
 
