@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -32,6 +31,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ChartOfAccountView
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
