@@ -41,14 +41,6 @@ public class BatchSearchRequest extends BaseRequest {
     @Nullable
     private LocalDate To;
 
-    @Schema(example = "user name")
-    @Nullable
-    private String createdBy;
-
-    @Schema(example = "763d9944314012fffdf3d19aa924f750576f467aaf2bbd217f74dd549308597a")
-    @Nullable
-    private String batchId;
-
     @JsonIgnore
     private Integer limit;
 

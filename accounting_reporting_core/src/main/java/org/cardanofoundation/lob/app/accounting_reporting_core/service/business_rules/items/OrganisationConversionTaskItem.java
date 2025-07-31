@@ -35,7 +35,7 @@ public class OrganisationConversionTaskItem implements PipelineTaskItem {
                     .processorModule(this.getClass().getSimpleName())
                     .bag(
                             Map.of(
-                                    "transactionNumber", tx.getInternalTransactionNumber()
+                                    "transactionNumber", tx.getTransactionInternalNumber()
                             )
                     )
                     .build();
@@ -57,7 +57,7 @@ public class OrganisationConversionTaskItem implements PipelineTaskItem {
                     .bag(
                             Map.of(
                                     "currencyId", organisation.getCurrencyId(),
-                                    "transactionNumber", tx.getInternalTransactionNumber()
+                                    "transactionNumber", tx.getTransactionInternalNumber()
                             )
                     )
                     .build();

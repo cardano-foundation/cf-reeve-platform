@@ -55,7 +55,7 @@ public class ExtractionItemService {
         Optional<Project> project = organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(null));
         return new ExtractionTransactionItemView(
                 item.getId(),
-                item.getTransaction().getInternalTransactionNumber(),
+                item.getTransaction().getTransactionInternalNumber(),
                 item.getTransaction().getId(),
                 item.getTransaction().getEntryDate(),
                 item.getTransaction().getTransactionType(),

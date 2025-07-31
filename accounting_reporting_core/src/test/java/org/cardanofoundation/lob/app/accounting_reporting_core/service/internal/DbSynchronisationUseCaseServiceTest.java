@@ -70,7 +70,7 @@ class DbSynchronisationUseCaseServiceTest {
         val tx1 = new TransactionEntity();
         tx1.setId(txId);
         tx1.setAccountingPeriod(YearMonth.of(2021, 1));
-        tx1.setInternalTransactionNumber("txn123");
+        tx1.setTransactionInternalNumber("txn123");
         tx1.setTransactionApproved(true);
         tx1.setLedgerDispatchApproved(true);
         tx1.setLedgerDispatchStatus(DISPATCHED);
@@ -94,7 +94,7 @@ class DbSynchronisationUseCaseServiceTest {
         val tx1 = new TransactionEntity();
         tx1.setId(txId);
         tx1.setAccountingPeriod(YearMonth.of(2021, 1));
-        tx1.setInternalTransactionNumber("txn123");
+        tx1.setTransactionInternalNumber("txn123");
         tx1.setTransactionApproved(true);
         tx1.setLedgerDispatchApproved(true);
         tx1.setLedgerDispatchStatus(DISPATCHED);
@@ -205,7 +205,7 @@ class DbSynchronisationUseCaseServiceTest {
         val tx1 = Mockito.mock(TransactionEntity.class);
         tx1.setId(txId);
         tx1.setAccountingPeriod(YearMonth.of(2021, 1));
-        tx1.setInternalTransactionNumber("txn123");
+        tx1.setTransactionInternalNumber("txn123");
         tx1.setTransactionApproved(true);
         tx1.setLedgerDispatchApproved(true);
         tx1.setLedgerDispatchStatus(DISPATCHED);
@@ -228,7 +228,7 @@ class DbSynchronisationUseCaseServiceTest {
         val tx1 = Mockito.mock(TransactionEntity.class);
         tx1.setId(txId);
         tx1.setAccountingPeriod(YearMonth.of(2021, 1));
-        tx1.setInternalTransactionNumber("txn123");
+        tx1.setTransactionInternalNumber("txn123");
         tx1.setTransactionApproved(true);
         tx1.setLedgerDispatchApproved(true);
         tx1.setLedgerDispatchStatus(DISPATCHED);

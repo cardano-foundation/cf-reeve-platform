@@ -27,7 +27,7 @@ public class DocumentMustBePresentTaskItem implements PipelineTaskItem {
                         .processorModule(this.getClass().getSimpleName())
                         .bag(
                                 Map.of(
-                                        "transactionNumber", tx.getInternalTransactionNumber()
+                                        "transactionNumber", tx.getTransactionInternalNumber()
                                 )
                         )
                         .build();

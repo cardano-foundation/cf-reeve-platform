@@ -6,7 +6,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -18,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +36,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
@@ -62,7 +59,6 @@ public class AccountingCorePresentationViewService {
     private final CostCenterRepository costCenterRepository;
     private final ProjectMappingRepository projectMappingRepository;
     private final OrganisationPublicApiIF organisationPublicApiIF;
-    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     /**
      * TODO: waiting for refactoring the layer to remove this
@@ -129,27 +125,9 @@ public class AccountingCorePresentationViewService {
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Either<Problem, Optional<BatchView>> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
-        if (page.getSort().isSorted()) {
-            Optional<Sort.Order> notSortableProperty = page.getSort().get().filter(order -> {
-                String property = Optional.ofNullable(TRANSACTION_ENTITY_FIELD_MAPPINGS.get(order.getProperty())).orElse(order.getProperty());
-
-                return !jpaSortFieldValidator.isSortable(TransactionEntity.class, property);
-
-            }).findFirst();
-            if (notSortableProperty.isPresent()) {
-                return Either.left(Problem.builder()
-                        .withTitle("Invalid Sort Property")
-                        .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
-                        .build());
-            }
-            page = PageRequest.of(page.getPageNumber(), page.getPageSize(),
-                    Sort.by(page.getSort().get().map(order -> new Sort.Order(order.getDirection(),
-                    Optional.ofNullable(TRANSACTION_ENTITY_FIELD_MAPPINGS.get(order.getProperty())).orElse(order.getProperty()))).toList()));
-        }
-        Pageable finalPage = page;
-        return Either.right(transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage);
+    public Optional<BatchView> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
+        return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
+                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, page);
 
                     BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
@@ -168,16 +146,12 @@ public class AccountingCorePresentationViewService {
                             transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
                     );
                 }
-        ));
+        );
     }
 
-    public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Sort sort) {
+    public BatchsDetailView listAllBatch(BatchSearchRequest body) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-        Either<Problem, List<TransactionBatchEntity>> transactionBatchEntitiesE = transactionBatchRepositoryGateway.findByFilter(body, sort);
-        if (transactionBatchEntitiesE.isLeft()) {
-            return Either.left(transactionBatchEntitiesE.getLeft());
-        }
-        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchEntitiesE.get();
+        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body);
         List<BatchView> batches = transactionBatchEntities
                 .stream()
                 .map(
@@ -203,7 +177,7 @@ public class AccountingCorePresentationViewService {
         batchDetailView.setBatchs(batches);
         batchDetailView.setTotal(transactionBatchRepositoryGateway.findByFilterCount(body));
 
-        return Either.right(batchDetailView);
+        return batchDetailView;
     }
 
     @Transactional
@@ -211,10 +185,6 @@ public class AccountingCorePresentationViewService {
         UserExtractionParameters fp = getUserExtractionParameters(body);
 
         return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
-    }
-
-    public List<BatchsUserListView> getBatchUserList(String orgId) {
-        return transactionBatchRepositoryGateway.findBatchUsersList(orgId).stream().map(BatchsUserListView::new).toList();
     }
 
     private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
@@ -313,7 +283,7 @@ public class AccountingCorePresentationViewService {
     private TransactionReconciliationTransactionsView getTransactionReconciliationView(TransactionEntity transactionEntity) {
         return new TransactionReconciliationTransactionsView(
                 transactionEntity.getId(),
-                transactionEntity.getInternalTransactionNumber(),
+                transactionEntity.getTransactionInternalNumber(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(),
                 DataSourceView.NETSUITE,
@@ -396,7 +366,7 @@ public class AccountingCorePresentationViewService {
     private TransactionView getTransactionView(TransactionEntity transactionEntity) {
         return new TransactionView(
                 transactionEntity.getId(),
-                transactionEntity.getInternalTransactionNumber(),
+                transactionEntity.getTransactionInternalNumber(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(),
                 DataSourceView.NETSUITE,

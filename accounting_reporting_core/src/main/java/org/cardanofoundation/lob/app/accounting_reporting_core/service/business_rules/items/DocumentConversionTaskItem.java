@@ -63,7 +63,7 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
                     return vatM.map(v -> new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat(vat.getCustomerCode(), Optional.of(v.getRate())))
                             .or(() -> {
 
-                                addViolation(tx, txItem, VAT_DATA_NOT_FOUND, Map.of("customerCode", vat.getCustomerCode(), "transactionNumber", tx.getInternalTransactionNumber()));
+                                addViolation(tx, txItem, VAT_DATA_NOT_FOUND, Map.of("customerCode", vat.getCustomerCode(), "transactionNumber", tx.getTransactionInternalNumber()));
                                 // We save the wrong value to allow the reprocess read it and compare it against the database
                                 return Optional.of(new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat(vat.getCustomerCode(), Optional.empty()));
                             });
@@ -83,7 +83,7 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
                     .severity(ERROR)
                     .source(ERP)
                     .processorModule(getClass().getSimpleName())
-                    .bag(Map.of("customerCode", customerCurrencyCode, "transactionNumber", tx.getInternalTransactionNumber()))
+                    .bag(Map.of("customerCode", customerCurrencyCode, "transactionNumber", tx.getTransactionInternalNumber()))
                     .build());
 
             return Optional.empty();
@@ -92,13 +92,13 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
         val organisationCurrencyM = organisationPublicApi.findCurrencyByCustomerCurrencyCode(organisationId, customerCurrencyCode);
 
         if (organisationCurrencyM.isEmpty()) {
-            addViolation(tx, txItem, CURRENCY_DATA_NOT_FOUND, Map.of("customerCode", customerCurrencyCode, "transactionNumber", tx.getInternalTransactionNumber()));
+            addViolation(tx, txItem, CURRENCY_DATA_NOT_FOUND, Map.of("customerCode", customerCurrencyCode, "transactionNumber", tx.getTransactionInternalNumber()));
         }
 
         return organisationCurrencyM.flatMap(orgCurrency -> {
             return coreCurrencyRepository.findByCurrencyId(orgCurrency.getCurrencyId())
                     .or(() -> {
-                        addViolation(tx, txItem, CORE_CURRENCY_NOT_FOUND, Map.of("currencyId", orgCurrency.getCurrencyId(), "transactionNumber", tx.getInternalTransactionNumber()));
+                        addViolation(tx, txItem, CORE_CURRENCY_NOT_FOUND, Map.of("currencyId", orgCurrency.getCurrencyId(), "transactionNumber", tx.getTransactionInternalNumber()));
 
                         return Optional.empty();
                     });

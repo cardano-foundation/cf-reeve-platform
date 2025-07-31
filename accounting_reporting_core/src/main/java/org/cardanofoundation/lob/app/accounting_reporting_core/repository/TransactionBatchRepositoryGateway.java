@@ -8,12 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -38,8 +34,8 @@ public class TransactionBatchRepositoryGateway {
         return transactionBatchRepository.findAllByFilteringParametersOrganisationId(organisationId);
     }
 
-    public Either<Problem, List<TransactionBatchEntity>> findByFilter(BatchSearchRequest body, Sort sort) {
-        return transactionBatchRepository.findByFilter(body, sort);
+    public List<TransactionBatchEntity> findByFilter(BatchSearchRequest body) {
+        return transactionBatchRepository.findByFilter(body);
     }
 
     public Long findByFilterCount(BatchSearchRequest body) {
@@ -52,10 +48,6 @@ public class TransactionBatchRepositoryGateway {
 
     public List<BatchStatisticsView> getBatchStatisticViewForBatchId(List<String> batchId, PageRequest pageRequest) {
         return transactionBatchRepository.getBatchStatisticViewForBatchId(batchId, pageRequest);
-    }
-    public List<String> findBatchUsersList(String orgId){
-        return transactionBatchRepository.findBatchUsersList(orgId);
-
     }
 
 }

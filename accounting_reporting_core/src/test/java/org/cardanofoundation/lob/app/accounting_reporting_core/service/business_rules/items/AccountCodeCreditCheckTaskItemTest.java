@@ -41,7 +41,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(FxRevaluation);
         tx.setItems(Set.of(txItem));
@@ -62,7 +62,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(FxRevaluation);
         tx.setItems(Set.of(txItem));
@@ -84,7 +84,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(Journal);
         tx.setItems(Set.of(txItem));
@@ -110,7 +110,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(FxRevaluation);
         tx.setItems(Set.of(txItem1, txItem2));
@@ -134,7 +134,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(FxRevaluation);
         tx.setItems(Set.of(txItem1, txItem2));
@@ -156,7 +156,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(BillCredit);
         tx.setItems(Set.of(txItem1));
@@ -174,7 +174,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(BillCredit);
         tx.setItems(Set.of());
@@ -195,7 +195,7 @@ public class AccountCodeCreditCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("1").build());
         tx.setTransactionType(FxRevaluation);
         tx.setItems(Set.of(txItem));

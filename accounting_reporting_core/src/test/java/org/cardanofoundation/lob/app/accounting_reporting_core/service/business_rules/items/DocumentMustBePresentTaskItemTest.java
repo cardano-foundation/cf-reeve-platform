@@ -38,7 +38,7 @@ class DocumentMustBePresentTaskItemTest {
         items.add(itemWithDocument);
 
         val transaction = new TransactionEntity();
-        transaction.setInternalTransactionNumber("txn123");
+        transaction.setTransactionInternalNumber("txn123");
         transaction.setItems(items);
         transaction.setViolations(new HashSet<>());
 
@@ -58,7 +58,7 @@ class DocumentMustBePresentTaskItemTest {
         items.add(itemWithoutDocument);
 
         val transaction = new TransactionEntity();
-        transaction.setInternalTransactionNumber("txn123");
+        transaction.setTransactionInternalNumber("txn123");
         transaction.setItems(items);
         transaction.setViolations(new HashSet<>());
 
@@ -85,7 +85,7 @@ class DocumentMustBePresentTaskItemTest {
         items.add(itemWithoutDocument);
 
         val transaction = new TransactionEntity();
-        transaction.setInternalTransactionNumber("txn123");
+        transaction.setTransactionInternalNumber("txn123");
         transaction.setItems(items);
         transaction.setViolations(new HashSet<>());
 
@@ -98,7 +98,7 @@ class DocumentMustBePresentTaskItemTest {
     @Test
     void shouldNotAddViolationForEmptyItems() {
         val transaction = new TransactionEntity();
-        transaction.setInternalTransactionNumber("txn123");
+        transaction.setTransactionInternalNumber("txn123");
         transaction.setItems(new HashSet<>());
         transaction.setViolations(new HashSet<>());
 

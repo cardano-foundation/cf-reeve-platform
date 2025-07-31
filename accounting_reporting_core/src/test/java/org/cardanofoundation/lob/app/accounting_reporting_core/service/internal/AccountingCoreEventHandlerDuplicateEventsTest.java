@@ -97,7 +97,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         TransactionEntity transactionEntity = new TransactionEntity();
         transactionEntity.setId("txId");
         transactionEntity.setOrganisation(Organisation.builder().id("testOrg").build());
-        transactionEntity.setInternalTransactionNumber("txInternalNumber");
+        transactionEntity.setTransactionInternalNumber("txInternalNumber");
         transactionEntity.setBatchId("batchId");
         transactionEntity.setAccountingPeriod(YearMonth.now());
         transactionEntity.setEntryDate(LocalDate.now());

@@ -31,7 +31,7 @@ public class AccountCodeDebitCheckTaskItem implements PipelineTaskItem {
                         .severity(ERROR)
                         .source(ERP)
                         .processorModule(this.getClass().getSimpleName())
-                        .bag(Map.of("transactionNumber", tx.getInternalTransactionNumber()))
+                        .bag(Map.of("transactionNumber", tx.getTransactionInternalNumber()))
                         .build();
 
                 tx.addViolation(v);

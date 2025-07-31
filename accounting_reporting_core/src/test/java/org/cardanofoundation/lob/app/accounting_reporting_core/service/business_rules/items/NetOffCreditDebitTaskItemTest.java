@@ -75,7 +75,7 @@ class NetOffCreditDebitTaskItemTest {
 
         tx.setId(txId);
         tx.setItems(txItems);
-        tx.setInternalTransactionNumber("JOURNAL000");
+        tx.setTransactionInternalNumber("JOURNAL000");
 
         taskItem.run(tx);
 
@@ -120,7 +120,7 @@ class NetOffCreditDebitTaskItemTest {
 
         tx.setId(txId);
         tx.setItems(txItems);
-        tx.setInternalTransactionNumber("JOURNAL000");
+        tx.setTransactionInternalNumber("JOURNAL000");
 
         taskItem.run(tx);
 

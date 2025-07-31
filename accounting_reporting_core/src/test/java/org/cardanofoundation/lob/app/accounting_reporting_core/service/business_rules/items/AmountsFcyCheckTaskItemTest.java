@@ -40,7 +40,7 @@ class AmountsFcyCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("1");
+        tx.setTransactionInternalNumber("1");
         tx.setOrganisation(Organisation.builder().id("1").build());
         tx.setTransactionType(TransactionType.BillCredit);
         tx.setItems(Set.of(txItem1));
@@ -63,7 +63,7 @@ class AmountsFcyCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("2");
+        tx.setTransactionInternalNumber("2");
         tx.setOrganisation(Organisation.builder().id("1").build());
         tx.setTransactionType(TransactionType.FxRevaluation);
         tx.setItems(Set.of(txItem1));
@@ -85,7 +85,7 @@ class AmountsFcyCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("3");
+        tx.setTransactionInternalNumber("3");
         tx.setOrganisation(Organisation.builder().id("1").build());
         tx.setTransactionType(TransactionType.BillCredit);
         tx.setItems(Set.of(txItem1));
@@ -107,7 +107,7 @@ class AmountsFcyCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setInternalTransactionNumber("4");
+        tx.setTransactionInternalNumber("4");
         tx.setOrganisation(Organisation.builder().id("1").build());
         tx.setTransactionType(TransactionType.BillCredit);
         tx.setItems(Set.of(txItem1));

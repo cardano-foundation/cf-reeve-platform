@@ -66,7 +66,7 @@ class DocumentConversionTaskItemTest {
 
         TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
-        transaction.setInternalTransactionNumber(txInternalNumber);
+        transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
                 .id(organisationId)
                 .build()
@@ -103,7 +103,7 @@ class DocumentConversionTaskItemTest {
 
         TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
-        transaction.setInternalTransactionNumber(txInternalNumber);
+        transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
                 .id(organisationId)
                 .build());
@@ -143,7 +143,7 @@ class DocumentConversionTaskItemTest {
 
         TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
-        transaction.setInternalTransactionNumber(txInternalNumber);
+        transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
                 .id(organisationId)
                 .build());
@@ -199,7 +199,7 @@ class DocumentConversionTaskItemTest {
 
         TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
-        transaction.setInternalTransactionNumber(txInternalNumber);
+        transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
                 .id(organisationId)
                 .build());
@@ -242,7 +242,7 @@ class DocumentConversionTaskItemTest {
 
         TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
-        transaction.setInternalTransactionNumber(txInternalNumber);
+        transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
                 .id(organisationId)
                 .build());

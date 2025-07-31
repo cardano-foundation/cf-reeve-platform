@@ -185,7 +185,7 @@ public class TransactionReconcilationService {
             reconcilationEntity.addViolation(ReconcilationViolation.builder()
                     .transactionId(tx.getId())
                     .rejectionCode(ReconcilationRejectionCode.TX_NOT_IN_LOB)
-                    .transactionInternalNumber(tx.getInternalTransactionNumber())
+                    .transactionInternalNumber(tx.getTransactionInternalNumber())
                     .transactionEntryDate(tx.getEntryDate())
                     .transactionType(tx.getTransactionType())
                     .amountLcySum(tx.getItems().stream()
@@ -220,7 +220,7 @@ public class TransactionReconcilationService {
             String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
             String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
             log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",
-                    attachedTx.getId(), attachedTx.getInternalTransactionNumber(), attachedTxHash, detachedTxHash);
+                    attachedTx.getId(), attachedTx.getTransactionInternalNumber(), attachedTxHash, detachedTxHash);
 
             ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash)
                     ? ReconcilationCode.OK : ReconcilationCode.NOK;
@@ -230,13 +230,13 @@ public class TransactionReconcilationService {
                 Changes changes = sourceDiff.getChanges();
                 String jsonDiff = javers.getJsonConverter().toJson(changes);
 
-                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), sourceDiff.prettyPrint());
+                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getTransactionInternalNumber(), sourceDiff.prettyPrint());
 
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(attachedTx.getId())
                         .rejectionCode(SOURCE_RECONCILATION_FAIL)
                         .sourceDiff(jsonDiff)
-                        .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
+                        .transactionInternalNumber(attachedTx.getTransactionInternalNumber())
                         .transactionEntryDate(attachedTx.getEntryDate())
                         .transactionType(attachedTx.getTransactionType())
                         .amountLcySum(computeAmountLcySum(attachedTx)
@@ -251,7 +251,7 @@ public class TransactionReconcilationService {
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(attachedTx.getId())
                         .rejectionCode(SINK_RECONCILATION_FAIL)
-                        .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
+                        .transactionInternalNumber(attachedTx.getTransactionInternalNumber())
                         .transactionEntryDate(attachedTx.getEntryDate())
                         .transactionType(attachedTx.getTransactionType())
                         .amountLcySum(computeAmountLcySum(attachedTx)
@@ -349,7 +349,7 @@ public class TransactionReconcilationService {
             reconcilationEntity.addViolation(ReconcilationViolation.builder()
                     .transactionId(missingTx.getId())
                     .rejectionCode(TX_NOT_IN_ERP)
-                    .transactionInternalNumber(missingTx.getInternalTransactionNumber())
+                    .transactionInternalNumber(missingTx.getTransactionInternalNumber())
                     .transactionEntryDate(missingTx.getEntryDate())
                     .transactionType(missingTx.getTransactionType())
                     .amountLcySum(computeAmountLcySum(missingTx)

@@ -16,7 +16,7 @@ public class ERPSourceTransactionVersionCalculator {
         val b = new StringBuilder();
 
         b.append(transactionEntity.getId());
-        b.append(transactionEntity.getInternalTransactionNumber());
+        b.append(transactionEntity.getTransactionInternalNumber());
         b.append(compute(transactionEntity.getOrganisation()));
         b.append(transactionEntity.getTransactionType());
         b.append(transactionEntity.getEntryDate());

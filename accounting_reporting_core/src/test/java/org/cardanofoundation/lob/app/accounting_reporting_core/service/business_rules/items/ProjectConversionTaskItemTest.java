@@ -49,7 +49,7 @@ public class ProjectConversionTaskItemTest {
 
         val transaction = new TransactionEntity();
         transaction.setId("1");
-        transaction.setInternalTransactionNumber("1");
+        transaction.setTransactionInternalNumber("1");
         transaction.setOrganisation(Organisation.builder()
                 .id("1")
                 .build());
@@ -76,7 +76,7 @@ public class ProjectConversionTaskItemTest {
 
         val transaction = new TransactionEntity();
         transaction.setId("1");
-        transaction.setInternalTransactionNumber("1");
+        transaction.setTransactionInternalNumber("1");
         transaction.setOrganisation(Organisation.builder()
                 .id("1")
                 .build());
@@ -100,7 +100,7 @@ public class ProjectConversionTaskItemTest {
 
         val transaction = new TransactionEntity();
         transaction.setId("1");
-        transaction.setInternalTransactionNumber("1");
+        transaction.setTransactionInternalNumber("1");
         transaction.setOrganisation(Organisation.builder()
                 .id("1")
                 .build());

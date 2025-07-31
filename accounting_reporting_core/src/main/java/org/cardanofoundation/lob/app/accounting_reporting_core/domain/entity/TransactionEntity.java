@@ -54,7 +54,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @LOBVersionSourceRelevant
     @Getter
     @Setter
-    private String internalTransactionNumber;
+    private String transactionInternalNumber;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -63,7 +63,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
             inverseJoinColumns = @JoinColumn(name = "transaction_batch_id"))
     @NotNull
     @Getter
-    @Builder.Default
     private Set<TransactionBatchEntity> batches = new LinkedHashSet<>();
 
     @Column(name = "batch_id", nullable = false)
@@ -102,7 +101,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @JdbcType(PostgreSQLEnumJdbcType.class)
     @Getter
     @Setter
-    @Builder.Default
+    // https://www.baeldung.com/java-enums-jpa-postgresql
     private LedgerDispatchStatus ledgerDispatchStatus = NOT_DISPATCHED;
 
     @Embedded
@@ -131,25 +130,21 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @JdbcType(PostgreSQLEnumJdbcType.class)
     @Getter
     @Setter
-    @Builder.Default
     private TxValidationStatus automatedValidationStatus = TxValidationStatus.VALIDATED;
 
     @Column(name = "transaction_approved", nullable = false)
     @Getter
     @Setter
     @DiffIgnore
-    @Builder.Default
     private Boolean transactionApproved = false;
 
     @Column(name = "ledger_dispatch_approved", nullable = false)
     @Getter
     @Setter
     @DiffIgnore
-    @Builder.Default
     private Boolean ledgerDispatchApproved = false;
 
     @OneToMany(mappedBy = "transaction", orphanRemoval = true, fetch = EAGER, cascade = CascadeType.ALL)
-    @Builder.Default
     private Set<TransactionItemEntity> items = new LinkedHashSet<>();
 
     @OneToOne(fetch = FetchType.LAZY)
@@ -194,7 +189,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @DiffIgnore
     @Getter
     @Setter
-    @Builder.Default
     private Set<TransactionViolation> violations = new LinkedHashSet<>();
 
     public Optional<TransactionProcessingStatus> getProcessingStatus() {
@@ -402,6 +396,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Override
     public String toString() {
         return "TransactionEntity{id='%s, transactionInternalNumber='%s, batchId='%s'}".formatted(
-                id, internalTransactionNumber, batchId);
+                id, transactionInternalNumber, batchId);
     }
 }
