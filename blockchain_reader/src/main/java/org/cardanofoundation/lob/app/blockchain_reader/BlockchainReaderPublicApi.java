@@ -51,7 +51,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     public Either<Problem, ChainTip> getChainTip() {
         try {
             ChainTip chainTip = restClient.get()
-                    .uri("%s/tip".formatted(lobFollowerBaseUrl))
+                    .uri("%s/v1/tip".formatted(lobFollowerBaseUrl))
                     .retrieve()
                     .body(ChainTip.class);
 
@@ -89,7 +89,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     public Either<Problem, Optional<OnChainTxDetails>> getTxDetails(String transactionHash) {
         try {
             OnChainTxDetails txDetails = restClient.get()
-                    .uri("%s/tx-details/%s".formatted(lobFollowerBaseUrl, transactionHash))
+                    .uri("%s/v1/tx-details/%s".formatted(lobFollowerBaseUrl, transactionHash))
                     .retrieve()
                     .body(OnChainTxDetails.class);
 
@@ -137,7 +137,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     public Either<Problem, Map<String, Boolean>> isOnChain(Set<String> transactionIds) {
         try {
             LOBOnChainTxStatusResponse lobOnChainDetailsResponse = restClient.post()
-                    .uri("%s/on-chain-statuses".formatted(lobFollowerBaseUrl))
+                    .uri("%s/v1/on-chain-statuses".formatted(lobFollowerBaseUrl))
                     .body(new LOBOnChainTxStatusRequest(transactionIds))
                     .retrieve()
                     .body(LOBOnChainTxStatusResponse.class);
