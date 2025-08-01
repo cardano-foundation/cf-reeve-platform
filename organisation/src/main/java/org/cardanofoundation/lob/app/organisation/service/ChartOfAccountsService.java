@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.cardanofoundation.lob.app.organisation.util.Constants.VALIDATION_ERROR;
 
-import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
