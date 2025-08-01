@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 
 @Getter
@@ -37,6 +38,7 @@ public class ReportView {
     private Boolean publish;
 
     private Boolean canBePublish;
+    private PublishError canPublishError;
 
     private String documentCurrencyCustomerCode;
 

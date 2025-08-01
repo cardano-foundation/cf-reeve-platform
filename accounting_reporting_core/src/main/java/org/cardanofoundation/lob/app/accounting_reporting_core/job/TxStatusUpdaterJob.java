@@ -22,6 +22,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
@@ -80,12 +81,15 @@ public class TxStatusUpdaterJob {
 
             reportEntitiesToBeUpdated.forEach(report -> {
                 log.info("Checking if report {} is ready to publish", report.getId());
-                Either<Problem, Boolean> isReadyToPublish = reportService.canPublish(report);
+                Either<Problem, Void> isReadyToPublish = reportService.canPublish(report);
                 if (isReadyToPublish.isLeft()) {
-                    log.error("Report {} cannot be published: {}", report.getId(), isReadyToPublish.getLeft().getDetail());
-                    return;
+                    log.warn("Report {} is not ready to publish: {}", report.getId(), isReadyToPublish.getLeft().getTitle());
+                    report.setPublishError(PublishError.valueOf(isReadyToPublish.getLeft().getTitle()));
+                    report.setIsReadyToPublish(false);
+                } else {
+                    report.setIsReadyToPublish(true);
                 }
-                report.setIsReadyToPublish(isReadyToPublish.get());
+
                 reportRepository.save(report);
             });
 

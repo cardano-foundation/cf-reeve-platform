@@ -62,6 +62,7 @@ public class ReportViewService {
             reportResponseView.setBlockChainHash(reportEntity.getLedgerDispatchReceipt().get().getPrimaryBlockchainHash());
         }
         reportResponseView.setCanBePublish(reportEntity.getIsReadyToPublish());
+        reportResponseView.setCanPublishError(reportEntity.getPublishError());
         reportResponseView.setVer(reportEntity.getVer());
         //BalanceSheet
         reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getTangibleAssets()))).ifPresent(bigDecimal -> reportResponseView.setTangibleAssets(bigDecimal.toString()));
