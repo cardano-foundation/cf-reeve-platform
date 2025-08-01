@@ -31,6 +31,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ChartOfAccountView
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
@@ -55,6 +56,8 @@ class ChartOfAccountsServiceTest {
     private CsvParser<ChartOfAccountUpdateCsv> csvParser;
     @Mock
     private Validator validator;
+    @Mock
+    private CurrencyRepository currencyRepository;
 
     private ChartOfAccountsService chartOfAccountsService;
 
@@ -75,6 +78,7 @@ class ChartOfAccountsServiceTest {
                 chartOfAccountTypeRepository,
                 chartOfAccountSubTypeRepository,
                 referenceCodeRepository,
+                currencyRepository,
                 organisationService,
                 csvParser,
                 validator
@@ -330,7 +334,8 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .thenReturn(Optional.of(chartOfAccount));
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
-
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
         ChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
 
         assertNotNull(response);
@@ -440,11 +445,29 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
-
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
         ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertTrue(response.getError().isEmpty());
+    }
+
+    @Test
+    void testInsertChartOfAccount_currencyNotFound() {
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .thenReturn(Optional.empty());
+        when(currencyRepository.findById(any())).thenReturn(Optional.empty());
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isPresent());
+        assertEquals("CURRENCY_NOT_FOUND", response.getError().get().getTitle());
     }
 
     @Test
@@ -515,7 +538,8 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(newAccount);
-
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
         ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);

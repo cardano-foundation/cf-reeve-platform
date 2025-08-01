@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.csv;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -45,7 +46,7 @@ public class ChartOfAccountUpdateCsv extends ChartOfAccountUpdate {
                 this.openBalanceCurrencyFcy,
                 this.openBalanceCurrencyLcy,
                 this.balanceType,
-                FlexibleDateParser.parse(this.date)
+                Optional.ofNullable(this.date).map(d -> FlexibleDateParser.parse(this.date)).orElse(null)
         ));
     }
 }

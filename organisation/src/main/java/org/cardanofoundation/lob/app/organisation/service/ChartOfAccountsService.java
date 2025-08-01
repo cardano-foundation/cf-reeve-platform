@@ -32,6 +32,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ChartOfAccountView
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
@@ -45,6 +46,7 @@ public class ChartOfAccountsService {
     private final ChartOfAccountTypeRepository chartOfAccountTypeRepository;
     private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
     private final ReferenceCodeRepository referenceCodeRepository;
+    private final CurrencyRepository currencyRepository;
     private final OrganisationService organisationService;
     private final CsvParser<ChartOfAccountUpdateCsv> csvParser;
     private final Validator validator;
@@ -191,9 +193,34 @@ public class ChartOfAccountsService {
         chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
         chartOfAccount.setSubType(subType.get());
         chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode() == null || chartOfAccountUpdate.getParentCustomerCode().isEmpty() ? null : chartOfAccountUpdate.getParentCustomerCode());
+        String currency = Optional.ofNullable(chartOfAccountUpdate.getCurrency()).orElse("");
+        if(!currency.isEmpty()) {
+            Optional<Currency> byId = currencyRepository.findById(new Currency.Id(chartOfAccount.getId().getOrganisationId(), currency));
+            if(byId.isEmpty()) {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("CURRENCY_NOT_FOUND")
+                        .withDetail("Unable to find currency with id: %s".formatted(currency))
+                        .withStatus(Status.NOT_FOUND)
+                        .build(), chartOfAccountUpdate);
+            }
+        }
         chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
+
         chartOfAccount.setCounterParty(chartOfAccountUpdate.getCounterParty());
         chartOfAccount.setActive(chartOfAccountUpdate.getActive());
+
+        // If opening balance and fcy currency is set then it must be equal to the currency
+        if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance()).isPresent()
+                && Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY()).isPresent()
+                && !chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
+                        .withDetail("The opening balance FCY currency must match the chart of account currency.")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate);
+            }
+
+
         chartOfAccount.setOpeningBalance(chartOfAccountUpdate.getOpeningBalance());
 
         ChartOfAccount chartOfAccountResult = chartOfAccountRepository.save(chartOfAccount);
@@ -228,7 +255,7 @@ public class ChartOfAccountsService {
             // A workAround to fill the nested object
             try {
                 chartOfAccountUpdateCsv.fillOpeningBalance();
-            } catch (IllegalArgumentException e) {
+            } catch (Exception e) {
                 Problem error = Problem.builder()
                         .withTitle("OPENING_BALANCE_ERROR")
                         .withDetail(e.getMessage())
