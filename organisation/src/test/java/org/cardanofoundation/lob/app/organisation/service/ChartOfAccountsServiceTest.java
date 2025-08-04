@@ -326,7 +326,9 @@ class ChartOfAccountsServiceTest {
 
     @Test
     void testUpdateChartOfAccount_Success() {
-        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("USD");
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
@@ -340,6 +342,26 @@ class ChartOfAccountsServiceTest {
 
         assertNotNull(response);
         assertTrue(response.getError().isEmpty());
+    }
+
+    @Test
+    void testUpdateChartOfAccount_openingBalanceLCYMismatch() {
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("EUR");
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .thenReturn(Optional.of(chartOfAccount));
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
+        ChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isPresent());
+        assertEquals("OPENING_BALANCE_CURRENCY_MISMATCH", response.getError().get().getTitle());
     }
 
     @Test
@@ -437,7 +459,9 @@ class ChartOfAccountsServiceTest {
 
     @Test
     void testInsertChartOfAccount_Success() {
-        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("USD");
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
@@ -447,6 +471,7 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
         Currency currency = mock(Currency.class);
         when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
+
         ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
@@ -530,7 +555,9 @@ class ChartOfAccountsServiceTest {
         ChartOfAccount.Id accountId = new ChartOfAccount.Id(orgId, customerCode);
         ChartOfAccount newAccount = ChartOfAccount.builder().id(accountId).subType(subType).build();
 
-        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("USD");
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
