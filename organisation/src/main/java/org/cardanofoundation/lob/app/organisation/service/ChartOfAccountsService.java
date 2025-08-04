@@ -173,7 +173,7 @@ public class ChartOfAccountsService {
                 .id(new ChartOfAccount.Id(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .build();
         if (chartOfAccountOpt.isPresent()) {
-            if(isUpsert) {
+            if (isUpsert) {
                 chartOfAccount = chartOfAccountOpt.get();
             } else {
                 return ChartOfAccountView.createFail(Problem.builder()
@@ -194,9 +194,9 @@ public class ChartOfAccountsService {
         chartOfAccount.setSubType(subType.get());
         chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode() == null || chartOfAccountUpdate.getParentCustomerCode().isEmpty() ? null : chartOfAccountUpdate.getParentCustomerCode());
         String currency = Optional.ofNullable(chartOfAccountUpdate.getCurrency()).orElse("");
-        if(!currency.isEmpty()) {
+        if (!currency.isEmpty()) {
             Optional<Currency> byId = currencyRepository.findById(new Currency.Id(chartOfAccount.getId().getOrganisationId(), currency));
-            if(byId.isEmpty()) {
+            if (byId.isEmpty()) {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("CURRENCY_NOT_FOUND")
                         .withDetail("Unable to find currency with id: %s".formatted(currency))
@@ -210,15 +210,25 @@ public class ChartOfAccountsService {
         chartOfAccount.setActive(chartOfAccountUpdate.getActive());
 
         // If opening balance and fcy currency is set then it must be equal to the currency
-        if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance()).isPresent()
-                && Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY()).isPresent()
-                && !chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
+        if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance()).isPresent()) {
+            if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY()).isPresent()
+                    && !chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
                         .withDetail("The opening balance FCY currency must match the chart of account currency.")
                         .withStatus(Status.BAD_REQUEST)
                         .build(), chartOfAccountUpdate);
             }
+            Organisation organisation = organisationService.findById(chartOfAccount.getId().getOrganisationId()).orElseThrow();
+            if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY()).isPresent()
+            && !chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisation.getCurrencyId())) {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
+                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisation.getCurrencyId()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate);
+            }
+        }
 
 
         chartOfAccount.setOpeningBalance(chartOfAccountUpdate.getOpeningBalance());
