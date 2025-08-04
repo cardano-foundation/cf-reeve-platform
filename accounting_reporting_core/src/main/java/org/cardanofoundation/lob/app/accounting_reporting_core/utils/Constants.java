@@ -35,4 +35,6 @@ public class Constants {
     public static final String REPORT_TYPE_IS_NOT_VALID_EXPECTED_BALANCE_SHEET_OR_INCOME_STATEMENT_BUT_GOT_S = "Report type is not valid. Expected BALANCE_SHEET or INCOME_STATEMENT but got %s.";
     public static final String REPORT_ALREADY_DISPATCHED = "REPORT_ALREADY_DISPATCHED";
     public static final String REPORT_WITH_ID_S_HAS_ALREADY_BEEN_DISPATCHED = "Report with ID %s has already been dispatched.";
+    public static final String REPORT_DATA_MISMATCH = "REPORT_DATA_MISMATCH";
+    public static final String REPORT_DATA_DOES_NOT_MATCH_GENERATED_REPORT = "Report data does not match generated report.";
 }

@@ -28,6 +28,7 @@ import org.hibernate.envers.Audited;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Validable;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.LedgerDispatchReceipt;
@@ -200,6 +201,13 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Getter
     @Setter
     private Boolean isReadyToPublish = false;
+
+    @Column(name = "publish_error")
+    @Enumerated(STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
+    @Getter
+    @Setter
+    private PublishError publishError;
 
     @Column(name = "ledger_dispatch_status", nullable = false)
     @Enumerated(STRING)

@@ -38,6 +38,7 @@ import org.zalando.problem.Status;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
@@ -91,10 +92,7 @@ public class ReportService {
                     .build());
         }
         ReportEntity report = reportM.orElseThrow();
-        Either<Problem, Boolean> isReportReadyToPublish = canPublish(report);
-        if (isReportReadyToPublish.isLeft()) {
-            return Either.left(isReportReadyToPublish.getLeft());
-        } else if (Boolean.FALSE.equals(isReportReadyToPublish.get())) {
+        if (Boolean.FALSE.equals(report.getIsReadyToPublish())) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_READY_FOR_PUBLISHING)
                     .withDetail(Constants.REPORT_WITH_ID_S_IS_NOT_READY_FOR_PUBLISHING.formatted(reportId))
@@ -347,11 +345,11 @@ public class ReportService {
             reportEntity.setIncomeStatementReportData(createReportView.getIncomeStatementData());
         }
 
-        Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);
-        if (isReportReadyToPublish.isLeft() || isReportReadyToPublish.get().equals(false)) {
+        Either<Problem, Void> isReportReadyToPublish = canPublish(reportEntity);
+        reportEntity.setIsReadyToPublish(true);
+        if (isReportReadyToPublish.isLeft()) {
+            reportEntity.setPublishError(PublishError.valueOf(isReportReadyToPublish.getLeft().getTitle()));
             reportEntity.setIsReadyToPublish(false);
-        } else {
-            reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
         }
 
         ReportEntity result = reportRepository.save(reportEntity);
@@ -526,11 +524,11 @@ public class ReportService {
 
             reportEntity.setBalanceSheetReportData(Optional.of(reportData.get()));
         }
-        Either<Problem, Boolean> isReadyToPublish = canPublish(reportEntity);
+        Either<Problem, Void> isReadyToPublish = canPublish(reportEntity);
+        reportEntity.setIsReadyToPublish(true);
         if (isReadyToPublish.isLeft()) {
-            return Either.left(isReadyToPublish.getLeft());
-        } else {
-            reportEntity.setIsReadyToPublish(isReadyToPublish.get());
+            reportEntity.setPublishError(PublishError.valueOf(isReadyToPublish.getLeft().getTitle()));
+            reportEntity.setIsReadyToPublish(false);
         }
         reportRepository.save(reportEntity);
 
@@ -557,7 +555,7 @@ public class ReportService {
                 .build());
     }
 
-    public Either<Problem, Boolean> canPublish(ReportEntity reportEntity) {
+    public Either<Problem, Void> canPublish(ReportEntity reportEntity) {
         // Validate profitForTheYear consistency between IncomeStatementData and BalanceSheetData
         ReportType relatedReportType = reportEntity.getType().equals(INCOME_STATEMENT) ? BALANCE_SHEET : INCOME_STATEMENT;
         String relatedReportId = Report.idControl(reportEntity.getOrganisation().getId(), relatedReportType, reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod());
@@ -611,9 +609,16 @@ public class ReportService {
             } else if (reportEntity.getType() == INCOME_STATEMENT) {
                 generatedReportsMatch = IncomeStatementMatcher.matches(generatedReportE.get().getIncomeStatementReportData(), reportEntity.getIncomeStatementReportData());
             }
-            return Either.right(generatedReportsMatch);
-        }
-        return Either.right(true);
+            if(!generatedReportsMatch) {
+                return Either.left(Problem.builder()
+                        .withTitle(Constants.REPORT_DATA_MISMATCH)
+                        .withDetail(Constants.REPORT_DATA_DOES_NOT_MATCH_GENERATED_REPORT)
+                        .withStatus(Status.BAD_REQUEST)
+                        .with(Constants.REPORT_ID, reportEntity.getReportId())
+                        .build());
+            }
+        } // we ignore the left case since it means there is no other report
+        return Either.right(null);
 
     }
 
@@ -1054,11 +1059,11 @@ public class ReportService {
                     .with(Constants.REPORT_ID, reportReprocessRequest.getReportId())
                     .build());
         }
-        Either<Problem, Boolean> isReportReadyToPublish = canPublish(reportEntity);
+        Either<Problem, Void> isReportReadyToPublish = canPublish(reportEntity);
+        reportEntity.setIsReadyToPublish(true);
         if (isReportReadyToPublish.isLeft()) {
             reportEntity.setIsReadyToPublish(false);
-        }else{
-            reportEntity.setIsReadyToPublish(isReportReadyToPublish.get());
+            reportEntity.setPublishError(PublishError.valueOf(isReportReadyToPublish.getLeft().getTitle()));
         }
         return Either.right(reportRepository.save(reportEntity));
     }
