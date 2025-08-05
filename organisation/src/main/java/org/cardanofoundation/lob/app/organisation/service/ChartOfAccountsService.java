@@ -285,27 +285,28 @@ public class ChartOfAccountsService {
             }
 
 
-            // only create subtypes if
-            chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, chartOfAccountUpdateCsv.getType()).ifPresentOrElse(
-                    type -> {
-                        type.getSubTypes().stream().filter(subtype -> subtype.getName().equals(chartOfAccountUpdateCsv.getSubType())).findFirst().ifPresentOrElse(
-                                subType -> chartOfAccountUpdateCsv.setSubType(String.valueOf(subType.getId())),
-                                () -> {
-                                    ChartOfAccountSubType subType = ChartOfAccountSubType.builder()
-                                            .type(type)
-                                            .name(chartOfAccountUpdateCsv.getSubType())
-                                            .organisationId(orgId)
-                                            .build();
-                                    ChartOfAccountSubType save = chartOfAccountSubTypeRepository.save(subType);
-                                    chartOfAccountUpdateCsv.setSubType(String.valueOf(save.getId()));
-                                }
-                        );
-                    },
-                    () -> {
-                        ChartOfAccountSubType subType = saveTypeAndSubType(orgId, chartOfAccountUpdateCsv);
-                        chartOfAccountUpdateCsv.setSubType(String.valueOf(subType.getId()));
-                    }
-            );
+            Optional<ChartOfAccountType> type = chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, chartOfAccountUpdateCsv.getType());
+            if( type.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle("CHART_OF_ACCOUNT_TYPE_NOT_FOUND")
+                        .withDetail("Chart of account type: %s not found. Please provide a valid type.".formatted(chartOfAccountUpdateCsv.getType()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
+                continue;
+            }
+            Optional<ChartOfAccountSubType> subType = chartOfAccountSubTypeRepository.findFirstByNameAndOrganisationIdAndParentName(orgId, chartOfAccountUpdateCsv.getSubType(), chartOfAccountUpdateCsv.getType());
+            if (subType.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle("CHART_OF_ACCOUNT_SUBTYPE_NOT_FOUND")
+                        .withDetail("Chart of account subtype: %s not found for type: %s. Please provide a valid subtype.".formatted(chartOfAccountUpdateCsv.getSubType(), chartOfAccountUpdateCsv.getType()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
+                continue;
+            }
+            chartOfAccountUpdateCsv.setType(String.valueOf(type.get().getId()));
+            chartOfAccountUpdateCsv.setSubType(String.valueOf(subType.get().getId()));
             ChartOfAccountView accountEventView = insertChartOfAccount(orgId, chartOfAccountUpdateCsv, true);
 
             accountEventViews.add(accountEventView);
