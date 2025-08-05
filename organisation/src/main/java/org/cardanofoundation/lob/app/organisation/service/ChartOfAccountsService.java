@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.Constants.OPENING_BALANCE_VALIDATION_ERORR;
 import static org.cardanofoundation.lob.app.organisation.util.Constants.VALIDATION_ERROR;
 
 import java.util.HashSet;
@@ -210,9 +211,18 @@ public class ChartOfAccountsService {
         chartOfAccount.setActive(chartOfAccountUpdate.getActive());
 
         // If opening balance and fcy currency is set then it must be equal to the currency
-        if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance()).isPresent()) {
-            if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY()).isPresent()
-                    && !chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
+        if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance()).isPresent() && !chartOfAccountUpdate.getOpeningBalance().allNull()) {
+            Errors errors = validator.validateObject(chartOfAccountUpdate.getOpeningBalance());
+            List<ObjectError> allErrors = errors.getAllErrors();
+            if (!allErrors.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle(OPENING_BALANCE_VALIDATION_ERORR)
+                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                return ChartOfAccountView.createFail(error, chartOfAccountUpdate);
+            }
+            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
                         .withDetail("The opening balance FCY currency must match the chart of account currency.")
@@ -220,11 +230,11 @@ public class ChartOfAccountsService {
                         .build(), chartOfAccountUpdate);
             }
             Organisation organisation = organisationService.findById(chartOfAccount.getId().getOrganisationId()).orElseThrow();
-            if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY()).isPresent()
-            && !chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisation.getCurrencyId())) {
+            Currency organisationCurrency = currencyRepository.findByCurrencyId(chartOfAccount.getId().getOrganisationId(), organisation.getCurrencyId()).orElseThrow(() -> new RuntimeException("Organisation currency not found"));
+            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisationCurrency.getId().getCustomerCode())) {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
-                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisation.getCurrencyId()))
+                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCustomerCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), chartOfAccountUpdate);
             }
@@ -237,7 +247,6 @@ public class ChartOfAccountsService {
         return ChartOfAccountView.createSuccess(chartOfAccountResult);
     }
 
-    @Transactional
     public Either<Set<Problem>, Set<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
 
 
@@ -275,6 +284,8 @@ public class ChartOfAccountsService {
                 continue;
             }
 
+
+            // only create subtypes if
             chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, chartOfAccountUpdateCsv.getType()).ifPresentOrElse(
                     type -> {
                         type.getSubTypes().stream().filter(subtype -> subtype.getName().equals(chartOfAccountUpdateCsv.getSubType())).findFirst().ifPresentOrElse(
@@ -295,8 +306,8 @@ public class ChartOfAccountsService {
                         chartOfAccountUpdateCsv.setSubType(String.valueOf(subType.getId()));
                     }
             );
-
             ChartOfAccountView accountEventView = insertChartOfAccount(orgId, chartOfAccountUpdateCsv, true);
+
             accountEventViews.add(accountEventView);
         }
         return Either.right(accountEventViews);
