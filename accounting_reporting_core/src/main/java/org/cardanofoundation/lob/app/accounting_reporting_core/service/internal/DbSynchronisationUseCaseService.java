@@ -112,7 +112,7 @@ public class DbSynchronisationUseCaseService {
             boolean isChanged = notStoredYet || (txM.map(tx -> !isIncomingTransactionERPSame(tx, incomingTx) || tx.hasAnyRejection(Source.ERP) || tx.hasAnyViolation(Source.ERP)).orElse(false));
 
             if (isDispatchMarked && isChanged) {
-                log.warn("Transaction cannot be altered, it is already marked as dispatched, transactionNumber: {}", incomingTx.getTransactionInternalNumber());
+                log.warn("Transaction cannot be altered, it is already marked as dispatched, transactionNumber: {}", incomingTx.getInternalTransactionNumber());
                 txsAlreadyStored.add(incomingTx);
             }
 
@@ -210,7 +210,7 @@ public class DbSynchronisationUseCaseService {
                     .processorModule(this.getClass().getSimpleName())
                     .bag(
                             Map.of(
-                                    "transactionNumber", tx.getTransactionInternalNumber()
+                                    "transactionNumber", tx.getInternalTransactionNumber()
                             )
                     )
                     .build();

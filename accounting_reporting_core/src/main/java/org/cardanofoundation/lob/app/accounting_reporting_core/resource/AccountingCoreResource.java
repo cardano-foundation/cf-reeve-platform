@@ -15,8 +15,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,6 +35,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+import org.zalando.problem.StatusType;
 import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
@@ -193,8 +195,7 @@ public class AccountingCoreResource {
     }
 
 
-
-        @Tag(name = "Transactions", description = "Transactions Approval API")
+    @Tag(name = "Transactions", description = "Transactions Approval API")
     @PostMapping(value = "/transactions/approve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @Operation(description = "Approve one or more transactions",
             responses = {
@@ -258,19 +259,45 @@ public class AccountingCoreResource {
             }
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<BatchsDetailView> listAllBatches(@Valid @RequestBody BatchSearchRequest body,
-                                                           @RequestParam(name = "page", defaultValue = "0") int page,
-                                                           @RequestParam(name = "limit", defaultValue = "10") int limit) {
-        body.setLimit(limit);
-        body.setPage(page);
+    public ResponseEntity<?> listAllBatches(@Valid @RequestBody BatchSearchRequest body,
+                                            @PageableDefault(page = 0, size = 10) Pageable pageable) {
 
-        BatchsDetailView batchs = accountingCorePresentationService.listAllBatch(body);
+
+        body.setLimit(pageable.getPageSize());
+        body.setPage(pageable.getPageNumber());
+
+        Either<Problem, BatchsDetailView> batchesE = accountingCorePresentationService.listAllBatch(body, pageable.getSort());
+        if( batchesE.isLeft()) {
+            Problem problem = batchesE.getLeft();
+            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
+                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+        }
+        return ResponseEntity.ok().body(batchesE.get());
+    }
+
+    @Tag(name = "Batches", description = "Returns the list of user names who have created batches within an organisation")
+    @GetMapping(value = "/batches/users", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> listAllBatchesUsers(@Valid @RequestParam(name = "organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String organisationId) {
+
+        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
+
+        if (orgM.isEmpty()) {
+            ThrowableProblem issue = Problem.builder()
+                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(organisationId))
+                    .withStatus(NOT_FOUND)
+                    .build();
+
+            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+        }
+        List<BatchsUserListView> batchs = accountingCorePresentationService.getBatchUserList(organisationId);
 
         return ResponseEntity.ok().body(batchs);
     }
 
     @Tag(name = "Batches", description = "Batches API")
-    @GetMapping(value = "/batches/reprocess/{batchId}",  produces = APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/batches/reprocess/{batchId}", produces = APPLICATION_JSON_VALUE)
     @Operation(description = "Batch reprocess",
             responses = {
                     @ApiResponse(content = {
@@ -295,10 +322,9 @@ public class AccountingCoreResource {
             description = "Returns the details of a batch, including a pageable list of transactions. " +
                     "Optionally, transactions can be filtered by their processing status.",
             parameters = {
-                    @Parameter(name = "page", description = "Page number (zero-based). Default is null, returning all transactions.", example = "0"),
-                    @Parameter(name = "size", description = "Page size (number of elements per page). Default is null, returning all transactions.", example = "10"),
                     @Parameter(name = "txStatus", description = "Filter transactions by their processing statuses. Accepts multiple statuses.",
                             array = @ArraySchema(schema = @Schema(implementation = TransactionProcessingStatus.class)))
+
             },
             responses = {
                     @ApiResponse(content = {
@@ -315,17 +341,20 @@ public class AccountingCoreResource {
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
-                                           @RequestParam(name = "page", required = false) Optional<Integer> page,
-                                           @RequestParam(name = "size", required = false) Optional<Integer> size,
-                                           @RequestParam(name = "txStatus", required = false) List <TransactionProcessingStatus> txStatus) {
-        Pageable pageable;
-        if(page.isEmpty() || size.isEmpty()) {
+                                           @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
+                                           Pageable pageable) {
+        if (Optional.ofNullable(pageable).isEmpty()) {
             pageable = Pageable.unpaged();
-        } else {
-            pageable = PageRequest.of(page.get(), size.get());
         }
-        Optional<BatchView> txBatchM = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable);
-        if (txBatchM.isEmpty()) {
+
+        Either<Problem, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable);
+        if (txBatchEO.isLeft()) {
+            Problem problem = txBatchEO.getLeft();
+            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
+                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+        }
+        Optional<BatchView> txBatchO = txBatchEO.get();
+        if (txBatchO.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("BATCH_NOT_FOUND")
                     .withDetail("Batch with id: {%s} could not be found".formatted(batchId))
@@ -339,7 +368,7 @@ public class AccountingCoreResource {
 
         return ResponseEntity
                 .ok()
-                .body(txBatchM.orElseThrow());
+                .body(txBatchO.orElseThrow());
     }
 
 }

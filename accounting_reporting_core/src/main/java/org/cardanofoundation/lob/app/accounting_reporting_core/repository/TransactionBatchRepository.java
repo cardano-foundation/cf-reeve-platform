@@ -49,6 +49,9 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
             """)
     Optional<BatchStatisticsView> getBatchStatisticViewForBatchId(@Param("batchId") String batchId);
 
+    @Query(" SELECT DISTINCT(tb.createdBy) FROM accounting_reporting_core.TransactionBatchEntity tb where tb.filteringParameters.organisationId = :organisationId")
+    List<String> findBatchUsersList(@Param("organisationId") String organisationId);
+
     // Keeping it to have an alternative to speed things up with a native query
 //    @Query(value = """
 //            SELECT

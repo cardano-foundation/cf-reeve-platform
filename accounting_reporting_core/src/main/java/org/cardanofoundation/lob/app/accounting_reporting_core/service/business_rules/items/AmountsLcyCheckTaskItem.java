@@ -28,7 +28,7 @@ public class AmountsLcyCheckTaskItem implements PipelineTaskItem {
                         .processorModule(this.getClass().getSimpleName())
                         .bag(
                                 Map.of(
-                                        "transactionNumber", tx.getTransactionInternalNumber(),
+                                        "transactionNumber", tx.getInternalTransactionNumber(),
                                         "amountFcy", txItem.getAmountFcy().toEngineeringString()    ,
                                         "amountLcy", txItem.getAmountLcy().toEngineeringString()
                                 )
