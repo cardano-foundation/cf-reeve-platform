@@ -21,6 +21,9 @@ public class FlexibleDateParser {
     );
 
     public static LocalDate parse(String input) {
+        if (input == null || input.isEmpty()) {
+            throw new IllegalArgumentException("Input date string cannot be null or empty");
+        }
         for (DateTimeFormatter formatter : FORMATTERS) {
             try {
                 return LocalDate.parse(input, formatter);

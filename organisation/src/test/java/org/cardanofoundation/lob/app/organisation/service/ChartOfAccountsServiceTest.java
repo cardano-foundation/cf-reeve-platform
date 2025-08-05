@@ -31,6 +31,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ChartOfAccountView
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
@@ -55,6 +56,8 @@ class ChartOfAccountsServiceTest {
     private CsvParser<ChartOfAccountUpdateCsv> csvParser;
     @Mock
     private Validator validator;
+    @Mock
+    private CurrencyRepository currencyRepository;
 
     private ChartOfAccountsService chartOfAccountsService;
 
@@ -75,6 +78,7 @@ class ChartOfAccountsServiceTest {
                 chartOfAccountTypeRepository,
                 chartOfAccountSubTypeRepository,
                 referenceCodeRepository,
+                currencyRepository,
                 organisationService,
                 csvParser,
                 validator
@@ -322,7 +326,9 @@ class ChartOfAccountsServiceTest {
 
     @Test
     void testUpdateChartOfAccount_Success() {
-        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("USD");
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
@@ -330,11 +336,45 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .thenReturn(Optional.of(chartOfAccount));
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
+        when(currencyRepository.findByCurrencyId(orgId, "USD")).thenReturn(Optional.of(currency));
+        when(currency.getId()).thenReturn(new Currency.Id(orgId, "USD"));
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(chartOfAccountUpdate.getOpeningBalance())).thenReturn(errors);
 
         ChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
 
         assertNotNull(response);
         assertTrue(response.getError().isEmpty());
+    }
+
+    @Test
+    void testUpdateChartOfAccount_openingBalanceLCYMismatch() {
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("EUR");
+
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .thenReturn(Optional.of(chartOfAccount));
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
+        when(currencyRepository.findByCurrencyId(orgId, "EUR")).thenReturn(Optional.of(currency));
+        when(currency.getId()).thenReturn(new Currency.Id(orgId, "EUR"));
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(chartOfAccountUpdate.getOpeningBalance())).thenReturn(errors);
+
+        ChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isPresent());
+        assertEquals("OPENING_BALANCE_CURRENCY_MISMATCH", response.getError().get().getTitle());
     }
 
     @Test
@@ -432,7 +472,9 @@ class ChartOfAccountsServiceTest {
 
     @Test
     void testInsertChartOfAccount_Success() {
-        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("USD");
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
@@ -440,11 +482,36 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
 
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(chartOfAccountUpdate.getOpeningBalance())).thenReturn(errors);
+
+        when(currencyRepository.findByCurrencyId(orgId, "USD")).thenReturn(Optional.of(currency));
+        when(currency.getId()).thenReturn(new Currency.Id(orgId, "USD"));
         ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertTrue(response.getError().isEmpty());
+    }
+
+    @Test
+    void testInsertChartOfAccount_currencyNotFound() {
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .thenReturn(Optional.empty());
+        when(currencyRepository.findById(any())).thenReturn(Optional.empty());
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isPresent());
+        assertEquals("CURRENCY_NOT_FOUND", response.getError().get().getTitle());
     }
 
     @Test
@@ -507,7 +574,9 @@ class ChartOfAccountsServiceTest {
         ChartOfAccount.Id accountId = new ChartOfAccount.Id(orgId, customerCode);
         ChartOfAccount newAccount = ChartOfAccount.builder().id(accountId).subType(subType).build();
 
-        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+        when(mockOrg.getCurrencyId()).thenReturn("USD");
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
                 .thenReturn(Optional.of(referenceCode));
         when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
@@ -515,10 +584,44 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(newAccount);
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(chartOfAccountUpdate.getOpeningBalance())).thenReturn(errors);
 
+        when(currencyRepository.findByCurrencyId(orgId, "USD")).thenReturn(Optional.of(currency));
+        when(currency.getId()).thenReturn(new Currency.Id(orgId, "USD"));
         ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
 
         assertNotNull(response);
         assertTrue(response.getError().isEmpty());
+    }
+
+    @Test
+    void testInsertChartOfAccount_validationError() {
+        ChartOfAccount.Id accountId = new ChartOfAccount.Id(orgId, customerCode);
+
+        Organisation mockOrg = mock(Organisation.class);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));
+
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .thenReturn(Optional.empty());
+        Currency currency = mock(Currency.class);
+        when(currencyRepository.findById(any())).thenReturn(Optional.of(currency));
+        Errors errors = mock(Errors.class);
+        ObjectError objectError = mock(ObjectError.class);
+        when(errors.getAllErrors()).thenReturn(List.of(objectError));
+        when(validator.validateObject(chartOfAccountUpdate.getOpeningBalance())).thenReturn(errors);
+        when(objectError.getDefaultMessage()).thenReturn("Default Message");
+
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isPresent());
     }
 }
