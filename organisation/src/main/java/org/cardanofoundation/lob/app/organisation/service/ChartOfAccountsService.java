@@ -247,6 +247,7 @@ public class ChartOfAccountsService {
         return ChartOfAccountView.createSuccess(chartOfAccountResult);
     }
 
+    @Transactional
     public Either<Set<Problem>, Set<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
 
 
