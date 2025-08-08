@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
@@ -11,6 +12,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 
@@ -62,10 +64,49 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     JOIN t.batches b
     WHERE b.id = :batchId
     AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
+    AND (:types IS NULL OR t.transactionType IN :types)
+    AND NOT EXISTS (
+        SELECT 1 FROM t.items i2
+        WHERE
+            i2.status = 'OK'
+            AND ((:documentNumbers IS NOT NULL AND i2.document.num NOT IN :documentNumbers)
+            OR (:currencyCustomerCodes IS NOT NULL AND i2.document.currency.customerCode NOT IN :currencyCustomerCodes)
+            OR (:minFCY IS NOT NULL AND i2.amountFcy < :minFCY)
+            OR (:maxFCY IS NOT NULL AND i2.amountFcy > :maxFCY)
+            OR (:minLCY IS NOT NULL AND i2.amountLcy < :minLCY)
+            OR (:maxLCY IS NOT NULL AND i2.amountLcy > :maxLCY)
+            OR (:vatCustomerCodes IS NOT NULL AND i2.document.vat.customerCode NOT IN :vatCustomerCodes)
+            OR (:costCenterCustomerCodes IS NOT NULL AND i2.costCenter.customerCode NOT IN :costCenterCustomerCodes)
+            OR (:counterPartyCustomerCodes IS NOT NULL AND i2.document.counterparty.customerCode NOT IN :counterPartyCustomerCodes)
+            OR (:counterPartyTypes IS NOT NULL AND i2.document.counterparty.type NOT IN :counterPartyTypes)
+            OR (:debitAccountCodes IS NOT NULL AND i2.accountDebit.code NOT IN :debitAccountCodes)
+            OR (:creditAccountCodes IS NOT NULL AND i2.accountCredit.code NOT IN :creditAccountCodes)
+            OR (:eventCodes IS NOT NULL AND i2.accountEvent.code NOT IN :eventCodes)
+            OR (:parentCostCenterCustomerCodes IS NOT NULL AND EXISTS (
+                SELECT 1 FROM CostCenter cc
+                WHERE cc.id.customerCode = i2.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostCenterCustomerCodes)
+            ))
+    )
     """)
+//    AND (:parentCostCenterCustomerCodes IS NULL OR i.document.costCenter.parentCustomerCode IN :parentCostCenterCustomerCodes)
     Page<TransactionEntity> findAllByBatchId(
             @Param("batchId") String batchId,
             @Param("txStatus") List<TransactionProcessingStatus> txStatus,
+            @Param("types") List<TransactionType> types,
+            @Param("documentNumbers") List<String> documentNumbers,
+            @Param("currencyCustomerCodes") List<String> currencyCustomerCodes,
+            @Param("minFCY") BigDecimal minFCY,
+            @Param("maxFCY") BigDecimal maxFCY,
+            @Param("minLCY") BigDecimal minLCY,
+            @Param("maxLCY") BigDecimal maxLCY,
+            @Param("vatCustomerCodes") List<String> vatCustomerCodes,
+            @Param("parentCostCenterCustomerCodes") List<String> parentCostCenterCustomerCodes,
+            @Param("costCenterCustomerCodes") List<String> costCenterCustomerCodes,
+            @Param("counterPartyCustomerCodes") List<String> counterPartyCustomerCodes,
+            @Param("counterPartyTypes") List<String> counterPartyTypes,
+            @Param("debitAccountCodes") List<String> debitAccountCodes,
+            @Param("creditAccountCodes") List<String> creditAccountCodes,
+            @Param("eventCodes") List<String> eventCodes,
             Pageable page
     );
 

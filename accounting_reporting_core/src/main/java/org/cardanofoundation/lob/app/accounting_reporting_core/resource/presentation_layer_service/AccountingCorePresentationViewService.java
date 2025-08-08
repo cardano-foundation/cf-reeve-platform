@@ -129,7 +129,7 @@ public class AccountingCorePresentationViewService {
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Either<Problem, Optional<BatchView>> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
+    public Either<Problem, Optional<BatchView>> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page, BatchFilterRequest batchFilterRequest) {
         if (page.getSort().isSorted()) {
             Optional<Sort.Order> notSortableProperty = page.getSort().get().filter(order -> {
                 String property = Optional.ofNullable(TRANSACTION_ENTITY_FIELD_MAPPINGS.get(order.getProperty())).orElse(order.getProperty());
@@ -149,7 +149,7 @@ public class AccountingCorePresentationViewService {
         }
         Pageable finalPage = page;
         return Either.right(transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage);
+                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage, batchFilterRequest);
 
                     BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
@@ -303,8 +303,24 @@ public class AccountingCorePresentationViewService {
         );
     }
 
-    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable) {
-        return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status, pageable).stream()
+    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable, BatchFilterRequest batchFilterRequest) {
+        return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status,
+                        batchFilterRequest.getTransactionTypes(),
+                        batchFilterRequest.getDocumentNumbers(),
+                        batchFilterRequest.getCurrencyCustomerCodes(),
+                        batchFilterRequest.getMinFCY(),
+                        batchFilterRequest.getMaxFCY(),
+                        batchFilterRequest.getMinLCY(),
+                        batchFilterRequest.getMaxLCY(),
+                        batchFilterRequest.getVatCustomerCodes(),
+                        batchFilterRequest.getParentCostCenterCustomerCodes(),
+                        batchFilterRequest.getCostCenterCustomerCodes(),
+                        batchFilterRequest.getCounterPartyCustomerCodes(),
+                        batchFilterRequest.getCounterPartyTypes(),
+                        batchFilterRequest.getDebitAccountCodes(),
+                        batchFilterRequest.getCreditAccountCodes(),
+                        batchFilterRequest.getEventCodes(),
+                        pageable).stream()
                 .map(this::getTransactionView)
                 .sorted(Comparator.comparing(TransactionView::getAmountTotalLcy).reversed())
                 .collect(Collectors.toCollection(LinkedHashSet::new));

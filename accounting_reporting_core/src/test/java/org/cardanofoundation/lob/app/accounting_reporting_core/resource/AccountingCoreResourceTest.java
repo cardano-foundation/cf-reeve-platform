@@ -3,6 +3,8 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -26,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.SearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionItemsRejectionRequest;
@@ -168,7 +171,7 @@ class AccountingCoreResourceTest {
     @Test
     void batchesDetailTest_error() {
         Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
-        when(accountingCorePresentationViewService.batchDetail("123", List.of(), createdBy)).thenReturn(Either.right(Optional.empty()));
+        when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.empty()));
 
         ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
@@ -179,7 +182,7 @@ class AccountingCoreResourceTest {
     void batchesDetailTest_success() {
         BatchView mock = mock(BatchView.class);
         Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
-        when(accountingCorePresentationViewService.batchDetail("123", List.of(), createdBy)).thenReturn(Either.right(Optional.of(mock)));
+        when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.of(mock)));
 
         ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());

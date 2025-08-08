@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Acc
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
@@ -244,9 +245,9 @@ class AccountingCorePresentationConverterTest {
         transaction2.setBatchId(batchId);
 
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
-        when(transactionRepository.findAllByBatchId(batchId, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
+        when(transactionRepository.findAllByBatchId(batchId, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
-        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged());
+        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), new BatchFilterRequest());
         assertTrue(resultE.isRight());
         Optional<BatchView> result = resultE.get();
         assertEquals(true, result.isPresent());

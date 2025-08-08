@@ -320,34 +320,31 @@ public class AccountingCoreResource {
     @GetMapping(value = "/batches/{batchId}", produces = APPLICATION_JSON_VALUE)
     @Operation(
             description = "Returns the details of a batch, including a pageable list of transactions. " +
-                    "Optionally, transactions can be filtered by their processing status.",
-            parameters = {
-                    @Parameter(name = "txStatus", description = "Filter transactions by their processing statuses. Accepts multiple statuses.",
-                            array = @ArraySchema(schema = @Schema(implementation = TransactionProcessingStatus.class)))
-
-            },
-            responses = {
-                    @ApiResponse(content = {
-                            @Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = BatchView.class))
-                    }),
-                    @ApiResponse(
-                            responseCode = "404",
-                            description = "Error: response status is 404",
-                            content = @Content(mediaType = APPLICATION_JSON_VALUE,
-                                    schema = @Schema(example = "{\"title\": \"BATCH_NOT_FOUND\",\"status\": 404,\"detail\": \"Batch with id: {batchId} could not be found\"}")
-                            )
-                    )
-            }
+                    "Optionally, transactions can be filtered by their processing status."
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
                                            @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
                                            Pageable pageable) {
+        return batchesDetail(batchId, txStatus, new BatchFilterRequest(), pageable);
+    }
+
+    @Tag(name = "Batches", description = "Batches API")
+    @PostMapping(value = "/batches/{batchId}", produces = APPLICATION_JSON_VALUE)
+    @Operation(
+            description = "Returns the details of a batch, including a pageable list of transactions. " +
+                    "Optionally, transactions can be filtered by their processing status."
+    )
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
+                                           @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
+                                           @RequestBody BatchFilterRequest batchFilterRequest,
+                                           Pageable pageable) {
         if (Optional.ofNullable(pageable).isEmpty()) {
             pageable = Pageable.unpaged();
         }
 
-        Either<Problem, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable);
+        Either<Problem, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable, batchFilterRequest);
         if (txBatchEO.isLeft()) {
             Problem problem = txBatchEO.getLeft();
             return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
