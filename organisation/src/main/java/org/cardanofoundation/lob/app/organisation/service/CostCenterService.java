@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -113,8 +114,7 @@ public class CostCenterService {
                                 .build()
                 );
             }
-            costCenter.setParent(parent.get());
-            costCenter.setParentCustomerCode(parent.get().getId().getCustomerCode());
+                costCenter.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
         }
 
         return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
