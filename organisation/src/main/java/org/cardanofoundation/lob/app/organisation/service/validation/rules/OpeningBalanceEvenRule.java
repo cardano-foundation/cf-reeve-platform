@@ -40,11 +40,11 @@ public class OpeningBalanceEvenRule implements OrganisationValidationRule {
                 continue;
             }
             if (openingBalance.getBalanceType() == OperationType.DEBIT) {
-                totalOpeningBalanceLCY = totalOpeningBalanceLCY.add(chartOfAccount.getOpeningBalance().getBalanceLCY());
-                totalOpeningBalanceFCY = totalOpeningBalanceFCY.add(chartOfAccount.getOpeningBalance().getBalanceFCY());
+                totalOpeningBalanceLCY = totalOpeningBalanceLCY.add(Optional.ofNullable(openingBalance.getBalanceLCY()).orElse(BigDecimal.ZERO));
+                totalOpeningBalanceFCY = totalOpeningBalanceFCY.add(Optional.ofNullable(openingBalance.getBalanceFCY()).orElse(BigDecimal.ZERO));
             } else {
-                totalOpeningBalanceLCY = totalOpeningBalanceLCY.subtract(chartOfAccount.getOpeningBalance().getBalanceLCY());
-                totalOpeningBalanceFCY = totalOpeningBalanceFCY.subtract(chartOfAccount.getOpeningBalance().getBalanceFCY());
+                totalOpeningBalanceLCY = totalOpeningBalanceLCY.subtract(Optional.ofNullable(openingBalance.getBalanceLCY()).orElse(BigDecimal.ZERO));
+                totalOpeningBalanceFCY = totalOpeningBalanceFCY.subtract(Optional.ofNullable(openingBalance.getBalanceFCY()).orElse(BigDecimal.ZERO));
             }
         }
         if (totalOpeningBalanceLCY.compareTo(BigDecimal.ZERO) != 0) {
