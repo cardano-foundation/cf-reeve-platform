@@ -35,7 +35,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCre
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
-import org.cardanofoundation.lob.app.organisation.util.Constants;
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -93,8 +93,8 @@ public class OrganisationResource {
         Optional<OrganisationView> organisation = organisationService.findById(orgId).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
-                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
-                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
+                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
+                    .withDetail(ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build();
 
@@ -196,8 +196,8 @@ public class OrganisationResource {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
-                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
-                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
+                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
+                    .withDetail(ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build();
 
@@ -241,8 +241,8 @@ public class OrganisationResource {
             Optional<Organisation> organisationOptional = organisationService.findById(orgId);
             if (organisationOptional.isEmpty()) {
                 ThrowableProblem issue = Problem.builder()
-                        .withTitle(Constants.ORGANISATION_NOT_FOUND)
-                        .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
+                        .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
+                        .withDetail(ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
                         .withStatus(Status.NOT_FOUND)
                         .build();
 

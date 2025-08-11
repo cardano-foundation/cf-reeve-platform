@@ -25,7 +25,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
-import org.cardanofoundation.lob.app.organisation.util.Constants;
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 
 @Slf4j
 @Service
@@ -58,7 +58,7 @@ public class ProjectCodeService {
                         projectUpdate,
                         Problem.builder()
                                 .withStatus(Status.CONFLICT)
-                                .withTitle("PROJECT_CODE_ALREADY_EXISTS")
+                                .withTitle(ErrorTitleConstants.PROJECT_CODE_ALREADY_EXISTS)
                                 .withDetail("Project code with customer code %s already exists.".formatted(projectUpdate.getCustomerCode()))
                                 .build()
                 );
@@ -76,7 +76,7 @@ public class ProjectCodeService {
                         projectUpdate,
                         Problem.builder()
                                 .withStatus(Status.NOT_FOUND)
-                                .withTitle("PARENT_PROJECT_CODE_NOT_FOUND")
+                                .withTitle(ErrorTitleConstants.PARENT_PROJECT_CODE_NOT_FOUND)
                                 .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
                                 .build()
                 );
@@ -103,7 +103,7 @@ public class ProjectCodeService {
                             projectUpdate,
                             Problem.builder()
                                     .withStatus(Status.NOT_FOUND)
-                                    .withTitle("PARENT_PROJECT_CODE_NOT_FOUND")
+                                    .withTitle(ErrorTitleConstants.PARENT_PROJECT_CODE_NOT_FOUND)
                                     .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
                                     .build()
                     );
@@ -116,7 +116,7 @@ public class ProjectCodeService {
                     projectUpdate,
                     Problem.builder()
                             .withStatus(Status.NOT_FOUND)
-                            .withTitle("PROJECT_CODE_NOT_FOUND")
+                            .withTitle(ErrorTitleConstants.PROJECT_CODE_NOT_FOUND)
                             .withDetail("Project code with customer code %s not found.".formatted(projectUpdate.getCustomerCode()))
                             .build()
             );
@@ -132,7 +132,7 @@ public class ProjectCodeService {
                     List<ObjectError> allErrors = errors.getAllErrors();
                     if (!allErrors.isEmpty()) {
                         return ProjectView.createFail(projectUpdate, Problem.builder()
-                                .withTitle(Constants.VALIDATION_ERROR)
+                                .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
                                 .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
                                 .withStatus(Status.BAD_REQUEST)
                                 .build());
