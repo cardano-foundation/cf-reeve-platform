@@ -24,7 +24,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
-import org.cardanofoundation.lob.app.organisation.util.Constants;
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 
 @Service
 @Slf4j
@@ -59,7 +59,7 @@ public class CostCenterService {
                             costCenterUpdate,
                             Problem.builder()
                                     .withStatus(Status.NOT_FOUND)
-                                    .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
+                                    .withTitle(ErrorTitleConstants.PARENT_COST_CENTER_CODE_NOT_FOUND)
                                     .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
                                     .build()
                     );
@@ -91,7 +91,7 @@ public class CostCenterService {
                         costCenterUpdate,
                         Problem.builder()
                                 .withStatus(Status.CONFLICT)
-                                .withTitle("COST_CENTER_CODE_ALREADY_EXISTS")
+                                .withTitle(ErrorTitleConstants.COST_CENTER_CODE_ALREADY_EXISTS)
                                 .withDetail("Cost Center with customer code %s already exists.".formatted(costCenterUpdate.getCustomerCode()))
                                 .build()
                 );
@@ -108,7 +108,7 @@ public class CostCenterService {
                 return CostCenterView.createFail(
                         costCenterUpdate,
                         Problem.builder()
-                                .withTitle("PARENT_COST_CENTER_CODE_NOT_FOUND")
+                                .withTitle(ErrorTitleConstants.PARENT_COST_CENTER_CODE_NOT_FOUND)
                                 .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
                                 .build()
                 );
@@ -128,7 +128,7 @@ public class CostCenterService {
                     List<ObjectError> allErrors = errors.getAllErrors();
                     if (!allErrors.isEmpty()) {
                         return CostCenterView.createFail(costCenterUpdate,Problem.builder()
-                                .withTitle(Constants.VALIDATION_ERROR)
+                                .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
                                 .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
                                 .withStatus(Status.BAD_REQUEST)
                                 .build());

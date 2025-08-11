@@ -24,7 +24,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
 import org.cardanofoundation.lob.app.organisation.repository.VatRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
-import org.cardanofoundation.lob.app.organisation.util.Constants;
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 
 @Slf4j
 @Service
@@ -57,7 +57,7 @@ public class VatService {
                 vatEntity = foundEntity.get();
             } else {
                 return VatView.createFail(vatUpdate, Problem.builder()
-                        .withTitle("ORGANISATION_VAT_ALREADY_EXISTS")
+                        .withTitle(ErrorTitleConstants.ORGANISATION_VAT_ALREADY_EXISTS)
                         .withDetail("The organisation vat with code :%s already exists".formatted(vatUpdate.getCustomerCode()))
                         .withStatus(Status.CONFLICT)
                         .build());
@@ -66,7 +66,7 @@ public class VatService {
 
         if (vatUpdate.getCountryCode() != null && !Locale.getISOCountries(Locale.IsoCountryCode.PART1_ALPHA2).contains(vatUpdate.getCountryCode())) {
             return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle("COUNTRY_CODE_NOT_FOUND")
+                    .withTitle(ErrorTitleConstants.COUNTRY_CODE_NOT_FOUND)
                     .withDetail("The organisation vat country_code with code %s do not exists".formatted(vatUpdate.getCountryCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build());
@@ -85,7 +85,7 @@ public class VatService {
 
         if (organisationVat.isEmpty()) {
             return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle("ORGANISATION_VAT_DO_NOT_EXISTS")
+                    .withTitle(ErrorTitleConstants.ORGANISATION_VAT_DO_NOT_EXISTS)
                     .withDetail("The organisation vat with code %s do not exists".formatted(vatUpdate.getCustomerCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build());
@@ -93,7 +93,7 @@ public class VatService {
 
         if (vatUpdate.getCountryCode() != null && !Locale.getISOCountries(Locale.IsoCountryCode.PART1_ALPHA2).contains(vatUpdate.getCountryCode())) {
             return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle("COUNTRY_CODE_NOT_FOUND")
+                    .withTitle(ErrorTitleConstants.COUNTRY_CODE_NOT_FOUND)
                     .withDetail("The organisation vat country_code with code %s do not exists".formatted(vatUpdate.getCountryCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build());
@@ -118,7 +118,7 @@ public class VatService {
                     List<ObjectError> allErrors = errors.getAllErrors();
                     if (!allErrors.isEmpty()) {
                         return VatView.createFail(vatUpdate,Problem.builder()
-                                .withTitle(Constants.VALIDATION_ERROR)
+                                .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
                                 .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
                                 .withStatus(Status.BAD_REQUEST)
                                 .build());

@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
-import static org.cardanofoundation.lob.app.organisation.util.Constants.OPENING_BALANCE_VALIDATION_ERORR;
-import static org.cardanofoundation.lob.app.organisation.util.Constants.VALIDATION_ERROR;
+import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.OPENING_BALANCE_VALIDATION_ERORR;
+import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
 
 import java.util.HashSet;
 import java.util.List;

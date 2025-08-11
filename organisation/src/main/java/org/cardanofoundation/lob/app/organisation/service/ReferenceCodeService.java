@@ -25,7 +25,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
-import org.cardanofoundation.lob.app.organisation.util.Constants;
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 
 @Service
 @Slf4j
@@ -56,7 +56,7 @@ public class ReferenceCodeService {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
                     .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(),
@@ -66,7 +66,7 @@ public class ReferenceCodeService {
             Optional<ReferenceCode> parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
                 return ReferenceCodeView.createFail(Problem.builder()
-                        .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
+                        .withTitle(ErrorTitleConstants.PARENT_REFERENCE_CODE_NOT_FOUND)
                         .withDetail("Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()))
                         .withStatus(Status.NOT_FOUND)
                         .build(),
@@ -83,7 +83,7 @@ public class ReferenceCodeService {
                 referenceCode = referenceCodeOpt.get();
             } else {
                 return ReferenceCodeView.createFail(Problem.builder()
-                                .withTitle("REFERENCE_CODE_ALREADY_EXIST")
+                                .withTitle(ErrorTitleConstants.REFERENCE_CODE_ALREADY_EXIST)
                                 .withDetail("The reference code with code :%s already exists".formatted(referenceCodeUpdate.getReferenceCode()))
                                 .withStatus(Status.CONFLICT)
                                 .build(),
@@ -106,7 +106,7 @@ public class ReferenceCodeService {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
+                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
                     .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
                     .build(),
@@ -116,7 +116,7 @@ public class ReferenceCodeService {
             Optional<ReferenceCode>  parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
                 return ReferenceCodeView.createFail(Problem.builder()
-                        .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
+                        .withTitle(ErrorTitleConstants.PARENT_REFERENCE_CODE_NOT_FOUND)
                         .withDetail("Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()))
                         .withStatus(Status.NOT_FOUND)
                         .build(),
@@ -128,7 +128,7 @@ public class ReferenceCodeService {
 
         if(referenceCodeOpt.isEmpty()){
             return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_NOT_FOUND")
+                    .withTitle(ErrorTitleConstants.REFERENCE_CODE_NOT_FOUND)
                     .withDetail("Unable to find reference Id: %s".formatted(referenceCodeUpdate.getReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(),
@@ -157,7 +157,7 @@ public class ReferenceCodeService {
                             List<ObjectError> allErrors = errors.getAllErrors();
                             if (!allErrors.isEmpty()) {
                                 return ReferenceCodeView.createFail(Problem.builder()
-                                        .withTitle(Constants.VALIDATION_ERROR)
+                                        .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
                                         .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
                                         .withStatus(Status.BAD_REQUEST)
                                         .build(), refCodeUpdate);
