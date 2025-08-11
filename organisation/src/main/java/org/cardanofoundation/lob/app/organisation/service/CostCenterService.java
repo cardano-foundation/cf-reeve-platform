@@ -114,6 +114,7 @@ public class CostCenterService {
                 );
             }
             costCenter.setParent(parent.get());
+            costCenter.setParentCustomerCode(parent.get().getId().getCustomerCode());
         }
 
         return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
