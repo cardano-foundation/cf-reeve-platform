@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
 
 public class Constants {
 
+    public static final String UNABLE_TO_FIND_ORGANISATION_BY_ID_S = "Unable to find Organisation by Id: %s";
+
     private Constants() {
         // Utility class, no instantiation
     }

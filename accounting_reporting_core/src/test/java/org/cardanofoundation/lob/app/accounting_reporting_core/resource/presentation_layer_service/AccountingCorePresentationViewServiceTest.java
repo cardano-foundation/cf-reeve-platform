@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -9,8 +12,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -22,8 +27,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
@@ -44,6 +52,8 @@ class AccountingCorePresentationViewServiceTest {
     private TransactionReconcilationRepository transactionReconcilationRepository;
     @Mock
     private AccountingCoreTransactionRepository accountingCoreTransactionRepository;
+    @Mock
+    private TransactionItemRepository transactionItemRepository;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
@@ -101,5 +111,56 @@ class AccountingCorePresentationViewServiceTest {
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
 
+    @Test
+    void getFilterOptions_emptyList() {
+        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(List.of(), "org123");
+
+        assertTrue(map.isEmpty());
+        verifyNoInteractions(transactionBatchRepositoryGateway);
+        verifyNoInteractions(transactionItemRepository);
+    }
+
+    @Test
+    void getFilterOptions_transactionTypes() {
+        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(List.of(FilterOptions.TRANSACTION_TYPES), "org123");
+
+        assertFalse(map.isEmpty());
+        assertEquals(TransactionType.values().length, map.get(FilterOptions.TRANSACTION_TYPES).size());
+        verifyNoInteractions(transactionBatchRepositoryGateway);
+        verifyNoInteractions(transactionItemRepository);
+    }
+
+    @Test
+    void getFilterOptions_users() {
+        when(transactionBatchRepositoryGateway.findBatchUsersList("org123")).thenReturn(List.of("user1", "user2"));
+
+        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(List.of(FilterOptions.USERS), "org123");
+
+        assertFalse(map.isEmpty());
+        assertEquals(2, map.get(FilterOptions.USERS).size());
+        verify(transactionBatchRepositoryGateway).findBatchUsersList("org123");
+        verifyNoMoreInteractions(transactionBatchRepositoryGateway);
+        verifyNoInteractions(transactionItemRepository);
+    }
+
+    @Test
+    void getFilterOptions_AllOptions() {
+        when(transactionBatchRepositoryGateway.findBatchUsersList("org123")).thenReturn(List.of("user1", "user2"));
+        when(transactionItemRepository.getAllDocumentNumbers()).thenReturn(List.of("Doc12"));
+
+        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(Arrays.stream(FilterOptions.values()).toList(), "org123");
+
+        assertFalse(map.isEmpty());
+        assertEquals(FilterOptions.values().length, map.size());
+        assertEquals(2, map.get(FilterOptions.USERS).size());
+        assertEquals(1, map.get(FilterOptions.DOCUMENT_NUMBERS).size());
+        assertEquals(TransactionType.values().length, map.get(FilterOptions.TRANSACTION_TYPES).size());
+
+        verify(transactionBatchRepositoryGateway).findBatchUsersList("org123");
+        verifyNoMoreInteractions(transactionBatchRepositoryGateway);
+        verify(transactionItemRepository).getAllDocumentNumbers();
+        verifyNoMoreInteractions(transactionItemRepository);
+
+    }
 
 }

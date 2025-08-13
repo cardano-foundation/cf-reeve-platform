@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
@@ -33,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.SearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionItemsRejectionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionsRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilterOptionsResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchReprocessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
@@ -40,6 +42,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Tr
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceTest {
@@ -48,6 +52,8 @@ class AccountingCoreResourceTest {
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
     @Mock
     private OrganisationPublicApi organisationPublicApi;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
@@ -55,7 +61,7 @@ class AccountingCoreResourceTest {
 
     @BeforeEach
     void setUp() {
-        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi);
+        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi, keycloakSecurityHelper);
     }
 
     @Test
@@ -187,5 +193,34 @@ class AccountingCoreResourceTest {
         ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void filterOptions_unauthorized() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<FilterOptionsResponse> response = accountingCoreResource.getFilterOptions("org123", List.of());
+        assertTrue(response.getStatusCode().is4xxClientError());
+        assertNotNull(response.getBody());
+    }
+
+    @Test
+    void filterOptions_orgNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.empty());
+
+        ResponseEntity<FilterOptionsResponse> response = accountingCoreResource.getFilterOptions("org123", List.of());
+        assertTrue(response.getStatusCode().is4xxClientError());
+        assertNotNull(response.getBody());
+    }
+
+    @Test void filterOptions_success() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(accountingCorePresentationViewService.getFilterOptions(List.of(), "org123")).thenReturn(mock(Map.class));
+
+        ResponseEntity<FilterOptionsResponse> response = accountingCoreResource.getFilterOptions("org123", List.of());
+        assertTrue(response.getStatusCode().is2xxSuccessful());
+        assertNotNull(response.getBody());
     }
 }

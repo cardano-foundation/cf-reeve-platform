@@ -4,8 +4,10 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
+import static org.zalando.problem.Status.UNAUTHORIZED;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -39,14 +41,18 @@ import org.zalando.problem.Status;
 import org.zalando.problem.StatusType;
 import org.zalando.problem.ThrowableProblem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilterOptionsResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -59,6 +65,7 @@ public class AccountingCoreResource {
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final ObjectMapper objectMapper;
     private final OrganisationPublicApi organisationPublicApi;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Transaction list", responses = {
@@ -71,6 +78,38 @@ public class AccountingCoreResource {
     public ResponseEntity<List<TransactionView>> listAllAction(@Valid @RequestBody SearchRequest body) {
         List<TransactionView> transactions = accountingCorePresentationService.allTransactions(body);
         return ResponseEntity.ok().body(transactions);
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @Operation(description = "List all Document Numbers in transactions", responses = {
+            @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = String.class)))}
+            )
+    })
+    @GetMapping(value = "/filter-options/{orgId}", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<FilterOptionsResponse> getFilterOptions(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                  @Valid @RequestParam(name = "filterOptions") List<FilterOptions> filterOptionsList)  {
+        if(!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(UNAUTHORIZED.getStatusCode()).body(FilterOptionsResponse.builder()
+                            .error(Problem.builder()
+                                    .withTitle("NO_ACCESS_TO_ORG")
+                                    .withDetail("The user doesn't have access to this org")
+                                    .withStatus(UNAUTHORIZED).build())
+                    .build());
+        }
+        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(orgId);
+
+        if (orgM.isEmpty()) {
+            ThrowableProblem issue = Problem.builder()
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
+                    .withStatus(NOT_FOUND)
+                    .build();
+            return ResponseEntity.status(NOT_FOUND.getStatusCode()).body(FilterOptionsResponse.builder()
+                    .error(issue).build());
+        }
+        Map<FilterOptions, List<String>> filterOptionsFound = accountingCorePresentationService.getFilterOptions(filterOptionsList, orgId);
+        return ResponseEntity.ok(FilterOptionsResponse.builder().filterOptions(filterOptionsFound).build());
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
@@ -161,12 +200,12 @@ public class AccountingCoreResource {
 
         if (orgM.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Unable to find Organisation by Id: %s".formatted(body.getOrganisationId()))
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(body.getOrganisationId()))
                     .withStatus(NOT_FOUND)
                     .build();
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+            return ResponseEntity.status(Objects.requireNonNull(issue.getStatus()).getStatusCode()).body(issue);
         }
 
         Organisation org = orgM.orElseThrow();
@@ -176,7 +215,7 @@ public class AccountingCoreResource {
         return extractionResultE.fold(
                 problem -> {
                     return ResponseEntity
-                            .status(problem.getStatus().getStatusCode())
+                            .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
                             .body(problem);
                 },
                 success -> {
@@ -273,27 +312,6 @@ public class AccountingCoreResource {
                     .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
         }
         return ResponseEntity.ok().body(batchesE.get());
-    }
-
-    @Tag(name = "Batches", description = "Returns the list of user names who have created batches within an organisation")
-    @GetMapping(value = "/batches/users", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> listAllBatchesUsers(@Valid @RequestParam(name = "organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String organisationId) {
-
-        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
-
-        if (orgM.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Unable to find Organisation by Id: %s".formatted(organisationId))
-                    .withStatus(NOT_FOUND)
-                    .build();
-
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
-        }
-        List<BatchsUserListView> batchs = accountingCorePresentationService.getBatchUserList(organisationId);
-
-        return ResponseEntity.ok().body(batchs);
     }
 
     @Tag(name = "Batches", description = "Batches API")

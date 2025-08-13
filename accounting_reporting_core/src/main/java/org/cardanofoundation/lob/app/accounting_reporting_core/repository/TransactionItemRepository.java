@@ -28,4 +28,9 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         AND t.transaction.ledgerDispatchStatus = 'FINALIZED'
         """)
     List<TransactionItemEntity> findTransactionItemsByAccountCodeAndDateRange(@Param("customerCodes") List<String> customerCodes, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    @Query("""
+        SELECT DISTINCT t.document.num FROM accounting_reporting_core.TransactionItemEntity t
+        """)
+    List<String> getAllDocumentNumbers();
 }
