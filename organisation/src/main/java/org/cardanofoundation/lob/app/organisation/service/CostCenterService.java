@@ -42,7 +42,7 @@ public class CostCenterService {
     }
 
     public Set<CostCenter> getAllCostCenter(String organisationId) {
-        return costCenterRepository.findAllByOrganisationId(organisationId);
+        return costCenterRepository.findAllByOrganisationIdWithParentAndChildren(organisationId);
     }
 
     @Transactional
