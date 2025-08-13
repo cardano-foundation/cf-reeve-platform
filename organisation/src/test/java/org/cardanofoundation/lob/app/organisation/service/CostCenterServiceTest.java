@@ -177,6 +177,7 @@ class CostCenterServiceTest {
         when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentCustomerCode"))).thenReturn(Optional.of(parentMock));
         when(costCenterUpdate.getName()).thenReturn("Test Cost Center");
         when(costCenterRepository.save(any())).thenReturn(costCenter);
+        when(parentMock.getId()).thenReturn(new CostCenter.Id(organisationId, "parentCustomerCode"));
 
         CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate, false);
 

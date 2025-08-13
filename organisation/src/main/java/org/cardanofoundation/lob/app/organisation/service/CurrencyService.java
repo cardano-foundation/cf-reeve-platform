@@ -26,7 +26,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
-import org.cardanofoundation.lob.app.organisation.util.Constants;
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -63,7 +63,7 @@ public class CurrencyService {
                 .orElseGet(() -> {
                     Problem error = Problem.builder()
                             .withStatus(Status.NOT_FOUND)
-                            .withTitle("Currency not found")
+                            .withTitle(ErrorTitleConstants.CURRENCY_NOT_FOUND)
                             .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " not found")
                             .build();
                     return CurrencyView.createFail(error, currencyUpdate);
@@ -80,7 +80,7 @@ public class CurrencyService {
             } else {
                 Problem error = Problem.builder()
                         .withStatus(Status.CONFLICT)
-                        .withTitle("Currency already exists")
+                        .withTitle(ErrorTitleConstants.CURRENCY_ALREADY_EXISTS)
                         .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " already exists")
                         .build();
                 return CurrencyView.createFail(error, currencyUpdate);
@@ -103,7 +103,7 @@ public class CurrencyService {
                         List<ObjectError> allErrors = errors.getAllErrors();
                         if (!allErrors.isEmpty()) {
                             return CurrencyView.createFail(Problem.builder()
-                                    .withTitle(Constants.VALIDATION_ERROR)
+                                    .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
                                     .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
                                     .withStatus(Status.BAD_REQUEST)
                                     .build(), currencyUpdate);
