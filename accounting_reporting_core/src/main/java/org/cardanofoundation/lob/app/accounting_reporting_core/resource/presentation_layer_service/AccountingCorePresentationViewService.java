@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
@@ -33,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rec
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationViolation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
@@ -63,6 +65,7 @@ public class AccountingCorePresentationViewService {
     private final ProjectMappingRepository projectMappingRepository;
     private final OrganisationPublicApiIF organisationPublicApiIF;
     private final JpaSortFieldValidator jpaSortFieldValidator;
+    private final TransactionItemRepository transactionItemRepository;
 
     /**
      * TODO: waiting for refactoring the layer to remove this
@@ -211,10 +214,6 @@ public class AccountingCorePresentationViewService {
         UserExtractionParameters fp = getUserExtractionParameters(body);
 
         return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
-    }
-
-    public List<BatchsUserListView> getBatchUserList(String orgId) {
-        return transactionBatchRepositoryGateway.findBatchUsersList(orgId).stream().map(BatchsUserListView::new).toList();
     }
 
     private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
@@ -593,4 +592,15 @@ public class AccountingCorePresentationViewService {
                 .reduce(ZERO, BigDecimal::add).abs();
     }
 
+    public Map<FilterOptions, List<String>> getFilterOptions(List<FilterOptions> filterOptions, String orgId) {
+        Map<FilterOptions, List<String>> filterOptionsListMap = new EnumMap<>(FilterOptions.class);
+        for(FilterOptions filterOption : filterOptions) {
+            switch (filterOption) {
+                case USERS -> filterOptionsListMap.put(filterOption, transactionBatchRepositoryGateway.findBatchUsersList(orgId));
+                case DOCUMENT_NUMBERS ->  filterOptionsListMap.put(filterOption, transactionItemRepository.getAllDocumentNumbers());
+                case TRANSACTION_TYPES -> filterOptionsListMap.put(filterOption, Arrays.stream(TransactionType.values()).map(Enum::name).toList());
+            }
+        }
+        return filterOptionsListMap;
+    }
 }
