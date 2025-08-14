@@ -49,7 +49,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
-import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCorePresentationConverterTest {
@@ -68,7 +68,7 @@ class AccountingCorePresentationConverterTest {
     @Mock
     private CostCenterRepository costCenterRepository;
     @Mock
-    private ProjectMappingRepository projectMappingRepository;
+    private ProjectRepository projectRepository;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationConverter;

@@ -40,12 +40,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
-import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -62,7 +62,7 @@ public class AccountingCorePresentationViewService {
     private final TransactionBatchRepositoryGateway transactionBatchRepositoryGateway;
     private final TransactionReconcilationRepository transactionReconcilationRepository;
     private final CostCenterRepository costCenterRepository;
-    private final ProjectMappingRepository projectMappingRepository;
+    private final ProjectRepository projectRepository;
     private final OrganisationPublicApiIF organisationPublicApiIF;
     private final JpaSortFieldValidator jpaSortFieldValidator;
     private final TransactionItemRepository transactionItemRepository;
@@ -505,7 +505,7 @@ public class AccountingCorePresentationViewService {
             Optional<Project> itemProject = Optional.empty();
             if (transaction.getOrganisation() != null) {
                 itemCostCenter = costCenterRepository.findById(new CostCenter.Id(transaction.getOrganisation().getId(), item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse("")));
-                itemProject = projectMappingRepository.findById(new Project.Id(transaction.getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse("")));
+                itemProject = projectRepository.findById(new Project.Id(transaction.getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse("")));
             }
             return new TransactionItemView(
                     item.getId(),

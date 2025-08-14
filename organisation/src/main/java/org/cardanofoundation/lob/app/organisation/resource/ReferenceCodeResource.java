@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import jakarta.validation.Valid;
@@ -8,6 +9,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -55,8 +58,16 @@ public class ReferenceCodeResource {
             ),
     })
     @GetMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<ReferenceCodeView> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
-        return referenceCodeService.getAllReferenceCodes(orgId);
+    public ResponseEntity<?> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                               @RequestParam(value = "refCode", required = false) String referenceCode,
+                                               @RequestParam(value = "name", required = false) String name,
+                                               @RequestParam(value = "parentCodes", required = false) List<String> parentCodes,
+                                               @RequestParam(value = "active", required = false) Boolean active,
+                                               @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        return referenceCodeService.getAllReferenceCodes(orgId, referenceCode, name, parentCodes, active, pageable).fold(
+                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                ResponseEntity::ok
+        );
     }
 
     @Operation(description = "Reference Code insert", responses = {
@@ -83,7 +94,7 @@ public class ReferenceCodeResource {
     @PostMapping(value = "/{orgId}/reference-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                       @RequestParam(value = "file") MultipartFile file) {
+                                                @RequestParam(value = "file") MultipartFile file) {
         Either<Set<Problem>, Set<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         if (refCodeE.isLeft()) {
             return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(refCodeE.getLeft());

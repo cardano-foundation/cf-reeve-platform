@@ -11,6 +11,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
+import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
 
 
@@ -37,7 +38,7 @@ public class VatView {
         return VatView.builder()
                 .customerCode(vat.getId().getCustomerCode())
                 .organisationId(vat.getId().getOrganisationId())
-                .rate(vat.getRate().toString())
+                .rate(BigDecimals.normaliseString(vat.getRate()))
                 .countryCode(vat.getCountryCode())
                 .description(vat.getDescription())
                 .active(vat.getActive())

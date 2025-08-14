@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -71,12 +72,12 @@ class AccountEventControllerTest {
 
     @Test
     void testGetReferenceCodes_returnsOk() {
-        when(accountEventService.getAllAccountEvent(orgId)).thenReturn(List.of());
+        when(accountEventService.getAllAccountEvent(orgId, null, null, null, null, null, Pageable.unpaged())).thenReturn(Either.right(List.of()));
 
-        ResponseEntity<?> response = controller.getReferenceCodes(orgId);
+        ResponseEntity<?> response = controller.getReferenceCodes(orgId, null, null, null, null, null, Pageable.unpaged());
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
-        verify(accountEventService).getAllAccountEvent(orgId);
+        verify(accountEventService).getAllAccountEvent(orgId, null, null, null, null, null, Pageable.unpaged());
     }
 
     @Test
