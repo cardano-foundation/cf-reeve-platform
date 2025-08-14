@@ -295,7 +295,7 @@ class ChartOfAccountsServiceTest {
         when(jpaSortFieldValidator.validateEntity(ChartOfAccount.class, Pageable.unpaged(), CHART_OF_ACCOUNT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
         Either<Problem, List<ChartOfAccountView>> result = chartOfAccountsService.getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, Pageable.unpaged());
 
-        assertNotNull(result.isRight());
+        assertTrue(result.isRight());
         assertEquals(1, result.get().size());
     }
 
