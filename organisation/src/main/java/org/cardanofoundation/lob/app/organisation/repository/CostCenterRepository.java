@@ -11,8 +11,8 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 
 public interface CostCenterRepository extends JpaRepository<CostCenter, CostCenter.Id> {
 
-    @Query("SELECT t FROM CostCenter t WHERE t.id.organisationId = :organisationId")
-    Set<CostCenter> findAllByOrganisationId(@Param("organisationId") String organisationId);
+    @Query("SELECT DISTINCT t FROM CostCenter t LEFT JOIN FETCH t.parent LEFT JOIN FETCH t.children WHERE t.id.organisationId = :organisationId")
+    Set<CostCenter> findAllByOrganisationIdWithParentAndChildren(@Param("organisationId") String organisationId);
 
     @Query("SELECT t FROM CostCenter t WHERE t.id = :Id AND t.active = :active ")
     Optional<CostCenter> findByIdAndActive(@Param("Id") CostCenter.Id Id, @Param("active") boolean active);

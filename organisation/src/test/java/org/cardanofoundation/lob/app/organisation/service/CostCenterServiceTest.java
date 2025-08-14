@@ -79,14 +79,14 @@ class CostCenterServiceTest {
     @Test
     void testGetAllCostCenter() {
         Set<CostCenter> costCenters = Set.of(costCenter);
-        when(costCenterRepository.findAllByOrganisationId(organisationId)).thenReturn(costCenters);
+        when(costCenterRepository.findAllByOrganisationIdWithParentAndChildren(organisationId)).thenReturn(costCenters);
 
         Set<CostCenter> result = costCenterService.getAllCostCenter(organisationId);
 
         assertNotNull(result);
         assertEquals(1, result.size());
         assertTrue(result.contains(costCenter));
-        verify(costCenterRepository).findAllByOrganisationId(organisationId);
+        verify(costCenterRepository).findAllByOrganisationIdWithParentAndChildren(organisationId);
     }
 
     @Test
