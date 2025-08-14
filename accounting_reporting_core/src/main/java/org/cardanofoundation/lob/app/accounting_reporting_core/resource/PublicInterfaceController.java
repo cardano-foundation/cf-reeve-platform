@@ -4,7 +4,6 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
 
