@@ -1,14 +1,16 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.COST_CENTER_MAPPINGS;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -26,6 +28,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @Service
 @Slf4j
@@ -36,13 +39,19 @@ public class CostCenterService {
     private final CostCenterRepository costCenterRepository;
     private final CsvParser<CostCenterUpdate> csvParser;
     private final Validator validator;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     public Optional<CostCenter> getCostCenter(String organisationId, String customerCode) {
         return costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, customerCode), true);
     }
 
-    public Set<CostCenter> getAllCostCenter(String organisationId) {
-        return costCenterRepository.findAllByOrganisationId(organisationId);
+    public Either<Problem, List<CostCenterView>> getAllCostCenter(String organisationId, String customerCode, String name, List<String> parentCustomerCodes, boolean active, Pageable pageable) {
+        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(CostCenter.class, pageable, COST_CENTER_MAPPINGS);
+        if(pageables.isLeft()) {
+            return Either.left(pageables.getLeft());
+        }
+        pageable = pageables.get();
+        return Either.right(costCenterRepository.findAllByOrganisationId(organisationId, customerCode, name, parentCustomerCodes, active, pageable).map(CostCenterView::fromEntity).toList());
     }
 
     @Transactional

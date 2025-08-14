@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -39,10 +40,10 @@ public class ReferenceCodeService {
     private final AccountEventService accountEventService;
     private final Validator validator;
 
-    public List<ReferenceCodeView> getAllReferenceCodes(String orgId) {
-        return referenceCodeRepository.findAllByOrgId(orgId).stream()
+    public Either<Problem, List<ReferenceCodeView>> getAllReferenceCodes(String orgId, String referenceCode, String name, List<String> parentCodes, Boolean active, Pageable pageable) {
+        return Either.right(referenceCodeRepository.findAllByOrgId(orgId, referenceCode, name, parentCodes, active, pageable).stream()
                 .map(ReferenceCodeView::fromEntity)
-                .toList();
+                .toList());
     }
 
     public Optional<ReferenceCodeView> getReferenceCode(String orgId, String referenceCode) {

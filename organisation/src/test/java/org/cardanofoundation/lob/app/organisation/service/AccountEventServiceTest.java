@@ -1,4 +1,5 @@
 package org.cardanofoundation.lob.app.organisation.service;
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.ACCOUNT_EVENT_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -6,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -29,6 +32,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.repository.AccountEventRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class AccountEventServiceTest {
@@ -45,6 +49,9 @@ class AccountEventServiceTest {
     private CsvParser<EventCodeUpdate> csvParser;
     @Mock
     private Validator validator;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
+
     @InjectMocks
     private AccountEventService accountEventService;
 
@@ -184,12 +191,13 @@ class AccountEventServiceTest {
 
     @Test
     void testGetAllEventCodes() {
-        when(accountEventRepository.findAllByOrganisationId(ORG_ID)).thenReturn(Set.of(mockAccountEvent));
+        when(accountEventRepository.findAllByOrganisationId(ORG_ID, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(mockAccountEvent)));
+        when(jpaSortFieldValidator.validateEntity(AccountEvent.class, Pageable.unpaged(), ACCOUNT_EVENT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
+        Either<Problem, List<AccountEventView>> result = accountEventService.getAllAccountEvent(ORG_ID, null, null, null, null, null, Pageable.unpaged());
 
-        List<AccountEventView> result = accountEventService.getAllAccountEvent(ORG_ID);
-
-        assertEquals(1, result.size());
-        verify(accountEventRepository).findAllByOrganisationId(ORG_ID);
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        verify(accountEventRepository).findAllByOrganisationId(ORG_ID, null, null, null, null, null, Pageable.unpaged());
     }
 
     @Test

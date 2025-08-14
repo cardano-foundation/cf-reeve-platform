@@ -1,14 +1,16 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.PROJECT_MAPPINGS;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -23,9 +25,10 @@ import org.zalando.problem.Status;
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
-import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @Slf4j
 @Service
@@ -33,16 +36,22 @@ import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 @Transactional(readOnly = true)
 public class ProjectCodeService {
 
-    private final ProjectMappingRepository projectMappingRepository;
+    private final ProjectRepository projectRepository;
     private final CsvParser<ProjectUpdate> csvParser;
     private final Validator validator;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     public Optional<Project> getProject(String organisationId, String customerCode) {
-        return projectMappingRepository.findById(new Project.Id(organisationId, customerCode));
+        return projectRepository.findById(new Project.Id(organisationId, customerCode));
     }
 
-    public Set<Project> getAllProjects(String organisationId) {
-        return projectMappingRepository.findAllByOrganisationId(organisationId);
+    public Either<Problem, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String parentCustomerCode, Pageable pageable) {
+        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Project.class, pageable, PROJECT_MAPPINGS);
+        if(pageables.isLeft()) {
+            return Either.left(pageables.getLeft());
+        }
+        pageable = pageables.get();
+        return Either.right(projectRepository.findAllByOrganisationId(organisationId, customerCode, parentCustomerCode, pageable).map(ProjectView::fromEntity).toList());
     }
 
     @Transactional
@@ -82,7 +91,7 @@ public class ProjectCodeService {
                 );
             }
         }
-        Project saved = projectMappingRepository.save(project);
+        Project saved = projectRepository.save(project);
         return ProjectView.fromEntity(saved);
 
     }
@@ -110,7 +119,7 @@ public class ProjectCodeService {
                 }
             }
 
-            return ProjectView.fromEntity(projectMappingRepository.save(projectEntityUpdated));
+            return ProjectView.fromEntity(projectRepository.save(projectEntityUpdated));
         } else {
             return ProjectView.createFail(
                     projectUpdate,

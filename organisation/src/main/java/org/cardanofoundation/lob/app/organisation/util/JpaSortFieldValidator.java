@@ -1,10 +1,21 @@
-package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
+package org.cardanofoundation.lob.app.organisation.util;
+
+import java.util.Map;
+import java.util.Optional;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.ManagedType;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
+
+import io.vavr.control.Either;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+
 
 @Component
 public class JpaSortFieldValidator {
@@ -13,6 +24,28 @@ public class JpaSortFieldValidator {
 
     public JpaSortFieldValidator(EntityManager entityManager) {
         this.entityManager = entityManager;
+    }
+
+    public Either<Problem, Pageable> validateEntity(Class entityClass, Pageable pageable, Map<String, String> mappings) {
+        if(pageable.getSort().isSorted()) {
+            Optional<Sort.Order> notSortableProperty = pageable.getSort().get().filter(order -> {
+                String property = Optional.ofNullable(mappings.get(order.getProperty())).orElse(order.getProperty());
+
+                return !this.isSortable(entityClass, property);
+
+            }).findFirst();
+            if (notSortableProperty.isPresent()) {
+                return Either.left(Problem.builder()
+                        .withStatus(Status.BAD_REQUEST)
+                        .withTitle("Invalid Sort Property")
+                        .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
+                        .build());
+            }
+            pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                    Sort.by(pageable.getSort().get().map(order -> new Sort.Order(order.getDirection(),
+                            Optional.ofNullable(mappings.get(order.getProperty())).orElse(order.getProperty()))).toList()));
+        }
+        return Either.right(pageable);
     }
 
     public boolean isSortable(Class<?> entityClass, String propertyPath) {

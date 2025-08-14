@@ -4,15 +4,16 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -58,9 +59,13 @@ public class ProjectCodeController {
             ),
     })
     @GetMapping(value = "/{orgId}/projects", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Set<ProjectView>> getAllProjects(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
-        return ResponseEntity.ok().body(
-                projectCodeService.getAllProjects(orgId).stream().map(ProjectView::fromEntity).collect(Collectors.toSet()));
+    public ResponseEntity<?> getAllProjects(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                            @RequestParam(value = "customerCode", required = false) String customerCode,
+                                            @RequestParam(value = "parentCustomerCode", required = false) String parentCustomerCode,
+                                            @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        return projectCodeService.getAllProjects(orgId, customerCode, parentCustomerCode, pageable).fold(
+                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                ResponseEntity::ok);
     }
 
     @Operation(description = "Organisation project creation", responses = {

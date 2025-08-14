@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.ACCOUNT_EVENT_MAPPINGS;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -9,6 +11,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -29,6 +32,7 @@ import org.cardanofoundation.lob.app.organisation.repository.AccountEventReposit
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -41,16 +45,22 @@ public class AccountEventService {
     private final OrganisationService organisationService;
     private final CsvParser<EventCodeUpdate> csvParser;
     private final Validator validator;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     public Optional<AccountEvent> findByIdAndActive(String organisationId, String debitReferenceCode, String creditReferenceCode) {
         return accountEventRepository.findByIdAndActive(new AccountEvent.Id(organisationId, debitReferenceCode, creditReferenceCode), true);
     }
 
-    public List<AccountEventView> getAllAccountEvent(String orgId) {
-        return accountEventRepository.findAllByOrganisationId(orgId).stream()
+    public Either<Problem, List<AccountEventView>> getAllAccountEvent(String orgId, String customerCode, String name, List<String> creditRefCodes, List<String> debitRefCodes, Boolean active, Pageable pageable) {
+        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(AccountEvent.class, pageable, ACCOUNT_EVENT_MAPPINGS);
+        if(pageables.isLeft()) {
+            return Either.left(pageables.getLeft());
+        }
+        pageable = pageables.get();
+        return Either.right(accountEventRepository.findAllByOrganisationId(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, pageable).stream()
                 .map(AccountEventView::convertFromEntity
                 )
-                .toList();
+                .toList());
     }
 
     @Transactional

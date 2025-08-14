@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CURRENCY_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -35,6 +38,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class CurrencyServiceTest {
@@ -45,6 +49,8 @@ class CurrencyServiceTest {
     private CsvParser<CurrencyUpdate> csvParser;
     @Mock
     private Validator validator;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private CurrencyService currencyService;
@@ -63,14 +69,14 @@ class CurrencyServiceTest {
 
     @Test
     void getAllCurrencies() {
-        when(currencyRepository.findAllByOrganisationId("org123")).thenReturn(Set.of(
+        when(currencyRepository.findAllByOrganisationId("org123", null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(
                 new Currency(new Currency.Id("org123", "USD"), "USD")
-        ));
-
-        List<CurrencyView> currencies = currencyService.getAllCurrencies("org123");
-
-        assertEquals(1, currencies.size());
-        assertEquals("USD", currencies.getFirst().getCurrencyId());
+        )));
+        when(jpaSortFieldValidator.validateEntity(Currency.class, Pageable.unpaged(), CURRENCY_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
+        Either<Problem, List<CurrencyView>> currencies = currencyService.getAllCurrencies("org123", null, null, Pageable.unpaged());
+        assertTrue(currencies.isRight());
+        assertEquals(1, currencies.get().size());
+        assertEquals("USD", currencies.get().getFirst().getCurrencyId());
     }
 
     @Test

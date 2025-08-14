@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.view;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
@@ -59,9 +60,9 @@ public class OrganisationView {
     @Schema(example = "IE")
     private String countryCode;
 
-    private Set<CostCenterView> costCenters;
+    private List<CostCenterView> costCenters;
 
-    private Set<ProjectView> projects;
+    private List<ProjectView> projects;
 
     private Set<String> organisationCurrencies;
 

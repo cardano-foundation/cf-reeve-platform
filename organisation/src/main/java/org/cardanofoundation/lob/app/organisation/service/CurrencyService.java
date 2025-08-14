@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CURRENCY_MAPPINGS;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -10,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.Errors;
@@ -27,6 +30,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -36,12 +40,18 @@ public class CurrencyService {
     private final CurrencyRepository currencyRepository;
     private final CsvParser<CurrencyUpdate> csvParser;
     private final Validator validator;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
-    public List<CurrencyView> getAllCurrencies(String orgId) {
-        return currencyRepository.findAllByOrganisationId(orgId)
+    public Either<Problem, List<CurrencyView>> getAllCurrencies(String orgId, String customerCode, List<String> currencyIds, Pageable pageable) {
+        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Currency.class, pageable, CURRENCY_MAPPINGS);
+        if(pageables.isLeft()) {
+            return Either.left(pageables.getLeft());
+        }
+        pageable = pageables.get();
+        return Either.right(currencyRepository.findAllByOrganisationId(orgId, customerCode, currencyIds, pageable)
                 .stream()
                 .map(currency -> CurrencyView.createSuccess(currency.getId().getCustomerCode(), currency.getCurrencyId()))
-                .toList();
+                .toList());
     }
 
     public Optional<Currency> findByOrganisationIdAndCode(@Param("organisationId") String organisationId,

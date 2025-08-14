@@ -7,8 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
-import java.util.Set;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
 
@@ -39,10 +38,10 @@ class ProjectCodeControllerTest {
     @Test
     void getAllProjects() {
         // Mock the service call
-        when(projectCodeService.getAllProjects("org123")).thenReturn(Set.of(mock(Project.class)));
+        when(projectCodeService.getAllProjects("org123", null, null, Pageable.unpaged())).thenReturn(Either.right(List.of(mock(ProjectView.class))));
 
         // Call the controller method
-        ResponseEntity<Set<ProjectView>> response = projectCodeController.getAllProjects("org123");
+        ResponseEntity<List<ProjectView>> response = (ResponseEntity<List<ProjectView>>) projectCodeController.getAllProjects("org123", null, null, Pageable.unpaged());
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());

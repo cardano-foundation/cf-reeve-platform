@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,9 +39,9 @@ class CurrencyControllerTest {
     @Test
     void getAllCurrencies() {
         CurrencyView view = mock(CurrencyView.class);
-        when(currencyService.getAllCurrencies("org123")).thenReturn(List.of(view));
+        when(currencyService.getAllCurrencies("org123", null, null, Pageable.unpaged())).thenReturn(Either.right(List.of(view)));
 
-        ResponseEntity<List<CurrencyView>> response = currencyController.getAllCurrencies("org123");
+        ResponseEntity<List<CurrencyView>> response = (ResponseEntity<List<CurrencyView>>) currencyController.getAllCurrencies("org123", null, null, Pageable.unpaged());
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
         assertEquals(1, response.getBody().size());

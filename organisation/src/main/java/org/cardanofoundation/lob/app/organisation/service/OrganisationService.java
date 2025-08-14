@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,9 +18,7 @@ import org.cardanofoundation.lob.app.organisation.domain.core.OrganisationViolat
 import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
-import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.domain.view.ValidationView;
 import org.cardanofoundation.lob.app.organisation.repository.*;
 import org.cardanofoundation.lob.app.organisation.service.validation.OrganisationValidationRule;
@@ -126,9 +125,8 @@ public class OrganisationService {
                 organisation.getPostCode(),
                 organisation.getProvince(),
                 organisation.getCountryCode(),
-                costCenterService.getAllCostCenter(organisation.getId()).stream()
-                        .map(CostCenterView::fromEntity).collect(Collectors.toSet()),
-                projectService.getAllProjects(organisation.getId()).stream().map(ProjectView::fromEntity).collect(Collectors.toSet()),
+                costCenterService.getAllCostCenter(organisation.getId(), null, null, null, true, Pageable.unpaged()).get(),
+                projectService.getAllProjects(organisation.getId(), null, null, Pageable.unpaged()).get(),
                 currencyService.findAllByOrganisationId(organisation.getId())
                         .stream()
                         .map(organisationCurrency ->

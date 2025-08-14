@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +21,20 @@ public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, 
     @Query("SELECT t FROM ChartOfAccount t " +
             "WHERE t.Id.organisationId = :orgId")
     Set<ChartOfAccount> findAllByOrganisationId(@Param("orgId") String orgId);
+
+    @Query("""
+            SELECT t FROM ChartOfAccount t
+            WHERE t.Id.organisationId = :orgId
+            AND (:customerCode IS NULL OR t.id.customerCode LIKE %:customerCode%)
+            AND (:name IS NULL or t.name LIKE %:name%)
+            AND (:currencies IS NULL OR t.currencyId IN :currencies)
+            AND (:counterPartyIds IS NULL OR t.counterParty IN :counterPartyIds)
+            AND (:types IS NULL OR (t.subType IS NOT NULL AND t.subType.type IS NOT NULL AND t.subType.type.id IN :types))
+            AND (:subTypes IS NULL OR (t.subType IS NOT NULL AND t.subType.id IN :subTypes))
+            AND (:referenceCodes IS NULL OR t.eventRefCode IN :referenceCodes)
+            """
+    )
+    Page<ChartOfAccount> findAllByOrganisationIdFiltered(@Param("orgId") String orgId, @Param("customerCode") String customerCode, @Param("name") String name, @Param("currencies") List<String> currencies, @Param("counterPartyIds") List<String> counterPartyIds, @Param("types") List<String> types, @Param("subTypes") List<String> subTypes, @Param("referenceCodes") List<String> referenceCodes, Pageable pageable);
 
     @Query("SELECT t FROM ChartOfAccount t " +
             "WHERE t.Id.organisationId = :orgId AND t.Id.customerCode = :customerCode")

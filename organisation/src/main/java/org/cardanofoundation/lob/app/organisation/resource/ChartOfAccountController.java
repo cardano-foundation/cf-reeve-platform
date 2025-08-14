@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -9,6 +10,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -76,8 +79,19 @@ public class ChartOfAccountController {
             ),
     })
     @GetMapping(value = "/{orgId}/chart-of-accounts", produces = "application/json")
-    public ResponseEntity<Set<ChartOfAccountView>> getChartOfAccounts(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
-        return ResponseEntity.ok().body(chartOfAccountsService.getAllChartOfAccount(orgId));
+    public ResponseEntity<?> getChartOfAccounts(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                @RequestParam(value = "customerCode", required = false) String customerCode,
+                                                @RequestParam(value = "name", required = false) String name,
+                                                @RequestParam(value = "currencies", required = false) List<String> currencies,
+                                                @RequestParam(value = "counterPartyIds", required = false) List<String> counterPartyIds,
+                                                @RequestParam(value = "types", required = false) List<String> types,
+                                                @RequestParam(value = "subTypes", required = false) List<String> subTypes,
+                                                @RequestParam(value = "refCodes", required = false) List<String> referenceCodes,
+                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        return chartOfAccountsService.getAllChartOfAccount(orgId, customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, pageable).fold(problem ->
+                        ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                ResponseEntity::ok);
+
     }
 
     @Operation(description = "Chart Of Account insert", responses = {
@@ -91,7 +105,7 @@ public class ChartOfAccountController {
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
 
         ChartOfAccountView chartOfAccountView = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
-        if(chartOfAccountView.getError().isPresent()){
+        if (chartOfAccountView.getError().isPresent()) {
             return ResponseEntity.status(chartOfAccountView.getError().get().getStatus().getStatusCode()).body(chartOfAccountView);
         }
 
@@ -106,7 +120,7 @@ public class ChartOfAccountController {
     @PostMapping(value = "/{orgId}/chart-of-accounts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertChartOfAccountByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                        @RequestParam(value = "file") MultipartFile file) {
+                                                       @RequestParam(value = "file") MultipartFile file) {
 
         Either<Set<Problem>, Set<ChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         if (chartOfAccountE.isEmpty()) {
@@ -127,7 +141,7 @@ public class ChartOfAccountController {
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
 
         ChartOfAccountView referenceCode = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
-        if(referenceCode.getError().isPresent()){
+        if (referenceCode.getError().isPresent()) {
             return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
         }
 

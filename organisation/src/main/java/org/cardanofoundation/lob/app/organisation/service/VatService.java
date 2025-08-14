@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.VAT_MAPPINGS;
+
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -8,6 +10,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -25,6 +28,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
 import org.cardanofoundation.lob.app.organisation.repository.VatRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @Slf4j
 @Service
@@ -35,15 +39,21 @@ public class VatService {
     private final VatRepository vatRepository;
     private final CsvParser<VatUpdate> csvParser;
     private final Validator validator;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     public Optional<Vat> findByOrganisationAndCode(String organisationId, String customerCode) {
         return vatRepository.findByIdAndActive(new Vat.Id(organisationId, customerCode),true);
     }
 
-    public List<VatView> findAllByOrganisationId(String organisationId) {
-        return vatRepository.findAllByOrganisationId(organisationId).stream()
+    public Either<Problem, List<VatView>> findAllByOrganisationId(String organisationId, String customerCode, Double minRate, Double maxRate, String description, List<String> countryCodes, Boolean active, Pageable pageable) {
+        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Vat.class, pageable, VAT_MAPPINGS);
+        if(pageables.isLeft()) {
+            return Either.left(pageables.getLeft());
+        }
+        pageable = pageables.get();
+        return Either.right(vatRepository.findAllByOrganisationId(organisationId,customerCode, minRate, maxRate, description, countryCodes, active, pageable).stream()
                 .map(VatView::convertFromEntity)
-                .toList();
+                .toList());
     }
 
     @Transactional

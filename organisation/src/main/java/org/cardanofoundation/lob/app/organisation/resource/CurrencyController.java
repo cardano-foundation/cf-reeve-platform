@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -8,6 +9,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,8 +55,13 @@ public class CurrencyController {
             ),
     })
     @GetMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<CurrencyView>> getAllCurrencies(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
-        return ResponseEntity.ok().body(currencyService.getAllCurrencies(orgId));
+    public ResponseEntity<?> getAllCurrencies(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                              @RequestParam("customerCode") String customerCode,
+                                              @RequestParam("currencyIds") List<String> currencyIds,
+                                              @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        return currencyService.getAllCurrencies(orgId, customerCode, currencyIds, pageable).fold(
+                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                ResponseEntity::ok);
     }
 
     @Operation(description = "Get currency", responses = {

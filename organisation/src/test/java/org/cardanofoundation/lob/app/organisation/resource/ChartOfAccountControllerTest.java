@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import java.util.*;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -64,14 +65,14 @@ class ChartOfAccountControllerTest {
     @Test
     void getChartOfAccounts_returnsAccounts() {
         String orgId = "org-1";
-        Set<ChartOfAccountView> accounts = Set.of(mock(ChartOfAccountView.class));
-        when(chartOfAccountsService.getAllChartOfAccount(orgId)).thenReturn(accounts);
+        List<ChartOfAccountView> accounts = List.of(mock(ChartOfAccountView.class));
+        when(chartOfAccountsService.getAllChartOfAccount(orgId, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(Either.right(accounts));
 
-        ResponseEntity<Set<ChartOfAccountView>> response = controller.getChartOfAccounts(orgId);
+        ResponseEntity<?> response = controller.getChartOfAccounts(orgId,  null, null, null, null, null, null, null, Pageable.unpaged());
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(accounts);
-        verify(chartOfAccountsService).getAllChartOfAccount(orgId);
+        verify(chartOfAccountsService).getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, Pageable.unpaged());
     }
 
     @Test

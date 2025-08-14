@@ -1,12 +1,15 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.COST_CENTER_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -27,6 +30,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class CostCenterServiceTest {
@@ -37,6 +41,8 @@ class CostCenterServiceTest {
     private CsvParser<CostCenterUpdate> csvParser;
     @Mock
     private Validator validator;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private CostCenterService costCenterService;
@@ -78,15 +84,15 @@ class CostCenterServiceTest {
 
     @Test
     void testGetAllCostCenter() {
-        Set<CostCenter> costCenters = Set.of(costCenter);
-        when(costCenterRepository.findAllByOrganisationId(organisationId)).thenReturn(costCenters);
-
-        Set<CostCenter> result = costCenterService.getAllCostCenter(organisationId);
+        List<CostCenter> costCenters = List.of(costCenter);
+        Page<CostCenter> costCenterPage = new PageImpl<>(costCenters);
+        when(costCenterRepository.findAllByOrganisationId(organisationId, customerCode, null, null,true, Pageable.unpaged())).thenReturn(costCenterPage);
+        when(jpaSortFieldValidator.validateEntity(CostCenter.class, Pageable.unpaged(), COST_CENTER_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
+        List<CostCenterView> result = costCenterService.getAllCostCenter(organisationId, customerCode, null, null, true, Pageable.unpaged()).get();
 
         assertNotNull(result);
         assertEquals(1, result.size());
-        assertTrue(result.contains(costCenter));
-        verify(costCenterRepository).findAllByOrganisationId(organisationId);
+        verify(costCenterRepository).findAllByOrganisationId(organisationId, customerCode, null, null, true, Pageable.unpaged());
     }
 
     @Test

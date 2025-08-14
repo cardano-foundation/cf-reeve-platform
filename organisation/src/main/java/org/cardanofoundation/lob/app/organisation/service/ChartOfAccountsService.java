@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.OPENING_BALANCE_VALIDATION_ERORR;
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CHART_OF_ACCOUNT_MAPPINGS;
 
 import java.util.HashSet;
 import java.util.List;
@@ -15,6 +16,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -36,6 +38,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeR
 import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -53,6 +56,7 @@ public class ChartOfAccountsService {
     private final Validator validator;
     @PersistenceContext
     private EntityManager entityManager;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     public Optional<ChartOfAccount> getChartAccount(String organisationId, String customerCode) {
         return chartOfAccountRepository.findByIdAndActive(new ChartOfAccount.Id(organisationId, customerCode), true);
@@ -67,8 +71,15 @@ public class ChartOfAccountsService {
         return chartOfAccountRepository.findAllByOrganisationIdSubTypeId(subType);
     }
 
-    public Set<ChartOfAccountView> getAllChartOfAccount(String organisationId) {
-        return chartOfAccountRepository.findAllByOrganisationId(organisationId).stream().map(ChartOfAccountView::createSuccess).collect(Collectors.toSet());
+
+
+    public Either<Problem, List<ChartOfAccountView>> getAllChartOfAccount(String organisationId, String customerCode, String name, List<String> currencies, List<String> counterPartyIds, List<String> types, List<String> subTypes, List<String> referenceCodes, Pageable pageable) {
+        Either<Problem, Pageable> validateEntity = jpaSortFieldValidator.validateEntity(ChartOfAccount.class, pageable, CHART_OF_ACCOUNT_MAPPINGS);
+        if(validateEntity.isLeft()) {
+            return Either.left(validateEntity.left().get());
+        }
+        pageable = validateEntity.get();
+        return Either.right(chartOfAccountRepository.findAllByOrganisationIdFiltered(organisationId,customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, pageable).stream().map(ChartOfAccountView::createSuccess).toList());
     }
 
     @Transactional

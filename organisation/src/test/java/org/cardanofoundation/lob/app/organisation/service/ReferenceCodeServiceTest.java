@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -28,6 +30,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class ReferenceCodeServiceTest {
@@ -45,6 +48,9 @@ class ReferenceCodeServiceTest {
     private AccountEventService accountEventService;
     @Mock
     private Validator validator;
+
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private ReferenceCodeService referenceCodeService;
@@ -142,14 +148,15 @@ class ReferenceCodeServiceTest {
 
     @Test
     void testGetAllReferenceCodes() {
-        when(referenceCodeRepository.findAllByOrgId(ORG_ID)).thenReturn(List.of(referenceCode));
+        when(referenceCodeRepository.findAllByOrgId(ORG_ID, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(referenceCode)));
 
-        List<ReferenceCodeView> result = referenceCodeService.getAllReferenceCodes(ORG_ID);
+        Either<Problem, List<ReferenceCodeView>> result = referenceCodeService.getAllReferenceCodes(ORG_ID, null, null, null, null, Pageable.unpaged());
 
-        assertEquals(1, result.size());
-        assertEquals(referenceCodeView.getReferenceCode(), result.getFirst().getReferenceCode());
-        assertEquals(referenceCodeView.getDescription(), result.getFirst().getDescription());
-        verify(referenceCodeRepository).findAllByOrgId(ORG_ID);
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        assertEquals(referenceCodeView.getReferenceCode(), result.get().getFirst().getReferenceCode());
+        assertEquals(referenceCodeView.getDescription(), result.get().getFirst().getDescription());
+        verify(referenceCodeRepository).findAllByOrgId(ORG_ID, null, null, null, null, Pageable.unpaged());
     }
 
     @Test

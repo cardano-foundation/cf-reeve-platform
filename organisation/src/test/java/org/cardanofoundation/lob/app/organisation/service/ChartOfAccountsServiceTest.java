@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CHART_OF_ACCOUNT_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -9,6 +10,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -34,6 +37,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeR
 import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class ChartOfAccountsServiceTest {
@@ -58,6 +62,8 @@ class ChartOfAccountsServiceTest {
     private Validator validator;
     @Mock
     private CurrencyRepository currencyRepository;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     private ChartOfAccountsService chartOfAccountsService;
 
@@ -81,7 +87,8 @@ class ChartOfAccountsServiceTest {
                 currencyRepository,
                 organisationService,
                 csvParser,
-                validator
+                validator,
+                jpaSortFieldValidator
         );
         chartOfAccountId = new ChartOfAccount.Id(orgId, customerCode);
         chartOfAccount = ChartOfAccount.builder()
@@ -283,13 +290,13 @@ class ChartOfAccountsServiceTest {
 
     @Test
     void testGetAllChartOfAccount() {
-        Set<ChartOfAccount> accounts = Set.of(chartOfAccount);
-        when(chartOfAccountRepository.findAllByOrganisationId(orgId)).thenReturn(accounts);
+        List<ChartOfAccount> accounts = List.of(chartOfAccount);
+        when(chartOfAccountRepository.findAllByOrganisationIdFiltered(orgId,  null, null, null, null, null,  null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(accounts));
+        when(jpaSortFieldValidator.validateEntity(ChartOfAccount.class, Pageable.unpaged(), CHART_OF_ACCOUNT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
+        Either<Problem, List<ChartOfAccountView>> result = chartOfAccountsService.getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, Pageable.unpaged());
 
-        Set<ChartOfAccountView> result = chartOfAccountsService.getAllChartOfAccount(orgId);
-
-        assertNotNull(result);
-        assertEquals(1, result.size());
+        assertNotNull(result.isRight());
+        assertEquals(1, result.get().size());
     }
 
     @Test
