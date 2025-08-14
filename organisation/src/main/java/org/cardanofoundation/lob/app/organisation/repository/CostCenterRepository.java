@@ -14,7 +14,8 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 public interface CostCenterRepository extends JpaRepository<CostCenter, CostCenter.Id> {
 
     @Query("""
-            SELECT t FROM CostCenter t LEFT JOIN FETCH t.parent LEFT JOIN FETCH t.children WHERE t.id.organisationId = :organisationId
+            SELECT t FROM CostCenter t LEFT JOIN FETCH t.parent
+            WHERE t.id.organisationId = :organisationId
             AND (:customerCode IS NULL OR t.id.customerCode LIKE %:customerCode%)
             AND (:name IS NULL OR t.name LIKE %:name%)
             AND (:parentCustomerCodes IS NULL OR t.parentCustomerCode IN :parentCustomerCodes)
