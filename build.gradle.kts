@@ -103,7 +103,7 @@ subprojects {
         }
     }
 
-    extra["springBootVersion"] = "3.3.3"
+    extra["springBootVersion"] = "3.3.13"
     extra["springCloudVersion"] = "2023.0.0"
     extra["jMoleculesVersion"] = "2023.1.0"
 
@@ -115,7 +115,7 @@ subprojects {
 
         // needed to store json via JPA in PostgreSQL for
         // Hibernate 6.6, 6.5, 6.4, and 6.3
-        implementation("io.hypersistence:hypersistence-utils-hibernate-63:3.8.3")
+        implementation("io.hypersistence:hypersistence-utils-hibernate-63:3.10.3")
 
         runtimeOnly("io.micrometer:micrometer-registry-prometheus")
         runtimeOnly("org.postgresql:postgresql")
@@ -307,6 +307,10 @@ subprojects {
             maven {
                 name = "localM2"
                 url = uri("${System.getProperty("user.home")}/.m2/repository")
+            }
+            maven {
+                name = "localM2App"
+                url = uri("${System.getProperty("user.home")}/git/reeve/cf-reeve-application/.m2/repository")
             }
             maven {
                 name = "gitlabPrivate"

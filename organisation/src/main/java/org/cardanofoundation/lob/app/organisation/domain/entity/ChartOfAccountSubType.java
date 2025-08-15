@@ -32,7 +32,7 @@ public class ChartOfAccountSubType extends CommonEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "type", referencedColumnName = "id")
     private ChartOfAccountType type;
 

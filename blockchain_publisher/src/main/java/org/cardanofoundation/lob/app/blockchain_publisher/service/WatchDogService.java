@@ -81,7 +81,7 @@ public class WatchDogService {
 
         Set<ReportEntity> reportEntities = reportEntityRepositoryGateway.findDispatchedReportsThatAreNotFinalizedYet(org.getId(), Limit.of(txStatusInspectionLimitPerOrgPullSize));
 
-                reportEntities.forEach(report -> {
+        reportEntities.forEach(report -> {
             log.info("Checking transaction status for report: {}", report.getId());
             L1SubmissionData l1SubmissionData = report.getL1SubmissionData().orElseThrow(() -> new RuntimeException("Failed to get L1 submission data"));
             report.setL1SubmissionData(Optional.of(updateL1SubmissionData(l1SubmissionData, chainTip)));

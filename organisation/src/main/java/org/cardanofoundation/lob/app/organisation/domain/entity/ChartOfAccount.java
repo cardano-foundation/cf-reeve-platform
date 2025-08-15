@@ -50,7 +50,7 @@ public class ChartOfAccount extends CommonEntity implements Persistable<ChartOfA
     @Builder.Default
     private Boolean active = true;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "subType", referencedColumnName = "id")
     private ChartOfAccountSubType subType;
 

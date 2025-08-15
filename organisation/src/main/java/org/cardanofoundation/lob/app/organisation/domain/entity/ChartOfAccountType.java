@@ -1,7 +1,5 @@
 package org.cardanofoundation.lob.app.organisation.domain.entity;
 
-import static jakarta.persistence.FetchType.LAZY;
-
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -36,7 +34,7 @@ public class ChartOfAccountType extends CommonEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @OneToMany(mappedBy = "type", orphanRemoval = true, fetch = LAZY, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "type", orphanRemoval = true, fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Builder.Default
     private Set<ChartOfAccountSubType> subTypes = new LinkedHashSet<>();
 
