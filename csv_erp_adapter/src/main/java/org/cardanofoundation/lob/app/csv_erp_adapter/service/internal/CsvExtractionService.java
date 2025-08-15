@@ -102,7 +102,6 @@ public class CsvExtractionService {
         applicationEventPublisher.publishEvent(validateIngestionResponseEvent);
     }
 
-    @Transactional
     public void startNewExtraction(@NotNull String organisationId, String user, @NotNull UserExtractionParameters userExtractionParameters, byte[] file) {
         String batchId = digestAsHex(UUID.randomUUID().toString());
         Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
