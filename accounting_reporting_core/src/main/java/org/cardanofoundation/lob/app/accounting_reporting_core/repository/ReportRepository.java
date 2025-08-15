@@ -6,10 +6,14 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 
@@ -33,6 +37,33 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
              AND r2.idControl IS NULL
              ORDER BY r.createdAt ASC, r.reportId ASC""")
     Set<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId);
+
+//    AND (:reportType IS NULL OR r.type = :reportType)
+//    AND (:intervalType IS NULL OR r.intervalType = :intervalType)
+//    AND (:ledgerStatus IS NULL OR r.ledgerDispatchStatus = :ledgerStatus)
+
+    @Query("""
+            SELECT r FROM accounting_reporting_core.report.ReportEntity r
+            LEFT JOIN accounting_reporting_core.report.ReportEntity r2 on r.idControl = r2.idControl and r.ver < r2.ver
+             WHERE r.organisation.id = :organisationId
+             AND r2.idControl IS NULL
+            AND (:reportType IS NULL OR CAST(r.type AS string) = CAST(:reportType AS string))
+            AND (:intervalType IS NULL OR  CAST(r.intervalType AS string) = CAST(:intervalType AS string))
+            AND (:ledgerStatus IS NULL OR CAST(r.ledgerDispatchStatus AS string) = CAST(:ledgerStatus AS string))
+            AND (:currencyCode IS NULL OR r.organisation.currencyId = :currencyCode)
+            AND (:year IS NULL OR r.year = :year)
+            AND (:period IS NULL OR r.period = :period)
+            AND (:txHash IS NULL OR r.ledgerDispatchReceipt.primaryBlockchainHash LIKE %:txHash%)
+            """)
+    Page<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId,
+                                               @Param("reportType") ReportType reportType,
+                                               @Param("currencyCode") String currencyCode,
+                                               @Param("intervalType") IntervalType intervalType,
+                                               @Param("year") Short year,
+                                               @Param("period") Short period,
+                                               @Param("ledgerStatus") LedgerDispatchStatus ledgerDispatchStatus,
+                                               @Param("txHash") String txHash,
+                                               Pageable pageable);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r

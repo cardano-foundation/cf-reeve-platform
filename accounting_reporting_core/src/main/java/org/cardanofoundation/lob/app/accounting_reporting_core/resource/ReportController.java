@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.*;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
@@ -120,12 +124,19 @@ public class ReportController {
     @Tag(name = "Reporting", description = "Report list")
     @GetMapping(value = "/report-list/{orgId}", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAuditorRole())")
-    public ResponseEntity<ReportResponseView> reportList(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
-        return ResponseEntity.ok().body(ReportResponseView.createSuccess(reportService.findAllByOrgId(
-                        orgId
-                ).stream().map(reportViewService::responseView).collect(Collectors.toList()))
+    public ResponseEntity<?> reportList(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                         @RequestParam(value = "reportType", required = false) ReportType reportType,
+                                                         @RequestParam(value = "currencyCode", required = false) String currencyCode,
+                                                         @RequestParam(value = "intervalType", required = false) IntervalType intervalType,
+                                                         @RequestParam(value = "year", required = false) Short year,
+                                                         @RequestParam(value = "period", required = false) Short period,
+                                                         @RequestParam(value = "ledgerStatus", required = false) LedgerDispatchStatus status,
+                                                         @RequestParam(value = "txHash", required = false) String txHash,
+                                                         @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        return reportService.findAllByOrgId(orgId, reportType, currencyCode, intervalType, year, period, status, txHash, pageable).fold(
+                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                reportViews -> ResponseEntity.ok(ReportResponseView.createSuccess(reportViews.stream().map(reportViewService::responseView).toList()))
         );
-
     }
 
 

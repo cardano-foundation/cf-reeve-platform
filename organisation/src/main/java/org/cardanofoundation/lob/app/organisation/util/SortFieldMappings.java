@@ -32,4 +32,13 @@ public class SortFieldMappings {
     public static final Map<String, String> VAT_MAPPINGS = Map.of(
             "customerCode", "id.customerCode"
     );
+
+    public static final Map<String, String> REPORT_MAPPINGS = Map.of(
+            "organisationId", "organisation.id",
+            "documentCurrencyCustomerCode", "organisation.currencyId",
+            "publishDate", "ledgerDispatchDate",
+            "publish", "ledgerDispatchApproved",
+            "blockChainHash", "ledgerDispatchReceipt.primaryBlockchainHash",
+            "canBePublish", "isReadyToPublish"
+            );
 }
