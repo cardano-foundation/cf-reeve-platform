@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.google.common.cache.Cache;
 import io.vavr.control.Either;
@@ -101,6 +102,7 @@ public class CsvExtractionService {
         applicationEventPublisher.publishEvent(validateIngestionResponseEvent);
     }
 
+    @Transactional
     public void startNewExtraction(@NotNull String organisationId, String user, @NotNull UserExtractionParameters userExtractionParameters, byte[] file) {
         String batchId = digestAsHex(UUID.randomUUID().toString());
         Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
@@ -157,6 +159,7 @@ public class CsvExtractionService {
         );
     }
 
+    @Transactional
     public void continueERPExtraction(@NotBlank String batchId, @NotBlank String organisationId, @NotNull UserExtractionParameters userExtractionParameters, @NotNull SystemExtractionParameters systemExtractionParameters) {
 
         ExtractionData extractionData = temporaryFileCache.getIfPresent(batchId);
