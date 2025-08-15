@@ -95,3 +95,7 @@ tasks.jacocoTestReport {
         csv.required.set(true)
     }
 }
+
+tasks.bootJar {
+    archiveClassifier = "all"
+}
