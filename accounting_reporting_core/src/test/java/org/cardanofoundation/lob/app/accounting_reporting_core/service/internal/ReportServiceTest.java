@@ -1343,7 +1343,7 @@ class ReportServiceTest {
     @Test
     void reportGenerate_OrgNotFound() {
         String organisationId = "org-123";
-        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1, false);
         request.setOrganisationId(organisationId);
         when(reportTypeRepository.findByOrganisationAndReportName(organisationId, BALANCE_SHEET.name())).thenReturn(Optional.empty());
 
@@ -1358,7 +1358,8 @@ class ReportServiceTest {
     void reportGenerate_generateBalanceSheet() {
         String organisationId = "org-123";
         ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
-        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1,
+                        false);
         request.setOrganisationId(organisationId);
         ReportTypeFieldEntity reportTypeFieldEntityCapital = mock(ReportTypeFieldEntity.class);
         ReportTypeFieldEntity reportTypeFieldEntityProfit = mock(ReportTypeFieldEntity.class);
@@ -1469,7 +1470,8 @@ class ReportServiceTest {
     void reportGenerate_generateNoChilds() {
         String organisationId = "org-123";
         ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
-        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1,
+                        false);
         request.setOrganisationId(organisationId);
         ReportTypeFieldEntity field = mock(ReportTypeFieldEntity.class);
 
@@ -1602,7 +1604,7 @@ class ReportServiceTest {
     void reportGenerate_generateFromOtherReport() {
         String organisationId = "org-123";
         ReportTypeEntity reportTypeEntity = mock(ReportTypeEntity.class);
-        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1);
+        ReportGenerateRequest request = new ReportGenerateRequest(BALANCE_SHEET, IntervalType.YEAR, (short) 2025, (short) 1, false);
         request.setOrganisationId(organisationId);
         ReportTypeFieldEntity field = mock(ReportTypeFieldEntity.class);
         ReportTypeFieldEntity parentField = mock(ReportTypeFieldEntity.class);
