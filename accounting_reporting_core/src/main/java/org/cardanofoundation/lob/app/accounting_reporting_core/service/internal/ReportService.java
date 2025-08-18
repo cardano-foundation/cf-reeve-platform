@@ -383,12 +383,12 @@ public class ReportService {
                 problem -> Either.left(problem),
                 adjustedPageable -> {
                     Page<ReportEntity> allByOrganisationId = reportRepository.findAllByOrganisationId(organisationId,
-                            reportType,
+                            reportType != null ? reportType.name() : null,
                             currencyCode,
-                            intervalType,
+                            intervalType != null ? intervalType.name() : null,
                             year,
                             period,
-                            status,
+                            status != null ? status.name() : null,
                             txHash,
                             adjustedPageable);
                     return Either.right(ReportResponseView.createSuccess(allByOrganisationId.stream().map(ReportView::fromEntity).toList(), allByOrganisationId.getTotalElements()));

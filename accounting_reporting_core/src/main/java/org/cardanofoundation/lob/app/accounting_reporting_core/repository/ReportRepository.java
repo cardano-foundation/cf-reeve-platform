@@ -12,8 +12,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 
@@ -44,19 +42,19 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
             LEFT JOIN accounting_reporting_core.report.ReportEntity r2 on r.idControl = r2.idControl and r.ver < r2.ver
              WHERE r.organisation.id = :organisationId
              AND r2.idControl IS NULL
-            AND (:reportType IS NULL OR CAST(r.type AS string) = CAST(:reportType AS string))
-            AND (:intervalType IS NULL OR  CAST(r.intervalType AS string) = CAST(:intervalType AS string))
-            AND (:ledgerStatus IS NULL OR CAST(r.ledgerDispatchStatus AS string) = CAST(:ledgerStatus AS string))
+            AND (:reportType IS NULL OR CAST(r.type AS string) = :reportType)
+            AND (:intervalType IS NULL OR  CAST(r.intervalType AS string) = :intervalType)
+            AND (:ledgerStatus IS NULL OR CAST(r.ledgerDispatchStatus AS string) = :ledgerStatus)
             AND (:currencyCode IS NULL OR r.organisation.currencyId = :currencyCode)
             AND (:year IS NULL OR r.year = :year)
             AND (:period IS NULL OR r.period = :period)
             AND (:txHash IS NULL OR r.ledgerDispatchReceipt.primaryBlockchainHash LIKE %:txHash%)
             """)
     Page<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId,
-            @Param("reportType") ReportType reportType, @Param("currencyCode") String currencyCode,
-            @Param("intervalType") IntervalType intervalType, @Param("year") Short year,
+            @Param("reportType") String reportType, @Param("currencyCode") String currencyCode,
+            @Param("intervalType") String intervalType, @Param("year") Short year,
             @Param("period") Short period,
-            @Param("ledgerStatus") LedgerDispatchStatus ledgerDispatchStatus,
+            @Param("ledgerStatus") String ledgerDispatchStatus,
             @Param("txHash") String txHash, Pageable pageable);
 
     @Query("""
