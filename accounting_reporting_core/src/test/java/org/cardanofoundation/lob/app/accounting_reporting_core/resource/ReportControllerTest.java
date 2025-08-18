@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
+import static org.mockito.Mockito.when;
+
 import org.springframework.http.ResponseEntity;
 
 import io.vavr.control.Either;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
@@ -53,7 +56,8 @@ class ReportControllerTest {
         ReportGenerateRequest reportGenerateRequest = Mockito.mock(ReportGenerateRequest.class);
         ReportEntity reportEntity = Mockito.mock(ReportEntity.class);
 
-        Mockito.when(reportService.reportGenerate(reportGenerateRequest)).thenReturn(Either.right(reportEntity));
+        when(reportService.reportGenerate(reportGenerateRequest)).thenReturn(Either.right(reportEntity));
+        when(reportEntity.getOrganisation()).thenReturn(Mockito.mock(Organisation.class));
         ResponseEntity<ReportResponseView> reportResponseViewResponseEntity = reportController.reportGenerate(reportGenerateRequest);
 
         assert reportResponseViewResponseEntity.getStatusCode().is2xxSuccessful();
