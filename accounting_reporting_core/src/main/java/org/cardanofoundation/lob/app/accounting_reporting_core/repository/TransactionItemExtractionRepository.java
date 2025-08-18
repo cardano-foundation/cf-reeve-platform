@@ -124,7 +124,7 @@ public class TransactionItemExtractionRepository {
     public long countItemsByAccountDateAggregated(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
         String jpql = """
                 SELECT COUNT(1) FROM accounting_reporting_core.TransactionItemEntity ti
-                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
+                    JOIN ti.transaction te LEFT JOIN CostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
@@ -142,7 +142,7 @@ public class TransactionItemExtractionRepository {
         String jpql = """
                     SELECT NEW org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView(MIN(ti.id), SUM(ti.amountLcy), SUM(ti.amountFcy))
                     FROM accounting_reporting_core.TransactionItemEntity ti
-                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
+                    JOIN ti.transaction te LEFT JOIN CostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
