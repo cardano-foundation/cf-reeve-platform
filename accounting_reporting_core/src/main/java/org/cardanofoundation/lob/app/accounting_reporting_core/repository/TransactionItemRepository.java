@@ -33,4 +33,15 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         SELECT DISTINCT t.document.num FROM accounting_reporting_core.TransactionItemEntity t
         """)
     List<String> getAllDocumentNumbers();
+
+    @Query("""
+            SELECT t FROM accounting_reporting_core.TransactionItemEntity t
+            WHERE t.transaction.entryDate >= :startDate
+            AND t.transaction.entryDate <= :endDate
+            AND (t.accountDebit.code IN :customerCodes OR t.accountCredit.code IN :customerCodes)
+            AND t.amountLcy <> 0
+            AND t.transaction.automatedValidationStatus = 'VALIDATED'
+            """)
+    List<TransactionItemEntity> findPreviewTransactionItemsByAccountCodeAndDateRange(
+            List<String> list, LocalDate orElse, LocalDate endDate);
 }

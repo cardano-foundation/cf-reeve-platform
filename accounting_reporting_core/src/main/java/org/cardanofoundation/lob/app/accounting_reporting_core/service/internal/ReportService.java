@@ -599,7 +599,7 @@ public class ReportService {
             }
         }
         // validate against generated report
-        ReportGenerateRequest reportGenerateRequest = new ReportGenerateRequest(reportEntity.getType(), reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod().orElse((short) 1));
+        ReportGenerateRequest reportGenerateRequest = new ReportGenerateRequest(reportEntity.getType(), reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod().orElse((short) 1), false);
         reportGenerateRequest.setOrganisationId(reportEntity.getOrganisation().getId());
         Either<Problem, ReportEntity> generatedReportE = reportGenerate(reportGenerateRequest);
         if (generatedReportE.isRight()) {
@@ -725,12 +725,13 @@ public class ReportService {
         switch (reportGenerateRequest.getReportType()) {
             case BALANCE_SHEET -> {
                 BalanceSheetData balanceSheetData = new BalanceSheetData();
-                fillReportData(balanceSheetData, reportTypeEntity, startDate, endDate);
+                fillReportData(balanceSheetData, reportTypeEntity, startDate, endDate,
+                        reportGenerateRequest.isPreview());
                 reportEntity.setBalanceSheetReportData(Optional.of(balanceSheetData));
             }
             case INCOME_STATEMENT -> {
                 IncomeStatementData incomeStatementData = new IncomeStatementData();
-                fillReportData(incomeStatementData, reportTypeEntity, startDate, endDate);
+                fillReportData(incomeStatementData, reportTypeEntity, startDate, endDate, reportGenerateRequest.isPreview());
                 reportEntity.setIncomeStatementReportData(Optional.of(incomeStatementData));
             }
             default -> {
@@ -746,11 +747,11 @@ public class ReportService {
         return Either.right(reportEntity);
     }
 
-    private void fillReportData(Object reportData, ReportTypeEntity reportTypeEntity, LocalDate startDate, LocalDate endDate) {
+    private void fillReportData(Object reportData, ReportTypeEntity reportTypeEntity, LocalDate startDate, LocalDate endDate, boolean preview) {
         // if we can solve it differently it would be better
         Set<ReportTypeFieldEntity> topLevelFields = reportTypeEntity.getFields().stream().filter(field -> field.getParent() == null).collect(Collectors.toSet());
         topLevelFields.forEach(reportTypeFieldEntity -> {
-            fillObjectRecursively(reportData, reportTypeFieldEntity, startDate, endDate);
+            fillObjectRecursively(reportData, reportTypeFieldEntity, startDate, endDate, preview);
         });
     }
 
@@ -760,7 +761,7 @@ public class ReportService {
      * If the field has no child fields, it will calculate the total amount based on the mapping types and set the value in the report data object.
      * NOTE: Currently it is only possible to have a value at the bottom level (No children) of the report data object.
      */
-    private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate) {
+    private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview) {
         if (field.getChildFields().isEmpty()) {
             if (field.getMappingTypes().isEmpty() && field.getMappingReportTypes().isEmpty()) {
                 log.debug("Field %s has no mapping type, skipping...".formatted(field.getName()));
@@ -784,7 +785,7 @@ public class ReportService {
                 endDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
             }
 
-            totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate);
+            totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate, preview);
             totalAmount = addValuesFromReportFields(field, endDate, totalAmount, startSearchDate);
             if (field.isNegate()) {
                 totalAmount = totalAmount.negate();
@@ -795,7 +796,7 @@ public class ReportService {
             LocalDate finalEndDate = endDate;
             field.getChildFields().forEach(subField -> {
                 Object subFieldObject = getOrCreateNestedObject(reportData, field.getName());
-                fillObjectRecursively(subFieldObject, subField, startDate, finalEndDate);
+                fillObjectRecursively(subFieldObject, subField, startDate, finalEndDate, preview);
             });
         }
     }
@@ -872,7 +873,7 @@ public class ReportService {
      * Then it will find all transaction items that are related to these ChartOfAccounts and fall within the specified date range.
      * Sum them up and return these.
      */
-    private BigDecimal addValuesFromTransactionItems(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate) {
+    private BigDecimal addValuesFromTransactionItems(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate, boolean preview) {
         // Finding all ChartOfAccounts that are mapped to the specific field via the subtypes from the chartOfAccount
         Set<ChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(ChartOfAccountSubType::getId).toList());
 
@@ -889,9 +890,23 @@ public class ReportService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
 
         // Finding all transaction items that are related to these ChartOfAccounts and fall within the specified date range
-        List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
-                allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
-                startSearchDate.orElse(LocalDate.EPOCH), endDate);
+        List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange;
+        if(preview) {
+            transactionItemsByAccountCodeAndDateRange =
+                    transactionItemRepository
+                            .findPreviewTransactionItemsByAccountCodeAndDateRange(
+                                    allByOrganisationIdSubTypeIds.stream()
+                                            .map(organisationChartOfAccount -> Objects
+                                                    .requireNonNull(
+                                                            organisationChartOfAccount.getId())
+                                                    .getCustomerCode())
+                                            .toList(),
+                                    startSearchDate.orElse(LocalDate.EPOCH), endDate);
+        } else {
+            transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                    allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
+                    startSearchDate.orElse(LocalDate.EPOCH), endDate);
+        }
         Map<String, ChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
 
         // Summing up the amounts
