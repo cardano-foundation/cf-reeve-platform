@@ -18,7 +18,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rep
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 
@@ -53,10 +52,8 @@ class ReportControllerTest {
     void testReportCreate_success() {
         ReportGenerateRequest reportGenerateRequest = Mockito.mock(ReportGenerateRequest.class);
         ReportEntity reportEntity = Mockito.mock(ReportEntity.class);
-        ReportView reportView = Mockito.mock(ReportView.class);
 
         Mockito.when(reportService.reportGenerate(reportGenerateRequest)).thenReturn(Either.right(reportEntity));
-        Mockito.when(reportViewService.responseView(reportEntity)).thenReturn(reportView);
         ResponseEntity<ReportResponseView> reportResponseViewResponseEntity = reportController.reportGenerate(reportGenerateRequest);
 
         assert reportResponseViewResponseEntity.getStatusCode().is2xxSuccessful();

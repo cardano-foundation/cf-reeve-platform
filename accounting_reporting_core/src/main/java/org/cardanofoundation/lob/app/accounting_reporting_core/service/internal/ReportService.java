@@ -29,6 +29,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +55,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportReprocessRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
@@ -375,18 +378,21 @@ public class ReportService {
         return Either.right(result);
     }
 
-    public Either<Problem, List<ReportEntity>> findAllByOrgId(String organisationId, ReportType reportType, String currencyCode, IntervalType intervalType, Short year, Short period, LedgerDispatchStatus status, String txHash, Pageable pageable) {
+    public Either<Problem, ReportResponseView> findAllByOrgId(String organisationId, ReportType reportType, String currencyCode, IntervalType intervalType, Short year, Short period, LedgerDispatchStatus status, String txHash, Pageable pageable) {
         return jpaSortFieldValidator.validateEntity(ReportEntity.class, pageable, REPORT_MAPPINGS).fold(
                 problem -> Either.left(problem),
-                adjustedPageable -> Either.right(reportRepository.findAllByOrganisationId(organisationId,
-                        reportType,
-                        currencyCode,
-                        intervalType,
-                        year,
-                        period,
-                        status,
-                        txHash,
-                        adjustedPageable).toList())
+                adjustedPageable -> {
+                    Page<ReportEntity> allByOrganisationId = reportRepository.findAllByOrganisationId(organisationId,
+                            reportType,
+                            currencyCode,
+                            intervalType,
+                            year,
+                            period,
+                            status,
+                            txHash,
+                            adjustedPageable);
+                    return Either.right(ReportResponseView.createSuccess(allByOrganisationId.stream().map(ReportView::fromEntity).toList(), allByOrganisationId.getTotalElements()));
+                }
         );
     }
 

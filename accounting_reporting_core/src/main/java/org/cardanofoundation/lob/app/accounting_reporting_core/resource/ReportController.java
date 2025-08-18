@@ -28,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.repor
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportingParametersView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
@@ -50,7 +51,7 @@ public class ReportController {
                 problem ->
                         ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportResponseView.createFail(problem)),
                 success -> ResponseEntity.ok().body(
-                        ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                        ReportResponseView.createSuccess(List.of(ReportView.fromEntity(success)))
                 )
         );
     }
@@ -62,7 +63,7 @@ public class ReportController {
         return reportService.reportReprocess(reportReprocessRequest).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportResponseView.createFail(problem)),
                 success -> ResponseEntity.ok().body(
-                        ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                        ReportResponseView.createSuccess(List.of(ReportView.fromEntity(success)))
                 )
         );
     }
@@ -94,7 +95,7 @@ public class ReportController {
                     return ResponseEntity.status(problem.getStatus().getStatusCode()).body(ReportResponseView.createFail(problem));
                 }, success -> {
                     return ResponseEntity.ok().body(
-                            ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                            ReportResponseView.createSuccess(List.of(ReportView.fromEntity(success)))
                     );
                 });
     }
@@ -115,7 +116,7 @@ public class ReportController {
             return ResponseEntity.status(problem.getStatus().getStatusCode()).body(ReportResponseView.createFail(problem));
         }, success -> {
             return ResponseEntity.ok().body(
-                    ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                    ReportResponseView.createSuccess(List.of(ReportView.fromEntity(success)))
             );
         });
     }
@@ -135,7 +136,7 @@ public class ReportController {
                                                          @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return reportService.findAllByOrgId(orgId, reportType, currencyCode, intervalType, year, period, status, txHash, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
-                reportViews -> ResponseEntity.ok(ReportResponseView.createSuccess(reportViews.stream().map(reportViewService::responseView).toList()))
+                ResponseEntity::ok
         );
     }
 
@@ -150,7 +151,7 @@ public class ReportController {
                     return ResponseEntity.status(problem.getStatus().getStatusCode()).body(ReportResponseView.createFail(problem));
                 }, success -> {
                     return ResponseEntity.ok().body(
-                            ReportResponseView.createSuccess(List.of(reportViewService.responseView(success)))
+                            ReportResponseView.createSuccess(List.of(ReportView.fromEntity(success)))
                     );
                 }
         );

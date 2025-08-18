@@ -19,28 +19,25 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rep
 
 public interface ReportRepository extends JpaRepository<ReportEntity, String> {
 
-    Optional<ReportEntity> findFirstByOrganisationIdAndReportId(@Param("organisationId") String organisationId, @Param("reportId") String reportId);
+    Optional<ReportEntity> findFirstByOrganisationIdAndReportId(
+            @Param("organisationId") String organisationId, @Param("reportId") String reportId);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
-             WHERE r.organisation.id = :organisationId
-             AND r.ledgerDispatchStatus = 'NOT_DISPATCHED'
-             AND r.ledgerDispatchApproved = true
-             ORDER BY r.createdAt ASC, r.reportId ASC""")
+            WHERE r.organisation.id = :organisationId
+            AND r.ledgerDispatchStatus = 'NOT_DISPATCHED'
+            AND r.ledgerDispatchApproved = true
+            ORDER BY r.createdAt ASC, r.reportId ASC""")
     Set<ReportEntity> findDispatchableReports(@Param("organisationId") String organisationId,
-                                              Limit limit);
+            Limit limit);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
             LEFT JOIN accounting_reporting_core.report.ReportEntity r2 on r.idControl = r2.idControl and r.ver < r2.ver
-             WHERE r.organisation.id = :organisationId
-             AND r2.idControl IS NULL
-             ORDER BY r.createdAt ASC, r.reportId ASC""")
+            WHERE r.organisation.id = :organisationId
+            AND r2.idControl IS NULL
+            ORDER BY r.createdAt ASC, r.reportId ASC""")
     Set<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId);
-
-//    AND (:reportType IS NULL OR r.type = :reportType)
-//    AND (:intervalType IS NULL OR r.intervalType = :intervalType)
-//    AND (:ledgerStatus IS NULL OR r.ledgerDispatchStatus = :ledgerStatus)
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
@@ -56,20 +53,18 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
             AND (:txHash IS NULL OR r.ledgerDispatchReceipt.primaryBlockchainHash LIKE %:txHash%)
             """)
     Page<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId,
-                                               @Param("reportType") ReportType reportType,
-                                               @Param("currencyCode") String currencyCode,
-                                               @Param("intervalType") IntervalType intervalType,
-                                               @Param("year") Short year,
-                                               @Param("period") Short period,
-                                               @Param("ledgerStatus") LedgerDispatchStatus ledgerDispatchStatus,
-                                               @Param("txHash") String txHash,
-                                               Pageable pageable);
+            @Param("reportType") ReportType reportType, @Param("currencyCode") String currencyCode,
+            @Param("intervalType") IntervalType intervalType, @Param("year") Short year,
+            @Param("period") Short period,
+            @Param("ledgerStatus") LedgerDispatchStatus ledgerDispatchStatus,
+            @Param("txHash") String txHash, Pageable pageable);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
              WHERE r.organisation.id = :organisationId
              AND r.idControl = :idControl""")
-    Optional<ReportEntity> findByIdControl(@Param("organisationId") String organisationId, @Param("idControl") String idControl);
+    Optional<ReportEntity> findByIdControl(@Param("organisationId") String organisationId,
+            @Param("idControl") String idControl);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
@@ -77,27 +72,27 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
              AND r.idControl = :idControl
              ORDER BY r.ver DESC, r.ledgerDispatchApproved ASC
              LIMIT 1""")
-    Optional<ReportEntity> findLatestByIdControl(@Param("organisationId") String organisationId, @Param("idControl") String idControl);
+    Optional<ReportEntity> findLatestByIdControl(@Param("organisationId") String organisationId,
+            @Param("idControl") String idControl);
 
     @Query("""
-        SELECT r FROM accounting_reporting_core.report.ReportEntity r
-        JOIN (
-            SELECT MAX(r2.ver) AS ver, r2.reportId as id FROM accounting_reporting_core.report.ReportEntity r2
-            WHERE r2.organisation.id = :organisationId
-            AND (CAST(:startDate AS date) IS NULL OR r2.date >= :startDate)
-            AND (CAST(:endDate AS date)  IS NULL OR r2.date <= :endDate)
-            AND r2.ledgerDispatchApproved = true
-            GROUP BY r2.reportId
-            ) AS latest
-        ON r.ver = latest.ver AND r.reportId = latest.id
-        WHERE r.organisation.id = :organisationId
-        AND (CAST(:startDate AS date) IS NULL OR r.date >= :startDate)
-        AND (CAST(:endDate AS date)  IS NULL OR r.date <= :endDate)
-        AND r.ledgerDispatchApproved = true
-        """)
+            SELECT r FROM accounting_reporting_core.report.ReportEntity r
+            JOIN (
+                SELECT MAX(r2.ver) AS ver, r2.reportId as id FROM accounting_reporting_core.report.ReportEntity r2
+                WHERE r2.organisation.id = :organisationId
+                AND (CAST(:startDate AS date) IS NULL OR r2.date >= :startDate)
+                AND (CAST(:endDate AS date)  IS NULL OR r2.date <= :endDate)
+                AND r2.ledgerDispatchApproved = true
+                GROUP BY r2.reportId
+                ) AS latest
+            ON r.ver = latest.ver AND r.reportId = latest.id
+            WHERE r.organisation.id = :organisationId
+            AND (CAST(:startDate AS date) IS NULL OR r.date >= :startDate)
+            AND (CAST(:endDate AS date)  IS NULL OR r.date <= :endDate)
+            AND r.ledgerDispatchApproved = true
+            """)
     List<ReportEntity> getNewestReportsInRange(@Param("organisationId") String organisationId,
-                                               @Param("startDate") LocalDate startDate,
-                                               @Param("endDate") LocalDate endDate);
+            @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
@@ -107,7 +102,9 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
              AND r.year <= :endYear
              AND r.ledgerDispatchStatus = 'FINALIZED'
             """)
-    Set<ReportEntity> findByTypeAndWithinYearRange(@Param("organisationId") String organisationId, @Param("reportType") ReportType reportType, @Param("startYear") int startYear, @Param("endYear") int endYear);
+    Set<ReportEntity> findByTypeAndWithinYearRange(@Param("organisationId") String organisationId,
+            @Param("reportType") ReportType reportType, @Param("startYear") int startYear,
+            @Param("endYear") int endYear);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
@@ -119,5 +116,7 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
                 OR (r.intervalType = 'QUARTER' AND ((r.year = :year AND r.period >= :quarter) OR (r.year > :year)))
                 OR (r.intervalType = 'MONTH' AND ((r.year = :year AND r.period >= :month) OR (r.year > :year)))
             """)
-    Set<ReportEntity> findNotPublishedByOrganisationIdAndContainingDate(@Param("organisationId") String organisationId, @Param("year") int year, @Param("quarter") int quarter, @Param("month") int month);
+    Set<ReportEntity> findNotPublishedByOrganisationIdAndContainingDate(
+            @Param("organisationId") String organisationId, @Param("year") int year,
+            @Param("quarter") int quarter, @Param("month") int month);
 }
