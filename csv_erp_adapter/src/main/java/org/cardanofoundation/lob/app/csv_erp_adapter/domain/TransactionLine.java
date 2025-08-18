@@ -62,6 +62,6 @@ public class TransactionLine {
     private String costCenterCode;
     @CsvBindByName(column = "Counterparty Code")
     private String counterPartyCode;
-    @CsvBindByName(column = "CounterpartyName")
+    @CsvBindByName(column = "Counterparty Name")
     private String counterPartyName;
 }
