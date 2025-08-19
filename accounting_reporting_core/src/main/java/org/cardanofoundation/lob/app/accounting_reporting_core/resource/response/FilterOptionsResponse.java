@@ -18,6 +18,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Filte
 @AllArgsConstructor
 public class FilterOptionsResponse {
 
-    Map<FilterOptions, List<String>> filterOptions;
+    Map<FilterOptions, List<FilteringOptionsListResponse>> filterOptions;
     Problem error;
 }

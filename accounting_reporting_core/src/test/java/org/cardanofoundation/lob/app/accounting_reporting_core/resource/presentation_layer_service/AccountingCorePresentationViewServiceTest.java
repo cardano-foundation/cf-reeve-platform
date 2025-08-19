@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
@@ -35,9 +36,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCorePresentationViewServiceTest {
@@ -54,6 +58,8 @@ class AccountingCorePresentationViewServiceTest {
     private AccountingCoreTransactionRepository accountingCoreTransactionRepository;
     @Mock
     private TransactionItemRepository transactionItemRepository;
+    @Mock
+    private OrganisationPublicApiIF organisationPublicApiIF;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
@@ -85,7 +91,7 @@ class AccountingCorePresentationViewServiceTest {
 
 
         verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
-        verify(accountingCoreTransactionRepository).findAllReconciliationCount(any(),eq(Optional.empty()), any(),any());
+        verify(accountingCoreTransactionRepository).findAllReconciliationCount(any(), eq(Optional.empty()), any(), any());
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verify(accountingCoreTransactionRepository).findAllReconciliation(any(ReconciliationFilterStatusRequest.class), eq(Optional.empty()), anyInt(), anyInt());
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository, transactionRepositoryGateway);
@@ -96,8 +102,8 @@ class AccountingCorePresentationViewServiceTest {
     void testAllReconiciliationTransaction_successfulUnReconciled() {
         when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(accountingCoreTransactionRepository.findAllReconciliationSpecial(eq(Set.of()), eq(Optional.empty()), eq(Optional.empty()),anyInt(), anyInt())).thenReturn(List.of());
-        when(accountingCoreTransactionRepository.findAllReconciliationSpecialCount(any(),any(), any(), any(), any())).thenReturn(Collections.singletonList(new Object[]{0L}));
+        when(accountingCoreTransactionRepository.findAllReconciliationSpecial(eq(Set.of()), eq(Optional.empty()), eq(Optional.empty()), anyInt(), anyInt())).thenReturn(List.of());
+        when(accountingCoreTransactionRepository.findAllReconciliationSpecialCount(any(), any(), any(), any(), any())).thenReturn(Collections.singletonList(new Object[]{0L}));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
@@ -113,7 +119,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void getFilterOptions_emptyList() {
-        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(List.of(), "org123");
+        Map<FilterOptions, List<FilteringOptionsListResponse>> map = accountingCorePresentationViewService.getFilterOptions(List.of(), "org123");
 
         assertTrue(map.isEmpty());
         verifyNoInteractions(transactionBatchRepositoryGateway);
@@ -122,7 +128,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void getFilterOptions_transactionTypes() {
-        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(List.of(FilterOptions.TRANSACTION_TYPES), "org123");
+        Map<FilterOptions, List<FilteringOptionsListResponse>> map = accountingCorePresentationViewService.getFilterOptions(List.of(FilterOptions.TRANSACTION_TYPES), "org123");
 
         assertFalse(map.isEmpty());
         assertEquals(TransactionType.values().length, map.get(FilterOptions.TRANSACTION_TYPES).size());
@@ -134,7 +140,7 @@ class AccountingCorePresentationViewServiceTest {
     void getFilterOptions_users() {
         when(transactionBatchRepositoryGateway.findBatchUsersList("org123")).thenReturn(List.of("user1", "user2"));
 
-        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(List.of(FilterOptions.USERS), "org123");
+        Map<FilterOptions, List<FilteringOptionsListResponse>> map = accountingCorePresentationViewService.getFilterOptions(List.of(FilterOptions.USERS), "org123");
 
         assertFalse(map.isEmpty());
         assertEquals(2, map.get(FilterOptions.USERS).size());
@@ -148,18 +154,30 @@ class AccountingCorePresentationViewServiceTest {
         when(transactionBatchRepositoryGateway.findBatchUsersList("org123")).thenReturn(List.of("user1", "user2"));
         when(transactionItemRepository.getAllDocumentNumbers()).thenReturn(List.of("Doc12"));
 
-        Map<FilterOptions, List<String>> map = accountingCorePresentationViewService.getFilterOptions(Arrays.stream(FilterOptions.values()).toList(), "org123");
+
+        when(transactionItemRepository.getAllCounterParty()).thenReturn(List.of(
+                Map.of("CustCode001","Customer code 1"),
+                Map.of("CustCode002","Customer code 2"),
+                Map.of("CustCode003","Customer code 3")
+        ));
+
+        Map<FilterOptions, List<FilteringOptionsListResponse>> map = accountingCorePresentationViewService.getFilterOptions(Arrays.stream(FilterOptions.values()).toList(), "org123");
 
         assertFalse(map.isEmpty());
         assertEquals(FilterOptions.values().length, map.size());
         assertEquals(2, map.get(FilterOptions.USERS).size());
         assertEquals(1, map.get(FilterOptions.DOCUMENT_NUMBERS).size());
         assertEquals(TransactionType.values().length, map.get(FilterOptions.TRANSACTION_TYPES).size());
+        assertEquals(3, map.get(FilterOptions.COUNTER_PARTY).size());
+        assertEquals(Counterparty.Type.values().length, map.get(FilterOptions.COUNTER_PARTY_TYPE).size());
+
 
         verify(transactionBatchRepositoryGateway).findBatchUsersList("org123");
         verifyNoMoreInteractions(transactionBatchRepositoryGateway);
         verify(transactionItemRepository).getAllDocumentNumbers();
+        verify(transactionItemRepository).getAllCounterParty();
         verifyNoMoreInteractions(transactionItemRepository);
+        verifyNoMoreInteractions(organisationPublicApiIF);
 
     }
 

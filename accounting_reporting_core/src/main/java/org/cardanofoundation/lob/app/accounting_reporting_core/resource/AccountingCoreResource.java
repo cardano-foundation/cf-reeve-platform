@@ -48,6 +48,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilterOptionsResponse;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
@@ -108,7 +109,7 @@ public class AccountingCoreResource {
             return ResponseEntity.status(NOT_FOUND.getStatusCode()).body(FilterOptionsResponse.builder()
                     .error(issue).build());
         }
-        Map<FilterOptions, List<String>> filterOptionsFound = accountingCorePresentationService.getFilterOptions(filterOptionsList, orgId);
+        Map<FilterOptions, List<FilteringOptionsListResponse>> filterOptionsFound = accountingCorePresentationService.getFilterOptions(filterOptionsList, orgId);
         return ResponseEntity.ok(FilterOptionsResponse.builder().filterOptions(filterOptionsFound).build());
     }
 

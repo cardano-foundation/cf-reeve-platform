@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -33,6 +34,11 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         SELECT DISTINCT t.document.num FROM accounting_reporting_core.TransactionItemEntity t
         """)
     List<String> getAllDocumentNumbers();
+
+    @Query("""
+        SELECT DISTINCT t.document.counterparty.customerCode as customerCode, t.document.counterparty.name as name FROM accounting_reporting_core.TransactionItemEntity t
+        """)
+    List<Map<String, String>> getAllCounterParty();
 
     @Query("""
             SELECT t FROM accounting_reporting_core.TransactionItemEntity t

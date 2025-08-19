@@ -38,6 +38,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
@@ -564,13 +565,26 @@ public class AccountingCorePresentationViewService {
         return getTransactionReconciliationViolationView();
     }
 
-    public Map<FilterOptions, List<String>> getFilterOptions(List<FilterOptions> filterOptions, String orgId) {
-        Map<FilterOptions, List<String>> filterOptionsListMap = new EnumMap<>(FilterOptions.class);
-        for(FilterOptions filterOption : filterOptions) {
+    public Map<FilterOptions, List<FilteringOptionsListResponse>> getFilterOptions(List<FilterOptions> filterOptions, String orgId) {
+        Map<FilterOptions, List<FilteringOptionsListResponse>> filterOptionsListMap = new EnumMap<>(FilterOptions.class);
+        for (FilterOptions filterOption : filterOptions) {
             switch (filterOption) {
-                case USERS -> filterOptionsListMap.put(filterOption, transactionBatchRepositoryGateway.findBatchUsersList(orgId));
-                case DOCUMENT_NUMBERS ->  filterOptionsListMap.put(filterOption, transactionItemRepository.getAllDocumentNumbers());
-                case TRANSACTION_TYPES -> filterOptionsListMap.put(filterOption, Arrays.stream(TransactionType.values()).map(Enum::name).toList());
+
+                case USERS ->
+                        filterOptionsListMap.put(filterOption, transactionBatchRepositoryGateway.findBatchUsersList(orgId).stream().map(user -> FilteringOptionsListResponse.builder().name(user).description(user).build()).toList());
+
+                case DOCUMENT_NUMBERS ->
+                        filterOptionsListMap.put(filterOption, transactionItemRepository.getAllDocumentNumbers().stream().map(document -> FilteringOptionsListResponse.builder().name(document).description(document).build()).toList());
+
+                case TRANSACTION_TYPES ->
+                        filterOptionsListMap.put(filterOption, Arrays.stream(TransactionType.values()).map(type -> FilteringOptionsListResponse.builder().name(type.name()).description(type.name()).build()).toList());
+
+                case COUNTER_PARTY ->
+                        filterOptionsListMap.put(filterOption, transactionItemRepository.getAllCounterParty().stream().map(document -> FilteringOptionsListResponse.builder().customerCode(document.get("customerCode")).description(document.get("name")).build()).toList());
+
+                case COUNTER_PARTY_TYPE ->
+                        filterOptionsListMap.put(filterOption, Arrays.stream(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty.Type.values()).map(type -> FilteringOptionsListResponse.builder().name(type.name()).description(type.name()).build()).toList());
+
             }
         }
         return filterOptionsListMap;
