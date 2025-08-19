@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
+import java.text.ParseException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -115,7 +116,7 @@ class ChartOfAccountsServiceTest {
     }
 
     @Test
-    void insertChartOfAccountByCsv_openingBalanceConvertError() {
+    void insertChartOfAccountByCsv_openingBalanceConvertError() throws IllegalArgumentException, ParseException {
         MultipartFile file = mock(MultipartFile.class);
 
         ChartOfAccountUpdateCsv updateCsv = mock(ChartOfAccountUpdateCsv.class);
