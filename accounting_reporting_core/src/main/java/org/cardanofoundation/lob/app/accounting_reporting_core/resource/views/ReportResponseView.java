@@ -31,6 +31,15 @@ public class ReportResponseView {
         );
     }
 
+    public static ReportResponseView createSuccess(List<ReportView> reportView, Long total) {
+        return new ReportResponseView(
+                true,
+                total,
+                reportView,
+                Optional.empty()
+        );
+    }
+
     public static ReportResponseView createFail(Problem error) {
         return new ReportResponseView(false, 0L, List.of(), Optional.of(error));
     }

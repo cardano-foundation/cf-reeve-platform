@@ -7,6 +7,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode.USER;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.BALANCE_SHEET;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.INCOME_STATEMENT;
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.REPORT_MAPPINGS;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -28,6 +29,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +55,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportReprocessRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
@@ -61,6 +66,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
+import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 
 @Service
@@ -78,6 +84,7 @@ public class ReportService {
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final ReportTypeRepository reportTypeRepository;
     private final TransactionItemRepository transactionItemRepository;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     @Transactional
     public Either<Problem, ReportEntity> approveReportForLedgerDispatch(String reportId) {
@@ -371,8 +378,22 @@ public class ReportService {
         return Either.right(result);
     }
 
-    public Set<ReportEntity> findAllByOrgId(String organisationId) {
-        return reportRepository.findAllByOrganisationId(organisationId);
+    public Either<Problem, ReportResponseView> findAllByOrgId(String organisationId, ReportType reportType, String currencyCode, IntervalType intervalType, Short year, Short period, LedgerDispatchStatus status, String txHash, Pageable pageable) {
+        return jpaSortFieldValidator.validateEntity(ReportEntity.class, pageable, REPORT_MAPPINGS).fold(
+                problem -> Either.left(problem),
+                adjustedPageable -> {
+                    Page<ReportEntity> allByOrganisationId = reportRepository.findAllByOrganisationId(organisationId,
+                            reportType != null ? reportType.name() : null,
+                            currencyCode,
+                            intervalType != null ? intervalType.name() : null,
+                            year,
+                            period,
+                            status != null ? status.name() : null,
+                            txHash,
+                            adjustedPageable);
+                    return Either.right(ReportResponseView.createSuccess(allByOrganisationId.stream().map(ReportView::fromEntity).toList(), allByOrganisationId.getTotalElements()));
+                }
+        );
     }
 
     public Set<ReportEntity> findAllByTypeAndPeriod(String organistionId, ReportType reportType, IntervalType intervalType, short year, short period) {
@@ -609,7 +630,7 @@ public class ReportService {
             } else if (reportEntity.getType() == INCOME_STATEMENT) {
                 generatedReportsMatch = IncomeStatementMatcher.matches(generatedReportE.get().getIncomeStatementReportData(), reportEntity.getIncomeStatementReportData());
             }
-            if(!generatedReportsMatch) {
+            if (!generatedReportsMatch) {
                 return Either.left(Problem.builder()
                         .withTitle(Constants.REPORT_DATA_MISMATCH)
                         .withDetail(Constants.REPORT_DATA_DOES_NOT_MATCH_GENERATED_REPORT)
