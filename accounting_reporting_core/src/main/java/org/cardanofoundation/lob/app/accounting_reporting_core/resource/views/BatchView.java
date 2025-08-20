@@ -1,8 +1,8 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.views;
 
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -49,7 +49,7 @@ public class BatchView {
     private FilteringParametersView filteringParameters;
 
     @ArraySchema(arraySchema = @Schema(implementation = TransactionView.class))
-    private Set<TransactionView> transactions = new LinkedHashSet<>();
+    private List<TransactionView> transactions = new ArrayList<>();
 
     private Map<String, Object> details;
 }

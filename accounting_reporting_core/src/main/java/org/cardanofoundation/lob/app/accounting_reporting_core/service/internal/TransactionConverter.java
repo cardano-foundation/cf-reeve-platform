@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -19,6 +20,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Cur
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 
 @Service("accounting_reporting_core.TransactionConverter")
 @Slf4j
@@ -27,6 +29,7 @@ public class TransactionConverter {
 
     private final CoreCurrencyService coreCurrencyService;
     private final OrganisationConverter organisationConverter;
+    private final OrganisationPublicApiIF organisationPublicApiIF;
 
     public FilteringParameters convertToDbDetached(SystemExtractionParameters systemExtractionParameters,
                                                    UserExtractionParameters userExtractionParameters) {
@@ -144,8 +147,35 @@ public class TransactionConverter {
 
         txEntity.setViolations(violations);
         txEntity.setItems(txItems);
-
+        txEntity.setTotalAmountLcy(getAmountLcyTotalForAllDebitItems(txEntity));
         return txEntity;
+    }
+
+    public BigDecimal getAmountLcyTotalForAllDebitItems(TransactionEntity tx) {
+        Set<TransactionItemEntity> items = tx.getItems();
+
+        if (tx.getTransactionType().equals(TransactionType.Journal)) {
+            Optional<String> dummyAccount = organisationPublicApiIF.findByOrganisationId(tx.getOrganisation().getId()).orElse(new org.cardanofoundation.lob.app.organisation.domain.entity.Organisation()).getDummyAccount();
+            items = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(Collectors.toSet());
+        }
+
+        if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
+            BigDecimal totalCredit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            BigDecimal totalDebit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.DEBIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            return totalCredit.subtract(totalDebit).abs();
+        }
+
+        return items.stream()
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add).abs();
     }
 
     private Optional<Project> convertProject(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project> projectM) {

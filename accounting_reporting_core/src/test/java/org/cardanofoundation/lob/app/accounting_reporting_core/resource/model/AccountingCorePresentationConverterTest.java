@@ -99,6 +99,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity.setTransactionApproved(Boolean.TRUE);
         transactionEntity.setLedgerDispatchApproved(Boolean.FALSE);
         transactionEntity.setOverallStatus(TransactionStatus.NOK);
+        transactionEntity.setTotalAmountLcy(BigDecimal.TEN);
 
         transactionEntity3.setId("tx-id-3");
         transactionEntity3.setTransactionType(TransactionType.CustomerPayment);
@@ -106,6 +107,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity3.setTransactionApproved(Boolean.TRUE);
         transactionEntity3.setLedgerDispatchApproved(Boolean.TRUE);
         transactionEntity3.setOverallStatus(TransactionStatus.OK);
+        transactionEntity3.setTotalAmountLcy(BigDecimal.TEN);
 
         transactionItem.setId("tx-item-id");
         transactionItem3.setId("tx-item-id-3");
@@ -143,6 +145,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity2.setTransactionApproved(Boolean.FALSE);
         transactionEntity2.setLedgerDispatchApproved(Boolean.TRUE);
         transactionEntity2.setOverallStatus(TransactionStatus.OK);
+        transactionEntity2.setTotalAmountLcy(BigDecimal.TEN);
 
         when(transactionRepositoryGateway.findAllByStatus(any(), any(), any(), any())).thenReturn(List.of(transactionEntity, transactionEntity2, transactionEntity3));
 

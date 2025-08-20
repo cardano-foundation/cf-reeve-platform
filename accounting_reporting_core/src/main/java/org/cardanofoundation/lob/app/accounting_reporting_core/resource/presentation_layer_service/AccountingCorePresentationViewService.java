@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -152,7 +153,7 @@ public class AccountingCorePresentationViewService {
         }
         Pageable finalPage = page;
         return Either.right(transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage, batchFilterRequest);
+                    List<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage, batchFilterRequest);
 
                     BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
@@ -196,7 +197,7 @@ public class AccountingCorePresentationViewService {
                                     transactionBatchEntity.getStatus(),
                                     statistic,
                                     this.getFilteringParameters(transactionBatchEntity.getFilteringParameters()),
-                                    Set.of(),
+                                    List.of(),
                                     transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
 
                             );
@@ -302,8 +303,8 @@ public class AccountingCorePresentationViewService {
         );
     }
 
-    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable, BatchFilterRequest batchFilterRequest) {
-        return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status,
+    private List<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable, BatchFilterRequest batchFilterRequest) {
+        Stream<TransactionView> transactionViewStream = accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status,
                         batchFilterRequest.getTransactionTypes(),
                         batchFilterRequest.getDocumentNumbers(),
                         batchFilterRequest.getCurrencyCustomerCodes(),
@@ -320,9 +321,8 @@ public class AccountingCorePresentationViewService {
                         batchFilterRequest.getCreditAccountCodes(),
                         batchFilterRequest.getEventCodes(),
                         pageable).stream()
-                .map(this::getTransactionView)
-                .sorted(Comparator.comparing(TransactionView::getAmountTotalLcy).reversed())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                .map(this::getTransactionView);
+                return transactionViewStream.toList();
     }
 
     private TransactionReconciliationTransactionsView getTransactionReconciliationView(TransactionEntity transactionEntity) {
@@ -337,7 +337,7 @@ public class AccountingCorePresentationViewService {
                 Optional.of(transactionEntity.getAutomatedValidationStatus()),
                 transactionEntity.getTransactionApproved(),
                 transactionEntity.getLedgerDispatchApproved(),
-                getAmountLcyTotalForAllDebitItems(transactionEntity),
+                transactionEntity.getTotalAmountLcy(),
                 false,
                 transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getSource().map(TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
                         .orElse(TransactionReconciliationTransactionsView.ReconciliationCodeView.NEVER),
@@ -421,7 +421,7 @@ public class AccountingCorePresentationViewService {
                 transactionEntity.getLedgerDispatchStatus(),
                 transactionEntity.getTransactionApproved(),
                 transactionEntity.getLedgerDispatchApproved(),
-                getAmountLcyTotalForAllDebitItems(transactionEntity),
+                transactionEntity.getTotalAmountLcy(),
                 transactionEntity.hasAnyRejection(),
                 transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getSource().map(TransactionView.ReconciliationCodeView::of))
                         .orElse(TransactionView.ReconciliationCodeView.NEVER),
@@ -563,33 +563,6 @@ public class AccountingCorePresentationViewService {
             }
         }
         return getTransactionReconciliationViolationView();
-    }
-
-    public BigDecimal getAmountLcyTotalForAllDebitItems(TransactionEntity tx) {
-        Set<TransactionItemEntity> items = tx.getItems();
-
-        if (tx.getTransactionType().equals(TransactionType.Journal)) {
-            Optional<String> dummyAccount = organisationPublicApiIF.findByOrganisationId(tx.getOrganisation().getId()).orElse(new org.cardanofoundation.lob.app.organisation.domain.entity.Organisation()).getDummyAccount();
-            items = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
-        }
-
-        if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
-            BigDecimal totalCredit = items.stream()
-                    .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
-                    .map(TransactionItemEntity::getAmountLcy)
-                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
-
-            BigDecimal totalDebit = items.stream()
-                    .filter(item -> item.getOperationType().equals(OperationType.DEBIT))
-                    .map(TransactionItemEntity::getAmountLcy)
-                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
-
-            return totalCredit.subtract(totalDebit).abs();
-        }
-
-        return items.stream()
-                .map(TransactionItemEntity::getAmountLcy)
-                .reduce(ZERO, BigDecimal::add).abs();
     }
 
     public Map<FilterOptions, List<String>> getFilterOptions(List<FilterOptions> filterOptions, String orgId) {
