@@ -157,20 +157,20 @@ class AccountingCorePresentationConverterTest {
         assertEquals(Boolean.TRUE, result.get(0).isTransactionApproved());
         assertEquals(Boolean.FALSE, result.get(0).isLedgerDispatchApproved());
         assertEquals(TransactionStatus.NOK, result.get(0).getStatus());
-        assertEquals(Boolean.FALSE, result.get(2).isTransactionApproved());
-        assertEquals(Boolean.TRUE, result.get(2).isLedgerDispatchApproved());
-        assertEquals(TxValidationStatus.FAILED, result.get(2).getValidationStatus());
-        assertEquals("tx-id2-internal", result.get(2).getInternalTransactionNumber());
+        assertEquals(Boolean.FALSE, result.get(1).isTransactionApproved());
+        assertEquals(Boolean.TRUE, result.get(1).isLedgerDispatchApproved());
+        assertEquals(TxValidationStatus.FAILED, result.get(1).getValidationStatus());
+        assertEquals("tx-id2-internal", result.get(1).getInternalTransactionNumber());
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        assertEquals(LedgerDispatchStatusView.PUBLISHED, result.get(1).getStatistic());
+        assertEquals(LedgerDispatchStatusView.PUBLISHED, result.get(2).getStatistic());
         assertEquals(LedgerDispatchStatusView.PUBLISH, result.get(0).getStatistic());
-        assertEquals(localDate.format(formatter).toString(), result.get(2).getEntryDate().toString());
+        assertEquals(localDate.format(formatter).toString(), result.get(1).getEntryDate().toString());
         assertEquals("tx-item-id", result.get(0).getItems().stream().findFirst().get().getId());
 
         assertEquals(BigDecimal.valueOf(1000), result.get(0).getItems().stream().findFirst().get().getAmountFcy());
         assertEquals(BigDecimal.valueOf(1000), result.get(0).getItems().stream().findFirst().get().getAmountLcy());
-        assertEquals(BigDecimal.valueOf(500), result.get(1).getItems().stream().findFirst().get().getAmountFcy());
-        assertEquals(BigDecimal.valueOf(500), result.get(1).getItems().stream().findFirst().get().getAmountLcy());
+        assertEquals(BigDecimal.valueOf(500), result.get(2).getItems().stream().findFirst().get().getAmountFcy());
+        assertEquals(BigDecimal.valueOf(500), result.get(2).getItems().stream().findFirst().get().getAmountLcy());
         assertEquals("debit-code", result.get(0).getItems().stream().findFirst().get().getAccountDebitCode());
         assertEquals("credit-code", result.get(0).getItems().stream().findFirst().get().getAccountCreditCode());
 

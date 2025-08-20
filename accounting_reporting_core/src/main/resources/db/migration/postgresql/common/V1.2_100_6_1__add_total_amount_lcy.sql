@@ -1,7 +1,9 @@
 -- 1) Add column to transaction table
 ALTER TABLE accounting_core_transaction
-    ADD COLUMN total_amount_lcy NUMERIC(38, 10);
+    ADD COLUMN total_amount_lcy DECIMAL(38, 10);
 
+ALTER TABLE accounting_core_transaction_aud
+    ADD COLUMN total_amount_lcy DECIMAL(38, 10);
 -- 2) Update with calculated value
 UPDATE accounting_core_transaction t
 SET total_amount_lcy = CASE
