@@ -12,11 +12,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -153,7 +153,7 @@ public class AccountingCorePresentationViewService {
         }
         Pageable finalPage = page;
         return Either.right(transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    List<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage, batchFilterRequest);
+                    Page<TransactionEntity> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage, batchFilterRequest);
 
                     BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
                     FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
@@ -168,8 +168,9 @@ public class AccountingCorePresentationViewService {
                             transactionBatchEntity.getStatus(),
                             statistic,
                             filteringParameters,
-                            transactions,
-                            transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
+                            transactions.stream().map(this::getTransactionView).toList(),
+                            transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag(),
+                            transactions.getTotalElements()
                     );
                 }
         ));
@@ -198,8 +199,8 @@ public class AccountingCorePresentationViewService {
                                     statistic,
                                     this.getFilteringParameters(transactionBatchEntity.getFilteringParameters()),
                                     List.of(),
-                                    transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
-
+                                    transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag(),
+                                    null // transactions are not loaded here
                             );
                         }
                 ).toList();
@@ -303,8 +304,8 @@ public class AccountingCorePresentationViewService {
         );
     }
 
-    private List<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable, BatchFilterRequest batchFilterRequest) {
-        Stream<TransactionView> transactionViewStream = accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status,
+    private Page<TransactionEntity> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable, BatchFilterRequest batchFilterRequest) {
+        return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status,
                         batchFilterRequest.getTransactionTypes(),
                         batchFilterRequest.getDocumentNumbers(),
                         batchFilterRequest.getCurrencyCustomerCodes(),
@@ -320,9 +321,7 @@ public class AccountingCorePresentationViewService {
                         batchFilterRequest.getDebitAccountCodes(),
                         batchFilterRequest.getCreditAccountCodes(),
                         batchFilterRequest.getEventCodes(),
-                        pageable).stream()
-                .map(this::getTransactionView);
-                return transactionViewStream.toList();
+                        pageable);
     }
 
     private TransactionReconciliationTransactionsView getTransactionReconciliationView(TransactionEntity transactionEntity) {

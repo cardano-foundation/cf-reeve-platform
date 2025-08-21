@@ -52,4 +52,6 @@ public class BatchView {
     private List<TransactionView> transactions = new ArrayList<>();
 
     private Map<String, Object> details;
+
+    private Long totalTransactionsCount;
 }
