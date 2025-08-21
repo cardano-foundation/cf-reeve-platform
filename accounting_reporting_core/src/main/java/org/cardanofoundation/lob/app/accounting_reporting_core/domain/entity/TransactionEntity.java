@@ -140,7 +140,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Column(name = "total_amount_lcy")
     @Getter
     @Setter
-    private BigDecimal totalAmountLcy;
+    private BigDecimal totalAmountLcy = BigDecimal.ZERO;
 
     @Column(name = "transaction_approved", nullable = false)
     @Getter

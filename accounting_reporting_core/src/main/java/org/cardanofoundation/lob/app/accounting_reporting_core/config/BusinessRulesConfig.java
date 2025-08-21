@@ -97,7 +97,8 @@ public class BusinessRulesConfig {
     private PipelineTask postCleansingPipelineTask() {
         return new DefaultPipelineTask(List.of(
                 new DiscardSameAccountCodeTaskItem(),
-                new TxItemsAmountsSummingTaskItem()
+                new TxItemsAmountsSummingTaskItem(),
+                new TxTotalAmountSummTaskItem(organisationPublicApi)
         ));
     }
 
