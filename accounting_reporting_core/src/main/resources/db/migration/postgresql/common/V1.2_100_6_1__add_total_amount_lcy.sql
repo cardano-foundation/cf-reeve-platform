@@ -23,13 +23,13 @@ SET total_amount_lcy = CASE
         ), 0)
     )
 
-    -- Journal transactions: sum excluding dummy accounts
+
     WHEN t.type = 'Journal' THEN COALESCE((
         SELECT SUM(i.amount_lcy)
         FROM accounting_core_transaction_item i
+        JOIN organisation o ON o.organisation_id = t.organisation_id
         WHERE i.transaction_id = t.transaction_id
-          AND (i.account_code_debit IS NULL OR i.account_code_debit <> 'DUMMY')
-          AND (i.account_code_credit IS NULL OR i.account_code_credit <> 'DUMMY')
+          AND i.account_code_debit = o.dummy_account
     ), 0)
 
     -- Default: sum of all items
