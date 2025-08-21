@@ -364,12 +364,23 @@ public class AccountingCorePresentationViewService {
     }
 
     private TransactionView getTransactionView(TransactionEntity transactionEntity) {
+        DataSourceView dataSourceView = transactionBatchRepositoryGateway.findById(transactionEntity.getBatchId())
+                .map(batch -> {
+                    try {
+                        return DataSourceView.valueOf(batch.getExtractorType());
+                    } catch (IllegalArgumentException e) {
+                        // log or handle the parsing error
+                        log.warn("Invalid extractorType '{}' for batch {}", batch.getExtractorType(), batch.getId(), e);
+                        return DataSourceView.UNKNOWN; // or a default value like DataSourceView.UNKNOWN
+                    }
+                })
+                .orElse(DataSourceView.UNKNOWN);
         return new TransactionView(
                 transactionEntity.getId(),
                 transactionEntity.getTransactionInternalNumber(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(),
-                DataSourceView.NETSUITE,
+                dataSourceView,
                 transactionEntity.getOverallStatus(),
                 getTransactionDispatchStatus(transactionEntity),
                 transactionEntity.getAutomatedValidationStatus(),

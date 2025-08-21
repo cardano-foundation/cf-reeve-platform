@@ -84,6 +84,9 @@ public class TransactionBatchEntity extends CommonEntity implements Persistable<
     @JdbcType(PostgreSQLEnumJdbcType.class)
     private TransactionBatchStatus status = TransactionBatchStatus.CREATED;
 
+    @Column(name = "extractor_type", nullable = false)
+    private String extractorType;
+
     public String getOrganisationId() {
         return filteringParameters.getOrganisationId();
     }

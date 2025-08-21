@@ -234,6 +234,7 @@ class AccountingCorePresentationConverterTest {
         transactions.add(transaction2);
         transactionBatchEntity.setTransactions(transactions);
         transactionBatchEntity.setStatus(TransactionBatchStatus.CREATED);
+        transactionBatchEntity.setExtractorType("NETSUITE");
         transactionBatchEntity.setBatchStatistics(BatchStatistics.builder()
                 .readyToApproveTransactions(2)
                 .total(2).build());
