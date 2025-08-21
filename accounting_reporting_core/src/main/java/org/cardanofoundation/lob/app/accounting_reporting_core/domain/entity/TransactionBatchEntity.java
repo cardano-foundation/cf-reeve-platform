@@ -85,6 +85,8 @@ public class TransactionBatchEntity extends CommonEntity implements Persistable<
     private TransactionBatchStatus status = TransactionBatchStatus.CREATED;
 
     @Column(name = "extractor_type", nullable = false)
+    @Getter
+    @Setter
     private String extractorType;
 
     public String getOrganisationId() {
