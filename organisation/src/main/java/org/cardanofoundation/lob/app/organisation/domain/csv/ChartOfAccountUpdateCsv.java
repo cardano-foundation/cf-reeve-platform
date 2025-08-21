@@ -1,6 +1,9 @@
 package org.cardanofoundation.lob.app.organisation.domain.csv;
 
 import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.text.ParseException;
+import java.util.Locale;
 import java.util.Optional;
 
 import jakarta.persistence.EnumType;
@@ -20,10 +23,10 @@ import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 public class ChartOfAccountUpdateCsv extends ChartOfAccountUpdate {
 
     @CsvBindByName(column = "Open Balance FCY")
-    private BigDecimal balanceFCY;
+    private String balanceFCY;
 
     @CsvBindByName(column = "Open Balance LCY")
-    private BigDecimal balanceLCY;
+    private String balanceLCY;
 
     @CsvBindByName(column = "Open Balance Currency ID FCY")
     private String openBalanceCurrencyFcy;
@@ -39,10 +42,11 @@ public class ChartOfAccountUpdateCsv extends ChartOfAccountUpdate {
     @CsvBindByName(column = "Open Balance Date")
     private String date;
 
-    public void fillOpeningBalance() throws IllegalArgumentException{
+    public void fillOpeningBalance() throws IllegalArgumentException, ParseException{
+        NumberFormat format = NumberFormat.getInstance(Locale.US);
         this.setOpeningBalance(new OpeningBalance(
-                this.balanceFCY,
-                this.balanceLCY,
+                BigDecimal.valueOf(format.parse(this.balanceFCY).doubleValue()),
+                BigDecimal.valueOf(format.parse(this.balanceLCY).doubleValue()),
                 this.openBalanceCurrencyFcy,
                 this.openBalanceCurrencyLcy,
                 this.balanceType,

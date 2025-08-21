@@ -520,7 +520,7 @@ public class AccountingCorePresentationViewService {
                     item.getFxRate(),
                     item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
                     item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getName).orElse(""),
-                    itemCostCenter.map(costCenter -> costCenter.getParent().map(CostCenter::getParentCustomerCode).orElse("")).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParentCustomerCode()).orElse(""),
                     itemCostCenter.map(costCenter -> costCenter.getParent().map(CostCenter::getName).orElse("")).orElse(""),
                     item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
                     item.getProject().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getName).orElse(""),

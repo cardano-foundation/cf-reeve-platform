@@ -162,7 +162,7 @@ public class CsvParser<T> {
                     String value = (String) field.get(bean);
                     field.set(bean, sanitizeCell(value));
                 } catch (IllegalAccessException ignored) {
-                    log.debug("Failed to access field {} in bean {}: {}", field.getName(), bean.getClass().getSimpleName(), ignored.getMessage());
+                    log.warn("Failed to access field {} in bean {}: {}", field.getName(), bean.getClass().getSimpleName(), ignored.getMessage());
                 }
             }
         }

@@ -108,8 +108,8 @@ public class DbSynchronisationUseCaseService {
 
             boolean isDispatchMarked = txM.map(TransactionEntity::allApprovalsPassedForTransactionDispatch).orElse(false);
             boolean notStoredYet = txM.isEmpty();
-            /** If is a new transaction || the new one is different from our Db copy || the transaction has an ERP source violation || transaction item has an ERP source rejection -> then should be processed*/
-            boolean isChanged = notStoredYet || (txM.map(tx -> !isIncomingTransactionERPSame(tx, incomingTx) || tx.hasAnyRejection(Source.ERP) || tx.hasAnyViolation(Source.ERP)).orElse(false));
+            /** If is a new transaction || the new one is different from our Db copy  -> then should be processed*/
+            boolean isChanged = notStoredYet || (txM.map(tx -> !isIncomingTransactionERPSame(tx, incomingTx)).orElse(false));
 
             if (isDispatchMarked && isChanged) {
                 log.warn("Transaction cannot be altered, it is already marked as dispatched, transactionNumber: {}", incomingTx.getInternalTransactionNumber());

@@ -3,11 +3,14 @@ package org.cardanofoundation.lob.app.csv_erp_adapter.service.internal;
 import static java.util.stream.Collectors.groupingBy;
 
 import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -41,6 +44,8 @@ import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 @Slf4j
 @RequiredArgsConstructor
 public class TransactionConverter {
+
+    NumberFormat format = NumberFormat.getInstance(Locale.US);
 
     public Either<Problem, List<Transaction>> convertToTransaction(String organisationId, String batchId, List<TransactionLine> lines) {
         Map<String, List<TransactionLine>> collect = lines.stream().collect(groupingBy(transactionLine -> Optional.ofNullable(transactionLine.getTxNumber()).orElse("")));
@@ -162,12 +167,12 @@ public class TransactionConverter {
                         .build());
             } else if (StringUtils.isNoneBlank(line.getAmountLCYDebit()) || StringUtils.isNoneBlank(line.getAmountFCYDebit())) {
                 operationType = OperationType.DEBIT;
-                amountLcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(Double.parseDouble(line.getAmountLCYDebit())));
-                amountFcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(Double.parseDouble(line.getAmountFCYDebit())));
+                amountLcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountLCYDebit()).doubleValue()));
+                amountFcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountFCYDebit()).doubleValue()));
             } else if (StringUtils.isNoneBlank(line.getAmountLCYCredit()) || StringUtils.isNoneBlank(line.getAmountFCYCredit())) {
                 operationType = OperationType.CREDIT;
-                amountLcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(Double.parseDouble(line.getAmountLCYCredit())));
-                amountFcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(Double.parseDouble(line.getAmountFCYCredit())));
+                amountLcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountLCYCredit()).doubleValue()));
+                amountFcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountFCYCredit()).doubleValue()));
             } else {
                 log.info("Skipping transaction line with zero amounts for transaction: {}", line.getTxNumber());
                 // Create a zero amount item.
@@ -178,7 +183,7 @@ public class TransactionConverter {
             builder.amountLcy(amountLcy);
             builder.amountFcy(amountFcy);
             builder.operationType(operationType);
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException | ParseException e) {
             log.error("Error parsing amount in transaction line", e);
             return Either.left(Problem.builder()
                     .withTitle("Error parsing amount")
