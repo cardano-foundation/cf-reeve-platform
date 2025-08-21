@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
-import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.OPENING_BALANCE_VALIDATION_ERORR;
+import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.OPENING_BALANCE_VALIDATION_ERROR;
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
 
 import java.util.HashSet;
@@ -216,7 +216,7 @@ public class ChartOfAccountsService {
             List<ObjectError> allErrors = errors.getAllErrors();
             if (!allErrors.isEmpty()) {
                 Problem error = Problem.builder()
-                        .withTitle(OPENING_BALANCE_VALIDATION_ERORR)
+                        .withTitle(OPENING_BALANCE_VALIDATION_ERROR)
                         .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
                         .withStatus(Status.BAD_REQUEST)
                         .build();
