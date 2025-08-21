@@ -18,11 +18,11 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
  * Task item that collapses transaction items with the same key by summing their amounts.
  */
 @Slf4j
-public class TxTotalAmountSummTaskItem implements PipelineTaskItem {
+public class TransactionFillAggregationFieldsTaskItem implements PipelineTaskItem {
 
     private final OrganisationPublicApi organisationPublicApiIF;
 
-    public TxTotalAmountSummTaskItem(OrganisationPublicApi organisationPublicApiIF) {
+    public TransactionFillAggregationFieldsTaskItem(OrganisationPublicApi organisationPublicApiIF) {
         this.organisationPublicApiIF = organisationPublicApiIF;
     }
 
@@ -32,6 +32,7 @@ public class TxTotalAmountSummTaskItem implements PipelineTaskItem {
             return;
         }
         tx.setTotalAmountLcy(getAmountLcyTotalForAllDebitItems(tx));
+        tx.setItemCount(tx.getItems().size());
     }
 
     public BigDecimal getAmountLcyTotalForAllDebitItems(TransactionEntity tx) {

@@ -4,6 +4,12 @@ ALTER TABLE accounting_core_transaction
 
 ALTER TABLE accounting_core_transaction_aud
     ADD COLUMN total_amount_lcy DECIMAL(30, 15);
+
+ALTER TABLE accounting_core_transaction
+ADD COLUMN item_count INTEGER CHECK (item_count >= 0);
+
+ALTER TABLE accounting_core_transaction_aud
+ADD COLUMN item_count INTEGER CHECK (item_count >= 0);
 -- 2) Update with calculated value
 UPDATE accounting_core_transaction t
 SET total_amount_lcy = CASE

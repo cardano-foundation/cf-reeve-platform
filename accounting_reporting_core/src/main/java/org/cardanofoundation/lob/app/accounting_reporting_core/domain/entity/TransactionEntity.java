@@ -161,6 +161,12 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Builder.Default
     private Set<TransactionItemEntity> items = new LinkedHashSet<>();
 
+    @Column(name = "item_count", nullable = false)
+    @Getter
+    @Setter
+    @Builder.Default
+    private int itemCount = 0;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reconcilation_id")
     @Nullable
