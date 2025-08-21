@@ -79,7 +79,7 @@ class TransactionConverterTest {
         when(transaction.getTransactionType()).thenReturn(TransactionType.BillCredit);
         when(transaction.getAccountingPeriod()).thenReturn(YearMonth.parse("2025-03"));
         Set<Transaction> transactions = Set.of(transaction);
-        Set<TransactionEntity> result = transactionConverter.convertToDbDetached(transactions);
+        Set<TransactionEntity> result = transactionConverter.convertToDbDetached(transactions, Optional.empty());
         Assertions.assertNotNull(result);
         Assertions.assertEquals(1, result.size());
         Assertions.assertEquals("tx001", result.stream().findFirst().get().getId());

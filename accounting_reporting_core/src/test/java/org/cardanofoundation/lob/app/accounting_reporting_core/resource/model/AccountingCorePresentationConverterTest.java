@@ -115,6 +115,8 @@ class AccountingCorePresentationConverterTest {
         transactionEntity.setItems(Set.of(transactionItem));
         transactionEntity3.setItems(Set.of(transactionItem3));
         transactionEntity.setViolations(Set.of(transactionViolation));
+        transactionEntity.setExtractorType("NETSUITE");
+        transactionEntity3.setExtractorType("NETSUITE");
 
         transactionItem.setAccountDebit(Optional.of(accountDebit));
         transactionItem.setAccountCredit(Optional.of(accountCredit));
@@ -140,7 +142,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity2.setTransactionApproved(Boolean.FALSE);
         transactionEntity2.setLedgerDispatchApproved(Boolean.TRUE);
         transactionEntity2.setOverallStatus(TransactionStatus.OK);
-
+        transactionEntity2.setExtractorType("NETSUITE");
         when(transactionRepositoryGateway.findAllByStatus(any(), any(), any(), any())).thenReturn(List.of(transactionEntity, transactionEntity2, transactionEntity3));
 
         List<TransactionView> result = accountingCorePresentationConverter.allTransactions(searchRequest);
@@ -182,6 +184,7 @@ class AccountingCorePresentationConverterTest {
         TransactionEntity transactionEntity = new TransactionEntity();
         transactionEntity.setTransactionType(TransactionType.VendorBill);
         transactionEntity.setId(transactionId);
+        transactionEntity.setExtractorType("NETSUITE");
 
         when(transactionRepositoryGateway.findById(transactionId)).thenReturn(Optional.of(transactionEntity));
 
@@ -215,10 +218,12 @@ class AccountingCorePresentationConverterTest {
         transaction1.setOrganisation(organisation);
         transaction1.setId("tx-id1");
         transaction1.setTransactionType(TransactionType.Journal);
+        transaction1.setExtractorType("NETSUITE");
         TransactionEntity transaction2 = new TransactionEntity();
         transaction2.setOrganisation(organisation);
         transaction2.setId("tx-id2");
         transaction2.setTransactionType(TransactionType.VendorBill);
+        transaction2.setExtractorType("NETSUITE");
 
         transaction1.setItems(Set.of(transactionItem));
         transaction1.setViolations(Set.of(transactionViolation));

@@ -104,6 +104,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         transactionEntity.setEntryDate(LocalDate.now());
         transactionEntity.setTransactionType(TransactionType.BillCredit);
         transactionEntity.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        transactionEntity.setExtractorType("NETSUITE");
         accountingCoreTransactionRepository.saveAndFlush(transactionEntity);
 
         TxsLedgerUpdatedEvent build = TxsLedgerUpdatedEvent.builder()
