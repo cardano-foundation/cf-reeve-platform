@@ -43,5 +43,6 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
             AND t.transaction.automatedValidationStatus = 'VALIDATED'
             """)
     List<TransactionItemEntity> findPreviewTransactionItemsByAccountCodeAndDateRange(
-            List<String> list, LocalDate orElse, LocalDate endDate);
+            @Param("customerCodes") List<String> customerCodes,
+            @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }
