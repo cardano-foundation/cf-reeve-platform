@@ -99,6 +99,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity.setTransactionApproved(Boolean.TRUE);
         transactionEntity.setLedgerDispatchApproved(Boolean.FALSE);
         transactionEntity.setOverallStatus(TransactionStatus.NOK);
+        transactionEntity.setTotalAmountLcy(BigDecimal.TEN);
 
         transactionEntity3.setId("tx-id-3");
         transactionEntity3.setTransactionType(TransactionType.CustomerPayment);
@@ -106,6 +107,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity3.setTransactionApproved(Boolean.TRUE);
         transactionEntity3.setLedgerDispatchApproved(Boolean.TRUE);
         transactionEntity3.setOverallStatus(TransactionStatus.OK);
+        transactionEntity3.setTotalAmountLcy(BigDecimal.TEN);
 
         transactionItem.setId("tx-item-id");
         transactionItem3.setId("tx-item-id-3");
@@ -143,6 +145,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity2.setTransactionApproved(Boolean.FALSE);
         transactionEntity2.setLedgerDispatchApproved(Boolean.TRUE);
         transactionEntity2.setOverallStatus(TransactionStatus.OK);
+        transactionEntity2.setTotalAmountLcy(BigDecimal.TEN);
 
         when(transactionRepositoryGateway.findAllByStatus(any(), any(), any(), any())).thenReturn(List.of(transactionEntity, transactionEntity2, transactionEntity3));
 
@@ -154,20 +157,20 @@ class AccountingCorePresentationConverterTest {
         assertEquals(Boolean.TRUE, result.get(0).isTransactionApproved());
         assertEquals(Boolean.FALSE, result.get(0).isLedgerDispatchApproved());
         assertEquals(TransactionStatus.NOK, result.get(0).getStatus());
-        assertEquals(Boolean.FALSE, result.get(2).isTransactionApproved());
-        assertEquals(Boolean.TRUE, result.get(2).isLedgerDispatchApproved());
-        assertEquals(TxValidationStatus.FAILED, result.get(2).getValidationStatus());
-        assertEquals("tx-id2-internal", result.get(2).getInternalTransactionNumber());
+        assertEquals(Boolean.FALSE, result.get(1).isTransactionApproved());
+        assertEquals(Boolean.TRUE, result.get(1).isLedgerDispatchApproved());
+        assertEquals(TxValidationStatus.FAILED, result.get(1).getValidationStatus());
+        assertEquals("tx-id2-internal", result.get(1).getInternalTransactionNumber());
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        assertEquals(LedgerDispatchStatusView.PUBLISHED, result.get(1).getStatistic());
+        assertEquals(LedgerDispatchStatusView.PUBLISHED, result.get(2).getStatistic());
         assertEquals(LedgerDispatchStatusView.PUBLISH, result.get(0).getStatistic());
-        assertEquals(localDate.format(formatter).toString(), result.get(2).getEntryDate().toString());
+        assertEquals(localDate.format(formatter).toString(), result.get(1).getEntryDate().toString());
         assertEquals("tx-item-id", result.get(0).getItems().stream().findFirst().get().getId());
 
         assertEquals(BigDecimal.valueOf(1000), result.get(0).getItems().stream().findFirst().get().getAmountFcy());
         assertEquals(BigDecimal.valueOf(1000), result.get(0).getItems().stream().findFirst().get().getAmountLcy());
-        assertEquals(BigDecimal.valueOf(500), result.get(1).getItems().stream().findFirst().get().getAmountFcy());
-        assertEquals(BigDecimal.valueOf(500), result.get(1).getItems().stream().findFirst().get().getAmountLcy());
+        assertEquals(BigDecimal.valueOf(500), result.get(2).getItems().stream().findFirst().get().getAmountFcy());
+        assertEquals(BigDecimal.valueOf(500), result.get(2).getItems().stream().findFirst().get().getAmountLcy());
         assertEquals("debit-code", result.get(0).getItems().stream().findFirst().get().getAccountDebitCode());
         assertEquals("credit-code", result.get(0).getItems().stream().findFirst().get().getAccountCreditCode());
 

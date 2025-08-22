@@ -87,8 +87,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
                 WHERE cc.id.customerCode = i2.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostCenterCustomerCodes)
             ))
     )
-    """)
-//    AND (:parentCostCenterCustomerCodes IS NULL OR i.document.costCenter.parentCustomerCode IN :parentCostCenterCustomerCodes)
+            """)
     Page<TransactionEntity> findAllByBatchId(
             @Param("batchId") String batchId,
             @Param("txStatus") List<TransactionProcessingStatus> txStatus,

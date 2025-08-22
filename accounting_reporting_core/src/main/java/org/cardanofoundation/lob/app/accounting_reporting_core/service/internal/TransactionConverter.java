@@ -19,6 +19,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Cur
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 
 @Service("accounting_reporting_core.TransactionConverter")
 @Slf4j
@@ -27,6 +28,7 @@ public class TransactionConverter {
 
     private final CoreCurrencyService coreCurrencyService;
     private final OrganisationConverter organisationConverter;
+    private final OrganisationPublicApiIF organisationPublicApiIF;
 
     public FilteringParameters convertToDbDetached(SystemExtractionParameters systemExtractionParameters,
                                                    UserExtractionParameters userExtractionParameters) {
@@ -144,9 +146,10 @@ public class TransactionConverter {
 
         txEntity.setViolations(violations);
         txEntity.setItems(txItems);
-
         return txEntity;
     }
+
+
 
     private Optional<Project> convertProject(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project> projectM) {
         return projectM.map(p -> Project.builder()
