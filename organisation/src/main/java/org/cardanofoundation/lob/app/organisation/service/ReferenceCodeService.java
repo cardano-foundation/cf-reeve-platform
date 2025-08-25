@@ -97,6 +97,9 @@ public class ReferenceCodeService {
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
         referenceCode.setActive(referenceCodeUpdate.isActive());
+        // updating event codes
+        accountEventService.updateStatus(orgId, referenceCode.getId().getReferenceCode());
+
         // The reference code returning is not the latest version after save
         return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
     }
