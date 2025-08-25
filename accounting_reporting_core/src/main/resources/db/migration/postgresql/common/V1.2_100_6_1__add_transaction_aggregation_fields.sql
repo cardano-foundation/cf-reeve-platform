@@ -42,3 +42,9 @@ SET total_amount_lcy = CASE
         AND i.status = 'OK'
     ), 0))
 END;
+
+UPDATE accounting_core_transaction t
+SET item_count = (SELECT COUNT(1)
+    FROM accounting_core_transaction_item i
+    WHERE i.transaction_id = t.transaction_id
+    AND i.status = 'OK')
