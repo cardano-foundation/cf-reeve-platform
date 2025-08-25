@@ -97,11 +97,12 @@ public class ReferenceCodeService {
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
         referenceCode.setActive(referenceCodeUpdate.isActive());
+        ReferenceCode savedEntity = referenceCodeRepository.save(referenceCode);
         // updating event codes
-        accountEventService.updateStatus(orgId, referenceCode.getId().getReferenceCode());
+        accountEventService.updateStatus(orgId, savedEntity.getId().getReferenceCode());
 
         // The reference code returning is not the latest version after save
-        return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
+        return ReferenceCodeView.fromEntity(savedEntity);
     }
 
     @Transactional
