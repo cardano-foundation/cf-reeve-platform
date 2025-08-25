@@ -56,8 +56,8 @@ public class CurrencyController {
     })
     @GetMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getAllCurrencies(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                              @RequestParam("customerCode") String customerCode,
-                                              @RequestParam("currencyIds") List<String> currencyIds,
+                                              @RequestParam(value = "customerCode", required = false) String customerCode,
+                                              @RequestParam(value = "currencyIds", required = false) List<String> currencyIds,
                                               @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return currencyService.getAllCurrencies(orgId, customerCode, currencyIds, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
