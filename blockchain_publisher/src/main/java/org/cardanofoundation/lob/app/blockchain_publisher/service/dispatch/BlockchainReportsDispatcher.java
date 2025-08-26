@@ -1,7 +1,9 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch;
 
 import static org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus.SUBMITTED;
+import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -17,6 +19,7 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Submission;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
@@ -66,7 +69,7 @@ public class BlockchainReportsDispatcher {
 
     @Transactional
     public void dispatchReports(String organisationId,
-                                   Set<ReportEntity> reportEntities) {
+                                Set<ReportEntity> reportEntities) {
         log.info("Dispatching reports for organisation: {}", organisationId);
 
         for (ReportEntity reportEntity : reportEntities) {
@@ -74,18 +77,27 @@ public class BlockchainReportsDispatcher {
         }
     }
 
+
     @Transactional
     public void dispatchReport(String organisationId, ReportEntity reportEntity) {
         log.info("Dispatching report for organisation: {}", organisationId);
 
-        Optional<API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
+        Either<Problem, API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
         if (api3BlockchainTransactionE.isEmpty()) {
+
+            reportEntity.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+                    .publishRetry(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
+                    .publishStatusErrorReason(Objects.requireNonNull(api3BlockchainTransactionE.getLeft().getDetail()))
+                    .publishStatus(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) >= 5L ? BlockchainPublishStatus.ERROR : BlockchainPublishStatus.STORED)
+                    .build()));
+            ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(organisationId, Set.of(reportEntity));
+
             log.info("No more reports to dispatch for organisationId, success or error?, organisationId: {}", organisationId);
         }
     }
 
     @Transactional
-    public Optional<API3BlockchainTransaction> createAndSendBlockchainTransactions(ReportEntity reportEntity) {
+    public Either<Problem, API3BlockchainTransaction> createAndSendBlockchainTransactions(ReportEntity reportEntity) {
         log.info("Creating and sending blockchain transactions for report:{}", reportEntity.getReportId());
 
         Either<Problem, API3BlockchainTransaction> serialisedTxE = api3L1TransactionCreator.pullBlockchainTransaction(reportEntity);
@@ -95,19 +107,22 @@ public class BlockchainReportsDispatcher {
 
             log.error("Error pulling blockchain transaction, problem: {}", problem);
 
-            return Optional.empty();
+            return serialisedTxE;
         }
 
         API3BlockchainTransaction serialisedTx = serialisedTxE.get();
         try {
             sendTransactionOnChainAndUpdateDb(serialisedTx);
 
-            return Optional.of(serialisedTx);
+            return serialisedTxE;
         } catch (ApiException | InterruptedException e) {
-            log.error("Error sending transaction on chain and / or updating db", e);
+            return Either.left(Problem.builder()
+                    .withTitle("ERROR_PUSHING_TRANSACTION")
+                    .withDetail("%s".formatted(e.getMessage()))
+                    .withStatus(INTERNAL_SERVER_ERROR)
+                    .build());
         }
 
-        return Optional.empty();
     }
 
     @Transactional

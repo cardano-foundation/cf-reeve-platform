@@ -110,6 +110,11 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Builder.Default
     private LedgerDispatchStatus ledgerDispatchStatus = NOT_DISPATCHED;
 
+    @Getter
+    @Setter
+    @Column(name = "ledger_dispatch_status_error_reason")
+    private String ledgerDispatchStatusErrorReason;
+
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(name = "primaryBlockchainType",

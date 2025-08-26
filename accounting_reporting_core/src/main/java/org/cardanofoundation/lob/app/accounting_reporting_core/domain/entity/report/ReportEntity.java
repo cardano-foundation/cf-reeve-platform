@@ -217,6 +217,11 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     // https://www.baeldung.com/java-enums-jpa-postgresql
     private LedgerDispatchStatus ledgerDispatchStatus = NOT_DISPATCHED;
 
+    @Getter
+    @Setter
+    @Column(name = "ledger_dispatch_status_error_reason")
+    private String ledgerDispatchStatusErrorReason;
+
     @Column(name = "ledger_dispatch_date")
     @Getter
     @Setter

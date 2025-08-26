@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
 
 import java.util.HashSet;
 import java.util.List;
@@ -20,6 +21,7 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -74,13 +76,13 @@ class BlockchainTransactionsDispatcherTest {
         Organisation organisation = new Organisation();
         organisation.setId("organisationId");
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
-        when(transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
+        when(transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
         when(dispatchingStrategy.apply("organisationId", Set.of())).thenReturn(Set.of());
 
         dispatcher.dispatchTransactions();
 
         verify(organisationPublicApi).listAll();
-        verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
+        verify(transactionEntityRepositoryGateway).findTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
         verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
@@ -98,23 +100,28 @@ class BlockchainTransactionsDispatcherTest {
         TransactionEntity transactionEntity = mock(TransactionEntity.class);
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
-        when(transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
+        when(transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
         when(dispatchingStrategy.apply("organisationId", Set.of())).thenReturn(Set.of(transactionEntity));
-        when(l1TransactionCreator.pullBlockchainTransaction(anyString(), anySet())).thenReturn(Either.left(null));
+        when(l1TransactionCreator.pullBlockchainTransaction(anyString(), anySet())).thenReturn(Either.left(Problem.builder()
+                .withTitle("ERROR_CREATING_TRANSACTION")
+                .withDetail("MESSAGE ERROR")
+                .withStatus(INTERNAL_SERVER_ERROR)
+                .build()));
 
         dispatcher.dispatchTransactions();
 
         verify(organisationPublicApi).listAll();
-        verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
+        verify(transactionEntityRepositoryGateway).findTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
+        verify(transactionEntityRepositoryGateway).lockTransactions(anySet());
         verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
+        verify(ledgerUpdatedEventPublisher).sendTxLedgerUpdatedEvents(eq("organisationId"),anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
         verifyNoMoreInteractions(l1TransactionCreator);
         verifyNoInteractions(transactionSubmissionService);
-        verifyNoInteractions(ledgerUpdatedEventPublisher);
     }
 
     @Test
@@ -124,15 +131,16 @@ class BlockchainTransactionsDispatcherTest {
         TransactionEntity transactionEntity = mock(TransactionEntity.class);
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
-        when(transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
+        when(transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
         when(dispatchingStrategy.apply("organisationId", Set.of())).thenReturn(Set.of(transactionEntity));
         when(l1TransactionCreator.pullBlockchainTransaction(anyString(), anySet())).thenReturn(Either.right(Optional.empty()));
 
         dispatcher.dispatchTransactions();
 
         verify(organisationPublicApi).listAll();
-        verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
+        verify(transactionEntityRepositoryGateway).findTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
+        verify(transactionEntityRepositoryGateway).lockTransactions(anySet());
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
         verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
@@ -140,8 +148,8 @@ class BlockchainTransactionsDispatcherTest {
         verifyNoMoreInteractions(dispatchingStrategy);
         verifyNoMoreInteractions(l1TransactionCreator);
         verifyNoInteractions(transactionSubmissionService);
-        verifyNoInteractions(ledgerUpdatedEventPublisher);
     }
+
 
     @Test
     void dispatchTransactionsL1TransactionsNull() {
@@ -150,24 +158,26 @@ class BlockchainTransactionsDispatcherTest {
         TransactionEntity transactionEntity = mock(TransactionEntity.class);
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
-        when(transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
+        when(transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
         when(dispatchingStrategy.apply("organisationId", Set.of())).thenReturn(Set.of(transactionEntity));
         when(l1TransactionCreator.pullBlockchainTransaction(anyString(), anySet())).thenReturn(Either.right(Optional.ofNullable(null)));
 
         dispatcher.dispatchTransactions();
 
         verify(organisationPublicApi).listAll();
-        verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
+        verify(transactionEntityRepositoryGateway).findTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
+        verify(transactionEntityRepositoryGateway).lockTransactions(anySet());
         verify(transactionEntityRepositoryGateway).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
         verifyNoMoreInteractions(l1TransactionCreator);
         verifyNoInteractions(transactionSubmissionService);
-        verifyNoInteractions(ledgerUpdatedEventPublisher);
     }
+
+
 
     @Test
     void dispatchTransactionsSuccess() throws ApiException, InterruptedException {
@@ -183,21 +193,20 @@ class BlockchainTransactionsDispatcherTest {
         when(blockchainTransactions.serialisedTxData()).thenReturn(new byte[0]);
         when(blockchainTransactions.receiverAddress()).thenReturn("receiverAddress");
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
-        when(transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
+        when(transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
         when(dispatchingStrategy.apply("organisationId", Set.of())).thenReturn(Set.of(transactionEntity));
         when(l1TransactionCreator.pullBlockchainTransaction(anyString(), anySet())).thenReturn(Either.right(Optional.ofNullable(blockchainTransactions)));
         when(transactionSubmissionService.submitTransactionWithPossibleConfirmation(eq(new byte[0]), anyString())).thenReturn(l1Submission);
         dispatcher.dispatchTransactions();
 
         verify(organisationPublicApi).listAll();
-        verify(transactionEntityRepositoryGateway).findAndLockTransactionsReadyToBeDispatched("organisationId", 50);
+        verify(transactionEntityRepositoryGateway).findTransactionsReadyToBeDispatched("organisationId", 50);
         verify(dispatchingStrategy).apply("organisationId", Set.of());
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
         verify(transactionSubmissionService).submitTransactionWithPossibleConfirmation(eq(new byte[0]), anyString());
         verify(ledgerUpdatedEventPublisher).sendTxLedgerUpdatedEvents(null, new HashSet<>());
         verify(transactionEntityRepositoryGateway, times(3)).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
-        verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
         verifyNoMoreInteractions(l1TransactionCreator);
         verifyNoMoreInteractions(transactionSubmissionService);

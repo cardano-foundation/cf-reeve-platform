@@ -55,11 +55,8 @@ public class LedgerUpdatedEventPublisher {
                         val txId = txEntity.getId();
 
                         val blockchainHashM = txEntity.getL1SubmissionData().flatMap(L1SubmissionData::getTransactionHash);
-                        if (blockchainHashM.isEmpty()) {
-                            return new TxStatusUpdate(txId, ledgerDispatchStatus, Set.of());
-                        }
 
-                        String blockchainHash = blockchainHashM.get();
+                        String blockchainHash = blockchainHashM.orElse(null);
 
                         val blockchainReceipts = Set.of(
                                 new BlockchainReceipt(
@@ -68,7 +65,7 @@ public class LedgerUpdatedEventPublisher {
                                 )
                         );
 
-                        return new TxStatusUpdate(txId, ledgerDispatchStatus, blockchainReceipts);
+                        return new TxStatusUpdate(txId, ledgerDispatchStatus, txEntity.getL1SubmissionData().get().getPublishStatusErrorReason().orElse(null), blockchainReceipts);
                     })
                     .collect(Collectors.toSet());
 
@@ -99,11 +96,8 @@ public class LedgerUpdatedEventPublisher {
                         val reportId = reportEntity.getReportId();
 
                         val blockchainHashM = reportEntity.getL1SubmissionData().flatMap(L1SubmissionData::getTransactionHash);
-                        if (blockchainHashM.isEmpty()) {
-                            return new ReportStatusUpdate(reportId, ledgerDispatchStatus, Set.of());
-                        }
 
-                        String blockchainHash = blockchainHashM.get();
+                        String blockchainHash = blockchainHashM.orElse(null);
 
                         val blockchainReceipts = Set.of(
                                 new BlockchainReceipt(
@@ -112,7 +106,7 @@ public class LedgerUpdatedEventPublisher {
                                 )
                         );
 
-                        return new ReportStatusUpdate(reportId, ledgerDispatchStatus, blockchainReceipts);
+                        return new ReportStatusUpdate(reportId, ledgerDispatchStatus, reportEntity.getL1SubmissionData().get().getPublishStatusErrorReason().orElse(null), blockchainReceipts);
                     })
                     .collect(Collectors.toSet());
 

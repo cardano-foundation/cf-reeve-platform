@@ -120,7 +120,9 @@ public class ReportEntity extends CommonDateOnlyEntity implements Persistable<St
             @AttributeOverride(name = "absoluteSlot", column = @Column(name = "l1_absolute_slot")),
             @AttributeOverride(name = "creationSlot", column = @Column(name = "l1_creation_slot")),
             @AttributeOverride(name = "finalityScore", column = @Column(name = "l1_finality_score", columnDefinition = "blockchain_publisher_finality_score_type")),
-            @AttributeOverride(name = "publishStatus", column = @Column(name = "l1_publish_status", columnDefinition = "blockchain_publisher_blockchain_publish_status_type"))
+            @AttributeOverride(name = "publishStatus", column = @Column(name = "l1_publish_status", columnDefinition = "blockchain_publisher_blockchain_publish_status_type")),
+            @AttributeOverride(name = "publishStatusErrorReason", column = @Column(name = "l1_publish_status_error_reason")),
+            @AttributeOverride(name = "publishRetry", column = @Column(name = "l1_publish_retry"))
     })
     private L1SubmissionData l1SubmissionData;
 
