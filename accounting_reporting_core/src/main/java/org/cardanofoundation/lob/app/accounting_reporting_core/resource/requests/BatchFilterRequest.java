@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
@@ -23,6 +24,10 @@ public class BatchFilterRequest {
     private BigDecimal maxFCY;
     private BigDecimal minLCY;
     private BigDecimal maxLCY;
+    private BigDecimal minTotalLcy;
+    private BigDecimal maxTotalLcy;
+    private LocalDate dateFrom;
+    private LocalDate dateTo;
     private List<String> vatCustomerCodes;
     private List<String> parentCostCenterCustomerCodes;
     private List<String> costCenterCustomerCodes;

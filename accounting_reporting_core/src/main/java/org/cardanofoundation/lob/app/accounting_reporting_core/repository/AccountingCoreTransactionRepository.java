@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -65,6 +66,10 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     WHERE b.id = :batchId
     AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
     AND (:types IS NULL OR t.transactionType IN :types)
+    AND (:minTotalLcy IS NULL OR t.totalAmountLcy >= :minTotalLcy)
+    AND (:maxTotalLcy IS NULL OR t.totalAmountLcy <= :maxTotalLcy)
+    AND t.entryDate >= COALESCE(:dateFrom, t.entryDate)
+    AND t.entryDate <= COALESCE(:dateTo, t.entryDate)
     AND NOT EXISTS (
         SELECT 1 FROM t.items i2
         WHERE
@@ -98,6 +103,10 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             @Param("maxFCY") BigDecimal maxFCY,
             @Param("minLCY") BigDecimal minLCY,
             @Param("maxLCY") BigDecimal maxLCY,
+            @Param("minTotalLcy") BigDecimal minTotalLcy,
+            @Param("maxTotalLcy") BigDecimal maxTotalLcy,
+            @Param("dateFrom") LocalDateTime dateFrom,
+            @Param("dateTo") LocalDateTime dateTo,
             @Param("vatCustomerCodes") List<String> vatCustomerCodes,
             @Param("parentCostCenterCustomerCodes") List<String> parentCostCenterCustomerCodes,
             @Param("costCenterCustomerCodes") List<String> costCenterCustomerCodes,
