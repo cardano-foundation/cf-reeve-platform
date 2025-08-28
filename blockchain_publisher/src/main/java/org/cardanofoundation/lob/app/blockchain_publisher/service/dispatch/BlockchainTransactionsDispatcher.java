@@ -88,7 +88,7 @@ public class BlockchainTransactionsDispatcher {
         int submittedTxCount = blockchainTransactions.submittedTransactions().size();
         int remainingTxCount = blockchainTransactions.remainingTransactions().size();
         transactionEntityRepositoryGateway.unlockTransactions(blockchainTransactions.remainingTransactions());
-
+        transactionEntityRepositoryGateway.unlockTransactions(blockchainTransactions.submittedTransactions());
         log.info("Submitted tx count:{}, remainingTxCount:{}", submittedTxCount, remainingTxCount);
     }
 
