@@ -248,7 +248,7 @@ class AccountingCorePresentationConverterTest {
         transaction2.setBatchId(batchId);
 
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
-        when(transactionRepository.findAllByBatchId(batchId, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
+        when(transactionRepository.findAllByBatchId(batchId, null, null, null, null, null, null, null, null, null, null, LocalDate.of(1970,1,1).atStartOfDay(), LocalDate.now().atStartOfDay(), null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
         Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), new BatchFilterRequest());
         assertTrue(resultE.isRight());
