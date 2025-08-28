@@ -195,7 +195,7 @@ class BlockchainTransactionsDispatcherTest {
         verify(l1TransactionCreator).pullBlockchainTransaction("organisationId", Set.of(transactionEntity));
         verify(transactionSubmissionService).submitTransactionWithPossibleConfirmation(eq(new byte[0]), anyString());
         verify(ledgerUpdatedEventPublisher).sendTxLedgerUpdatedEvents(null, new HashSet<>());
-        verify(transactionEntityRepositoryGateway, times(2)).unlockTransactions(anySet());
+        verify(transactionEntityRepositoryGateway, times(3)).unlockTransactions(anySet());
         verifyNoMoreInteractions(organisationPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
         verifyNoMoreInteractions(dispatchingStrategy);
