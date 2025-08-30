@@ -92,6 +92,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
                         .accountingPeriodFrom(LocalDate.now().minusYears(1))
                         .accountingPeriodTo(LocalDate.now().plusYears(1))
                 .build());
+        transactionBatchEntity.setExtractorType("NETSUITE");
         transactionBatchRepository.save(transactionBatchEntity);
 
         TransactionEntity transactionEntity = new TransactionEntity();
@@ -103,6 +104,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         transactionEntity.setEntryDate(LocalDate.now());
         transactionEntity.setTransactionType(TransactionType.BillCredit);
         transactionEntity.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        transactionEntity.setExtractorType("NETSUITE");
         accountingCoreTransactionRepository.saveAndFlush(transactionEntity);
 
         TxsLedgerUpdatedEvent build = TxsLedgerUpdatedEvent.builder()
@@ -165,6 +167,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
                 .accountingPeriodFrom(LocalDate.now().minusYears(1))
                 .accountingPeriodTo(LocalDate.now().plusYears(1))
                 .build());
+        transactionBatchEntity.setExtractorType("NETSUITE");
         transactionBatchRepository.saveAndFlush(transactionBatchEntity);
         TransactionBatchFailedEvent event = TransactionBatchFailedEvent.builder()
                 .batchId("batchId")

@@ -80,6 +80,7 @@ public class TransactionBatchService {
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setStatus(CREATED);
         transactionBatchEntity.setCreatedBy(user);
+        transactionBatchEntity.setExtractorType(extractorType.name());
         AuditorContext.setCurrentUser(user);
 
         transactionBatchRepository.saveAndFlush(transactionBatchEntity);
