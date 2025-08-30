@@ -58,9 +58,9 @@ public class TransactionConverter {
                 .build();
     }
 
-    public Set<TransactionEntity> convertToDbDetached(Set<Transaction> transactions) {
+    public Set<TransactionEntity> convertToDbDetached(Set<Transaction> transactions, Optional<TransactionBatchEntity> batch) {
         return transactions.stream()
-                .map(this::convertToDbDetached)
+                .map(tx -> convertToDbDetached(tx, batch))
                 .collect(Collectors.toSet());
     }
 
@@ -70,7 +70,7 @@ public class TransactionConverter {
                 .collect(Collectors.toSet());
     }
 
-    private TransactionEntity convertToDbDetached(Transaction transaction) {
+    private TransactionEntity convertToDbDetached(Transaction transaction, Optional<TransactionBatchEntity> batch) {
         Set<TransactionViolation> violations = transaction.getViolations()
                 .stream()
                 .map(violation -> {
@@ -139,7 +139,7 @@ public class TransactionConverter {
         txEntity.setAccountingPeriod(transaction.getAccountingPeriod());
         txEntity.setTransactionApproved(transaction.isTransactionApproved());
         txEntity.setLedgerDispatchApproved(transaction.isLedgerDispatchApproved());
-
+        txEntity.setExtractorType(batch.map(TransactionBatchEntity::getExtractorType).orElse(null));
         txItems.forEach(i -> i.setTransaction(txEntity));
 
         txEntity.setViolations(violations);

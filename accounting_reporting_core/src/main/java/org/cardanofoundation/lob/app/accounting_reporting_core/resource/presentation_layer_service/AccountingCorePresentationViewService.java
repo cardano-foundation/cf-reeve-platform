@@ -364,12 +364,18 @@ public class AccountingCorePresentationViewService {
     }
 
     private TransactionView getTransactionView(TransactionEntity transactionEntity) {
+        DataSourceView dataSourceView = DataSourceView.UNKNOWN;
+        try {
+            dataSourceView = DataSourceView.valueOf(transactionEntity.getExtractorType());
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid extractorType '{}' for transaction {}", transactionEntity.getExtractorType(), transactionEntity.getId(), e);
+        }
         return new TransactionView(
                 transactionEntity.getId(),
                 transactionEntity.getTransactionInternalNumber(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(),
-                DataSourceView.NETSUITE,
+                dataSourceView,
                 transactionEntity.getOverallStatus(),
                 getTransactionDispatchStatus(transactionEntity),
                 transactionEntity.getAutomatedValidationStatus(),

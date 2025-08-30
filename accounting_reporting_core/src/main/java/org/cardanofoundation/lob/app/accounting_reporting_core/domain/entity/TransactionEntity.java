@@ -82,6 +82,11 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Setter
     private YearMonth accountingPeriod;
 
+    @Column(name = "extractor_type", nullable = false)
+    @Getter
+    @Setter
+    private String extractorType;
+
     @Column(name = "type", nullable = false)
     @Enumerated(STRING)
     @LOBVersionSourceRelevant

@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
@@ -125,7 +126,8 @@ public class AccountingCoreEventHandler {
         log.info("Received handleTransactionBatchChunkEvent event...., event, batch_id: {}, chunk_size:{}", batchId, transactionBatchChunkEvent.getTransactions().size());
 
         Set<Transaction> txs = transactionBatchChunkEvent.getTransactions();
-        Set<TransactionEntity> detachedDbTxs = transactionConverter.convertToDbDetached(txs);
+        Optional<TransactionBatchEntity> batch = transactionBatchService.findById(batchId);
+        Set<TransactionEntity> detachedDbTxs = transactionConverter.convertToDbDetached(txs, batch);
 
         erpIncomingDataProcessor.continueIngestion(
                 transactionBatchChunkEvent.getOrganisationId(),
@@ -174,7 +176,7 @@ public class AccountingCoreEventHandler {
         LocalDate fromDate = event.getFrom();
         LocalDate toDate = event.getTo();
         Set<Transaction> transactions = event.getTransactions();
-        Set<TransactionEntity> chunkDetachedTxEntities = transactionConverter.convertToDbDetached(transactions);
+        Set<TransactionEntity> chunkDetachedTxEntities = transactionConverter.convertToDbDetached(transactions, Optional.empty());
 
         erpIncomingDataProcessor.continueReconcilation(
                 reconcilationId,
