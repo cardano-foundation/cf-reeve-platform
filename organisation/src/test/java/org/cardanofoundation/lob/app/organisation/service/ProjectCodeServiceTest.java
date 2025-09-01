@@ -75,12 +75,12 @@ class ProjectCodeServiceTest {
     @Test
     void testGetAllProjects() {
         List<Project> projects = new ArrayList<>();
-        when(projectRepository.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(projects ));
+        when(projectRepository.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(projects ));
         when(jpaSortFieldValidator.validateEntity(Project.class, Pageable.unpaged(), PROJECT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
-        Either<Problem, List<ProjectView>> result = projectCodeService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, Pageable.unpaged());
+        Either<Problem, List<ProjectView>> result = projectCodeService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, Pageable.unpaged());
         assertTrue(result.isRight());
         assertEquals(Either.right(projects), result);
-        verify(projectRepository).findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, Pageable.unpaged());
+        verify(projectRepository).findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, Pageable.unpaged());
         verifyNoMoreInteractions(projectRepository);
     }
 

@@ -292,9 +292,9 @@ class ChartOfAccountsServiceTest {
     @Test
     void testGetAllChartOfAccount() {
         List<ChartOfAccount> accounts = List.of(chartOfAccount);
-        when(chartOfAccountRepository.findAllByOrganisationIdFiltered(orgId,  null, null, null, null, null,  null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(accounts));
+        when(chartOfAccountRepository.findAllByOrganisationIdFiltered(orgId,  null, null, null, null, null, null,  null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(accounts));
         when(jpaSortFieldValidator.validateEntity(ChartOfAccount.class, Pageable.unpaged(), CHART_OF_ACCOUNT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
-        Either<Problem, List<ChartOfAccountView>> result = chartOfAccountsService.getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, Pageable.unpaged());
+        Either<Problem, List<ChartOfAccountView>> result = chartOfAccountsService.getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, null, Pageable.unpaged());
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());

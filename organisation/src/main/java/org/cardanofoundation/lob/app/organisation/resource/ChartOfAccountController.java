@@ -87,8 +87,9 @@ public class ChartOfAccountController {
                                                 @RequestParam(value = "types", required = false) List<String> types,
                                                 @RequestParam(value = "subTypes", required = false) List<String> subTypes,
                                                 @RequestParam(value = "refCodes", required = false) List<String> referenceCodes,
+                                                @RequestParam(value = "active" ,required = false) Boolean active,
                                                 @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return chartOfAccountsService.getAllChartOfAccount(orgId, customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, pageable).fold(problem ->
+        return chartOfAccountsService.getAllChartOfAccount(orgId, customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, active, pageable).fold(problem ->
                         ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
 

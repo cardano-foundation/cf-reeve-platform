@@ -61,9 +61,10 @@ public class ProjectCodeController {
     @GetMapping(value = "/{orgId}/projects", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getAllProjects(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                             @RequestParam(value = "customerCode", required = false) String customerCode,
+                                            @RequestParam(value = "name", required = false) String name,
                                             @RequestParam(value = "parentCustomerCode", required = false) String parentCustomerCode,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return projectCodeService.getAllProjects(orgId, customerCode, parentCustomerCode, pageable).fold(
+        return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
     }
