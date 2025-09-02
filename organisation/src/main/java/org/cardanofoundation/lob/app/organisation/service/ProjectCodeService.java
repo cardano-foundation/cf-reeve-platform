@@ -45,13 +45,13 @@ public class ProjectCodeService {
         return projectRepository.findById(new Project.Id(organisationId, customerCode));
     }
 
-    public Either<Problem, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String parentCustomerCode, Pageable pageable) {
+    public Either<Problem, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String name, String parentCustomerCode, Pageable pageable) {
         Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Project.class, pageable, PROJECT_MAPPINGS);
         if(pageables.isLeft()) {
             return Either.left(pageables.getLeft());
         }
         pageable = pageables.get();
-        return Either.right(projectRepository.findAllByOrganisationId(organisationId, customerCode, parentCustomerCode, pageable).map(ProjectView::fromEntity).toList());
+        return Either.right(projectRepository.findAllByOrganisationId(organisationId, customerCode, name, parentCustomerCode, pageable).map(ProjectView::fromEntity).toList());
     }
 
     @Transactional

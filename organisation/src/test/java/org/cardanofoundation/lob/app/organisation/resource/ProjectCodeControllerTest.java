@@ -38,10 +38,10 @@ class ProjectCodeControllerTest {
     @Test
     void getAllProjects() {
         // Mock the service call
-        when(projectCodeService.getAllProjects("org123", null, null, Pageable.unpaged())).thenReturn(Either.right(List.of(mock(ProjectView.class))));
+        when(projectCodeService.getAllProjects("org123", null, null, null, Pageable.unpaged())).thenReturn(Either.right(List.of(mock(ProjectView.class))));
 
         // Call the controller method
-        ResponseEntity<List<ProjectView>> response = (ResponseEntity<List<ProjectView>>) projectCodeController.getAllProjects("org123", null, null, Pageable.unpaged());
+        ResponseEntity<List<ProjectView>> response = (ResponseEntity<List<ProjectView>>) projectCodeController.getAllProjects("org123", null, null, null, Pageable.unpaged());
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());

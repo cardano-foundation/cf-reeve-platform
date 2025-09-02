@@ -32,9 +32,10 @@ public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, 
             AND (:types IS NULL OR (t.subType IS NOT NULL AND t.subType.type IS NOT NULL AND t.subType.type.id IN :types))
             AND (:subTypes IS NULL OR (t.subType IS NOT NULL AND t.subType.id IN :subTypes))
             AND (:referenceCodes IS NULL OR t.eventRefCode IN :referenceCodes)
+            AND (:active IS NULL OR t.active = :active)
             """
     )
-    Page<ChartOfAccount> findAllByOrganisationIdFiltered(@Param("orgId") String orgId, @Param("customerCode") String customerCode, @Param("name") String name, @Param("currencies") List<String> currencies, @Param("counterPartyIds") List<String> counterPartyIds, @Param("types") List<String> types, @Param("subTypes") List<String> subTypes, @Param("referenceCodes") List<String> referenceCodes, Pageable pageable);
+    Page<ChartOfAccount> findAllByOrganisationIdFiltered(@Param("orgId") String orgId, @Param("customerCode") String customerCode, @Param("name") String name, @Param("currencies") List<String> currencies, @Param("counterPartyIds") List<String> counterPartyIds, @Param("types") List<String> types, @Param("subTypes") List<String> subTypes, @Param("referenceCodes") List<String> referenceCodes, @Param("active") Boolean active, Pageable pageable);
 
     @Query("SELECT t FROM ChartOfAccount t " +
             "WHERE t.Id.organisationId = :orgId AND t.Id.customerCode = :customerCode")

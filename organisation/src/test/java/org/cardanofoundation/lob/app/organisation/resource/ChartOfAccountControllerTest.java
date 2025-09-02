@@ -66,13 +66,15 @@ class ChartOfAccountControllerTest {
     void getChartOfAccounts_returnsAccounts() {
         String orgId = "org-1";
         List<ChartOfAccountView> accounts = List.of(mock(ChartOfAccountView.class));
-        when(chartOfAccountsService.getAllChartOfAccount(orgId, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(Either.right(accounts));
+        when(chartOfAccountsService.getAllChartOfAccount(orgId, null, null, null, null, null, null,
+                null, null, Pageable.unpaged())).thenReturn(Either.right(accounts));
 
-        ResponseEntity<?> response = controller.getChartOfAccounts(orgId,  null, null, null, null, null, null, null, Pageable.unpaged());
+        ResponseEntity<?> response = controller.getChartOfAccounts(orgId,  null, null, null, null, null, null, null, null, Pageable.unpaged());
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(accounts);
-        verify(chartOfAccountsService).getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, Pageable.unpaged());
+        verify(chartOfAccountsService).getAllChartOfAccount(orgId,  null, null, null, null, null,
+                null, null, null, Pageable.unpaged());
     }
 
     @Test

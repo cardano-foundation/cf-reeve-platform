@@ -126,7 +126,7 @@ public class OrganisationService {
                 organisation.getProvince(),
                 organisation.getCountryCode(),
                 costCenterService.getAllCostCenter(organisation.getId(), null, null, null, true, Pageable.unpaged()).get(),
-                projectService.getAllProjects(organisation.getId(), null, null, Pageable.unpaged()).get(),
+                projectService.getAllProjects(organisation.getId(), null, null, null, Pageable.unpaged()).get(),
                 currencyService.findAllByOrganisationId(organisation.getId())
                         .stream()
                         .map(organisationCurrency ->

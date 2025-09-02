@@ -73,13 +73,13 @@ public class ChartOfAccountsService {
 
 
 
-    public Either<Problem, List<ChartOfAccountView>> getAllChartOfAccount(String organisationId, String customerCode, String name, List<String> currencies, List<String> counterPartyIds, List<String> types, List<String> subTypes, List<String> referenceCodes, Pageable pageable) {
+    public Either<Problem, List<ChartOfAccountView>> getAllChartOfAccount(String organisationId, String customerCode, String name, List<String> currencies, List<String> counterPartyIds, List<String> types, List<String> subTypes, List<String> referenceCodes, Boolean active, Pageable pageable) {
         Either<Problem, Pageable> validateEntity = jpaSortFieldValidator.validateEntity(ChartOfAccount.class, pageable, CHART_OF_ACCOUNT_MAPPINGS);
         if(validateEntity.isLeft()) {
             return Either.left(validateEntity.left().get());
         }
         pageable = validateEntity.get();
-        return Either.right(chartOfAccountRepository.findAllByOrganisationIdFiltered(organisationId,customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, pageable).stream().map(ChartOfAccountView::createSuccess).toList());
+        return Either.right(chartOfAccountRepository.findAllByOrganisationIdFiltered(organisationId,customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, active, pageable).stream().map(ChartOfAccountView::createSuccess).toList());
     }
 
     @Transactional

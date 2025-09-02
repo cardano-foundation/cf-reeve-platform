@@ -159,7 +159,7 @@ class OrganisationServiceTest {
         org.setLogo("logo");
 
         when(costCenterService.getAllCostCenter(anyString(), eq(null), eq(null), eq(null), eq(true), eq(Pageable.unpaged()))).thenReturn(Either.right(List.of(mock(CostCenterView.class))));
-        when(projectCodeService.getAllProjects(anyString(), eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Either.right(List.of(mock(ProjectView.class))));
+        when(projectCodeService.getAllProjects(anyString(), eq(null), eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Either.right(List.of(mock(ProjectView.class))));
         when(currencyService.findAllByOrganisationId(anyString())).thenReturn(Set.of(new Currency()));
 
         OrganisationView organisationView = organisationService.getOrganisationView(org);
@@ -183,7 +183,7 @@ class OrganisationServiceTest {
         assertEquals(1, organisationView.getOrganisationCurrencies().size());
 
         verify(costCenterService).getAllCostCenter(anyString(), eq(null), eq(null), eq(null), eq(true), eq(Pageable.unpaged()));
-        verify(projectCodeService).getAllProjects(anyString(), eq(null), eq(null), eq(Pageable.unpaged()));
+        verify(projectCodeService).getAllProjects(anyString(), eq(null), eq(null), eq(null), eq(Pageable.unpaged()));
         verify(currencyService).findAllByOrganisationId(anyString());
         verifyNoMoreInteractions(costCenterService, projectCodeService, currencyService);
     }
