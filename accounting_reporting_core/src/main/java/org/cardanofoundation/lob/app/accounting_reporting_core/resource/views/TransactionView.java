@@ -36,6 +36,8 @@ public class TransactionView {
 
     private LedgerDispatchStatusView statistic = LedgerDispatchStatusView.PENDING;
 
+    private String ledgerDispatchStatusErrorReason;
+
     private TxValidationStatus validationStatus = TxValidationStatus.VALIDATED;
 
     private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;

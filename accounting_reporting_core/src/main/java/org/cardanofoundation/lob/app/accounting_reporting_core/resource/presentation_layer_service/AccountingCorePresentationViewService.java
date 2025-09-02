@@ -427,6 +427,7 @@ public class AccountingCorePresentationViewService {
                 dataSourceView,
                 transactionEntity.getOverallStatus(),
                 getTransactionDispatchStatus(transactionEntity),
+                transactionEntity.getLedgerDispatchStatusErrorReason(),
                 transactionEntity.getAutomatedValidationStatus(),
                 transactionEntity.getLedgerDispatchStatus(),
                 transactionEntity.getTransactionApproved(),

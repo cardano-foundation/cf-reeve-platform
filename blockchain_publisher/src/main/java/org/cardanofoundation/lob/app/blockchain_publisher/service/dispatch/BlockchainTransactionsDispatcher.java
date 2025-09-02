@@ -1,8 +1,10 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch;
 
 import static org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus.SUBMITTED;
+import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -21,6 +23,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.BlockchainException;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API1BlockchainTransactions;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Submission;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
@@ -58,7 +61,7 @@ public class BlockchainTransactionsDispatcher {
 
         for (Organisation organisation : organisationPublicApi.listAll()) {
             String organisationId = organisation.getId();
-            Set<TransactionEntity> transactionsBatch = transactionEntityRepositoryGateway.findAndLockTransactionsReadyToBeDispatched(organisationId, pullTransactionsBatchSize);
+            Set<TransactionEntity> transactionsBatch = transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched(organisationId, pullTransactionsBatchSize);
             Set<TransactionEntity> transactionToDispatch = dispatchingStrategy.apply(organisationId, transactionsBatch);
             // unlock other transactions
             HashSet<TransactionEntity> toUnlock = new HashSet<>(transactionsBatch);
@@ -73,17 +76,37 @@ public class BlockchainTransactionsDispatcher {
     }
 
     private void dispatchTransactionsBatch(String organisationId,
-                                          Set<TransactionEntity> transactionEntitiesBatch) {
+                                           Set<TransactionEntity> transactionEntitiesBatch) {
         log.info("Dispatching passedTransactions for organisation: {}", organisationId);
-
-        Optional<API1BlockchainTransactions> blockchainTransactionsM = createAndSendBlockchainTransactions(organisationId, transactionEntitiesBatch);
+        transactionEntityRepositoryGateway.lockTransactions(transactionEntitiesBatch);
+        Either<Problem, Optional<API1BlockchainTransactions>> blockchainTransactionsM = createAndSendBlockchainTransactions(organisationId, transactionEntitiesBatch);
 
         if (blockchainTransactionsM.isEmpty()) {
-            log.info("No more passedTransactions to dispatch for organisationId: {}", organisationId);
+            transactionEntitiesBatch.forEach(tx -> tx.setL1SubmissionData(Optional.ofNullable(
+                    L1SubmissionData.builder()
+                            .publishRetry(tx.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
+                            .publishStatusErrorReason(Objects.requireNonNull(blockchainTransactionsM.getLeft().getDetail()))
+                            .publishStatus(tx.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) >= 5L ? BlockchainPublishStatus.ERROR : BlockchainPublishStatus.STORED)
+                            .build()
+            )));
+            ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, transactionEntitiesBatch);
             return;
         }
 
-        API1BlockchainTransactions blockchainTransactions = blockchainTransactionsM.orElseThrow();
+        API1BlockchainTransactions blockchainTransactions = blockchainTransactionsM.get().orElse(null);
+
+        if (blockchainTransactionsM.get().isEmpty()) {
+            transactionEntitiesBatch.forEach(tx -> tx.setL1SubmissionData(Optional.ofNullable(
+                    L1SubmissionData.builder()
+                            .publishRetry(tx.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
+                            .publishStatusErrorReason(Objects.requireNonNull(blockchainTransactionsM.isLeft() ? blockchainTransactionsM.getLeft().getDetail() : "Empty response"))
+                            .publishStatus(tx.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) >= 5L ? BlockchainPublishStatus.ERROR : BlockchainPublishStatus.STORED)
+                            .build()
+            )));
+            ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, transactionEntitiesBatch);
+            return;
+        }
+
 
         int submittedTxCount = blockchainTransactions.submittedTransactions().size();
         int remainingTxCount = blockchainTransactions.remainingTransactions().size();
@@ -92,21 +115,21 @@ public class BlockchainTransactionsDispatcher {
         log.info("Submitted tx count:{}, remainingTxCount:{}", submittedTxCount, remainingTxCount);
     }
 
-    private Optional<API1BlockchainTransactions> createAndSendBlockchainTransactions(String organisationId,
-                                                                                     Set<TransactionEntity> transactions) {
+    private Either<Problem, Optional<API1BlockchainTransactions>> createAndSendBlockchainTransactions(String organisationId,
+                                                                                                      Set<TransactionEntity> transactions) {
         log.info("Processing passedTransactions for organisation:{}, remaining size:{}", organisationId, transactions.size());
 
         if (transactions.isEmpty()) {
             log.info("No more passedTransactions to dispatch for organisation:{}", organisationId);
 
-            return Optional.empty();
+            return Either.right(Optional.empty());
         }
 
         Either<Problem, Optional<API1BlockchainTransactions>> serialisedTxE = l1TransactionCreator.pullBlockchainTransaction(organisationId, transactions);
         if (serialisedTxE.isEmpty()) {
             log.warn("Error, there is more passedTransactions to dispatch for organisation:{}, actual issue:{}", organisationId, serialisedTxE.getLeft());
 
-            return Optional.empty();
+            return serialisedTxE;
         }
 
         Optional<API1BlockchainTransactions> serialisedTxM = serialisedTxE.get();
@@ -114,21 +137,31 @@ public class BlockchainTransactionsDispatcher {
         if (serialisedTxM.isEmpty()) {
             log.warn("No passedTransactions to dispatch for organisationId:{}", organisationId);
 
-            return Optional.empty();
+            return Either.right(serialisedTxM);
         }
 
         API1BlockchainTransactions serialisedTx = serialisedTxM.orElseThrow();
         try {
             sendTransactionOnChainAndUpdateDb(serialisedTx);
 
-            return Optional.of(serialisedTx);
+            return Either.right(Optional.of(serialisedTx));
         } catch (ApiException | BlockchainException e) {
             log.error("Error sending transaction on chain and / or updating db", e);
+            return Either.left(Problem.builder()
+                    .withTitle("ERROR_PUSHING_TRANSACTION")
+                    .withDetail(e.getMessage())
+                    .withStatus(INTERNAL_SERVER_ERROR)
+                    .build());
+
         } catch (Exception e) {
             log.error("Unexpected error while sending transaction on chain and / or updating db", e);
+            return Either.left(Problem.builder()
+                    .withTitle("ERROR_TRANSACTION_DISPATCHER")
+                    .withDetail(e.getMessage())
+                    .withStatus(INTERNAL_SERVER_ERROR)
+                    .build());
         }
 
-        return Optional.empty();
     }
 
     private void sendTransactionOnChainAndUpdateDb(API1BlockchainTransactions blockchainTransactions) throws ApiException, InterruptedException {

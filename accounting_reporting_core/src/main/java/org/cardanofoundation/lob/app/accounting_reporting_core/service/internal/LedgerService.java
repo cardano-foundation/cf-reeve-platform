@@ -61,7 +61,7 @@ public class LedgerService {
         for (TransactionEntity tx : transactionEntities) {
             TxStatusUpdate txStatusUpdate = statuses.get(tx.getId());
             tx.setLedgerDispatchStatus(txStatusUpdate.getStatus());
-
+            tx.setLedgerDispatchStatusErrorReason(txStatusUpdate.getLedgerDispatchStatusErrorReason());
             // TODO for now we only support one blockchain but this is open for adding more blockchains
             if (!txStatusUpdate.getBlockchainReceipts().isEmpty()) {
                 BlockchainReceipt firstBlockchainReceipt = txStatusUpdate.getBlockchainReceipts().stream().iterator().next();
@@ -92,6 +92,7 @@ public class LedgerService {
         for (ReportEntity report : reports) {
             ReportStatusUpdate reportsLedgerUpdatedEvent = reportStatusUpdateMap.get(report.getId());
             report.setLedgerDispatchStatus(reportsLedgerUpdatedEvent.getStatus());
+            report.setLedgerDispatchStatusErrorReason(reportsLedgerUpdatedEvent.getLedgerDispatchStatusErrorReason());
 
             // TODO for now we only support one blockchain but this is open for adding more blockchains
             if (!reportsLedgerUpdatedEvent.getBlockchainReceipts().isEmpty()) {

@@ -59,7 +59,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 @TestPropertySource(properties = "spring.main.allow-bean-definition-overriding=true")
 @EnableAutoConfiguration
 @ContextConfiguration(classes = TestContainerConfig.class)
-@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core","org.cardanofoundation.lob.app.organisation","org.cardanofoundation.lob.app.blockchain_reader","org.cardanofoundation.lob.app.support.security", "org.cardanofoundation.lob.app.accounting_reporting_core.job"})
+@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core", "org.cardanofoundation.lob.app.organisation", "org.cardanofoundation.lob.app.blockchain_reader", "org.cardanofoundation.lob.app.support.security", "org.cardanofoundation.lob.app.accounting_reporting_core.job"})
 class AccountingCoreEventHandlerDuplicateEventsTest {
 
     @Autowired
@@ -76,7 +76,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
     private TransactionReconcilationRepository transactionReconcilationRepository;
 
     @BeforeEach
-    void clearDatabase(@Autowired Flyway flyway){
+    void clearDatabase(@Autowired Flyway flyway) {
         flyway.clean();
         flyway.migrate();
     }
@@ -86,11 +86,11 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
         transactionBatchEntity.setId("batchId");
         transactionBatchEntity.setFilteringParameters(FilteringParameters.builder()
-                        .organisationId("testOrg")
-                        .from(LocalDate.now().minusWeeks(1))
-                        .to(LocalDate.now().plusWeeks(1))
-                        .accountingPeriodFrom(LocalDate.now().minusYears(1))
-                        .accountingPeriodTo(LocalDate.now().plusYears(1))
+                .organisationId("testOrg")
+                .from(LocalDate.now().minusWeeks(1))
+                .to(LocalDate.now().plusWeeks(1))
+                .accountingPeriodFrom(LocalDate.now().minusYears(1))
+                .accountingPeriodTo(LocalDate.now().plusYears(1))
                 .build());
         transactionBatchEntity.setExtractorType("NETSUITE");
         transactionBatchRepository.save(transactionBatchEntity);
@@ -111,7 +111,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
                 .metadata(EventMetadata.create("1.0", "testUser"))
                 .organisationId("testOrg")
                 // padding the transaction id to 64 characters to match the length of the id in the database
-                .statusUpdates(Set.of(new TxStatusUpdate(String.format("%-64s", transactionEntity.getId()), LedgerDispatchStatus.MARK_DISPATCH, Set.of())))
+                .statusUpdates(Set.of(new TxStatusUpdate(String.format("%-64s", transactionEntity.getId()), LedgerDispatchStatus.MARK_DISPATCH, null, Set.of())))
                 .build();
 
         // sending events twice to check if the status is updated correctly and no exceptions are thrown
@@ -133,7 +133,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         reportEntity.setOrganisation(Organisation.builder().id("testOrg").name("testOrg").countryCode("CH").currencyId("ISO_4217:CHF").taxIdNumber("taxIdNumber").build());
         reportEntity.setType(ReportType.INCOME_STATEMENT);
         reportEntity.setIntervalType(IntervalType.MONTH);
-        reportEntity.setYear((short)2021);
+        reportEntity.setYear((short) 2021);
         reportEntity.setDate(LocalDate.now());
         reportEntity.setMode(ReportMode.SYSTEM);
         reportEntity.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
@@ -143,7 +143,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
                 .metadata(EventMetadata.create("1.0", "testUser"))
                 .organisationId("testOrg")
                 // padding the transaction id to 64 characters to match the length of the id in the database
-                .statusUpdates(Set.of(new ReportStatusUpdate(String.format("%-64s", reportEntity.getReportId()), LedgerDispatchStatus.MARK_DISPATCH, Set.of())))
+                .statusUpdates(Set.of(new ReportStatusUpdate(String.format("%-64s", reportEntity.getReportId()), LedgerDispatchStatus.MARK_DISPATCH, null, Set.of())))
                 .build();
 
         // sending events twice to check if the status is updated correctly and no exceptions are thrown

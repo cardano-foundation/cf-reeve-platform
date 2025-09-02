@@ -61,6 +61,9 @@ public class ReportView {
     @Nullable
     private String blockChainHash;
 
+    @Nullable
+    private String ledgerDispatchStatusErrorReason;
+
     private Optional<Problem> error;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
@@ -177,6 +180,8 @@ public class ReportView {
         if (reportEntity.getLedgerDispatchReceipt().isPresent()) {
             reportResponseView.setBlockChainHash(reportEntity.getLedgerDispatchReceipt().get().getPrimaryBlockchainHash());
         }
+
+        reportResponseView.setLedgerDispatchStatusErrorReason(reportEntity.getLedgerDispatchStatusErrorReason());
         reportResponseView.setCanBePublish(reportEntity.getIsReadyToPublish());
         reportResponseView.setCanPublishError(reportEntity.getPublishError());
         reportResponseView.setVer(reportEntity.getVer());

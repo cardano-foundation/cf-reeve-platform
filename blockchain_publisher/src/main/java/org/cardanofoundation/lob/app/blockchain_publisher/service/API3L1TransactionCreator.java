@@ -89,7 +89,7 @@ public class API3L1TransactionCreator {
 
             if (!isValid) {
                 return Either.left(Problem.builder()
-                        .withTitle("INVALID_TRANSACTION_METADATA")
+                        .withTitle("INVALID_REPORT_METADATA")
                         .withDetail("Metadata is not valid according to the transaction schema, we will not create a transaction!")
                         .withStatus(INTERNAL_SERVER_ERROR)
                         .build()
@@ -109,7 +109,7 @@ public class API3L1TransactionCreator {
             log.error("Error serialising metadata to cbor", e);
             return Either.left(Problem.builder()
                     .withTitle("ERROR_SERIALISING_METADATA")
-                    .withDetail("Error serialising metadata to cbor")
+                    .withDetail(e.getMessage())
                     .withStatus(INTERNAL_SERVER_ERROR)
                     .build()
             );
