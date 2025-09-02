@@ -110,9 +110,10 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
              r.organisation.id = :organisationId
              AND r.ledgerDispatchStatus = 'NOT_DISPATCHED'
              AND
-                (r.intervalType = 'YEAR' AND r.year >= :year)
+                (r.intervalType = 'YEAR' AND r.year >= :year
                 OR (r.intervalType = 'QUARTER' AND ((r.year = :year AND r.period >= :quarter) OR (r.year > :year)))
                 OR (r.intervalType = 'MONTH' AND ((r.year = :year AND r.period >= :month) OR (r.year > :year)))
+                )
             """)
     Set<ReportEntity> findNotPublishedByOrganisationIdAndContainingDate(
             @Param("organisationId") String organisationId, @Param("year") int year,
