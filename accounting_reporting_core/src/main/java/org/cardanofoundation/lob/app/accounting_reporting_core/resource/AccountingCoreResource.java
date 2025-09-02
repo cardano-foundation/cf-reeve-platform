@@ -362,7 +362,17 @@ public class AccountingCoreResource {
         if (Optional.ofNullable(pageable).isEmpty()) {
             pageable = Pageable.unpaged();
         }
+        if(Optional.ofNullable(batchFilterRequest.getDateFrom()).isPresent() && Optional.ofNullable(batchFilterRequest.getDateTo()).isPresent() && batchFilterRequest.getDateFrom().isAfter(batchFilterRequest.getDateTo())) {
+            ThrowableProblem issue = Problem.builder()
+                    .withTitle("INVALID_DATE_RANGE")
+                    .withDetail("The 'dateFrom' must be before 'dateTo'")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build();
 
+            return ResponseEntity
+                    .status(Objects.requireNonNull(issue.getStatus()).getStatusCode())
+                    .body(issue);
+        }
         Either<Problem, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable, batchFilterRequest);
         if (txBatchEO.isLeft()) {
             Problem problem = txBatchEO.getLeft();

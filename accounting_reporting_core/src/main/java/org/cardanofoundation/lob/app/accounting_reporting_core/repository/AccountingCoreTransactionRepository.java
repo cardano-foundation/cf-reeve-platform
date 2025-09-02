@@ -76,22 +76,22 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         WHERE
             i2.status = 'OK'
             AND ((:documentNumber IS NOT NULL AND i2.document.num NOT LIKE %:documentNumber%)
-            OR (:currencyCustomerCodes IS NOT NULL AND i2.document.currency.customerCode NOT IN :currencyCustomerCodes)
+            OR (:currencyCustomerCodes IS NOT NULL AND (i2.document.currency.customerCode is NULL OR i2.document.currency.customerCode NOT IN :currencyCustomerCodes))
             OR (:minFCY IS NOT NULL AND i2.amountFcy < :minFCY)
             OR (:maxFCY IS NOT NULL AND i2.amountFcy > :maxFCY)
             OR (:minLCY IS NOT NULL AND i2.amountLcy < :minLCY)
             OR (:maxLCY IS NOT NULL AND i2.amountLcy > :maxLCY)
-            OR (:vatCustomerCodes IS NOT NULL AND i2.document.vat.customerCode NOT IN :vatCustomerCodes)
-            OR (:costCenterCustomerCodes IS NOT NULL AND i2.costCenter.customerCode NOT IN :costCenterCustomerCodes)
-            OR (:counterPartyCustomerCodes IS NOT NULL AND i2.document.counterparty.customerCode NOT IN :counterPartyCustomerCodes)
-            OR (:counterPartyTypes IS NOT NULL AND i2.document.counterparty.type NOT IN :counterPartyTypes)
-            OR (:debitAccountCodes IS NOT NULL AND i2.accountDebit.code NOT IN :debitAccountCodes)
-            OR (:creditAccountCodes IS NOT NULL AND i2.accountCredit.code NOT IN :creditAccountCodes)
-            OR (:eventCodes IS NOT NULL AND i2.accountEvent.code NOT IN :eventCodes)
-            OR (:parentCostCenterCustomerCodes IS NOT NULL AND EXISTS (
+            OR (:vatCustomerCodes IS NOT NULL AND (i2.document.vat.customerCode IS NULL OR i2.document.vat.customerCode NOT IN :vatCustomerCodes))
+            OR (:costCenterCustomerCodes IS NOT NULL AND (i2.costCenter.customerCode IS NULL OR i2.costCenter.customerCode NOT IN :costCenterCustomerCodes))
+            OR (:counterPartyCustomerCodes IS NOT NULL AND (i2.document.counterparty.customerCode IS NULL OR i2.document.counterparty.customerCode NOT IN :counterPartyCustomerCodes))
+            OR (:counterPartyTypes IS NOT NULL AND (i2.document.counterparty.type IS NULL OR i2.document.counterparty.type NOT IN :counterPartyTypes))
+            OR (:debitAccountCodes IS NOT NULL AND (i2.accountDebit.code IS NULL OR i2.accountDebit.code NOT IN :debitAccountCodes))
+            OR (:creditAccountCodes IS NOT NULL AND (i2.accountCredit.code IS NULL OR i2.accountCredit.code NOT IN :creditAccountCodes))
+            OR (:eventCodes IS NOT NULL AND (i2.accountEvent.code IS NULL OR i2.accountEvent.code NOT IN :eventCodes))
+            OR (:parentCostCenterCustomerCodes IS NOT NULL AND (i2.costCenter.customerCode IS NULL OR NOT EXISTS (
                 SELECT 1 FROM CostCenter cc
                 WHERE cc.id.customerCode = i2.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostCenterCustomerCodes)
-            ))
+            )))
     )
             """)
     Page<TransactionEntity> findAllByBatchId(
