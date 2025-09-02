@@ -109,6 +109,7 @@ public class TransactionBatchService {
     public void failTransactionBatch(String batchId,
                                      UserExtractionParameters userExtractionParameters,
                                      Optional<SystemExtractionParameters> systemExtractionParameters,
+                                     ExtractorType extractorType,
                                      FatalError error) {
         Optional<TransactionBatchEntity> txBatchM = transactionBatchRepositoryGateway.findById(batchId);
 
@@ -122,6 +123,7 @@ public class TransactionBatchService {
         }
 
         txBatch.setStatus(FAILED);
+        txBatch.setExtractorType(extractorType.name());
         txBatch.setDetails(Details.builder()
                 .code(error.getCode().name())
                 .subCode(error.getSubCode())
