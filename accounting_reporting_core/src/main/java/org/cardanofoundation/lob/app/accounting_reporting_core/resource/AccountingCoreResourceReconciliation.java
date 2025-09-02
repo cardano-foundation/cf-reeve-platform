@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -70,12 +72,9 @@ public class AccountingCoreResourceReconciliation {
     @PostMapping(value = "/transactions-reconcile", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ReconciliationResponseView> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
-                                            @RequestParam(name = "page", defaultValue = "0") int page,
-                                            @RequestParam(name = "limit", defaultValue = "10") int limit) {
-        body.setLimit(limit);
-        body.setPage(page);
+                                            @PageableDefault(size = Integer.MAX_VALUE) Pageable page) {
 
-        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body);
+        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, page);
 
         return ResponseEntity.ok().body(reconciliationResponseView);
     }

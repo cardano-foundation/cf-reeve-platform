@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
+import jakarta.persistence.Tuple;
+
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
@@ -32,8 +34,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationViolation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
@@ -65,23 +69,27 @@ public class AccountingCorePresentationViewService {
     private final TransactionReconcilationRepository transactionReconcilationRepository;
     private final CostCenterRepository costCenterRepository;
     private final ProjectRepository projectRepository;
-    private final OrganisationPublicApiIF organisationPublicApiIF;
     private final JpaSortFieldValidator jpaSortFieldValidator;
     private final TransactionItemRepository transactionItemRepository;
+    private final ReconcilationRepository reconcilationRepository;
 
     /**
      * TODO: waiting for refactoring the layer to remove this
      */
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
-    public ReconciliationResponseView allReconciliationTransaction(ReconciliationFilterRequest body) {
+    public ReconciliationResponseView allReconciliationTransaction(ReconciliationFilterRequest body, Pageable pageable) {
         Object transactionsStatistic = accountingCoreTransactionRepository.findCalcReconciliationStatistic();
         Optional<ReconcilationEntity> latestReconcilation = transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
         Set<TransactionReconciliationTransactionsView> transactions;
         long count;
+        Set<ReconcilationRejectionCode> rejectionCodes = body.getReconciliationRejectionCode().stream().map(
+                    ReconciliationRejectionCodeRequest::toReconcilationRejectionCode).collect(Collectors.toSet());
         if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
             Set<Object> txDuplicated = new HashSet<>();
-            transactions = accountingCoreTransactionRepository.findAllReconciliationSpecial(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getLimit(), body.getPage()).stream()
+            Page<Object[]> allReconciliationSpecial = reconcilationRepository.findAllReconciliationSpecial(rejectionCodes, body.getDateFrom().orElse(null), body.getDateTo().orElse(null), pageable);
+            count = allReconciliationSpecial.getTotalElements();
+            transactions = allReconciliationSpecial.stream()
                     .filter(o -> {
                         if (o[0] instanceof TransactionEntity transactionEntity && !txDuplicated.contains((transactionEntity).getId())) {
                             txDuplicated.add((transactionEntity).getId());
@@ -98,12 +106,14 @@ public class AccountingCorePresentationViewService {
                     .map(this::getReconciliationTransactionsSelector)
                     .sorted(Comparator.comparing(TransactionReconciliationTransactionsView::getId))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            count = accountingCoreTransactionRepository.findAllReconciliationSpecialCount(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getLimit(), body.getPage()).size();
+            // count = accountingCoreTransactionRepository.findAllReconciliationSpecialCount(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), pageable).size();
         } else {
-            transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getSource(), body.getLimit(), body.getPage()).stream()
-                    .map(this::getTransactionReconciliationView)
-                    .collect(toSet());
-            count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getSource(), body.getLimit(), body.getPage()).size();
+            Page<TransactionEntity> pagedTransactions = reconcilationRepository.findAllReconcilation(rejectionCodes, body.getSource(), pageable);
+            count = pagedTransactions.getTotalElements();
+            // transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getSource(), pageable).stream()
+            //         .map(this::getTransactionReconciliationView)
+            //         .collect(toSet());
+            // count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getSource(), pageable).size();
         }
         return new ReconciliationResponseView(
                 count,

@@ -42,10 +42,8 @@ public class ReconciliationFilterRequest extends BaseRequest {
     @ArraySchema(arraySchema = @Schema(example = "[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\"]"))
     private Set<ReconciliationRejectionCodeRequest> reconciliationRejectionCode = new HashSet<>();
 
-    @JsonIgnore
-    private Integer limit;
 
-    @JsonIgnore
-    private Integer page;
+    @Schema(example = "2014-01-01")
+    private Optional<LocalDate> reconcilationDate = Optional.empty();
 
 }

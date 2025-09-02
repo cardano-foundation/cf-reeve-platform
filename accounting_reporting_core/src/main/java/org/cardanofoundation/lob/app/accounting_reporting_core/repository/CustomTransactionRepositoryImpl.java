@@ -16,7 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.PageRequest;
-
+import org.springframework.data.domain.Pageable;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
@@ -36,8 +36,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     public List<TransactionEntity> findAllByStatus(String organisationId,
                                                    List<TxValidationStatus> validationStatuses,
                                                    List<TransactionType> transactionTypes,
-                                                   PageRequest pageRequest) {
-        // TODO what about order by entry date or transaction internal number, etc?
+                                                   Pageable pageable) {
         CriteriaBuilder builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
 
@@ -56,25 +55,27 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Integer limit, Integer page) {
+    public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Pageable pageable) {
         String jpql = reconciliationQuery(rejectionCodes, getDateFrom, getDateTo);
-
+        
         Query reconciliationQuery = em.createQuery(jpql);
 
         getDateFrom.ifPresent(value -> reconciliationQuery.setParameter("startDate", value));
         getDateTo.ifPresent(value -> reconciliationQuery.setParameter("endDate", value));
 
-        reconciliationQuery.setMaxResults(limit);
+        reconciliationQuery.setMaxResults(pageable.getPageSize());
 
-        if (null != page && 0 < page) {
-            reconciliationQuery.setFirstResult(page * limit);
+        if (null != pageable && 0 < pageable.getPageNumber()) {
+            reconciliationQuery.setFirstResult(pageable.getPageNumber() * pageable.getPageSize());
         }
+
+        
 
         return reconciliationQuery.getResultList();
     }
 
     @Override
-    public List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Integer limit, Integer page) {
+    public List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Pageable pageable) {
         String jpql = "SELECT count(rv.transactionId) " +
                 "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
                 "JOIN r.violations rv " +
@@ -127,7 +128,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<TransactionEntity> findAllReconciliation(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Integer limit, Integer page) {
+    public List<TransactionEntity> findAllReconciliation(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Pageable pageable) {
         switch (filter) {
             case RECONCILED -> {
                 CriteriaBuilder builder = em.getCriteriaBuilder();
@@ -146,9 +147,9 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 });
                 criteriaQuery.orderBy(builder.desc(rootEntry.get("entryDate")));
                 TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
-                theQuery.setMaxResults(limit);
-                if (null != page && 0 < page) {
-                    theQuery.setFirstResult(page * limit);
+                theQuery.setMaxResults(pageable.getPageSize());
+                if (null != pageable && 0 < pageable.getPageNumber()) {
+                    theQuery.setFirstResult(pageable.getPageNumber() * pageable.getPageSize());
                 }
                 return theQuery.getResultList();
             }
@@ -172,7 +173,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     }
 
     @Override
-    public List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Integer limit, Integer page) {
+    public List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Pageable pageable) {
         CriteriaBuilder builder = em.getCriteriaBuilder();
         CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
         Root<TransactionEntity> rootEntry = criteriaQuery.from(TransactionEntity.class);
@@ -304,12 +305,10 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
 
             if (rejectionCodes.stream().anyMatch(reconciliationRejectionCodeRequest -> reconciliationRejectionCodeRequest.equals(ReconciliationRejectionCodeRequest.NEW_VERSION_NOT_PUBLISHED))) {
                 condition.add(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
-                //where += "AND (rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' AND tr.ledgerDispatchApproved IS FALSE ) ";
             }
 
             if (rejectionCodes.stream().anyMatch(reconciliationRejectionCodeRequest -> reconciliationRejectionCodeRequest.equals(ReconciliationRejectionCodeRequest.NEW_VERSION))) {
                 condition.add(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
-                //where += "AND (rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' AND tr.ledgerDispatchApproved IS TRUE ) ";
             }
             where += " AND rv.rejectionCode IN (%s) ".formatted(condition.stream().map(code -> "'" + code.name() + "'").collect(Collectors.joining(",")));
         }
@@ -321,7 +320,6 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
             where += " AND tr.entryDate < :endDate ";
         }
         where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.rejectionCode, rv.sourceDiff, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ORDER BY rv.transactionEntryDate ";
-
         return jpql + where;
     }
 

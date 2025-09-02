@@ -20,4 +20,12 @@ public enum ReconciliationRejectionCodeRequest {
         };
     }
 
-}
+    public static ReconcilationRejectionCode toReconcilationRejectionCode(ReconciliationRejectionCodeRequest codeRequest) {
+        return switch (codeRequest) {
+            case MISSING_IN_ERP -> ReconcilationRejectionCode.TX_NOT_IN_ERP;
+            case IN_PROCESSING -> ReconcilationRejectionCode.SINK_RECONCILATION_FAIL;
+            case NEW_IN_ERP -> ReconcilationRejectionCode.TX_NOT_IN_LOB;
+            case NEW_VERSION_NOT_PUBLISHED -> ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL;
+            case NEW_VERSION -> ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL;
+        };
+    }
