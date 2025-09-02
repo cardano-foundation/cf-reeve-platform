@@ -66,6 +66,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     WHERE b.id = :batchId
     AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
     AND (:types IS NULL OR t.transactionType IN :types)
+    AND (:internalTransactionNumber IS NULL OR t.internalTransactionNumber LIKE %:internalTransactionNumber%)
     AND (:minTotalLcy IS NULL OR t.totalAmountLcy >= :minTotalLcy)
     AND (:maxTotalLcy IS NULL OR t.totalAmountLcy <= :maxTotalLcy)
     AND t.entryDate >= COALESCE(:dateFrom, t.entryDate)
@@ -74,7 +75,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         SELECT 1 FROM t.items i2
         WHERE
             i2.status = 'OK'
-            AND ((:documentNumbers IS NOT NULL AND i2.document.num NOT IN :documentNumbers)
+            AND ((:documentNumber IS NOT NULL AND i2.document.num NOT LIKE %:documentNumber%)
             OR (:currencyCustomerCodes IS NOT NULL AND i2.document.currency.customerCode NOT IN :currencyCustomerCodes)
             OR (:minFCY IS NOT NULL AND i2.amountFcy < :minFCY)
             OR (:maxFCY IS NOT NULL AND i2.amountFcy > :maxFCY)
@@ -96,8 +97,9 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     Page<TransactionEntity> findAllByBatchId(
             @Param("batchId") String batchId,
             @Param("txStatus") List<TransactionProcessingStatus> txStatus,
+            @Param("internalTransactionNumber") String internalTransactionNumber,
             @Param("types") List<TransactionType> types,
-            @Param("documentNumbers") List<String> documentNumbers,
+            @Param("documentNumber") String documentNumber,
             @Param("currencyCustomerCodes") List<String> currencyCustomerCodes,
             @Param("minFCY") BigDecimal minFCY,
             @Param("maxFCY") BigDecimal maxFCY,

@@ -17,8 +17,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 @NoArgsConstructor
 public class BatchFilterRequest {
 
+    private String internalTransactionNumber;
     private List<TransactionType> transactionTypes;
-    private List<String> documentNumbers;
+    private String documentNumber;
     private List<String> currencyCustomerCodes;
     private BigDecimal minFCY;
     private BigDecimal maxFCY;

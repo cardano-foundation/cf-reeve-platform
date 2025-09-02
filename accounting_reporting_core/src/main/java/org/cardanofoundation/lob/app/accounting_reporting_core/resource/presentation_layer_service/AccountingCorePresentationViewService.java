@@ -307,8 +307,9 @@ public class AccountingCorePresentationViewService {
 
     private Page<TransactionEntity> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable, BatchFilterRequest batchFilterRequest) {
         return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status,
+                        batchFilterRequest.getInternalTransactionNumber(),
                         batchFilterRequest.getTransactionTypes(),
-                        batchFilterRequest.getDocumentNumbers(),
+                        batchFilterRequest.getDocumentNumber(),
                         batchFilterRequest.getCurrencyCustomerCodes(),
                         batchFilterRequest.getMinFCY(),
                         batchFilterRequest.getMaxFCY(),
