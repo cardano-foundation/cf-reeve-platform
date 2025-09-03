@@ -32,7 +32,7 @@ import org.cardanofoundation.lob.app.organisation.repository.AccountEventReposit
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
-import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @Slf4j
 @RequiredArgsConstructor

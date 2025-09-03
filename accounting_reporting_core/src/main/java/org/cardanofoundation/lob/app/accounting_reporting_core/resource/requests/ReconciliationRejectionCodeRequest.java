@@ -29,3 +29,4 @@ public enum ReconciliationRejectionCodeRequest {
             case NEW_VERSION -> ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL;
         };
     }
+}

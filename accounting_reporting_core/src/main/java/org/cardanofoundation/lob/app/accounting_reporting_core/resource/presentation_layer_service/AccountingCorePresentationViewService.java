@@ -24,8 +24,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
-import jakarta.persistence.Tuple;
-
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
@@ -46,12 +44,11 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
-import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -72,7 +69,6 @@ public class AccountingCorePresentationViewService {
     private final JpaSortFieldValidator jpaSortFieldValidator;
     private final TransactionItemRepository transactionItemRepository;
     private final ReconcilationRepository reconcilationRepository;
-
     /**
      * TODO: waiting for refactoring the layer to remove this
      */
@@ -86,34 +82,25 @@ public class AccountingCorePresentationViewService {
         Set<ReconcilationRejectionCode> rejectionCodes = body.getReconciliationRejectionCode().stream().map(
                     ReconciliationRejectionCodeRequest::toReconcilationRejectionCode).collect(Collectors.toSet());
         if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
-            Set<Object> txDuplicated = new HashSet<>();
-            Page<Object[]> allReconciliationSpecial = reconcilationRepository.findAllReconciliationSpecial(rejectionCodes, body.getDateFrom().orElse(null), body.getDateTo().orElse(null), pageable);
+
+            Page<Object[]> allReconciliationSpecial = reconcilationRepository.findAllReconciliationSpecial(rejectionCodes,
+                                                                                                    body.getDateFrom().orElse(null),
+                                                                                                    body.getDateTo().orElse(null),
+                                                                                                    body.getSource().orElse(null),
+                                                                                                    body.getTransactionTypes(),
+                                                                                                    body.getTransactionId(),
+                                                                                                    pageable);
             count = allReconciliationSpecial.getTotalElements();
             transactions = allReconciliationSpecial.stream()
-                    .filter(o -> {
-                        if (o[0] instanceof TransactionEntity transactionEntity && !txDuplicated.contains((transactionEntity).getId())) {
-                            txDuplicated.add((transactionEntity).getId());
-                            return true;
-                        }
-
-                        if (o[1] instanceof ReconcilationViolation reconcilationViolation && !txDuplicated.contains((reconcilationViolation).getTransactionId())) {
-                            txDuplicated.add((reconcilationViolation).getTransactionId());
-                            return true;
-                        }
-
-                        return false;
-                    })
                     .map(this::getReconciliationTransactionsSelector)
                     .sorted(Comparator.comparing(TransactionReconciliationTransactionsView::getId))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            // count = accountingCoreTransactionRepository.findAllReconciliationSpecialCount(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), pageable).size();
         } else {
-            Page<TransactionEntity> pagedTransactions = reconcilationRepository.findAllReconcilation(rejectionCodes, body.getSource(), pageable);
+            Page<TransactionEntity> pagedTransactions = reconcilationRepository.findAllReconcilation(body.getFilter().name(), rejectionCodes, body.getSource(), pageable);
             count = pagedTransactions.getTotalElements();
-            // transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getSource(), pageable).stream()
-            //         .map(this::getTransactionReconciliationView)
-            //         .collect(toSet());
-            // count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getSource(), pageable).size();
+            transactions = pagedTransactions.stream()
+                    .map(this::getTransactionReconciliationView)
+                    .collect(toSet());
         }
         return new ReconciliationResponseView(
                 count,
@@ -144,10 +131,11 @@ public class AccountingCorePresentationViewService {
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Either<Problem, Optional<BatchView>> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page, BatchFilterRequest batchFilterRequest) {
+    public Either<Problem, Pageable> convertPageable(Pageable page, Map<String, String> fieldMappings) {
         if (page.getSort().isSorted()) {
             Optional<Sort.Order> notSortableProperty = page.getSort().get().filter(order -> {
-                String property = Optional.ofNullable(TRANSACTION_ENTITY_FIELD_MAPPINGS.get(order.getProperty())).orElse(order.getProperty());
+                String property = Optional.ofNullable(fieldMappings.get(order.getProperty()))
+                        .orElse(order.getProperty());
 
                 return !jpaSortFieldValidator.isSortable(TransactionEntity.class, property);
 
@@ -158,11 +146,21 @@ public class AccountingCorePresentationViewService {
                         .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
                         .build());
             }
-            page = PageRequest.of(page.getPageNumber(), page.getPageSize(),
+            return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
                     Sort.by(page.getSort().get().map(order -> new Sort.Order(order.getDirection(),
-                    Optional.ofNullable(TRANSACTION_ENTITY_FIELD_MAPPINGS.get(order.getProperty())).orElse(order.getProperty()))).toList()));
+                            Optional.ofNullable(fieldMappings.get(order.getProperty()))
+                                    .orElse(order.getProperty())))
+                            .toList())));
         }
-        Pageable finalPage = page;
+        return Either.right(page);
+    }
+
+    public Either<Problem, Optional<BatchView>> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page, BatchFilterRequest batchFilterRequest) {
+        Either<Problem, Pageable> pageableEither = convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS);
+        if (pageableEither.isLeft()) {
+            return Either.left(pageableEither.getLeft());
+        }
+        Pageable finalPage = pageableEither.get();
         return Either.right(transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
                     Page<TransactionEntity> transactions = this.getTransaction(transactionBatchEntity, txStatus, finalPage, batchFilterRequest);
 

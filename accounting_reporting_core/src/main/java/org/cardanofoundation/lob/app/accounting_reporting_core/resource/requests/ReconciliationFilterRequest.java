@@ -13,10 +13,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
@@ -43,7 +43,11 @@ public class ReconciliationFilterRequest extends BaseRequest {
     private Set<ReconciliationRejectionCodeRequest> reconciliationRejectionCode = new HashSet<>();
 
 
-    @Schema(example = "2014-01-01")
-    private Optional<LocalDate> reconcilationDate = Optional.empty();
+    @ArraySchema(arraySchema = @Schema(example ="[\"Journal\"]"))
+    private Set<TransactionType> transactionTypes = new HashSet<>();
+
+    private String transactionId;
+
+
 
 }

@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
 import io.vavr.control.Either;
@@ -85,11 +86,11 @@ class AccountingCoreResourceReconcilationTest {
     @Test
     void testReconcileStart() {
         ReconciliationResponseView responseView = new ReconciliationResponseView(5L, Optional.of(LocalDate.now()), Optional.of(LocalDate.now()), Optional.of(LocalDate.now()), null, null);
-        when(accountingCorePresentationService.allReconciliationTransaction(any(ReconciliationFilterRequest.class)))
+        when(accountingCorePresentationService.allReconciliationTransaction(any(ReconciliationFilterRequest.class), any(Pageable.class)))
                 .thenReturn(responseView);
 
         ReconciliationFilterRequest request = mock(ReconciliationFilterRequest.class);
-        ResponseEntity<ReconciliationResponseView> response = accountingCoreResourceReconciliation.reconcileStart(request, 0, 10);
+        ResponseEntity<ReconciliationResponseView> response = accountingCoreResourceReconciliation.reconcileStart(request, Pageable.unpaged());
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertEquals(responseView, response.getBody());
     }

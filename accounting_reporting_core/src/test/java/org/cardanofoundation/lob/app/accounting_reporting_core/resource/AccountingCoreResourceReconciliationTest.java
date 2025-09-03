@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.zalando.problem.Status.BAD_REQUEST;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
 import io.vavr.control.Either;
@@ -62,10 +63,10 @@ class AccountingCoreResourceReconciliationTest {
 
     @Test
     void testReconcileStart() {
-        when(accountingCorePresentationViewService.allReconciliationTransaction(any())).thenReturn(null);
-        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), 0, 10);
+        when(accountingCorePresentationViewService.allReconciliationTransaction(any(), any())).thenReturn(null);
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), Pageable.unpaged());
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
-        verify(accountingCorePresentationViewService).allReconciliationTransaction(any());
+        verify(accountingCorePresentationViewService).allReconciliationTransaction(any(), any());
         verifyNoMoreInteractions(accountingCorePresentationViewService);
         verifyNoInteractions(accountingCoreService);
     }

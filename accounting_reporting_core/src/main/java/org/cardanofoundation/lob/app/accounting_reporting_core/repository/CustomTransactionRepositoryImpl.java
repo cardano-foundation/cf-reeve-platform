@@ -15,8 +15,8 @@ import jakarta.persistence.criteria.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
@@ -57,7 +57,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
     @Override
     public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Pageable pageable) {
         String jpql = reconciliationQuery(rejectionCodes, getDateFrom, getDateTo);
-        
+
         Query reconciliationQuery = em.createQuery(jpql);
 
         getDateFrom.ifPresent(value -> reconciliationQuery.setParameter("startDate", value));
@@ -69,7 +69,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
             reconciliationQuery.setFirstResult(pageable.getPageNumber() * pageable.getPageSize());
         }
 
-        
+
 
         return reconciliationQuery.getResultList();
     }
@@ -161,9 +161,9 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 criteriaQuery.select(rootEntry);
                 criteriaQuery.where(builder.isNull(rootEntry.get("reconcilation").get("source")));
                 TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
-                theQuery.setMaxResults(limit);
-                if (null != page && 0 < page) {
-                    theQuery.setFirstResult(page * limit);
+                theQuery.setMaxResults(pageable.getPageSize());
+                if (null != pageable && 0 < pageable.getPageNumber()) {
+                    theQuery.setFirstResult(pageable.getPageNumber() * pageable.getPageSize());
                 }
                 return theQuery.getResultList();
             }

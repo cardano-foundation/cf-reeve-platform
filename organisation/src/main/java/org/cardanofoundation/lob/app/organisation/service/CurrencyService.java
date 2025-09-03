@@ -30,7 +30,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
-import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @RequiredArgsConstructor
 @Slf4j

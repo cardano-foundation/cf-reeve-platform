@@ -23,6 +23,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.vavr.control.Either;
+import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
@@ -31,6 +33,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconcileResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -71,10 +74,14 @@ public class AccountingCoreResourceReconciliation {
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @PostMapping(value = "/transactions-reconcile", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ReconciliationResponseView> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
-                                            @PageableDefault(size = Integer.MAX_VALUE) Pageable page) {
-
-        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, page);
+    public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
+                                            @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        Either<Problem, Pageable> pageableEither = accountingCorePresentationService.convertPageable(pageable,
+                        SortFieldMappings.RECONCILATION_FIELD_MAPPINGS);
+        if (pageableEither.isLeft()) {
+            return ResponseEntity.badRequest().body(pageableEither.getLeft());
+        }
+        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, pageableEither.get());
 
         return ResponseEntity.ok().body(reconciliationResponseView);
     }

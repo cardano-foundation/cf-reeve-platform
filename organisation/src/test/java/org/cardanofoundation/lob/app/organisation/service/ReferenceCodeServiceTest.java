@@ -30,7 +30,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
-import org.cardanofoundation.lob.app.organisation.util.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class ReferenceCodeServiceTest {
