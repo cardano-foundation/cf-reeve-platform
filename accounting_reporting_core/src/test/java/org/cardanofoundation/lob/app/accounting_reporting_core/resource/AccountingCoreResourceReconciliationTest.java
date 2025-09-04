@@ -64,6 +64,7 @@ class AccountingCoreResourceReconciliationTest {
     @Test
     void testReconcileStart() {
         when(accountingCorePresentationViewService.allReconciliationTransaction(any(), any())).thenReturn(null);
+        when(accountingCorePresentationViewService.convertPageable(any(Pageable.class), any())).thenReturn(Either.right(Pageable.unpaged()));
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), Pageable.unpaged());
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
         verify(accountingCorePresentationViewService).allReconciliationTransaction(any(), any());

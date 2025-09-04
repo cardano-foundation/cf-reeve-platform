@@ -16,8 +16,10 @@ public class SortFieldMappings {
     );
 
     public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS = Map.of(
-        "finalStatus", "finalStatus",
-        "source", "source",
-        "sink", "sink"
+        "dataSource", "extractorType",
+        "status", "overallStatus",
+        "amountTotalLcy", "totalAmountLcy",
+        "reconciliationSource", "reconcilation.source",
+        "reconcilationSink", "reconcilation.sink"
     );
 }

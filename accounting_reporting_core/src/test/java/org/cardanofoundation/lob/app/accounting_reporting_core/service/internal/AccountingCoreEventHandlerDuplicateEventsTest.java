@@ -59,7 +59,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 @TestPropertySource(properties = "spring.main.allow-bean-definition-overriding=true")
 @EnableAutoConfiguration
 @ContextConfiguration(classes = TestContainerConfig.class)
-@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core", "org.cardanofoundation.lob.app.organisation", "org.cardanofoundation.lob.app.blockchain_reader", "org.cardanofoundation.lob.app.support.security", "org.cardanofoundation.lob.app.accounting_reporting_core.job"})
+@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core", "org.cardanofoundation.lob.app.organisation", "org.cardanofoundation.lob.app.blockchain_reader", "org.cardanofoundation.lob.app.support.security", "org.cardanofoundation.lob.app.accounting_reporting_core.job", "org.cardanofoundation.lob.app.support.database"})
 class AccountingCoreEventHandlerDuplicateEventsTest {
 
     @Autowired

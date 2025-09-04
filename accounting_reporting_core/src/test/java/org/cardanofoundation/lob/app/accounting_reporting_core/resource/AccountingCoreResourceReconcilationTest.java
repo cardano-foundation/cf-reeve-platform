@@ -88,9 +88,10 @@ class AccountingCoreResourceReconcilationTest {
         ReconciliationResponseView responseView = new ReconciliationResponseView(5L, Optional.of(LocalDate.now()), Optional.of(LocalDate.now()), Optional.of(LocalDate.now()), null, null);
         when(accountingCorePresentationService.allReconciliationTransaction(any(ReconciliationFilterRequest.class), any(Pageable.class)))
                 .thenReturn(responseView);
+        when(accountingCorePresentationService.convertPageable(any(Pageable.class), any())).thenReturn(Either.right(Pageable.unpaged()));
 
         ReconciliationFilterRequest request = mock(ReconciliationFilterRequest.class);
-        ResponseEntity<ReconciliationResponseView> response = accountingCoreResourceReconciliation.reconcileStart(request, Pageable.unpaged());
+        ResponseEntity<?> response = accountingCoreResourceReconciliation.reconcileStart(request, Pageable.unpaged());
         Assertions.assertEquals(200, response.getStatusCode().value());
         Assertions.assertEquals(responseView, response.getBody());
     }
