@@ -47,8 +47,9 @@ public class NetOffCreditDebitTaskItem implements PipelineTaskItem {
             itemsDebit.forEach(item -> {
 
                 BigDecimal amount = item.getAmountFcy();
-                BigDecimal itemToCompare = itemsCredit.stream().filter(txItems -> txItems.getAccountDebit().isPresent()
-                                && txItems.getAccountDebit().equals(item.getAccountCredit())
+                BigDecimal itemToCompare = itemsCredit.stream().filter(txItems -> {
+                                    return txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(item.getAccountCredit().get().getCode());
+                                }
                         ).map(TransactionItemEntity::getAmountFcy)
                         .reduce(ZERO, BigDecimal::add);
 
