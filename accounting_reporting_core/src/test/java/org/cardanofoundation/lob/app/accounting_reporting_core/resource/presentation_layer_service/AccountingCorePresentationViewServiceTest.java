@@ -71,7 +71,8 @@ class AccountingCorePresentationViewServiceTest {
     void testAllReconiciliationTransaction_successfulUnprocessed() {
         when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconcilation(any(), eq(Optional.empty()), eq(Pageable.unpaged()))).thenReturn(Page.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
+                eq(null), eq(Optional.empty()), eq(Pageable.unpaged()))).thenReturn(Page.empty());
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
 
