@@ -9,7 +9,6 @@ import java.util.stream.Collectors;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
-import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.*;
 
 import lombok.RequiredArgsConstructor;
@@ -19,11 +18,8 @@ import org.springframework.data.domain.Pageable;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterSource;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 
 @RequiredArgsConstructor
@@ -52,147 +48,6 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
         criteriaQuery.select(rootEntry);
         criteriaQuery.where(pValidationStatuses, pOrganisationId, pTransactionType);
         return em.createQuery(criteriaQuery).getResultList();
-    }
-
-    @Override
-    public List<Object[]> findAllReconciliationSpecial(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Pageable pageable) {
-        String jpql = reconciliationQuery(rejectionCodes, getDateFrom, getDateTo);
-
-        Query reconciliationQuery = em.createQuery(jpql);
-
-        getDateFrom.ifPresent(value -> reconciliationQuery.setParameter("startDate", value));
-        getDateTo.ifPresent(value -> reconciliationQuery.setParameter("endDate", value));
-
-        reconciliationQuery.setMaxResults(pageable.getPageSize());
-
-        if (null != pageable && 0 < pageable.getPageNumber()) {
-            reconciliationQuery.setFirstResult(pageable.getPageNumber() * pageable.getPageSize());
-        }
-
-
-
-        return reconciliationQuery.getResultList();
-    }
-
-    @Override
-    public List<Object[]> findAllReconciliationSpecialCount(Set<ReconciliationRejectionCodeRequest> rejectionCodes, Optional<LocalDate> getDateFrom, Optional<LocalDate> getDateTo, Pageable pageable) {
-        String jpql = "SELECT count(rv.transactionId) " +
-                "FROM accounting_reporting_core.reconcilation.ReconcilationEntity r " +
-                "JOIN r.violations rv " +
-                "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
-                "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL) AND ((rv.rejectionCode = 'TX_NOT_IN_ERP' AND tr.ledgerDispatchApproved IS TRUE) OR (rv.rejectionCode != 'TX_NOT_IN_ERP')) ";
-
-        String where = "";
-        if (!rejectionCodes.isEmpty()) {
-            List<ReconcilationRejectionCode> condition = new ArrayList<>(List.of());
-            if (rejectionCodes.stream().anyMatch(reconciliationRejectionCodeRequest -> reconciliationRejectionCodeRequest.equals(ReconciliationRejectionCodeRequest.MISSING_IN_ERP))) {
-                condition.add(ReconcilationRejectionCode.TX_NOT_IN_ERP);
-            }
-
-            if (rejectionCodes.stream().anyMatch(reconciliationRejectionCodeRequest -> reconciliationRejectionCodeRequest.equals(ReconciliationRejectionCodeRequest.IN_PROCESSING))) {
-                condition.add(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
-            }
-
-            if (rejectionCodes.stream().anyMatch(reconciliationRejectionCodeRequest -> reconciliationRejectionCodeRequest.equals(ReconciliationRejectionCodeRequest.NEW_IN_ERP))) {
-                condition.add(ReconcilationRejectionCode.TX_NOT_IN_LOB);
-            }
-
-            if (rejectionCodes.stream().anyMatch(reconciliationRejectionCodeRequest -> reconciliationRejectionCodeRequest.equals(ReconciliationRejectionCodeRequest.NEW_VERSION_NOT_PUBLISHED))) {
-                condition.add(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
-                //where += "AND (rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' AND tr.ledgerDispatchApproved IS FALSE ) ";
-            }
-
-            if (rejectionCodes.stream().anyMatch(reconciliationRejectionCodeRequest -> reconciliationRejectionCodeRequest.equals(ReconciliationRejectionCodeRequest.NEW_VERSION))) {
-                condition.add(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
-                //where += "AND (rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' AND tr.ledgerDispatchApproved IS TRUE ) ";
-            }
-
-            where = " AND ( rv.rejectionCode IN (%s) %s )".formatted(condition.stream().map(code -> "'" + code.name() + "'").collect(Collectors.joining(",")), where);
-        }
-
-        if (getDateFrom.isPresent()) {
-            where += " AND tr.entryDate > :startDate ";
-        }
-        if (getDateTo.isPresent()) {
-            where += " AND tr.entryDate < :endDate ";
-        }
-
-        where += "GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType ";
-
-        Query resultQuery = em.createQuery(jpql + where);
-
-        getDateFrom.ifPresent(value -> resultQuery.setParameter("startDate", value));
-        getDateTo.ifPresent(value -> resultQuery.setParameter("endDate", value));
-
-        return resultQuery.getResultList();
-    }
-
-    @Override
-    public List<TransactionEntity> findAllReconciliation(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Pageable pageable) {
-        switch (filter) {
-            case RECONCILED -> {
-                CriteriaBuilder builder = em.getCriteriaBuilder();
-                CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
-                Root<TransactionEntity> rootEntry = criteriaQuery.from(TransactionEntity.class);
-
-                criteriaQuery.select(rootEntry);
-                criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("finalStatus"), ReconcilationCode.OK)));
-                sourceO.ifPresent(source -> {
-                    if(source.equals(ReconciliationFilterSource.ERP)) {
-                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("source"), ReconcilationCode.OK)));
-                    }
-                    if(source.equals(ReconciliationFilterSource.BLOCKCHAIN)) {
-                        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.OK)));
-                    }
-                });
-                criteriaQuery.orderBy(builder.desc(rootEntry.get("entryDate")));
-                TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
-                theQuery.setMaxResults(pageable.getPageSize());
-                if (null != pageable && 0 < pageable.getPageNumber()) {
-                    theQuery.setFirstResult(pageable.getPageNumber() * pageable.getPageSize());
-                }
-                return theQuery.getResultList();
-            }
-            case UNPROCESSED -> {
-                CriteriaBuilder builder = em.getCriteriaBuilder();
-                CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
-                Root<TransactionEntity> rootEntry = criteriaQuery.from(TransactionEntity.class);
-
-                criteriaQuery.select(rootEntry);
-                criteriaQuery.where(builder.isNull(rootEntry.get("reconcilation").get("source")));
-                TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
-                theQuery.setMaxResults(pageable.getPageSize());
-                if (null != pageable && 0 < pageable.getPageNumber()) {
-                    theQuery.setFirstResult(pageable.getPageNumber() * pageable.getPageSize());
-                }
-                return theQuery.getResultList();
-            }
-        }
-
-        return List.of();
-    }
-
-    @Override
-    public List<TransactionEntity> findAllReconciliationCount(ReconciliationFilterStatusRequest filter, Optional<ReconciliationFilterSource> sourceO, Pageable pageable) {
-        CriteriaBuilder builder = em.getCriteriaBuilder();
-        CriteriaQuery<TransactionEntity> criteriaQuery = builder.createQuery(TransactionEntity.class);
-        Root<TransactionEntity> rootEntry = criteriaQuery.from(TransactionEntity.class);
-
-        criteriaQuery.select(rootEntry);
-        if(filter.equals(ReconciliationFilterStatusRequest.RECONCILED)) {
-            sourceO.ifPresent(source -> {
-                if (source.equals(ReconciliationFilterSource.ERP)) {
-                    criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("source"), ReconcilationCode.OK)));
-                }
-                if (source.equals(ReconciliationFilterSource.BLOCKCHAIN)) {
-                    criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("sink"), ReconcilationCode.OK)));
-                }
-            });
-        }
-        criteriaQuery.where(builder.and(builder.equal(rootEntry.get("reconcilation").get("finalStatus"), ReconcilationCode.OK)));
-        TypedQuery<TransactionEntity> theQuery = em.createQuery(criteriaQuery);
-
-        return theQuery.getResultList();
     }
 
     public Object findCalcReconciliationStatistic() {

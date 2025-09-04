@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
@@ -19,7 +20,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 public interface ReconcilationRepository extends JpaRepository<ReconcilationEntity, String> {
 
         @Query("""
-                SELECT DISTINCT tr, rv
+                SELECT DISTINCT new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto(tr, rv)
                 FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
                 JOIN r.violations rv
                 LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
@@ -31,7 +32,7 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                 AND (:transactionTypes IS NULL OR tr.transactionType IN :transactionTypes OR rv.transactionType IN :transactionTypes)
                 AND (:transactionId IS NULL OR tr.id LIKE %:transactionId% OR rv.transactionId LIKE %:transactionId%)
                 """)
-        Page<Object[]> findAllReconciliationSpecial(
+        Page<TransactionWithViolationDto> findAllReconciliationSpecial(
                         @Param("rejectionCodes") Set<ReconcilationRejectionCode> rejectionCodes,
                         @Param("startDate") LocalDate startDate,
                         @Param("endDate") LocalDate endDate,

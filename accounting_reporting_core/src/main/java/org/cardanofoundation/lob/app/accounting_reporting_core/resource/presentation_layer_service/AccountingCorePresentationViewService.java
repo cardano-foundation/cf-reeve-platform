@@ -29,6 +29,7 @@ import org.zalando.problem.Problem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
@@ -42,6 +43,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
@@ -59,6 +61,8 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Transactional(readOnly = true)
 // presentation layer service
 public class AccountingCorePresentationViewService {
+
+    private final ValidateIngestionResponseWaiter validateIngestionResponseWaiter;
 
         private final TransactionRepositoryGateway transactionRepositoryGateway;
         private final AccountingCoreService accountingCoreService;
@@ -82,6 +86,7 @@ public class AccountingCorePresentationViewService {
                         "totalAmountLcy", "amountLcySum"
         // add more mappings here
         );
+
         // This function is to add dynamically sort for violations, since we are querying two types at the same time for performance.
         // This function adds rv.<field> for each shared field in the sort if there is a tr.<field>
         public Pageable expandSorts(Pageable pageable, boolean mapRv) {
@@ -119,7 +124,7 @@ public class AccountingCorePresentationViewService {
                                 .collect(Collectors.toSet());
                 if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
                         pageable = expandSorts(pageable, true);
-                        Page<Object[]> allReconciliationSpecial = reconcilationRepository.findAllReconciliationSpecial(
+                        Page<TransactionWithViolationDto> allReconciliationSpecial = reconcilationRepository.findAllReconciliationSpecial(
                                         rejectionCodes.isEmpty() ? null
                                                         : rejectionCodes,
                                         body.getDateFrom().orElse(null),
@@ -724,18 +729,13 @@ public class AccountingCorePresentationViewService {
                                 violation.getBag())).collect(toSet());
         }
 
-        private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(Object[] violations) {
-                for (Object o : violations) {
-                        if (Objects.isNull(o)) {
-                                continue;
-                        }
-                        if (o instanceof TransactionEntity transactionEntity
-                                        && transactionEntity.getLastReconcilation().isPresent()) {
-                                return getTransactionReconciliationView(transactionEntity);
-                        }
-                        if (o instanceof ReconcilationViolation reconcilationViolation) {
-                                return getTransactionReconciliationViolationView(reconcilationViolation);
-                        }
+        private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(TransactionWithViolationDto violations) {
+                // All of the needed data is within the Transaction. The violation is just a fallback, if the transaction doesn't exist in Reeve
+                if(Optional.ofNullable(violations.tx()).isPresent()) {
+                        return getTransactionReconciliationView(violations.tx());
+                }
+                if(Optional.ofNullable(violations.violation()).isPresent()) {
+                        return getTransactionReconciliationViolationView(violations.violation());
                 }
                 return getTransactionReconciliationViolationView();
         }
