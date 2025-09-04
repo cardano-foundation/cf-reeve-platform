@@ -45,13 +45,19 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                         SELECT tr
                         FROM accounting_reporting_core.TransactionEntity tr
                         WHERE
-                            (:filter = 'RECONCILED'
+                            (CAST(:startDate AS date) IS NULL OR tr.entryDate > :startDate)
+                            AND (CAST(:endDate AS date) IS NULL OR tr.entryDate < :endDate)
+                            AND (:transactionTypes IS NULL OR tr.transactionType IN :transactionTypes)
+                            AND (:transactionId IS NULL OR tr.id LIKE %:transactionId% )
+                            AND (:filter = 'RECONCILED'
                                 AND tr.reconcilation.finalStatus = 'OK'
                                 AND (:source IS NULL
                                      OR (:source = 'ERP' AND tr.reconcilation.source = 'OK')
-                                     OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK')))
+                                     OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK'))
+                                )
                             OR (:filter = 'UNRECONCILED'
-                                AND tr.reconcilation.source IS NULL)
+                                AND tr.reconcilation.source IS NULL
+                                )
                         """, countQuery = """
                         SELECT COUNT(tr)
                         FROM accounting_reporting_core.TransactionEntity tr
@@ -66,6 +72,10 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                         """)
         Page<TransactionEntity> findAllReconcilation(
                         @Param("filter") String filter,
+                        @Param("startDate") LocalDate startDate,
+                        @Param("endDate") LocalDate endDate,
+                        @Param("transactionTypes") Set<TransactionType> transactionTypes,
+                        @Param("transactionId") String transactionId,
                         @Param("source") Optional<ReconciliationFilterSource> source, Pageable pageable);
 
 }
