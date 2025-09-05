@@ -9,6 +9,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 
 @Getter
@@ -17,8 +19,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 @NoArgsConstructor
 public class BatchFilterRequest {
 
+    @Schema(description = "Search of a specific internal transaction number.")
     private String internalTransactionNumber;
     private List<TransactionType> transactionTypes;
+    @Schema(description = "List of document numbers to filter for. If this list is provided, only transactions with a document number in this list are returned.")
+    private List<String> documentNumbers;
+    @Schema(description = "Document number to filter for. If this field is provided, only transactions with a document number containing this value are returned.")
     private String documentNumber;
     private List<String> currencyCustomerCodes;
     private BigDecimal minFCY;

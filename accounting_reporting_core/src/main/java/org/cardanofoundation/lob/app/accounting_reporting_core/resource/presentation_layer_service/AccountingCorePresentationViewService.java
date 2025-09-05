@@ -114,33 +114,36 @@ public class AccountingCorePresentationViewService {
                                 Sort.by(newOrders));
         }
 
-        public ReconciliationResponseView allReconciliationTransaction(ReconciliationFilterRequest body,
-                        Pageable pageable) {
-                Object transactionsStatistic = accountingCoreTransactionRepository.findCalcReconciliationStatistic();
-                Optional<ReconcilationEntity> latestReconcilation = transactionReconcilationRepository
-                                .findTopByOrderByCreatedAtDesc();
+        public ReconciliationResponseView allReconciliationTransaction(
+                        ReconciliationFilterRequest body, Pageable pageable) {
+                Object transactionsStatistic = accountingCoreTransactionRepository
+                                .findCalcReconciliationStatistic();
+                Optional<ReconcilationEntity> latestReconcilation =
+                                transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
                 Set<TransactionReconciliationTransactionsView> transactions;
                 long count;
-                Set<ReconcilationRejectionCode> rejectionCodes = body.getReconciliationRejectionCode().stream().map(
-                                ReconciliationRejectionCodeRequest::toReconcilationRejectionCode)
+                Set<ReconcilationRejectionCode> rejectionCodes = body
+                                .getReconciliationRejectionCode().stream()
+                                .map(ReconciliationRejectionCodeRequest::toReconcilationRejectionCode)
                                 .collect(Collectors.toSet());
                 if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
                         pageable = expandSorts(pageable, true);
-                        Page<TransactionWithViolationDto> allReconciliationSpecial = reconcilationRepository
-                                        .findAllReconciliationSpecial(
+                        Page<TransactionWithViolationDto> allReconciliationSpecial =
+                                        reconcilationRepository.findAllReconciliationSpecial(
                                                         rejectionCodes.isEmpty() ? null
                                                                         : rejectionCodes,
                                                         body.getDateFrom().orElse(null),
                                                         body.getDateTo().orElse(null),
-                                                        body.getSource().map(t -> t.name()).orElse(null),
+                                                        body.getSource().map(t -> t.name())
+                                                                        .orElse(null),
                                                         body.getTransactionTypes().isEmpty() ? null
                                                                         : body.getTransactionTypes(),
-                                                        body.getTransactionId(),
-                                                        pageable);
+                                                        body.getTransactionId(), pageable);
                         count = allReconciliationSpecial.getTotalElements();
                         transactions = allReconciliationSpecial.stream()
                                         .map(this::getReconciliationTransactionsSelector)
-                                        .sorted(Comparator.comparing(TransactionReconciliationTransactionsView::getId))
+                                        .sorted(Comparator.comparing(
+                                                        TransactionReconciliationTransactionsView::getId))
                                         .collect(Collectors.toCollection(LinkedHashSet::new));
                 } else {
                         pageable = expandSorts(pageable, false);
@@ -150,18 +153,18 @@ public class AccountingCorePresentationViewService {
                                                         body.getDateTo().orElse(null),
                                                         body.getTransactionTypes().isEmpty() ? null
                                                                         : body.getTransactionTypes(),
-                                                        body.getTransactionId(), body.getSource(), pageable);
+                                                        body.getTransactionId(), body.getSource(),
+                                                        pageable);
                         count = pagedTransactions.getTotalElements();
                         transactions = pagedTransactions.stream()
                                         .map(this::getTransactionReconciliationView)
                                         .collect(toSet());
                 }
-                return new ReconciliationResponseView(
-                                count,
+                return new ReconciliationResponseView(count,
                                 latestReconcilation.flatMap(ReconcilationEntity::getFrom),
                                 latestReconcilation.flatMap(ReconcilationEntity::getTo),
-                                latestReconcilation.map(reconcilationEntity -> reconcilationEntity.getUpdatedAt()
-                                                .toLocalDate()),
+                                latestReconcilation.map(reconcilationEntity -> reconcilationEntity
+                                                .getUpdatedAt().toLocalDate()),
                                 getTransactionReconciliationStatistic(transactionsStatistic),
                                 transactions);
         }
@@ -425,6 +428,7 @@ public class AccountingCorePresentationViewService {
                                 transactionBatchEntity.getId(), status,
                                 batchFilterRequest.getInternalTransactionNumber(),
                                 batchFilterRequest.getTransactionTypes(),
+                                batchFilterRequest.getDocumentNumbers(),
                                 batchFilterRequest.getDocumentNumber(),
                                 batchFilterRequest.getCurrencyCustomerCodes(),
                                 batchFilterRequest.getMinFCY(), batchFilterRequest.getMaxFCY(),
