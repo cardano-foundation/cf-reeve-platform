@@ -75,7 +75,9 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         SELECT 1 FROM t.items i2
         WHERE
             i2.status = 'OK'
-            AND ((:documentNumber IS NOT NULL AND i2.document.num NOT LIKE %:documentNumber%)
+            AND (
+            (:documentNumber IS NOT NULL AND i2.document.num NOT LIKE %:documentNumber%)
+            OR (:documentNumbers IS NOT NULL AND (i2.document.num IS NULL OR i2.document.num NOT IN :documentNumbers))
             OR (:currencyCustomerCodes IS NOT NULL AND (i2.document.currency.customerCode is NULL OR i2.document.currency.customerCode NOT IN :currencyCustomerCodes))
             OR (:minFCY IS NOT NULL AND i2.amountFcy < :minFCY)
             OR (:maxFCY IS NOT NULL AND i2.amountFcy > :maxFCY)
@@ -99,6 +101,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             @Param("txStatus") List<TransactionProcessingStatus> txStatus,
             @Param("internalTransactionNumber") String internalTransactionNumber,
             @Param("types") List<TransactionType> types,
+            @Param("documentNumbers") List<String> documentNumbers,
             @Param("documentNumber") String documentNumber,
             @Param("currencyCustomerCodes") List<String> currencyCustomerCodes,
             @Param("minFCY") BigDecimal minFCY,
