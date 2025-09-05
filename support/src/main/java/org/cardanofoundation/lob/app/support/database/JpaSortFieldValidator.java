@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.organisation.util;
+package org.cardanofoundation.lob.app.support.database;
 
 import java.util.Map;
 import java.util.Optional;
