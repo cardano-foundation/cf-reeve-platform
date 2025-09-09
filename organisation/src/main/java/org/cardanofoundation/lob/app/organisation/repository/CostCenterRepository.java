@@ -21,7 +21,7 @@ public interface CostCenterRepository extends JpaRepository<CostCenter, CostCent
             AND (:parentCustomerCodes IS NULL OR t.parentCustomerCode IN :parentCustomerCodes)
             AND (:active IS NULL OR t.active = :active)
             """)
-    Page<CostCenter> findAllByOrganisationId(@Param("organisationId") String id, @Param("customerCode") String customerCode, @Param("name") String name, @Param("parentCustomerCodes") List<String> parentCustomerCodes, @Param("active") boolean active, Pageable pageable);
+    Page<CostCenter> findAllByOrganisationId(@Param("organisationId") String id, @Param("customerCode") String customerCode, @Param("name") String name, @Param("parentCustomerCodes") List<String> parentCustomerCodes, @Param("active") Boolean active, Pageable pageable);
 
     @Query("SELECT t FROM CostCenter t WHERE t.id = :Id AND t.active = :active ")
     Optional<CostCenter> findByIdAndActive(@Param("Id") CostCenter.Id Id, @Param("active") boolean active);
