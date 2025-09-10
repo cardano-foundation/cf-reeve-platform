@@ -45,7 +45,7 @@ public class CostCenterService {
         return costCenterRepository.findByIdAndActive(new CostCenter.Id(organisationId, customerCode), true);
     }
 
-    public Either<Problem, List<CostCenterView>> getAllCostCenter(String organisationId, String customerCode, String name, List<String> parentCustomerCodes, boolean active, Pageable pageable) {
+    public Either<Problem, List<CostCenterView>> getAllCostCenter(String organisationId, String customerCode, String name, List<String> parentCustomerCodes, Boolean active, Pageable pageable) {
         Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(CostCenter.class, pageable, COST_CENTER_MAPPINGS);
         if(pageables.isLeft()) {
             return Either.left(pageables.getLeft());

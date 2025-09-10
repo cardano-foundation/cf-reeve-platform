@@ -62,7 +62,7 @@ public class CostCenterController {
                                                @RequestParam(value = "customerCode", required = false) String customerCode,
                                                @RequestParam(value = "name", required = false) String name,
                                                @RequestParam(value = "parentCustomerCodes", required = false) List<String> parentCustomerCodes,
-                                               @RequestParam(value = "active", required = false, defaultValue = "true") boolean active,
+                                               @RequestParam(value = "active", required = false) Boolean active,
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
 
         return costCenterService.getAllCostCenter(orgId, customerCode, name, parentCustomerCodes, active, pageable).fold(
