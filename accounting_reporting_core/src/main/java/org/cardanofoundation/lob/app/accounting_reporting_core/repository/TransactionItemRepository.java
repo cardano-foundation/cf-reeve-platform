@@ -47,6 +47,7 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
             AND (t.accountDebit.code IN :customerCodes OR t.accountCredit.code IN :customerCodes)
             AND t.amountLcy <> 0
             AND t.transaction.automatedValidationStatus = 'VALIDATED'
+            AND t.transaction.processingStatus NOT IN ('PENDING','INVALID')
             """)
     List<TransactionItemEntity> findPreviewTransactionItemsByAccountCodeAndDateRange(
             @Param("customerCodes") List<String> customerCodes,
