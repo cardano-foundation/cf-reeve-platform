@@ -42,15 +42,24 @@ public class ChartOfAccountUpdateCsv extends ChartOfAccountUpdate {
     @CsvBindByName(column = "Open Balance Date")
     private String date;
 
-    public void fillOpeningBalance() throws IllegalArgumentException, ParseException{
+    public void fillOpeningBalance() throws IllegalArgumentException, ParseException {
         NumberFormat format = NumberFormat.getInstance(Locale.US);
-        this.setOpeningBalance(new OpeningBalance(
-                BigDecimal.valueOf(format.parse(this.balanceFCY).doubleValue()),
-                BigDecimal.valueOf(format.parse(this.balanceLCY).doubleValue()),
-                this.openBalanceCurrencyFcy,
-                this.openBalanceCurrencyLcy,
-                this.balanceType,
-                Optional.ofNullable(this.date).map(d -> FlexibleDateParser.parse(this.date)).orElse(null)
-        ));
+
+        OpeningBalance openin = OpeningBalance.builder()
+                .originalCurrencyIdFCY(this.openBalanceCurrencyFcy)
+                .originalCurrencyIdLCY(this.openBalanceCurrencyLcy)
+                .balanceType(this.balanceType)
+                .date(Optional.ofNullable(this.date).map(d -> FlexibleDateParser.parse(this.date)).orElse(null))
+                .build();
+
+        if (this.balanceFCY != null && !this.balanceFCY.isEmpty()) {
+            openin.setBalanceFCY(BigDecimal.valueOf(format.parse(this.balanceFCY).doubleValue()));
+        }
+
+        if (this.balanceLCY != null && !this.balanceLCY.isEmpty()) {
+            openin.setBalanceLCY(BigDecimal.valueOf(format.parse(this.balanceLCY).doubleValue()));
+        }
+
+        this.setOpeningBalance(openin);
     }
 }
