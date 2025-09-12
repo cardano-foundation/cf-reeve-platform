@@ -75,7 +75,7 @@ public class ExtractionController {
                     .ok()
                     .body(extractionItemService.findTransactionItems(dateFrom, dateTo, transactionsRequest.getAccountCode(), transactionsRequest.getCostCenter(), transactionsRequest.getProject(), transactionsRequest.getAccountType(), transactionsRequest.getAccountSubType()));
         } catch (Exception e) {
-            log.error("Error occurred while searching transactions");
+            log.error("Error occurred while searching transactions: {}",e.getMessage());
             return ResponseEntity.status(500).body(null);
         }
     }
