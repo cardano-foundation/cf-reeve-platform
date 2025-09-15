@@ -22,6 +22,7 @@ import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter
+@Setter
 @Builder(toBuilder = true)
 @EqualsAndHashCode
 public class OpeningBalance {
