@@ -61,6 +61,8 @@ public class TransactionView {
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime reconciliationDate;
 
+    private int itemCount;
+
     private Set<TransactionItemView> items = new LinkedHashSet<>();
 
     private Set<ViolationView> violations = new LinkedHashSet<>();
