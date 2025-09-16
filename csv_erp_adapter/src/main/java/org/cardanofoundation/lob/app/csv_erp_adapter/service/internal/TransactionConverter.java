@@ -61,11 +61,9 @@ public class TransactionConverter {
             try {
                 transactionType = Optional.ofNullable(transactionLines.getFirst().getType()).map(TransactionType::valueOf).orElse(TransactionType.Unknown);
             } catch (IllegalArgumentException e) {
+                // incase the transaction type is not found in enum
                 log.error("Transaction type not found for transaction number {}", entry.getKey(), e);
-                return Either.left(Problem.builder()
-                        .withTitle("Transaction type not found")
-                        .withDetail("Transaction type not found for transaction number " + entry.getKey())
-                        .build());
+                transactionType = TransactionType.Unknown;
             }
             LocalDate entryDate;
             try {
