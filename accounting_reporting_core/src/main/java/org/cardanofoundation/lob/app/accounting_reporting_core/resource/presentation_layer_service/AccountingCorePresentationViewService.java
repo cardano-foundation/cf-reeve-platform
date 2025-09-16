@@ -446,7 +446,10 @@ public class AccountingCorePresentationViewService {
                                 batchFilterRequest.getCounterPartyTypes(),
                                 batchFilterRequest.getDebitAccountCodes(),
                                 batchFilterRequest.getCreditAccountCodes(),
-                                batchFilterRequest.getEventCodes(), pageable);
+                                batchFilterRequest.getEventCodes(),
+                                batchFilterRequest.getProjectCustomerCodes(),
+                                batchFilterRequest.getParentProjectCustomerCodes(),
+                                pageable);
         }
 
         private TransactionReconciliationTransactionsView getTransactionReconciliationView(
