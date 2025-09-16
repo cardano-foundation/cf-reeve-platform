@@ -591,6 +591,7 @@ public class AccountingCorePresentationViewService {
                                                 .orElse(new LinkedHashSet<>()),
                                 transactionEntity.getLastReconcilation()
                                                 .map(CommonEntity::getCreatedAt).orElse(null),
+                                transactionEntity.getItemCount(),
                                 getTransactionItemView(transactionEntity),
                                 getViolations(transactionEntity)
 
