@@ -200,7 +200,7 @@ public class TransactionConverter {
                 .number(line.getDocumentNumber())
                 .vat(Optional.ofNullable(line.getVatCode()).map(vatCode -> Vat.builder()
                         .customerCode(vatCode)
-                        .rate(Optional.of(BigDecimal.valueOf(Double.parseDouble(line.getVatRate()))))
+                        .rate(Optional.ofNullable(line.getVatRate()).map(vatRate -> BigDecimal.valueOf(Double.parseDouble(vatRate))))
                         .build()))
                 .counterparty(Optional.ofNullable(line.getCounterPartyCode()).map(counterPartyCode ->
                         Counterparty.builder()
