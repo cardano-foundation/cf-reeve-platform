@@ -45,7 +45,7 @@ public class KeriService {
             int interactionIndex = Integer.parseInt(ked.get("s").toString(), 16);
             MetadataMap metadataMap = MetadataBuilder.createMap();
             metadataMap.put("sn", BigInteger.valueOf(interactionIndex));
-            metadataMap.put("prefix", identifierConfig.getPrefix());
+            metadataMap.put("aid", identifierConfig.getPrefix());
             metadataMap.put("dataHash", HexUtil.encodeHexString(Sha256Hash.hash(data.toJson().getBytes())));
             return metadataMap;
 
