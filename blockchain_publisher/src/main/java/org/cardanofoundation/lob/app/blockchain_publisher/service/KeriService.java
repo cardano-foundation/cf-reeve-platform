@@ -8,6 +8,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import co.nstant.in.cbor.CborException;
@@ -25,6 +26,10 @@ import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
 @Slf4j
 @RequiredArgsConstructor
 @Service
+@ConditionalOnProperty(name = {
+    "lob.blockchain-publisher.keri.enabled",
+    "lob.blockchain-publisher.enabled"
+}, havingValue = "true", matchIfMissing = false)
 public class KeriService {
 
 

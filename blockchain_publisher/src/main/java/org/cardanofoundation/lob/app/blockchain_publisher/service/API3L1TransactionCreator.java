@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -50,7 +51,7 @@ public class API3L1TransactionCreator {
     private final int metadataLabel;
     private final boolean debugStoreOutputTx;
     private final boolean keriEnabled;
-    private final KeriService keriService;
+    private final Optional<KeriService> keriService;
 
     private String runId;
 
@@ -78,7 +79,7 @@ public class API3L1TransactionCreator {
             if(keriEnabled) {
                 MetadataMap keriMetadataMap =
                         api3MetadataSerialiser.serializeToKeriMap(reportEntity);
-                metadataMap.put("identifier", keriService.interactWithIdentifier(keriMetadataMap));
+                metadataMap.put("identifier", keriService.map(service -> service.interactWithIdentifier(keriMetadataMap)).orElse(null));
             }
 
             Map data = metadataMap.getMap();
