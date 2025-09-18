@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
@@ -38,18 +39,19 @@ public class NetOffCreditDebitTaskItem implements PipelineTaskItem {
                     .flatMap(Organisation::getDummyAccount);
             String dummyAccount = dummyAccountM.orElseThrow();
 
-            Set<TransactionItemEntity> itemsDebit = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent()
-                    && txItems.getAccountDebit().get().getCode().equals(dummyAccount)
+            Set<TransactionItemEntity> itemsDebit = tx.getItems().stream().filter(txItems ->
+                    (txItems.getOperationType().equals(OperationType.DEBIT) && !txItems.getAccountDebit().get().getCode().equals(dummyAccount))
             ).collect(toSet());
-            Set<TransactionItemEntity> itemsCredit = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent()
-                    && !txItems.getAccountDebit().get().getCode().equals(dummyAccount)
+            Set<TransactionItemEntity> itemsCredit = tx.getItems().stream().filter(txItems ->
+                    (txItems.getOperationType().equals(OperationType.CREDIT) || txItems.getAccountDebit().get().getCode().equals(dummyAccount))
+
             ).collect(toSet());
             itemsDebit.forEach(item -> {
 
                 BigDecimal amount = item.getAmountFcy();
-                BigDecimal itemToCompare = itemsCredit.stream().filter(txItems -> {
-                                    return txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(item.getAccountCredit().get().getCode());
-                                }
+                BigDecimal itemToCompare = itemsCredit.stream().filter(txItems -> txItems.getAccountDebit().isPresent()
+                                && txItems.getAccountDebit().equals(item.getAccountCredit())
+                                && txItems.getAccountCredit().equals(item.getAccountDebit())
                         ).map(TransactionItemEntity::getAmountFcy)
                         .reduce(ZERO, BigDecimal::add);
 
@@ -57,8 +59,7 @@ public class NetOffCreditDebitTaskItem implements PipelineTaskItem {
                     matches.getAndIncrement();
                 }
             });
-
-            if (matches.get() == itemsDebit.stream().count()) {
+            if (matches.get() != 0 && matches.get() == itemsDebit.stream().count()) {
                 TransactionViolation v = TransactionViolation.builder()
                         .code(NET_OFF_TX)
                         .severity(ERROR)

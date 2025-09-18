@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -52,6 +53,7 @@ class NetOffCreditDebitTaskItemTest {
         txItem1.setAmountFcy(BigDecimal.valueOf(100));
         txItem1.setAccountDebit(Optional.ofNullable(Account.builder().code("0000000000").build()));
         txItem1.setAccountCredit(Optional.ofNullable(Account.builder().code("Test1").build()));
+        txItem1.setOperationType(OperationType.DEBIT);
         txItem1.setStatus(OK);
 
         TransactionItemEntity txItem2 = new TransactionItemEntity();
@@ -60,6 +62,7 @@ class NetOffCreditDebitTaskItemTest {
         txItem2.setAmountFcy(BigDecimal.valueOf(100));
         txItem2.setAccountDebit(Optional.ofNullable(Account.builder().code("Test1").build()));
         txItem2.setAccountCredit(Optional.ofNullable(Account.builder().code("0000000000").build()));
+        txItem2.setOperationType(OperationType.DEBIT);
         txItem2.setStatus(OK);
 
 
@@ -97,6 +100,7 @@ class NetOffCreditDebitTaskItemTest {
         txItem1.setAmountFcy(BigDecimal.valueOf(100));
         txItem1.setAccountDebit(Optional.ofNullable(Account.builder().code("0000000000").build()));
         txItem1.setAccountCredit(Optional.ofNullable(Account.builder().code("Test1").build()));
+        txItem1.setOperationType(OperationType.DEBIT);
         txItem1.setStatus(OK);
 
         TransactionItemEntity txItem2 = new TransactionItemEntity();
@@ -105,6 +109,7 @@ class NetOffCreditDebitTaskItemTest {
         txItem2.setAmountFcy(BigDecimal.valueOf(100));
         txItem2.setAccountDebit(Optional.ofNullable(Account.builder().code("Test2").build()));
         txItem2.setAccountCredit(Optional.ofNullable(Account.builder().code("0000000000").build()));
+        txItem2.setOperationType(OperationType.DEBIT);
         txItem2.setStatus(OK);
 
 
