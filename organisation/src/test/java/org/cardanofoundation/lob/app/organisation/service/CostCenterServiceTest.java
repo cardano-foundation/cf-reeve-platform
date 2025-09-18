@@ -52,6 +52,7 @@ class CostCenterServiceTest {
         costCenter = CostCenter.builder()
                 .id(costCenterId)
                 .name("Test Cost Center")
+
                 .build();
     }
 
@@ -120,9 +121,33 @@ class CostCenterServiceTest {
     }
 
     @Test
+    void updateCostCenter_parentIsSame() {
+        CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
+        CostCenter parentMock = mock(CostCenter.class);
+        when(parentMock.getId()).thenReturn(new CostCenter.Id(organisationId, "customercode"));
+
+        when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode")))
+                .thenReturn(Optional.of(costCenter));
+        when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentcode");
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentcode")))
+                .thenReturn(Optional.of(parentMock));
+
+        CostCenterView costCenterView =
+                costCenterService.updateCostCenter(organisationId, costCenterUpdate);
+
+        assertNotNull(costCenterView);
+        assertEquals("customercode", costCenterView.getCustomerCode());
+        assertEquals("PARENT_COST_CENTER_CANNOT_BE_SELF",
+                costCenterView.getError().get().getTitle());
+    }
+
+    @Test
     void updateCostCenter_success() {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         CostCenter parentMock = mock(CostCenter.class);
+        when(parentMock.getId())
+                .thenReturn(new CostCenter.Id(organisationId, "parentCustomerCode"));
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
         when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.of(costCenter));
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
@@ -171,6 +196,7 @@ class CostCenterServiceTest {
     void insertCostCenter_success() {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         CostCenter parentMock = mock(CostCenter.class);
+        when(parentMock.getId()).thenReturn(new CostCenter.Id(organisationId, "parentCustomerCode"));
         when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
         when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode"))).thenReturn(Optional.empty());
         when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentCustomerCode");
