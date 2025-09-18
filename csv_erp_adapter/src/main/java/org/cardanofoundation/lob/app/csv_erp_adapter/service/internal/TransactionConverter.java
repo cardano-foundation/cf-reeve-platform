@@ -119,7 +119,7 @@ public class TransactionConverter {
                             String.valueOf(lineNumber++)))
                     .fxRate(Optional.ofNullable(line.getFxRate())
                             .map(rate -> BigDecimal.valueOf(Double.parseDouble(rate)))
-                            .orElse(BigDecimal.ONE))
+                            .orElse(BigDecimal.ZERO))
                     .costCenter(Optional.ofNullable(line.getCostCenterCode())
                             .map(costCenterCode -> CostCenter.builder()
                                     .customerCode(costCenterCode).build()))
