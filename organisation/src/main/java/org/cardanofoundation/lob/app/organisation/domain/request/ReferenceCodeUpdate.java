@@ -36,6 +36,7 @@ public class ReferenceCodeUpdate {
 
     @Schema(example = "true")
     @CsvBindByName(column = "Active")
+    @NotNull(message = "Active is required")
     private boolean isActive = true;
 
     public ReferenceCode toEntity(String orgId) {
