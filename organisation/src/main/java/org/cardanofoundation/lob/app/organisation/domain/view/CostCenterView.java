@@ -62,6 +62,7 @@ public class CostCenterView {
                 .customerCode(costCenterUpdate.getCustomerCode())
                 .name(costCenterUpdate.getName())
                 .parentCustomerCode(costCenterUpdate.getParentCustomerCode())
+                .active(Optional.ofNullable(costCenterUpdate.getActive()).orElse(false))
                 .error(Optional.of(error))
                 .build();
     }
