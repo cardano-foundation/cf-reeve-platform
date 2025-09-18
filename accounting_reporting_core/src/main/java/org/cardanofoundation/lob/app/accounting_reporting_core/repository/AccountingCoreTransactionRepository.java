@@ -85,6 +85,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             OR (:maxLCY IS NOT NULL AND i2.amountLcy > :maxLCY)
             OR (:vatCustomerCodes IS NOT NULL AND (i2.document.vat.customerCode IS NULL OR i2.document.vat.customerCode NOT IN :vatCustomerCodes))
             OR (:costCenterCustomerCodes IS NOT NULL AND (i2.costCenter.customerCode IS NULL OR i2.costCenter.customerCode NOT IN :costCenterCustomerCodes))
+            OR (:projectCustomerCodes IS NOT NULL AND (i2.project.customerCode IS NULL OR i2.project.customerCode NOT IN :projectCustomerCodes))
             OR (:counterPartyCustomerCodes IS NOT NULL AND (i2.document.counterparty.customerCode IS NULL OR i2.document.counterparty.customerCode NOT IN :counterPartyCustomerCodes))
             OR (:counterPartyTypes IS NOT NULL AND (i2.document.counterparty.type IS NULL OR i2.document.counterparty.type NOT IN :counterPartyTypes))
             OR (:debitAccountCodes IS NOT NULL AND (i2.accountDebit.code IS NULL OR i2.accountDebit.code NOT IN :debitAccountCodes))
@@ -92,8 +93,11 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             OR (:eventCodes IS NOT NULL AND (i2.accountEvent.code IS NULL OR i2.accountEvent.code NOT IN :eventCodes))
             OR (:parentCostCenterCustomerCodes IS NOT NULL AND (i2.costCenter.customerCode IS NULL OR NOT EXISTS (
                 SELECT 1 FROM CostCenter cc
-                WHERE cc.id.customerCode = i2.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostCenterCustomerCodes)
-            )))
+                WHERE cc.id.customerCode = i2.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostCenterCustomerCodes)))
+            OR (:parentProjectCustomerCodes IS NOT NULL AND (i2.project.customerCode IS NULL OR NOT EXISTS (
+                SELECT 1 FROM Project cc
+                WHERE cc.id.customerCode = i2.project.customerCode AND cc.parentCustomerCode IN :parentProjectCustomerCodes)))
+        )
     )
             """)
     Page<TransactionEntity> findAllByBatchId(
@@ -120,6 +124,8 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             @Param("debitAccountCodes") List<String> debitAccountCodes,
             @Param("creditAccountCodes") List<String> creditAccountCodes,
             @Param("eventCodes") List<String> eventCodes,
+            @Param("projectCustomerCodes") List<String> projectCustomerCodes,
+            @Param("parentProjectCustomerCodes") List<String> parentProjectCustomerCodes,
             Pageable page
     );
 

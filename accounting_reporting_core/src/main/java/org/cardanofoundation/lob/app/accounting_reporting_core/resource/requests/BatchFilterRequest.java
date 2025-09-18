@@ -43,4 +43,6 @@ public class BatchFilterRequest {
     private List<String> debitAccountCodes;
     private List<String> creditAccountCodes;
     private List<String> eventCodes;
+    private List<String> parentProjectCustomerCodes;
+    private List<String> projectCustomerCodes;
 }
