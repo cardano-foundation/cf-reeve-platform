@@ -38,7 +38,7 @@ public class CsvParser<T> {
 
     @Value("${lob.csv.delimiter:;}")
     private String delimiter;
-    private static final char[] DANGEROUS_PREFIXES = { '=', '+', '-', '@' };
+    private static final char[] DANGEROUS_PREFIXES = { '=', '+', '@' };
     private final AntiVirusScanner antiVirusScanner;
 
     public Either<Problem, List<T>> parseCsv(MultipartFile file, Class<T> type){
