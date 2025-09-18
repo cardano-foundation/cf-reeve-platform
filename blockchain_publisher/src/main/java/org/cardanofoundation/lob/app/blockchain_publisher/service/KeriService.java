@@ -46,7 +46,7 @@ public class KeriService {
             MetadataMap metadataMap = MetadataBuilder.createMap();
             metadataMap.put("sn", BigInteger.valueOf(interactionIndex));
             metadataMap.put("aid", identifierConfig.getPrefix());
-            metadataMap.put("dataHash", HexUtil.encodeHexString(Sha256Hash.hash(data.toJson().getBytes())));
+            metadataMap.put("data_hash", HexUtil.encodeHexString(Sha256Hash.hash(data.toJson().getBytes())));
             return metadataMap;
 
         } catch (DigestException | LibsodiumException | InterruptedException | IOException
