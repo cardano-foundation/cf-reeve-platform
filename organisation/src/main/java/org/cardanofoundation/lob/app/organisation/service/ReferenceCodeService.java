@@ -72,6 +72,13 @@ public class ReferenceCodeService {
                         .build(),
                         referenceCodeUpdate);
             }
+            if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
+                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
+            }
         }
 
         Optional<ReferenceCode> referenceCodeOpt = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode());
@@ -124,6 +131,13 @@ public class ReferenceCodeService {
                         .withStatus(Status.NOT_FOUND)
                         .build(),
                         referenceCodeUpdate);
+            }
+            if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
+                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
             }
         }
 

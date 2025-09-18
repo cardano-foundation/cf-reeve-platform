@@ -37,7 +37,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
-import org.cardanofoundation.lob.app.support.calc.MoreBigDecimal;
 import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
 @Service("csvTransactionConverter")
@@ -61,11 +60,9 @@ public class TransactionConverter {
             try {
                 transactionType = Optional.ofNullable(transactionLines.getFirst().getType()).map(TransactionType::valueOf).orElse(TransactionType.Unknown);
             } catch (IllegalArgumentException e) {
+                // incase the transaction type is not found in enum
                 log.error("Transaction type not found for transaction number {}", entry.getKey(), e);
-                return Either.left(Problem.builder()
-                        .withTitle("Transaction type not found")
-                        .withDetail("Transaction type not found for transaction number " + entry.getKey())
-                        .build());
+                transactionType = TransactionType.Unknown;
             }
             LocalDate entryDate;
             try {
@@ -122,7 +119,7 @@ public class TransactionConverter {
                             String.valueOf(lineNumber++)))
                     .fxRate(Optional.ofNullable(line.getFxRate())
                             .map(rate -> BigDecimal.valueOf(Double.parseDouble(rate)))
-                            .orElse(null))
+                            .orElse(BigDecimal.ZERO))
                     .costCenter(Optional.ofNullable(line.getCostCenterCode())
                             .map(costCenterCode -> CostCenter.builder()
                                     .customerCode(costCenterCode).build()))
@@ -167,12 +164,16 @@ public class TransactionConverter {
                         .build());
             } else if (StringUtils.isNoneBlank(line.getAmountLCYDebit()) || StringUtils.isNoneBlank(line.getAmountFCYDebit())) {
                 operationType = OperationType.DEBIT;
-                amountLcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountLCYDebit()).doubleValue()));
-                amountFcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountFCYDebit()).doubleValue()));
+                String debitLcyStr = line.getAmountLCYDebit();
+                String debitFcyStr = line.getAmountFCYDebit();
+                amountLcy = debitLcyStr != null ? BigDecimal.valueOf(format.parse(debitLcyStr).doubleValue()) : BigDecimal.ZERO;
+                amountFcy = debitFcyStr != null ? BigDecimal.valueOf(format.parse(debitFcyStr).doubleValue()) : BigDecimal.ZERO;
             } else if (StringUtils.isNoneBlank(line.getAmountLCYCredit()) || StringUtils.isNoneBlank(line.getAmountFCYCredit())) {
                 operationType = OperationType.CREDIT;
-                amountLcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountLCYCredit()).doubleValue()));
-                amountFcy = MoreBigDecimal.zeroForNull(BigDecimal.valueOf(format.parse(line.getAmountFCYCredit()).doubleValue()));
+                String creditLcyStr = line.getAmountLCYCredit();
+                String creditFcyStr = line.getAmountFCYCredit();
+                amountLcy = creditLcyStr != null ? BigDecimal.valueOf(format.parse(creditLcyStr).doubleValue()) : BigDecimal.ZERO;
+                amountFcy = creditFcyStr != null ? BigDecimal.valueOf(format.parse(creditFcyStr).doubleValue()) : BigDecimal.ZERO;
             } else {
                 log.info("Skipping transaction line with zero amounts for transaction: {}", line.getTxNumber());
                 // Create a zero amount item.
@@ -202,7 +203,7 @@ public class TransactionConverter {
                 .number(line.getDocumentNumber())
                 .vat(Optional.ofNullable(line.getVatCode()).map(vatCode -> Vat.builder()
                         .customerCode(vatCode)
-                        .rate(Optional.of(BigDecimal.valueOf(Double.parseDouble(line.getVatRate()))))
+                        .rate(Optional.ofNullable(line.getVatRate()).map(vatRate -> BigDecimal.valueOf(Double.parseDouble(vatRate))))
                         .build()))
                 .counterparty(Optional.ofNullable(line.getCounterPartyCode()).map(counterPartyCode ->
                         Counterparty.builder()

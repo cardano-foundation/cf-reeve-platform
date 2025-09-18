@@ -64,6 +64,16 @@ public class CostCenterService {
                                     .build()
                     );
                 }
+                if (costCenterOptional.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
+                    return CostCenterView.createFail(
+                            costCenterUpdate,
+                            Problem.builder()
+                                    .withStatus(Status.BAD_REQUEST)
+                                    .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
+                                    .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
+                                    .build()
+                    );
+                }
             }
             costCenter.setParentCustomerCode(costCenterUpdate.getParentCustomerCode() == null || costCenterUpdate.getParentCustomerCode().isBlank() ? null : costCenterUpdate.getParentCustomerCode());
             costCenter.setActive(costCenterUpdate.isActive());
@@ -110,6 +120,16 @@ public class CostCenterService {
                         Problem.builder()
                                 .withTitle(ErrorTitleConstants.PARENT_COST_CENTER_CODE_NOT_FOUND)
                                 .withDetail("Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()))
+                                .build()
+                );
+            }
+            if (parent.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
+                return CostCenterView.createFail(
+                        costCenterUpdate,
+                        Problem.builder()
+                                .withStatus(Status.BAD_REQUEST)
+                                .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
+                                .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
                                 .build()
                 );
             }

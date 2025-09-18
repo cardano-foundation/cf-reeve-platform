@@ -67,7 +67,7 @@ public class CostCenterController {
             ),
     })
     @PostMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<CostCenterView> insertCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         CostCenterView costCenterView = costCenterService.insertCostCenter(orgId, costCenterUpdate, false);
         return costCenterView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
@@ -81,7 +81,7 @@ public class CostCenterController {
             ),
     })
     @PutMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<CostCenterView> updateCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         CostCenterView costCenterView = costCenterService.updateCostCenter(orgId, costCenterUpdate);
 
@@ -96,7 +96,7 @@ public class CostCenterController {
             ),
     })
     @PostMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> insertCostCentersCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam("file") MultipartFile file) {
         return costCenterService.createCostCenterFromCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(BAD_REQUEST).body(problem),
