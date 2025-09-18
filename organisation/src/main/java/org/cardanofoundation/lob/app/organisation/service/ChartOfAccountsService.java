@@ -150,6 +150,13 @@ public class ChartOfAccountsService {
                         .withStatus(Status.NOT_FOUND)
                         .build(), chartOfAccountUpdate));
             }
+            if (parentChartOfAccount.get().getId().getCustomerCode().equals(chartOfAccountUpdate.getCustomerCode())) {
+                return Either.left(ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("PARENT_ACCOUNT_CANNOT_BE_SELF")
+                        .withDetail("The parent chart of account cannot be the same as the account itself :%s".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate));
+            }
         }
         return Either.right(null);
     }

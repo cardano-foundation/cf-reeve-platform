@@ -70,6 +70,16 @@ public class ProjectCodeService {
         if (projectUpdate.getParentCustomerCode() != null) {
             Optional<Project> parent = getProject(orgId, projectUpdate.getParentCustomerCode());
             if(parent.isPresent()) {
+                if (parent.get().getId().getCustomerCode().equals(projectUpdate.getCustomerCode())) {
+                    return ProjectView.createFail(
+                            projectUpdate,
+                            Problem.builder()
+                                    .withStatus(Status.BAD_REQUEST)
+                                    .withTitle("PARENT_PROJECT_CANNOT_BE_SELF")
+                                    .withDetail("The parent project cannot be the same as the project itself :%s".formatted(projectUpdate.getCustomerCode()))
+                                    .build()
+                    );
+                }
                 project.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
             } else {
                 return ProjectView.createFail(
@@ -81,6 +91,7 @@ public class ProjectCodeService {
                                 .build()
                 );
             }
+
         }
         Project saved = projectMappingRepository.save(project);
         return ProjectView.fromEntity(saved);
@@ -97,6 +108,16 @@ public class ProjectCodeService {
             if (projectUpdate.getParentCustomerCode() != null) {
                 Optional<Project> project = getProject(orgId, projectUpdate.getParentCustomerCode());
                 if(project.isPresent()) {
+                    if (project.get().getId().getCustomerCode().equals(projectUpdate.getCustomerCode())) {
+                        return ProjectView.createFail(
+                                projectUpdate,
+                                Problem.builder()
+                                        .withStatus(Status.BAD_REQUEST)
+                                        .withTitle("PARENT_PROJECT_CANNOT_BE_SELF")
+                                        .withDetail("The parent project cannot be the same as the project itself :%s".formatted(projectUpdate.getCustomerCode()))
+                                        .build()
+                        );
+                    }
                     projectEntityUpdated.setParentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
                 } else {
                     return ProjectView.createFail(
