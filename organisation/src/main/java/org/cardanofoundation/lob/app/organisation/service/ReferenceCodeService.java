@@ -102,7 +102,7 @@ public class ReferenceCodeService {
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
-        referenceCode.setActive(referenceCodeUpdate.isActive());
+        referenceCode.setActive(referenceCodeUpdate.getActive());
         ReferenceCode savedEntity = referenceCodeRepository.save(referenceCode);
         // updating event codes
         accountEventService.updateStatus(orgId, savedEntity.getId().getReferenceCode());
@@ -156,7 +156,7 @@ public class ReferenceCodeService {
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
-        referenceCode.setActive(referenceCodeUpdate.isActive());
+        referenceCode.setActive(referenceCodeUpdate.getActive());
         // The reference code returning is not the latest version after save
         referenceCode = referenceCodeRepository.save(referenceCode);
         accountEventService.updateStatus(orgId, referenceCode.getId().getReferenceCode());

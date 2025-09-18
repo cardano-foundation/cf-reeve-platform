@@ -37,13 +37,13 @@ public class ReferenceCodeUpdate {
     @Schema(example = "true")
     @CsvBindByName(column = "Active")
     @NotNull(message = "Active is required")
-    private boolean isActive = true;
+    private Boolean active;
 
     public ReferenceCode toEntity(String orgId) {
         return ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCode))
                 .name(name)
-                .isActive(isActive)
+                .isActive(active)
                 .parentReferenceCode(parentReferenceCode.isEmpty() ? null : parentReferenceCode)
                 .build();
     }

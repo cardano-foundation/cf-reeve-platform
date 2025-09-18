@@ -32,5 +32,7 @@ public class EventCodeUpdate {
     @NotNull(message = "Name is required")
     private String name;
 
-    private Boolean active = true;
+    @CsvBindByName(column = "Active")
+    @NotNull(message = "Active is required")
+    private Boolean active;
 }

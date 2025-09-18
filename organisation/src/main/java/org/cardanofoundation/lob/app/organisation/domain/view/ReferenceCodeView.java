@@ -42,7 +42,7 @@ public class ReferenceCodeView {
                 .referenceCode(referenceCodeUpdate.getReferenceCode())
                 .description(referenceCodeUpdate.getName())
                 .parentReferenceCode(referenceCodeUpdate.getParentReferenceCode())
-                .isActive(referenceCodeUpdate.isActive())
+                .isActive(referenceCodeUpdate.getActive())
                 .error(Optional.of(error))
                 .build();
     }
