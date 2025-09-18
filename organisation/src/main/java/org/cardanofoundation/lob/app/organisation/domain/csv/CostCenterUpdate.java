@@ -23,6 +23,6 @@ public class CostCenterUpdate {
     private String parentCustomerCode;
     @CsvBindByName(column = "Active")
     @NotNull(message = "Active is required")
-    private boolean active = true;
+    private Boolean active;
 
 }

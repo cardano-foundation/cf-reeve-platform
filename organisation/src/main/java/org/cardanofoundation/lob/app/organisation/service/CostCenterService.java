@@ -76,7 +76,7 @@ public class CostCenterService {
                 }
             }
             costCenter.setParentCustomerCode(costCenterUpdate.getParentCustomerCode() == null || costCenterUpdate.getParentCustomerCode().isBlank() ? null : costCenterUpdate.getParentCustomerCode());
-            costCenter.setActive(costCenterUpdate.isActive());
+            costCenter.setActive(costCenterUpdate.getActive());
             return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
         }
         return CostCenterView.createFail(
@@ -109,7 +109,7 @@ public class CostCenterService {
             costCenter = costCenterFound.get();
         }
         costCenter.setName(costCenterUpdate.getName());
-        costCenter.setActive(costCenterUpdate.isActive());
+        costCenter.setActive(costCenterUpdate.getActive());
 
         // check if parent exists
         if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {

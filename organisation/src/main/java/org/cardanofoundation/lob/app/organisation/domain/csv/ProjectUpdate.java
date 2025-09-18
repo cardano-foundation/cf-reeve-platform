@@ -23,5 +23,5 @@ public class ProjectUpdate {
     private String parentCustomerCode;
     @CsvBindByName(column = "Active")
     @NotNull(message = "Active is required")
-    private Boolean active = true;
+    private Boolean active;
 }
