@@ -79,7 +79,7 @@ public class API3L1TransactionCreator {
             if(keriEnabled) {
                 MetadataMap keriMetadataMap =
                         api3MetadataSerialiser.serializeToKeriMap(reportEntity);
-                metadataMap.put("identifier", 
+                metadataMap.put("identifier",
                         keriService.orElseThrow(() -> new IllegalStateException("KeriService not available")).interactWithIdentifier(keriMetadataMap));
             }
 

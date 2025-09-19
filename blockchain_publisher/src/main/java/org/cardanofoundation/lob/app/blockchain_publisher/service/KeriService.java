@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.security.DigestException;
 import java.util.Map;
 
@@ -39,7 +38,7 @@ public class KeriService {
     public MetadataMap interactWithIdentifier(MetadataMap data) {
         try {
             String dataHash = HexUtil.encodeHexString(Sha256Hash.hash(data.toJson().getBytes()));
-            
+
             EventResult interact = client.identifiers().interact(identifierConfig.getPrefix(), dataHash);
             client.operations().wait(Operation.fromObject(interact.op()));
             Map<String, Object> ked = interact.serder().getKed();
