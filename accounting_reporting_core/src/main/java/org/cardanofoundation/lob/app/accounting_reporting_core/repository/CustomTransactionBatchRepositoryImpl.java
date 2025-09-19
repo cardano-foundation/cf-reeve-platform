@@ -135,9 +135,8 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
         }
 
         if (body.getCreatedBy() != null && !body.getCreatedBy().isEmpty()) {
-            andPredicates.add(builder.equal(rootEntry.get("createdBy"), body.getCreatedBy()));
+            andPredicates.add(builder.in(rootEntry.get("createdBy")).value(body.getCreatedBy()));
         }
-
 
         if (null != body.getFrom()) {
             LocalDateTime localDateTime1 = body.getFrom().atStartOfDay();
