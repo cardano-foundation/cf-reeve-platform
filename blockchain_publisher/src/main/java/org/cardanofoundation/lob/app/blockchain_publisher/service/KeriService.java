@@ -38,15 +38,16 @@ public class KeriService {
 
     public MetadataMap interactWithIdentifier(MetadataMap data) {
         try {
-            String dataJson = data.toJson();
-            EventResult interact = client.identifiers().interact(identifierConfig.getPrefix(), dataJson);
+            String dataHash = HexUtil.encodeHexString(Sha256Hash.hash(data.toJson().getBytes()));
+            
+            EventResult interact = client.identifiers().interact(identifierConfig.getPrefix(), dataHash);
             client.operations().wait(Operation.fromObject(interact.op()));
             Map<String, Object> ked = interact.serder().getKed();
-            int interactionIndex = Integer.parseInt(ked.get("s").toString(), 16);
             MetadataMap metadataMap = MetadataBuilder.createMap();
-            metadataMap.put("sn", BigInteger.valueOf(interactionIndex));
-            metadataMap.put("aid", identifierConfig.getPrefix());
-            metadataMap.put("data_hash", HexUtil.encodeHexString(Sha256Hash.hash(data.toJson().getBytes())));
+            metadataMap.put("s", ked.get("s").toString());
+            metadataMap.put("i", identifierConfig.getPrefix());
+            metadataMap.put("d", dataHash);
+            metadataMap.put("type", "KERI");
             return metadataMap;
 
         } catch (DigestException | LibsodiumException | InterruptedException | IOException
