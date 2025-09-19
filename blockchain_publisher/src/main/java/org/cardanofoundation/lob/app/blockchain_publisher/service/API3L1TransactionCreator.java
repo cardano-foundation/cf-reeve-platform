@@ -76,12 +76,7 @@ public class API3L1TransactionCreator {
         try {
             MetadataMap metadataMap =
                     api3MetadataSerialiser.serialiseToMetadataMap(reportEntity, creationSlot);
-            if(keriEnabled) {
-                MetadataMap keriMetadataMap =
-                        api3MetadataSerialiser.serializeToKeriMap(reportEntity);
-                metadataMap.put("identifier",
-                        keriService.orElseThrow(() -> new IllegalStateException("KeriService not available")).interactWithIdentifier(keriMetadataMap));
-            }
+
 
             Map data = metadataMap.getMap();
             byte[] bytes = CborSerializationUtil.serialize(data);
@@ -93,7 +88,12 @@ public class API3L1TransactionCreator {
             CBORMetadataMap cborMetadataMap = new CBORMetadataMap(data);
 
             metadata.put(metadataLabel, cborMetadataMap);
-
+            if (keriEnabled) {
+                metadata.put(1,
+                        keriService.orElseThrow(
+                                () -> new IllegalStateException("KeriService not available"))
+                                .interactWithIdentifier(cborMetadataMap)); // using the complete data for KERI
+            }
             boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
 
             if (!isValid) {
