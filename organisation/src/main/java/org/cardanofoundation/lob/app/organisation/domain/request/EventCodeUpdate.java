@@ -31,8 +31,4 @@ public class EventCodeUpdate {
     @CsvBindByName(column = "Name")
     @NotNull(message = "Name is required")
     private String name;
-
-    @CsvBindByName(column = "Active")
-    @NotNull(message = "Active is required")
-    private Boolean active;
 }
