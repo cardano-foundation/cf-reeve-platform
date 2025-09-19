@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -165,9 +164,9 @@ public class ReferenceCodeService {
     }
 
     @Transactional
-    public Either<Set<Problem>, Set<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
+    public Either<List<Problem>, List<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, ReferenceCodeUpdate.class).fold(
-                problem -> Either.left(Set.of(problem)),
+                problem -> Either.left(List.of(problem)),
                 referenceCodeUpdates -> Either.right(referenceCodeUpdates.stream().map(
                         refCodeUpdate -> {
                             Errors errors = validator.validateObject(refCodeUpdate);
@@ -180,7 +179,7 @@ public class ReferenceCodeService {
                                         .build(), refCodeUpdate);
                             }
                             return insertReferenceCode(orgId, refCodeUpdate, true);
-                        }).collect(Collectors.toSet()))
+                        }).toList())
         );
     }
 

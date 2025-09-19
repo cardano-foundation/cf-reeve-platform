@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.organisation.service;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -155,10 +154,10 @@ public class AccountEventService {
     }
 
     @Transactional
-    public Either<Set<Problem>, Set<AccountEventView>> insertAccountEventByCsv(String orgId, MultipartFile file) {
+    public Either<List<Problem>, List<AccountEventView>> insertAccountEventByCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, EventCodeUpdate.class).fold(
                 problem ->
-                        Either.left(Set.of(problem)),
+                        Either.left(List.of(problem)),
                 eventCodeUpdates ->
                         Either.right(eventCodeUpdates.stream().map(eventCodeUpdate -> {
                             Errors errors = validator.validateObject(eventCodeUpdate);
@@ -171,7 +170,7 @@ public class AccountEventService {
                                         .build(), eventCodeUpdate);
                             }
                              return insertAccountEvent(orgId, eventCodeUpdate, true);
-                        }).collect(Collectors.toSet()))
+                        }).toList())
         );
     }
 

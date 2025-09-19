@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
@@ -109,7 +111,7 @@ class ChartOfAccountsServiceTest {
                 .withStatus(org.zalando.problem.Status.BAD_REQUEST)
                 .build()));
 
-        Either<Set<Problem>, Set<ChartOfAccountView>> views = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<Problem>, List<ChartOfAccountView>> views = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
 
         assertTrue(views.isLeft());
         assertEquals(1, views.getLeft().size());
@@ -125,7 +127,7 @@ class ChartOfAccountsServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         doThrow(new IllegalArgumentException("Error")).when(updateCsv).fillOpeningBalance();
-        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
         assertEquals("OPENING_BALANCE_ERROR", sets.get().iterator().next().getError().get().getTitle());
@@ -143,7 +145,7 @@ class ChartOfAccountsServiceTest {
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
 
-        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
         assertEquals("VALIDATION_ERROR", sets.get().iterator().next().getError().get().getTitle());
@@ -165,7 +167,7 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, "TYPE")).thenReturn(Optional.of(typeMock));
         when(chartOfAccountSubTypeRepository.findFirstByNameAndOrganisationIdAndParentName(orgId, "SUBTYPE", "TYPE")).thenReturn(Optional.of(subTypeMock));
 
-        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
         assertEquals("ORGANISATION_NOT_FOUND", sets.get().iterator().next().getError().get().getTitle());
@@ -198,7 +200,7 @@ class ChartOfAccountsServiceTest {
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
 
-        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }
@@ -217,7 +219,7 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, "TYPE")).thenReturn(Optional.empty());
         when(updateCsv.getEventRefCode()).thenReturn(chartOfAccountUpdate.getEventRefCode());
 
-        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }
@@ -238,7 +240,7 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountSubTypeRepository.findFirstByNameAndOrganisationIdAndParentName(orgId, "SUBTYPE", "TYPE")).thenReturn(Optional.empty());
         when(updateCsv.getEventRefCode()).thenReturn(chartOfAccountUpdate.getEventRefCode());
 
-        Either<Set<Problem>, Set<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }

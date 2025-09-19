@@ -3,7 +3,7 @@ package org.cardanofoundation.lob.app.organisation.service;
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.OPENING_BALANCE_VALIDATION_ERROR;
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
 
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -255,17 +255,17 @@ public class ChartOfAccountsService {
     }
 
     @Transactional
-    public Either<Set<Problem>, Set<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
+    public Either<List<Problem>, List<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
 
 
         Either<Problem, List<ChartOfAccountUpdateCsv>> lists = csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class);
 
         if (lists.isLeft()) {
-            return Either.left(Set.of(lists.getLeft()));
+            return Either.left(List.of(lists.getLeft()));
         }
 
         List<ChartOfAccountUpdateCsv> chartOfAccountUpdates = lists.get();
-        Set<ChartOfAccountView> accountEventViews = new HashSet<>();
+        List<ChartOfAccountView> accountEventViews = new ArrayList<>();
         for (ChartOfAccountUpdateCsv chartOfAccountUpdateCsv : chartOfAccountUpdates) {
             Errors errors = validator.validateObject(chartOfAccountUpdateCsv);
             List<ObjectError> allErrors = errors.getAllErrors();
