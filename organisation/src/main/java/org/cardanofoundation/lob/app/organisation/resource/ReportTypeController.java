@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 import jakarta.validation.Valid;
 
@@ -72,7 +71,7 @@ public class ReportTypeController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         if (reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).isLeft()) {
-            Set<Problem> left = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).getLeft();
+            List<Problem> left = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).getLeft();
             return ResponseEntity.status(Objects.requireNonNull(400)).body(left);
         }
         return ResponseEntity.ok().body(true);

@@ -1,9 +1,8 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import jakarta.validation.Valid;
 
@@ -80,13 +79,13 @@ public class ReportTypeService {
     }
 
     @Transactional
-    public Either<Set<Problem>, Void> addMappingToReportTypeFieldCsv(String orgId, MultipartFile file) {
+    public Either<List<Problem>, Void> addMappingToReportTypeFieldCsv(String orgId, MultipartFile file) {
         Either<Problem, List<ReportTypeFieldUpdateCsv>> csv = csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class);
         if (csv.isLeft()) {
-            return Either.left(Set.of(csv.getLeft()));
+            return Either.left(List.of(csv.getLeft()));
         }
         List<ReportTypeFieldUpdateCsv> reportTypeFieldUpdateCsvs = csv.get();
-        Set<Problem> errors = new HashSet<>();
+        List<Problem> errors = new ArrayList<>();
         for (ReportTypeFieldUpdateCsv reportUpdate : reportTypeFieldUpdateCsvs) {
             ReportTypeFieldUpdate reportTypeFieldUpdate = new ReportTypeFieldUpdate(
                     safeParse(reportUpdate.getReportType()),

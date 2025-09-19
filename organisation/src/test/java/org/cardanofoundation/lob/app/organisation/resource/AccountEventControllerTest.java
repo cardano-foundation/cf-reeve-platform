@@ -5,7 +5,6 @@ import static org.mockito.Mockito.*;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
@@ -43,7 +42,7 @@ class AccountEventControllerTest {
 
     @Test
     void insertReferenceCodeByCsv_error() {
-        when(accountEventService.insertAccountEventByCsv("orgId", null)).thenReturn(Either.left(Set.of(Problem.builder()
+        when(accountEventService.insertAccountEventByCsv("orgId", null)).thenReturn(Either.left(List.of(Problem.builder()
                 .withTitle("Error")
                 .withStatus(Status.BAD_REQUEST)
                 .build())));
@@ -51,22 +50,23 @@ class AccountEventControllerTest {
         ResponseEntity<?> response = controller.insertReferenceCodeByCsv("orgId", null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody())).hasSize(1);
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        assertThat(((List<?>) response.getBody())).hasSize(1);
     }
 
     @Test
     void insertReferenceCodeByCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
         AccountEventView view = mock(AccountEventView.class);
-        when(accountEventService.insertAccountEventByCsv(orgId, file)).thenReturn(Either.right(Set.of(view)));
+        when(accountEventService.insertAccountEventByCsv(orgId, file)).thenReturn(Either.right(
+                List.of(view)));
 
         ResponseEntity<?> response = controller.insertReferenceCodeByCsv(orgId, file);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody())).hasSize(1);
-        assertThat(((Set<?>) response.getBody()).iterator().next()).isEqualTo(view);
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        assertThat(((List<?>) response.getBody())).hasSize(1);
+        assertThat(((List<?>) response.getBody()).iterator().next()).isEqualTo(view);
     }
 
     @Test
