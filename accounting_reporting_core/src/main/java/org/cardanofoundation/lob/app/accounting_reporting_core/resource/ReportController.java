@@ -47,6 +47,15 @@ public class ReportController {
     @PostMapping(value = "/report-generate", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportResponseView> reportGenerate(@Valid @RequestBody ReportGenerateRequest reportGenerateRequest) {
+        if(reportGenerateRequest.getReportType().equals(ReportType.DYNAMIC)){
+            return reportService.reportGenerate(reportGenerateRequest,true).fold(
+                    problem ->
+                            ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportResponseView.createFail(problem)),
+                    success -> ResponseEntity.ok().body(
+                            ReportResponseView.createSuccess(List.of(ReportView.fromEntity(success)))
+                    )
+            );
+        }
         return reportService.reportGenerate(reportGenerateRequest).fold(
                 problem ->
                         ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportResponseView.createFail(problem)),
