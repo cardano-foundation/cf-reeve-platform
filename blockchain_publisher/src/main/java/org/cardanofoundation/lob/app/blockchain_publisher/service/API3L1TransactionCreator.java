@@ -52,6 +52,7 @@ public class API3L1TransactionCreator {
     private final boolean debugStoreOutputTx;
     private final boolean keriEnabled;
     private final Optional<KeriService> keriService;
+    private final int keriMetadataLabel;
 
     private String runId;
 
@@ -89,7 +90,8 @@ public class API3L1TransactionCreator {
 
             metadata.put(metadataLabel, cborMetadataMap);
             if (keriEnabled) {
-                metadata.put(1,
+                metadata.put(
+                        keriMetadataLabel,
                         keriService.orElseThrow(
                                 () -> new IllegalStateException("KeriService not available"))
                                 .interactWithIdentifier(cborMetadataMap)); // using the complete data for KERI

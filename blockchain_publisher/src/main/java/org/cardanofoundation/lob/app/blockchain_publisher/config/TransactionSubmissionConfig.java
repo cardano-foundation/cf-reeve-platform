@@ -86,7 +86,8 @@ public class TransactionSubmissionConfig {
                                                              @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
                                                              @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx,
                                                              @Value("${lob.blockchain_publisher.keri.enabled:false}") boolean keriEnabled,
-                                                             Optional<KeriService> keriService
+                                                             Optional<KeriService> keriService,
+                                                             @Value("${lob.blockchain_publisher.keri.metadata_label:1}") int keriMetadataLabel
     ) {
         return new API3L1TransactionCreator(backendService,
                 metadataSerialiser,
@@ -96,7 +97,8 @@ public class TransactionSubmissionConfig {
                 metadataLabel,
                 debugStoreOutputTx,
                 keriEnabled,
-                keriService
+                keriService,
+                keriMetadataLabel
         );
     }
 
