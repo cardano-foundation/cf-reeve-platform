@@ -11,16 +11,19 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import co.nstant.in.cbor.CborException;
-import com.bloxbean.cardano.client.crypto.bip39.Sha256Hash;
+import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
-import com.bloxbean.cardano.client.util.HexUtil;
+import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataMap;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
 import org.cardanofoundation.signify.app.aiding.EventResult;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Operation;
+import org.cardanofoundation.signify.cesr.Diger;
+import org.cardanofoundation.signify.cesr.args.RawArgs;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
+import org.cardanofoundation.signify.cesr.util.CoreUtil;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -35,17 +38,20 @@ public class KeriService {
     private final SignifyClient client;
     private final IdentifierConfig identifierConfig;
 
-    public MetadataMap interactWithIdentifier(MetadataMap data) {
+    public MetadataMap interactWithIdentifier(CBORMetadataMap data) {
         try {
-            String dataHash = HexUtil.encodeHexString(Sha256Hash.hash(data.toJson().getBytes()));
+            byte[] blake3_256 = CoreUtil.blake3_256(
+                    CborSerializationUtil.serialize(data.getMap()), 32);
+            Diger diger = new Diger(RawArgs.builder().raw(blake3_256).build());
 
-            EventResult interact = client.identifiers().interact(identifierConfig.getPrefix(), dataHash);
+            EventResult interact = client.identifiers().interact(identifierConfig.getPrefix(),
+                    diger.getQb64());
             client.operations().wait(Operation.fromObject(interact.op()));
             Map<String, Object> ked = interact.serder().getKed();
             MetadataMap metadataMap = MetadataBuilder.createMap();
             metadataMap.put("s", ked.get("s").toString());
             metadataMap.put("i", identifierConfig.getPrefix());
-            metadataMap.put("d", dataHash);
+            metadataMap.put("d", diger.getQb64());
             metadataMap.put("type", "KERI");
             return metadataMap;
 
