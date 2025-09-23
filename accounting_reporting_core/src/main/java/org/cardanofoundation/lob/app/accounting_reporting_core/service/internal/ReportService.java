@@ -46,12 +46,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.repor
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.IncomeStatementData;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.PublicReportRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportReprocessRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
@@ -77,6 +73,8 @@ public class ReportService {
 
 
     private final ReportRepository reportRepository;
+    private final ReportDynamicRepository reportDynamicRepository;
+    private final ReportDynamicFieldRepository reportDynamicFieldRepository;
     private final PublicReportRepository publicReportRepository;
     private final OrganisationPublicApi organisationPublicApi;
     private final Clock clock;
@@ -822,6 +820,53 @@ public class ReportService {
         }
     }
 
+    private void fillObjectRecursively(ReportDynamicEntity reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview, boolean segundo) {
+        if (field.getChildFields().isEmpty()) {
+            if (field.getMappingTypes().isEmpty() && field.getMappingReportTypes().isEmpty()) {
+                log.debug("Field %s has no mapping type, skipping...".formatted(field.getName()));
+                return;
+            }
+
+            Optional<LocalDate> startSearchDate = Optional.of(startDate);
+            BigDecimal totalAmount = BigDecimal.ZERO;
+
+            if (field.isAccumulatedYearly()) {
+                startSearchDate = Optional.of(LocalDate.of(startDate.getYear(), 1, 1));
+            }
+            if (field.isAccumulated()) {
+                startSearchDate = Optional.of(LocalDate.EPOCH);
+            }
+            if (field.isAccumulatedPreviousYear()) {
+                if (!field.isAccumulated()) {
+                    startSearchDate = Optional.of(LocalDate.of(startDate.getYear() - 1, 1, 1));
+                }
+
+                endDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
+            }
+
+            totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate, preview);
+            totalAmount = addValuesFromReportFields(field, endDate, totalAmount, startSearchDate);
+            if (field.isNegate()) {
+                totalAmount = totalAmount.negate();
+            }
+            // Set value dynamically in reportData
+
+            ReportDynamicFieldEntity reportField = new ReportDynamicFieldEntity();
+            reportField.setId("1");
+            reportField.setFieldId(field.getName());
+            reportField.setAmount(totalAmount.toString());
+            reportData.addField(reportField);
+
+            //setFieldValue(reportData, field.getName(), totalAmount);
+        } else {
+            LocalDate finalEndDate = endDate;
+            field.getChildFields().forEach(subField -> {
+                Object subFieldObject = getOrCreateNestedObject(reportData, field.getName());
+                fillObjectRecursively(subFieldObject, subField, startDate, finalEndDate, preview);
+            });
+        }
+    }
+
     private BigDecimal addValuesFromReportFields(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate) {
         List<ReportTypeFieldEntity> mappingReportTypes = field.getMappingReportTypes();
         for (ReportTypeFieldEntity mappedTypeField : mappingReportTypes) {
@@ -912,7 +957,7 @@ public class ReportService {
 
         // Finding all transaction items that are related to these ChartOfAccounts and fall within the specified date range
         List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange;
-        if(preview) {
+        if (preview) {
             transactionItemsByAccountCodeAndDateRange =
                     transactionItemRepository
                             .findPreviewTransactionItemsByAccountCodeAndDateRange(
@@ -1102,5 +1147,56 @@ public class ReportService {
             reportEntity.setPublishError(PublishError.valueOf(isReportReadyToPublish.getLeft().getTitle()));
         }
         return Either.right(reportRepository.save(reportEntity));
+    }
+
+    public Either<Problem, ReportDynamicEntity> reportGenerate(@Valid ReportGenerateRequest reportGenerateRequest, boolean segundo) {
+        LocalDate startDate = getReportStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear());
+        LocalDate endDate = getReportEndDate(reportGenerateRequest.getIntervalType(), getReportStartDate(reportGenerateRequest.getIntervalType(), reportGenerateRequest.getPeriod(), reportGenerateRequest.getYear()));
+
+        ReportDynamicEntity reportEntity = new ReportDynamicEntity();
+        reportEntity.setYear(reportGenerateRequest.getYear());
+        reportEntity.setPeriod(Optional.of(reportGenerateRequest.getPeriod()));
+        reportEntity.setIntervalType(reportGenerateRequest.getIntervalType());
+        reportEntity.setMode(USER);
+        reportEntity.setDate(LocalDate.now(clock));
+        reportEntity.setOrganisation(Organisation.builder().id(reportGenerateRequest.getOrganisationId()).build());
+        reportEntity.setType(reportGenerateRequest.getReportType());
+
+
+        Optional<ReportTypeEntity> optionalReportSetupEntity = reportTypeRepository.findByOrganisationAndReportName(reportGenerateRequest.getOrganisationId(), ReportType.DYNAMIC.name());
+
+        if (optionalReportSetupEntity.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle(Constants.REPORT_SETUP_NOT_FOUND)
+                    .withDetail(String.format(Constants.REPORT_SETUP_FOR_S_NOT_FOUND, reportGenerateRequest.getReportType().name()))
+                    .withStatus(Status.BAD_REQUEST)
+                    .with(Constants.REPORT_TYPE, reportGenerateRequest.getReportType().name())
+                    .build());
+        }
+        ReportTypeEntity reportTypeEntity = optionalReportSetupEntity.get();
+        switch (reportGenerateRequest.getReportType()) {
+            case DYNAMIC -> {
+                BalanceSheetData balanceSheetData = new BalanceSheetData();
+
+
+                Set<ReportTypeFieldEntity> topLevelFields = reportTypeEntity.getFields().stream().filter(field -> field.getParent() == null).collect(Collectors.toSet());
+                topLevelFields.forEach(reportTypeFieldEntity -> {
+                    fillObjectRecursively(reportEntity, reportTypeFieldEntity, startDate, endDate, reportGenerateRequest.isPreview(), true);
+                });
+
+
+
+            }
+            default -> {
+                return Either.left(Problem.builder()
+                        .withTitle(Constants.INVALID_REPORT_TYPE)
+                        .withDetail(String.format(Constants.REPORT_TYPE_IS_NOT_VALID_EXPECTED_BALANCE_SHEET_OR_INCOME_STATEMENT_BUT_GOT_S, reportGenerateRequest.getReportType()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .with(Constants.REPORT_TYPE, reportGenerateRequest.getReportType())
+                        .build());
+            }
+        }
+
+        return Either.right(reportEntity);
     }
 }

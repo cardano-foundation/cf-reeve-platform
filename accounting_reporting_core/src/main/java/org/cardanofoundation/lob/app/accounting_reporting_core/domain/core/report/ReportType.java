@@ -2,5 +2,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.repo
 
 public enum ReportType {
     BALANCE_SHEET,
-    INCOME_STATEMENT
+    INCOME_STATEMENT,
+    DYNAMIC
 }

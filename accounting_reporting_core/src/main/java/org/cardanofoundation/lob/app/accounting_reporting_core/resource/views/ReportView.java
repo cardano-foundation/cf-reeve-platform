@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.views;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -16,6 +17,8 @@ import org.zalando.problem.Problem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportDynamicEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportDynamicFieldEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 
 @Getter
@@ -159,6 +162,8 @@ public class ReportView {
     @Schema(example = "1000.51")
     private String directTaxes;
 
+    private Set<ReportDynamicFieldEntity> fields;
+
     public static ReportView fromEntity(ReportEntity reportEntity) {
         ReportView reportResponseView = new ReportView();
         reportResponseView.setReportId(reportEntity.getReportId());
@@ -232,4 +237,41 @@ public class ReportView {
         return reportResponseView;
     }
 
+    public static ReportView fromEntity(ReportDynamicEntity reportEntity) {
+        ReportView reportResponseView = new ReportView();
+        reportResponseView.setReportId(reportEntity.getReportId());
+        reportResponseView.setDocumentCurrencyCustomerCode(reportEntity.getOrganisation().getCurrencyId());
+        reportResponseView.setOrganisationId(reportEntity.getOrganisation().getId());
+        reportResponseView.setType(reportEntity.getType());
+        reportResponseView.setPublishDate(reportEntity.getLedgerDispatchDate());
+        reportResponseView.setPublishedBy(reportEntity.getPublishedBy());
+        reportResponseView.setCreatedBy(reportEntity.getCreatedBy());
+        reportResponseView.setCreatedAt(reportEntity.getCreatedAt());
+        reportResponseView.setUpdatedBy(reportEntity.getUpdatedBy());
+        reportResponseView.setUpdatedAt(reportEntity.getUpdatedAt());
+        reportResponseView.setIntervalType(reportEntity.getIntervalType());
+        reportResponseView.setYear(reportEntity.getYear());
+        reportResponseView.setPeriod(reportEntity.getPeriod());
+        reportResponseView.setDate(reportEntity.getDate());
+        reportResponseView.setPublish(reportEntity.getLedgerDispatchApproved());
+
+        if (reportEntity.getLedgerDispatchReceipt().isPresent()) {
+            reportResponseView.setBlockChainHash(reportEntity.getLedgerDispatchReceipt().get().getPrimaryBlockchainHash());
+        }
+
+        reportResponseView.setLedgerDispatchStatusErrorReason(reportEntity.getLedgerDispatchStatusErrorReason());
+        reportResponseView.setCanBePublish(reportEntity.getIsReadyToPublish());
+        reportResponseView.setCanPublishError(reportEntity.getPublishError());
+        reportResponseView.setVer(reportEntity.getVer());
+        //BalanceSheet
+
+        //reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getCapital().flatMap(capital -> capital.getResultsCarriedForward())).ifPresent(bigDecimal -> reportResponseView.setResultsCarriedForward(bigDecimal.toString()));
+
+        //IncomeStatement
+        //reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getRevenues().flatMap(revenues -> revenues.getOtherIncome())).ifPresent(bigDecimal -> reportResponseView.setOtherIncome(bigDecimal.toString()));
+
+        reportResponseView.setFields(reportEntity.getFields());
+
+        return reportResponseView;
+    }
 }
