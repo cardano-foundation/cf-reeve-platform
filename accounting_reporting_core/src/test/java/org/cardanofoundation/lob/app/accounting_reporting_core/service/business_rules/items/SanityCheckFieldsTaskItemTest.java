@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VALIDATION_ERROR;
 import static org.mockito.Mockito.*;
 
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
@@ -98,6 +99,7 @@ class SanityCheckFieldsTaskItemTest {
         when(itemEntity.getDocument()).thenReturn(Optional.of(document));
         when(itemEntity.getId()).thenReturn("item1");
         when(itemEntity.getStatus()).thenReturn(TxItemValidationStatus.OK);
+        when(itemEntity.getFxRate()).thenReturn(BigDecimal.ONE);
 
         tx.setItems(Set.of(itemEntity));
         taskItem.run(tx);
