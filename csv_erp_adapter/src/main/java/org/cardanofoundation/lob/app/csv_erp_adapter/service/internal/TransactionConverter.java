@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
 import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
@@ -51,6 +52,7 @@ public class TransactionConverter {
         List<Transaction> transactions = new ArrayList<>();
         for (Map.Entry<String, List<TransactionLine>> entry : collect.entrySet()) {
             List<TransactionLine> transactionLines = entry.getValue();
+            Set<Violation> violations = new HashSet<>();
             if (transactionLines.isEmpty()) {
                 continue; // skipping
             }
@@ -64,12 +66,17 @@ public class TransactionConverter {
                 log.error("Transaction type not found for transaction number {}", entry.getKey(), e);
                 transactionType = TransactionType.Unknown;
             }
-            LocalDate entryDate;
+            LocalDate entryDate = null;
             try {
-                if (Optional.ofNullable(transactionLines.getFirst().getDate()).isEmpty()) {
-                    continue; // skipping transactions without date
+                Optional<TransactionLine> firstWithDate = transactionLines.stream().filter(line -> Optional.ofNullable(line.getDate()).isPresent()).findFirst();
+                if (firstWithDate.isEmpty()) {
+                    return Either.left(Problem.builder()
+                            .withTitle("Transaction items conversion failed")
+                            .withDetail("Transaction date is missing for transaction number " + entry.getKey())
+                            .build());
+                } else {
+                    entryDate = FlexibleDateParser.parse(firstWithDate.get().getDate());
                 }
-                entryDate = FlexibleDateParser.parse(transactionLines.getFirst().getDate());
             } catch (IllegalArgumentException e) {
                 log.error("Transaction date parse error {}", entry.getKey(), e);
                 return Either.left(Problem.builder()
@@ -103,8 +110,9 @@ public class TransactionConverter {
                     .organisation(Organisation.builder().id(organisationId).build())
                     .transactionType(transactionType)
                     .entryDate(entryDate)
-                    .accountingPeriod(YearMonth.from(entryDate))
+                    .accountingPeriod(Optional.ofNullable(entryDate).map(YearMonth::from).orElse(null))
                     .items(convertItems.get())
+                    .violations(violations)
                     .build());
         }
         return Either.right(transactions);
