@@ -33,6 +33,7 @@ import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult
 import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.Serder;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
+import org.cardanofoundation.signify.cesr.util.Utils;
 import org.cardanofoundation.signify.core.States;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,7 +73,7 @@ public class CreateTestVLei {
         ClientAidPair issuerPair = initClientAndAid("issuer", "issuerRegistry", "");
         issuerClient = issuerPair.client();
         issuerAid = issuerPair.aid();
-
+        
         ClientAidPair holderPair = initClientAndAid("holder", "holderRegistry", "");
         holderClient = holderPair.client();
         holderAid = holderPair.aid();
@@ -86,7 +87,8 @@ public class CreateTestVLei {
         reeveAid = reevePair.aid();
 
         resolveOobis(List.of(issuerClient, holderClient, legalEntityClient, reeveClient),
-                List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL));
+                List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, issuerAid.oobi, holderAid.oobi,
+                        legalEntityAid.oobi, REEVE_SCHEMA_URL, reeveAid.oobi));
 
         System.out.println("Creating holder credential");
 
@@ -99,34 +101,67 @@ public class CreateTestVLei {
         CredentialData cData = CredentialData.builder().build();
         cData.setA(a);
         cData.setS(QVI_SCHEMA_SAID);
-        cData.setI(issuerAid.prefix);
-        cData.setRi(registriesList.getFirst().get("regk").toString()); // TODO need to check this
-
+        cData.setRi(registriesList.getFirst().get("regk").toString());
+        
         IssueCredentialResult holderCredentialResult =
                 issuerClient.credentials().issue(issuerAid.name(), cData);
-        Operation<?> wait = issuerClient.operations().wait(holderCredentialResult.getOp());
+        issuerClient.operations().wait(holderCredentialResult.getOp());
         String qviCredentialId = holderCredentialResult.getAcdc().getKed().get("d").toString();
-        System.out.println("QVI Credential ID: " + qviCredentialId);
-        System.out.println(wait);
-        System.out.println("IPEX grant - Sending Credential to Holder");
+        
+        System.out.println("Holder Credential ID: " + qviCredentialId + " Sending IPEX grant...");
+        sentIpexGrant(qviCredentialId, issuerAid, holderAid, issuerClient);
+
+        System.out.println("Holder IPEX admit");
         String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
-        Object issuerCredential = null;
-        int retries = 10;
-        int delayMillis = 2000;
-        for (int i = 0; i < retries; i++) {
-            try {
-            issuerCredential = issuerClient.credentials().get(qviCredentialId);
-            if (issuerCredential != null) {
+        int retryCount = 1000;
+        int waitTimeMs = 3000;
+        String route = "/exn/ipex/grant";
+        Map<String, Object> grantNotification = null;
+        for(int i = 0; i < retryCount; i++) {
+            System.out.println("Checking for notifications, attempt " + (i+1) + " of " + retryCount);
+            Notifying.Notifications.NotificationListResponse response = holderClient.notifications().list();
+            String notesResponse = response.notes();
+            System.out.println(notesResponse)
+            List<Map<String, Object>> holderNotifications = objectMapper.readValue(notesResponse, new TypeReference<>() {});
+            System.out.println(holderNotifications.size() + " notifications found");
+            holderNotifications = holderNotifications.stream()
+                    .filter(m -> {
+                        return m.containsKey("a") && ((Map<String,Object>)m.get("a")).containsKey("r") &&
+                                ((String)((Map<String,Object>)m.get("a")).get("r")).equals(route);
+                    })
+                    .toList();
+            System.out.println(holderNotifications.size() + " ipex grant notifications found");
+            if(holderNotifications.size() > 0) {
+                grantNotification = holderNotifications.getFirst();
                 break;
             }
-            } catch (Exception e) {
-                System.out.println("Retrying to get issuer credential... attempt " + (i + 1));
-            }
-            Thread.sleep(delayMillis);
+            System.out.println("No notifications yet, waiting...");
+            Thread.sleep(waitTimeMs);
         }
-        if (issuerCredential == null) {
-            throw new IllegalStateException("Issuer credential not available after retries");
+        if(grantNotification == null) {
+            throw new IllegalStateException("No notifications received after retries");
         }
+        IpexAdmitArgs iargs = IpexAdmitArgs.builder().build();
+        iargs.setSenderName(holderAid.name);
+        iargs.setMessage("");
+        iargs.setGrantSaid((String)((Map<String,Object>) grantNotification.get("a")).get("d"));
+        iargs.setRecipient(issuerAid.prefix);
+        iargs.setDatetime(dt);
+
+        Exchanging.ExchangeMessageResult resultApexAdmint = holderClient.ipex().admit(iargs);
+        Object op = holderClient.ipex().submitAdmit(holderAid.name, resultApexAdmint.exn(), 
+                resultApexAdmint.sigs(),
+                resultApexAdmint.atc(), Collections.singletonList(issuerAid.prefix));
+        holderClient.operations().wait(Operation.fromObject(op));
+        System.out.println("Holder Credential: " + qviCredentialId + " issued to " + holderAid.name);
+    }
+
+
+    private static void sentIpexGrant(String qviCredentialId, Aid issuerAid, Aid holderAid, SignifyClient issuerClient)
+            throws IOException, InterruptedException, DigestException {
+        String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
+        
+        Object issuerCredential = issuerClient.credentials().get(qviCredentialId);
         LinkedHashMap<String, Object> issuerCredentialList =
                 (LinkedHashMap<String, Object>) issuerCredential;
         Map<String, Object> getSAD = (Map<String, Object>) issuerCredentialList.get("sad");
@@ -145,30 +180,10 @@ public class CreateTestVLei {
         Object op = issuerClient.ipex().submitGrant(issuerAid.name, result.exn(), result.sigs(),
                 result.atc(), holderAidPrefix);
         Operation<Object> wait2 = issuerClient.operations().wait(Operation.fromObject(op));
-        if(!wait2.isDone()) {
-            throw new IllegalStateException("Operation not done yet");
+        if(!wait2.isDone() || wait2.getError() != null) {
+            throw new IllegalStateException("Operation not done yet or error: " + (wait2.getError() != null ? wait2.getError() : "unknown"));
         }
-        System.out.println(wait2.getResponse());
         issuerClient.operations().delete(wait2.getName());
-        System.out.println("Holder IPEX admit");
-        Notifying.Notifications.NotificationListResponse response = holderClient.notifications().list();
-        String notesResponse = response.notes();
-        List<Map<String, Object>> holderNotifications = objectMapper.readValue(notesResponse, new TypeReference<>() {});
-        Map<String, Object> grantNotification = holderNotifications.getFirst();
-
-        IpexAdmitArgs iargs = IpexAdmitArgs.builder().build();
-        iargs.setSenderName(holderAid.name);
-        iargs.setMessage("");
-        iargs.setGrantSaid((String)((Map<String,Object>)grantNotification.get("a")).get("d"));
-        iargs.setRecipient(issuerAid.prefix);
-        iargs.setDatetime(dt);
-
-        Exchanging.ExchangeMessageResult resultApexAdmint = holderClient.ipex().admit(iargs);
-        op = holderClient.ipex().submitAdmit(holderAid.name, resultApexAdmint.exn(), 
-                resultApexAdmint.sigs(),
-                resultApexAdmint.atc(), Collections.singletonList(issuerAid.prefix));
-        holderClient.operations().wait(Operation.fromObject(op));
-        System.out.println("Holder Credential: " + qviCredentialId + " issued to " + holderAid.name);
     }
 
 
@@ -248,7 +263,9 @@ public class CreateTestVLei {
 
     public static void createRegistry(SignifyClient client, Aid aid, String registryName) {
         CreateRegistryArgs registryArgs =
-                CreateRegistryArgs.builder().name(aid.name).registryName(registryName).build();
+                CreateRegistryArgs.builder().build();
+                registryArgs.setRegistryName(registryName);
+                registryArgs.setName(aid.name);
         RegistryResult registryResult;
         try {
             registryResult = client.registries().create(registryArgs);
@@ -257,6 +274,5 @@ public class CreateTestVLei {
             System.out.println(
                     "Registry " + registryName + " probably already exists for " + aid.name);
         }
-
     }
 }
