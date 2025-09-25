@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.util.Set;
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,7 +36,8 @@ class ReferenceCodeResourceTest {
 
     @Test
     void insertReferenceCodeByCsv_error() {
-        when(referenceCodeService.insertReferenceCodeByCsv("orgId", null)).thenReturn(Either.left(Set.of(Problem.builder()
+        when(referenceCodeService.insertReferenceCodeByCsv("orgId", null)).thenReturn(Either.left(
+                List.of(Problem.builder()
                 .withTitle("Error")
                 .withStatus(Status.BAD_REQUEST)
                 .build())));
@@ -44,22 +45,22 @@ class ReferenceCodeResourceTest {
         ResponseEntity<?> response = controller.insertRefCodeByCsv("orgId", null);
 
         assertThat(response.getStatusCode().value()).isEqualTo(Status.BAD_REQUEST.getStatusCode());
-        assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody())).hasSize(1);
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        assertThat(((List<?>) response.getBody())).hasSize(1);
     }
 
     @Test
     void insertReferenceCodeByCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
         ReferenceCodeView view = mock(ReferenceCodeView.class);
-        when(referenceCodeService.insertReferenceCodeByCsv("orgId", file)).thenReturn(Either.right(Set.of(view)));
+        when(referenceCodeService.insertReferenceCodeByCsv("orgId", file)).thenReturn(Either.right(List.of(view)));
 
         ResponseEntity<?> response = controller.insertRefCodeByCsv("orgId", file);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody())).hasSize(1);
-        assertThat(((Set<?>) response.getBody()).iterator().next()).isEqualTo(view);
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        assertThat(((List<?>) response.getBody())).hasSize(1);
+        assertThat(((List<?>) response.getBody()).iterator().next()).isEqualTo(view);
     }
 
 }

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.util.Set;
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,7 +33,7 @@ class ReportTypeControllerTest {
     @Test
     void insertReferenceCodeByCsv_error() {
         MultipartFile file = mock(MultipartFile.class);
-        when(reportTypeService.addMappingToReportTypeFieldCsv("orgId", file)).thenReturn(Either.left(Set.of(Problem.builder()
+        when(reportTypeService.addMappingToReportTypeFieldCsv("orgId", file)).thenReturn(Either.left(List.of(Problem.builder()
                 .withTitle("Error")
                 .withStatus(Status.BAD_REQUEST)
                 .build())));
@@ -41,8 +41,8 @@ class ReportTypeControllerTest {
         ResponseEntity<?> response = controller.addMappingToReportTypeField("orgId", file);
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
-        assertThat(response.getBody()).isInstanceOf(Set.class);
-        assertThat(((Set<?>) response.getBody())).hasSize(1);
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        assertThat(((List<?>) response.getBody())).hasSize(1);
     }
 
     @Test

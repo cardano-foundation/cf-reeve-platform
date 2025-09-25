@@ -59,7 +59,8 @@ public class ChartOfAccountUpdate {
 
     @Schema(example = "true")
     @CsvBindByName(column = "Active")
-    private Boolean active = true;
+    @NotNull(message = "Active is required")
+    private Boolean active;
 
     private OpeningBalance openingBalance;
 

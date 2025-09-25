@@ -5,7 +5,6 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -54,7 +53,7 @@ class ReportTypeServiceTest {
                 .withStatus(Status.BAD_REQUEST)
                 .build()));
 
-        Either<Set<Problem>, Void> result = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
+        Either<List<Problem>, Void> result = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(result.isLeft());
         Assertions.assertEquals(1, result.getLeft().size());
@@ -68,7 +67,7 @@ class ReportTypeServiceTest {
         ReportTypeFieldUpdateCsv reportTypeFieldUpdateCsv = mock(ReportTypeFieldUpdateCsv.class);
         when(csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class)).thenReturn(Either.right(List.of(reportTypeFieldUpdateCsv)));
 
-        Either<Set<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
+        Either<List<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());
@@ -92,7 +91,7 @@ class ReportTypeServiceTest {
         when(updateCsv.getSubType()).thenReturn("SubTypeId");
         when(chartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, "SubTypeId")).thenReturn(Optional.of(subType));
 
-        Either<Set<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
+        Either<List<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());

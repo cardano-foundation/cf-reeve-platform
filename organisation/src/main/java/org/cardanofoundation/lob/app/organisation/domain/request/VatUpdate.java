@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.organisation.domain.request;
 
-import static java.lang.Boolean.TRUE;
 
 import java.math.BigDecimal;
 
@@ -43,5 +42,6 @@ public class VatUpdate {
     private String description;
 
     @CsvBindByName(column = "Active")
-    private Boolean active = TRUE;
+    @NotNull(message = "Active is required")
+    private Boolean active;
 }
