@@ -127,9 +127,9 @@ class ProjectCodeServiceTest {
         when(parent.getId()).thenReturn(new Project.Id(organisationId, customerCode));
         when(update.getCustomerCode()).thenReturn(customerCode);
         when(update.getParentCustomerCode()).thenReturn("parentCode");
-        when(projectMappingRepository.findById(new Project.Id(organisationId, customerCode)))
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode)))
                 .thenReturn(Optional.empty());
-        when(projectMappingRepository.findById(new Project.Id(organisationId, "parentCode")))
+        when(projectRepository.findById(new Project.Id(organisationId, "parentCode")))
                 .thenReturn(Optional.of(parent));
 
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
