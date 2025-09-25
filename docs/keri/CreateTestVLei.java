@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,8 +70,7 @@ public class CreateTestVLei {
     private static final String keriUrl = "http://localhost:3901";
     private static final String keriBootUrl = "http://localhost:3903";
     private static final String reeveIdentifierBran = "0ADF2TpptgqcDE5IQUF1H";
-    private static SignifyClient issuerClient, holderClient, legalEntityClient, reeveClient;
-    private static Aid issuerAid, holderAid, legalEntityAid, reeveAid;
+    private static ClientAidPair issuer, holder, legalEntity, reeve;
     private static String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
     private static String LE_SCHEMA_SAID = "ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY";
     private static String REEVE_SCHEMA_SAID = "EG9587oc7lSUJGS7mtTkpmRUnJ8F5Ji79-e_pY4jt3Ik";
@@ -81,60 +81,54 @@ public class CreateTestVLei {
     private static final String provenantLEI = "5493001KJTIIGC8Y1R17";
     private static final String CFLEI = "123456789ABCDEF12345"; // dummy LEI for CF
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final List<String> witnessIds =
+            List.of("BBilc4-L3tFUnfM_wJr4S4OJanAv_VmF_dJNN6vkf2Ha",
+                    "BLskRTInXnMxWaGqcpSyMgo0nYbalW99cGZESrz3zapM",
+                    "BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX");
 
     public static void main(String[] args) throws Exception {
         System.out.println("Create Test Clients");
         // Creating clients for issuer, holder, legal entity and reeve
         System.out.println("Creating clients and AIDs...");
-        ClientAidPair issuerPair = initClientAndAid("issuer", "issuerRegistry", "");
-        issuerClient = issuerPair.client();
-        issuerAid = issuerPair.aid();
+        issuer = initClientAndAid("issuer", "issuerRegistry", "");
+        holder = initClientAndAid("holder", "holderRegistry", "");
+        legalEntity = initClientAndAid("legalEntity", "legalEntityRegistry", "");
+        reeve = initClientAndAid("reeve", "reeveRegistry", reeveIdentifierBran);
 
-        ClientAidPair holderPair = initClientAndAid("holder", "holderRegistry", "");
-        holderClient = holderPair.client();
-        holderAid = holderPair.aid();
-
-        ClientAidPair legalEntityPair = initClientAndAid("legalEntity", "legalEntityRegistry", "");
-        legalEntityClient = legalEntityPair.client();
-        legalEntityAid = legalEntityPair.aid();
-
-        ClientAidPair reevePair = initClientAndAid("reeve", "reeveRegistry", reeveIdentifierBran);
-        reeveClient = reevePair.client();
-        reeveAid = reevePair.aid();
-
-        resolveOobis(List.of(issuerClient, holderClient, legalEntityClient, reeveClient),
-                List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL));
-        resolveAidOobis(issuerClient, List.of(holderAid, legalEntityAid, reeveAid));
-        resolveAidOobis(holderClient, List.of(issuerAid, legalEntityAid, reeveAid));
-        resolveAidOobis(legalEntityClient, List.of(issuerAid, holderAid, reeveAid));
-        resolveAidOobis(reeveClient, List.of(issuerAid, holderAid, legalEntityAid));
+        resolveOobis(
+                List.of(issuer.client(), holder.client(), legalEntity.client(), reeve.client()),
+                List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL));
+        resolveAidOobis(issuer.client, List.of(holder.aid(), legalEntity.aid(), reeve.aid()));
+        resolveAidOobis(holder.client, List.of(issuer.aid(), legalEntity.aid(), reeve.aid()));
+        resolveAidOobis(legalEntity.client, List.of(issuer.aid(), holder.aid(), reeve.aid()));
+        resolveAidOobis(reeve.client, List.of(issuer.aid(), holder.aid(), legalEntity.aid()));
         System.out.println("Creating holder credential");
 
         String qviCredentialId = createCredential();
 
         System.out.println("Holder Credential ID: " + qviCredentialId + " Sending IPEX grant...");
-        sentIpexGrant(qviCredentialId, issuerAid, holderAid, issuerClient);
+        sentIpexGrant(qviCredentialId, issuer.aid(), holder.aid(), issuer.client());
 
         System.out.println("Holder IPEX admit");
-        
-        List<CreateTestVLei.Notification> filteredNotifications = waitForNotifications();
+        List<CreateTestVLei.Notification> filteredNotifications =
+                waitForNotifications("/exn/ipex/grant");
         if (filteredNotifications == null) {
             throw new IllegalStateException("No notifications received after retries");
         }
 
         // Map<String, Object> grantNotification;
         // if (filteredNotifications.size() > 0) {
-        //     Notification notification = filteredNotifications.getFirst();
-        //     // Convert back to Map format for compatibility with existing code
-        //     grantNotification = new HashMap<>();
-        //     grantNotification.put("i", notification.i);
-        //     grantNotification.put("dt", notification.dt);
-        //     grantNotification.put("r", notification.r);
-        //     Map<String, Object> aMap = new HashMap<>();
-        //     aMap.put("r", notification.a.r);
-        //     aMap.put("d", notification.a.d);
-        //     aMap.put("m", notification.a.m);
-        //     grantNotification.put("a", aMap);
+        // Notification notification = filteredNotifications.getFirst();
+        // // Convert back to Map format for compatibility with existing code
+        // grantNotification = new HashMap<>();
+        // grantNotification.put("i", notification.i);
+        // grantNotification.put("dt", notification.dt);
+        // grantNotification.put("r", notification.r);
+        // Map<String, Object> aMap = new HashMap<>();
+        // aMap.put("r", notification.a.r);
+        // aMap.put("d", notification.a.d);
+        // aMap.put("m", notification.a.m);
+        // grantNotification.put("a", aMap);
         // }
         // String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
         // IpexAdmitArgs iargs = IpexAdmitArgs.builder().build();
@@ -148,24 +142,24 @@ public class CreateTestVLei {
 
         // Exchanging.ExchangeMessageResult resultApexAdmint = holderClient.ipex().admit(iargs);
         // Object op = holderClient.ipex().submitAdmit(holderAid.name, resultApexAdmint.exn(),
-        //         resultApexAdmint.sigs(), resultApexAdmint.atc(),
-        //         Collections.singletonList(issuerAid.prefix));
+        // resultApexAdmint.sigs(), resultApexAdmint.atc(),
+        // Collections.singletonList(issuerAid.prefix));
         // holderClient.operations().wait(Operation.fromObject(op));
         // System.out
-        //         .println("Holder Credential: " + qviCredentialId + " issued to " + holderAid.name);
+        // .println("Holder Credential: " + qviCredentialId + " issued to " + holderAid.name);
     }
 
 
-    private static List<CreateTestVLei.Notification> waitForNotifications() throws IOException, InterruptedException {
+    private static List<CreateTestVLei.Notification> waitForNotifications(String route)
+            throws IOException, InterruptedException {
         int retryCount = 10;
         int waitTimeMs = 3000;
-        String route = "/exn/ipex/grant";
         Map<String, Object> grantNotification = null;
         for (int i = 0; i < retryCount; i++) {
             System.out.println(
                     "Checking for notifications, attempt " + (i + 1) + " of " + retryCount);
             Notifying.Notifications.NotificationListResponse response =
-                    holderClient.notifications().list();
+                    holder.client().notifications().list();
             String notesResponse = response.notes();
             System.out.println(notesResponse);
             List<Notification> holderNotifications =
@@ -179,7 +173,7 @@ public class CreateTestVLei {
                 return isUnread && routeMatches;
             }).toList();
             System.out.println(filteredNotifications.size() + " ipex grant notifications found");
-            if(filteredNotifications.size() > 0) {
+            if (filteredNotifications.size() > 0) {
                 return filteredNotifications;
             }
             System.out.println("No notifications yet, waiting...");
@@ -192,10 +186,10 @@ public class CreateTestVLei {
     private static String createCredential()
             throws IOException, InterruptedException, DigestException {
         List<Map<String, Object>> registriesList =
-                (List<Map<String, Object>>) issuerClient.registries().list(issuerAid.name);
+                (List<Map<String, Object>>) issuer.client().registries().list(issuer.aid().name);
 
         CredentialData.CredentialSubject a = CredentialData.CredentialSubject.builder().build();
-        a.setI(holderAid.prefix);
+        a.setI(holder.aid().prefix);
         a.setAdditionalProperties(Map.of("LEI", provenantLEI));
         CredentialData cData = CredentialData.builder().build();
         cData.setA(a);
@@ -203,8 +197,8 @@ public class CreateTestVLei {
         cData.setRi(registriesList.getFirst().get("regk").toString());
 
         IssueCredentialResult holderCredentialResult =
-                issuerClient.credentials().issue(issuerAid.name(), cData);
-        issuerClient.operations().wait(holderCredentialResult.getOp());
+                issuer.client().credentials().issue(issuer.aid().name(), cData);
+        issuer.client().operations().wait(holderCredentialResult.getOp());
         String qviCredentialId = holderCredentialResult.getAcdc().getKed().get("d").toString();
         return qviCredentialId;
     }
@@ -276,8 +270,10 @@ public class CreateTestVLei {
             States.HabState identifier = client.identifiers().get(name);
             id = identifier.getPrefix();
         } catch (Exception e) {
-            EventResult result =
-                    client.identifiers().create(name, CreateIdentifierArgs.builder().build());
+            CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
+            kArgs.setToad(witnessIds.size());
+            kArgs.setWits(witnessIds);
+            EventResult result = client.identifiers().create(name, kArgs);
             Object op = client.operations().wait(Operation.fromObject(result.op()));
             if (op instanceof String) {
                 try {
@@ -306,8 +302,7 @@ public class CreateTestVLei {
 
     public static void resolveOobis(List<SignifyClient> clients, List<String> oobis)
             throws Exception {
-        for (int i = 0; i < clients.size(); i++) {
-            SignifyClient client = clients.get(i);
+        for (SignifyClient client : clients) {
             for (String oobi : oobis) {
                 // System.out.println("Resolving OOBI for " + oobi);
                 Object result = client.oobis().resolve(oobi, null);
@@ -318,7 +313,8 @@ public class CreateTestVLei {
 
     public static void resolveAidOobis(SignifyClient client, List<Aid> aids) throws Exception {
         for (Aid aid : aids) {
-            List<Contacting.Contact> list = Arrays.asList(client.contacts().list(null, "alias", "^" + aid.name + "$"));
+            List<Contacting.Contact> list =
+                    Arrays.asList(client.contacts().list(null, "alias", "^" + aid.name + "$"));
             if (!list.isEmpty()) {
                 Contacting.Contact contact = list.getFirst();
                 if (contact.getOobi().equals(aid.oobi)) {
@@ -327,7 +323,8 @@ public class CreateTestVLei {
             }
             Object op = client.oobis().resolve(aid.oobi, aid.name);
             Operation<Object> opBody = client.operations().wait(Operation.fromObject(op));
-            LinkedHashMap<String, Object> response = (LinkedHashMap<String,Object>)opBody.getResponse();
+            LinkedHashMap<String, Object> response =
+                    (LinkedHashMap<String, Object>) opBody.getResponse();
 
             if (response.get("i") == null) {
                 aids.add(aid); // repeat it
