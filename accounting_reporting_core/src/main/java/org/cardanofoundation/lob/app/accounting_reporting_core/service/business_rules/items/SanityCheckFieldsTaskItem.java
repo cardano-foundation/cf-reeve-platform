@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.business
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.DOCUMENT_NAME_MUST_BE_SET;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.ENTRY_DATE_MUST_BE_PRESENT;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.FX_RATE_MUST_BE_GREATER_THAN_ZERO;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_INTERNAL_NUMBER_MUST_BE_PRESENT;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VALIDATION_ERROR;
@@ -54,6 +55,15 @@ public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
         if(Optional.ofNullable(tx.getTransactionInternalNumber()).orElse("").isEmpty()) {
             TransactionViolation v = TransactionViolation.builder()
                     .code(TX_INTERNAL_NUMBER_MUST_BE_PRESENT)
+                    .severity(ERROR)
+                    .source(ERP)
+                    .processorModule(this.getClass().getSimpleName())
+                    .build();
+            tx.addViolation(v);
+        }
+        if(Optional.ofNullable(tx.getEntryDate()).isEmpty()) {
+            TransactionViolation v = TransactionViolation.builder()
+                    .code(ENTRY_DATE_MUST_BE_PRESENT)
                     .severity(ERROR)
                     .source(ERP)
                     .processorModule(this.getClass().getSimpleName())

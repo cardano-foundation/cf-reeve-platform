@@ -77,7 +77,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @DiffIgnore
     private TransactionProcessingStatus processingStatus;
 
-    @Column(name = "accounting_period", nullable = false)
+    @Column(name = "accounting_period")
     @Getter
     @Setter
     private YearMonth accountingPeriod;
@@ -95,7 +95,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @JdbcType(PostgreSQLEnumJdbcType.class)
     private TransactionType transactionType;
 
-    @Column(name = "entry_date", nullable = false)
+    @Column(name = "entry_date")
     @LOBVersionSourceRelevant
     @Getter
     @Setter

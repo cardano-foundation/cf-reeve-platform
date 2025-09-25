@@ -69,12 +69,7 @@ public class TransactionConverter {
             LocalDate entryDate = null;
             try {
                 Optional<TransactionLine> firstWithDate = transactionLines.stream().filter(line -> Optional.ofNullable(line.getDate()).isPresent()).findFirst();
-                if (firstWithDate.isEmpty()) {
-                    return Either.left(Problem.builder()
-                            .withTitle("Transaction items conversion failed")
-                            .withDetail("Transaction date is missing for transaction number " + entry.getKey())
-                            .build());
-                } else {
+                if (!firstWithDate.isEmpty()) {
                     entryDate = FlexibleDateParser.parse(firstWithDate.get().getDate());
                 }
             } catch (IllegalArgumentException e) {
