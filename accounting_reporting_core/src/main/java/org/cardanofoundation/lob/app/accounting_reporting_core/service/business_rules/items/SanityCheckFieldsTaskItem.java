@@ -11,7 +11,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -62,7 +61,7 @@ public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
                     .build();
             tx.addViolation(v);
         }
-        if(Optional.ofNullable(tx.getEntryDate()).orElse(LocalDate.of(1900, 1, 1)).isBefore(LocalDate.of(1990, 1, 1))) {
+        if(Optional.ofNullable(tx.getEntryDate()).isEmpty()) {
             TransactionViolation v = TransactionViolation.builder()
                     .code(ENTRY_DATE_MUST_BE_PRESENT)
                     .severity(ERROR)
