@@ -15,8 +15,6 @@ public class TransactionLine {
     @NotBlank
     private String txNumber;
     @CsvBindByName(column = "Transaction Date")
-    @NotNull
-    @NotBlank
     private String date;
     @CsvBindByName(column = "Transaction Type")
     @NotNull

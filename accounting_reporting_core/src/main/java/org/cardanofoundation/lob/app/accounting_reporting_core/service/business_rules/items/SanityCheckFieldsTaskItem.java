@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.business
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.LOB;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.DOCUMENT_NAME_MUST_BE_SET;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.ENTRY_DATE_MUST_BE_PRESENT;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.FX_RATE_MUST_BE_GREATER_THAN_ZERO;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_INTERNAL_NUMBER_MUST_BE_PRESENT;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode.TX_VALIDATION_ERROR;
@@ -10,6 +11,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -54,6 +56,15 @@ public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
         if(Optional.ofNullable(tx.getTransactionInternalNumber()).orElse("").isEmpty()) {
             TransactionViolation v = TransactionViolation.builder()
                     .code(TX_INTERNAL_NUMBER_MUST_BE_PRESENT)
+                    .severity(ERROR)
+                    .source(ERP)
+                    .processorModule(this.getClass().getSimpleName())
+                    .build();
+            tx.addViolation(v);
+        }
+        if(Optional.ofNullable(tx.getEntryDate()).orElse(LocalDate.of(1900, 1, 1)).isBefore(LocalDate.of(1990, 1, 1))) {
+            TransactionViolation v = TransactionViolation.builder()
+                    .code(ENTRY_DATE_MUST_BE_PRESENT)
                     .severity(ERROR)
                     .source(ERP)
                     .processorModule(this.getClass().getSimpleName())
