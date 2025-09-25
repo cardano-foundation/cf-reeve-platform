@@ -95,19 +95,41 @@ public class CreateTestVLei {
         legalEntity = initClientAndAid("legalEntity", "legalEntityRegistry", "");
         reeve = initClientAndAid("reeve", "reeveRegistry", reeveIdentifierBran);
 
+        System.out.println("Resolving schema OOBIs...");
         resolveOobis(
                 List.of(issuer.client(), holder.client(), legalEntity.client(), reeve.client()),
                 List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL));
+        
+        System.out.println("Resolving AID OOBIs for inter-client communication...");
         resolveAidOobis(issuer.client, List.of(holder.aid(), legalEntity.aid(), reeve.aid()));
         resolveAidOobis(holder.client, List.of(issuer.aid(), legalEntity.aid(), reeve.aid()));
         resolveAidOobis(legalEntity.client, List.of(issuer.aid(), holder.aid(), reeve.aid()));
         resolveAidOobis(reeve.client, List.of(issuer.aid(), holder.aid(), legalEntity.aid()));
+        
+        System.out.println("All OOBIs resolved successfully!");
+        
+        // Verify client connections and contacts
+        System.out.println("Verifying client connections...");
+        verifyClientConnections();
+        
         System.out.println("Creating holder credential");
 
         String qviCredentialId = createCredential();
 
+        // Test notification service before sending grant
+        System.out.println("Testing notification service...");
+        try {
+            Notifying.Notifications.NotificationListResponse testResponse = holder.client().notifications().list();
+            System.out.println("Notification service working, response: " + testResponse.notes());
+        } catch (Exception e) {
+            System.out.println("WARNING: Notification service may not be working: " + e.getMessage());
+        }
+        
         System.out.println("Holder Credential ID: " + qviCredentialId + " Sending IPEX grant...");
         sentIpexGrant(qviCredentialId, issuer.aid(), holder.aid(), issuer.client());
+
+        System.out.println("Waiting a moment for the grant to be processed...");
+        Thread.sleep(2000); // Give some time for the grant to be processed
 
         System.out.println("Holder IPEX admit");
         List<CreateTestVLei.Notification> filteredNotifications =
@@ -116,37 +138,34 @@ public class CreateTestVLei {
             throw new IllegalStateException("No notifications received after retries");
         }
 
-        // Map<String, Object> grantNotification;
-        // if (filteredNotifications.size() > 0) {
-        // Notification notification = filteredNotifications.getFirst();
-        // // Convert back to Map format for compatibility with existing code
-        // grantNotification = new HashMap<>();
-        // grantNotification.put("i", notification.i);
-        // grantNotification.put("dt", notification.dt);
-        // grantNotification.put("r", notification.r);
-        // Map<String, Object> aMap = new HashMap<>();
-        // aMap.put("r", notification.a.r);
-        // aMap.put("d", notification.a.d);
-        // aMap.put("m", notification.a.m);
-        // grantNotification.put("a", aMap);
-        // }
-        // String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
-        // IpexAdmitArgs iargs = IpexAdmitArgs.builder().build();
-        // iargs.setSenderName(holderAid.name);
-        // iargs.setMessage("");
-        // @SuppressWarnings("unchecked")
-        // Map<String, Object> aMap = (Map<String, Object>) grantNotification.get("a");
-        // iargs.setGrantSaid((String) aMap.get("d"));
-        // iargs.setRecipient(issuerAid.prefix);
-        // iargs.setDatetime(dt);
+        // Process the grant notification and send admit
+        if (filteredNotifications.size() > 0) {
+            Notification grantNotification = filteredNotifications.getFirst();
+            System.out.println("Processing grant notification: " + grantNotification.a.d);
+            
+            // Send IPEX admit from holder
+            String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
+            IpexAdmitArgs iargs = IpexAdmitArgs.builder().build();
+            iargs.setSenderName(holder.aid().name);
+            iargs.setMessage("");
+            iargs.setGrantSaid(grantNotification.a.d);
+            iargs.setRecipient(issuer.aid().prefix);
+            iargs.setDatetime(dt);
 
-        // Exchanging.ExchangeMessageResult resultApexAdmint = holderClient.ipex().admit(iargs);
-        // Object op = holderClient.ipex().submitAdmit(holderAid.name, resultApexAdmint.exn(),
-        // resultApexAdmint.sigs(), resultApexAdmint.atc(),
-        // Collections.singletonList(issuerAid.prefix));
-        // holderClient.operations().wait(Operation.fromObject(op));
-        // System.out
-        // .println("Holder Credential: " + qviCredentialId + " issued to " + holderAid.name);
+            Exchanging.ExchangeMessageResult resultAdmit = holder.client().ipex().admit(iargs);
+            Object op = holder.client().ipex().submitAdmit(holder.aid().name, resultAdmit.exn(),
+                    resultAdmit.sigs(), resultAdmit.atc(),
+                    Collections.singletonList(issuer.aid().prefix));
+            Operation<Object> waitOp = holder.client().operations().wait(Operation.fromObject(op));
+            
+            if (!waitOp.isDone() || waitOp.getError() != null) {
+                throw new IllegalStateException("IPEX admit operation failed: " 
+                        + (waitOp.getError() != null ? waitOp.getError() : "unknown"));
+            }
+            holder.client().operations().delete(waitOp.getName());
+            
+            System.out.println("Holder Credential: " + qviCredentialId + " admitted by " + holder.aid().name);
+        }
     }
 
 
@@ -154,29 +173,60 @@ public class CreateTestVLei {
             throws IOException, InterruptedException {
         int retryCount = 10;
         int waitTimeMs = 3000;
-        Map<String, Object> grantNotification = null;
+        
+        System.out.println("Waiting for notifications for route: " + route);
+        System.out.println("Holder client prefix: " + holder.aid().prefix);
+        
         for (int i = 0; i < retryCount; i++) {
             System.out.println(
                     "Checking for notifications, attempt " + (i + 1) + " of " + retryCount);
-            Notifying.Notifications.NotificationListResponse response =
-                    holder.client().notifications().list();
-            String notesResponse = response.notes();
-            System.out.println(notesResponse);
-            List<Notification> holderNotifications =
-                    Utils.fromJson(notesResponse, new TypeReference<>() {});
-            System.out.println(holderNotifications.size() + " notifications found");
-            List<Notification> filteredNotifications = holderNotifications.stream().filter(note -> {
-                // Check if notification has not been read yet (r field should be false)
-                boolean isUnread = !Boolean.TRUE.equals(note.r);
-                // Check if route matches
-                boolean routeMatches = note.a != null && route.equals(note.a.r);
-                return isUnread && routeMatches;
-            }).toList();
-            System.out.println(filteredNotifications.size() + " ipex grant notifications found");
-            if (filteredNotifications.size() > 0) {
-                return filteredNotifications;
+            
+            try {
+                Notifying.Notifications.NotificationListResponse response =
+                        holder.client().notifications().list();
+                String notesResponse = response.notes();
+                System.out.println("Raw notification response: " + notesResponse);
+                
+                List<Notification> holderNotifications =
+                        Utils.fromJson(notesResponse, new TypeReference<>() {});
+                System.out.println(holderNotifications.size() + " total notifications found");
+                
+                // Print all notifications for debugging
+                for (int j = 0; j < holderNotifications.size(); j++) {
+                    Notification note = holderNotifications.get(j);
+                    System.out.println("Notification " + j + ":");
+                    System.out.println("  - i: " + note.i);
+                    System.out.println("  - dt: " + note.dt);
+                    System.out.println("  - r (read): " + note.r);
+                    if (note.a != null) {
+                        System.out.println("  - a.r (route): " + note.a.r);
+                        System.out.println("  - a.d (said): " + note.a.d);
+                        System.out.println("  - a.m (message): " + note.a.m);
+                    } else {
+                        System.out.println("  - a: null");
+                    }
+                }
+                
+                List<Notification> filteredNotifications = holderNotifications.stream().filter(note -> {
+                    // Check if notification has not been read yet (r field should be false)
+                    boolean isUnread = !Boolean.TRUE.equals(note.r);
+                    // Check if route matches
+                    boolean routeMatches = note.a != null && route.equals(note.a.r);
+                    
+                    System.out.println("Filtering notification - isUnread: " + isUnread + ", routeMatches: " + routeMatches);
+                    return isUnread && routeMatches;
+                }).toList();
+                
+                System.out.println(filteredNotifications.size() + " matching notifications found for route: " + route);
+                if (filteredNotifications.size() > 0) {
+                    return filteredNotifications;
+                }
+            } catch (Exception e) {
+                System.out.println("Error retrieving notifications: " + e.getMessage());
+                e.printStackTrace();
             }
-            System.out.println("No notifications yet, waiting...");
+            
+            System.out.println("No matching notifications yet, waiting " + waitTimeMs + "ms...");
             Thread.sleep(waitTimeMs);
         }
         return null;
@@ -206,6 +256,11 @@ public class CreateTestVLei {
 
     private static void sentIpexGrant(String qviCredentialId, Aid issuerAid, Aid holderAid,
             SignifyClient issuerClient) throws IOException, InterruptedException, DigestException {
+        System.out.println("Starting IPEX grant process...");
+        System.out.println("Issuer: " + issuerAid.name + " (" + issuerAid.prefix + ")");
+        System.out.println("Holder: " + holderAid.name + " (" + holderAid.prefix + ")");
+        System.out.println("Credential ID: " + qviCredentialId);
+        
         String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
 
         Object issuerCredential = issuerClient.credentials().get(qviCredentialId);
@@ -215,24 +270,46 @@ public class CreateTestVLei {
         Map<String, Object> getSAD = (Map<String, Object>) issuerCredentialList.get("sad");
         Map<String, Object> getANC = (Map<String, Object>) issuerCredentialList.get("anc");
         Map<String, Object> getISS = (Map<String, Object>) issuerCredentialList.get("iss");
+        
+        System.out.println("Building IPEX grant arguments...");
         IpexGrantArgs gArgs = IpexGrantArgs.builder().build();
         gArgs.setSenderName(issuerAid.name);
         gArgs.setAcdc(new Serder(getSAD));
         gArgs.setAnc(new Serder(getANC));
         gArgs.setIss(new Serder(getISS));
         gArgs.setAncAttachment(null);
-        gArgs.setRecipient(holderAid.prefix);
+        // Get the resolved holder contact ID from issuer's contacts
+        String holderContactId;
+        try {
+            holderContactId = getContactId(issuerClient, "holder");
+            if (holderContactId == null) {
+                System.out.println("WARNING: Using original holder prefix since contact not found");
+                holderContactId = holderAid.prefix;
+            }
+        } catch (Exception e) {
+            System.out.println("ERROR getting contact ID: " + e.getMessage());
+            holderContactId = holderAid.prefix;
+        }
+        System.out.println("Using holder contact ID: " + holderContactId);
+        gArgs.setRecipient(holderContactId);
         gArgs.setDatetime(dt);
+        
+        System.out.println("Creating IPEX grant message...");
         Exchanging.ExchangeMessageResult result = issuerClient.ipex().grant(gArgs);
-        List<String> holderAidPrefix = Collections.singletonList(holderAid.prefix);
+        
+        System.out.println("Submitting IPEX grant to holder...");
+        List<String> holderAidPrefix = Collections.singletonList(holderContactId);
         Object op = issuerClient.ipex().submitGrant(issuerAid.name, result.exn(), result.sigs(),
                 result.atc(), holderAidPrefix);
+        
+        System.out.println("Waiting for IPEX grant operation to complete...");
         Operation<Object> wait2 = issuerClient.operations().wait(Operation.fromObject(op));
         if (!wait2.isDone() || wait2.getError() != null) {
-            throw new IllegalStateException("Operation not done yet or error: "
+            throw new IllegalStateException("IPEX grant operation failed: "
                     + (wait2.getError() != null ? wait2.getError() : "unknown"));
         }
         issuerClient.operations().delete(wait2.getName());
+        System.out.println("IPEX grant sent successfully!");
     }
 
 
@@ -313,22 +390,39 @@ public class CreateTestVLei {
 
     public static void resolveAidOobis(SignifyClient client, List<Aid> aids) throws Exception {
         for (Aid aid : aids) {
+            System.out.println("Resolving OOBI for " + aid.name + " with prefix " + aid.prefix);
+            System.out.println("OOBI: " + aid.oobi);
+            
+            // Check if contact already exists
             List<Contacting.Contact> list =
                     Arrays.asList(client.contacts().list(null, "alias", "^" + aid.name + "$"));
             if (!list.isEmpty()) {
                 Contacting.Contact contact = list.getFirst();
+                System.out.println("Existing contact found: " + contact.getAlias() + " (" + contact.getId() + ")");
                 if (contact.getOobi().equals(aid.oobi)) {
+                    System.out.println("OOBI already resolved for " + aid.name);
                     continue;
                 }
             }
-            Object op = client.oobis().resolve(aid.oobi, aid.name);
-            Operation<Object> opBody = client.operations().wait(Operation.fromObject(op));
-            LinkedHashMap<String, Object> response =
-                    (LinkedHashMap<String, Object>) opBody.getResponse();
+            
+            try {
+                Object op = client.oobis().resolve(aid.oobi, aid.name);
+                Operation<Object> opBody = client.operations().wait(Operation.fromObject(op));
+                LinkedHashMap<String, Object> response =
+                        (LinkedHashMap<String, Object>) opBody.getResponse();
 
-            if (response.get("i") == null) {
-                aids.add(aid); // repeat it
-                System.out.println("Failed to resolve OOBI for " + aid.name + ", retrying...");
+                System.out.println("OOBI resolution response: " + response);
+                
+                if (response.get("i") == null) {
+                    System.out.println("Failed to resolve OOBI for " + aid.name + ", retrying...");
+                    aids.add(aid); // repeat it
+                } else {
+                    System.out.println("Successfully resolved OOBI for " + aid.name + 
+                                     " resolved to: " + response.get("i"));
+                }
+            } catch (Exception e) {
+                System.out.println("Error resolving OOBI for " + aid.name + ": " + e.getMessage());
+                throw e;
             }
         }
     }
@@ -345,5 +439,50 @@ public class CreateTestVLei {
             System.out.println(
                     "Registry " + registryName + " probably already exists for " + aid.name);
         }
+    }
+    
+    public static void verifyClientConnections() throws Exception {
+        System.out.println("Verifying client connections and contacts...");
+        
+        // Check if issuer can see holder
+        List<Contacting.Contact> issuerContacts = Arrays.asList(issuer.client().contacts().list(null, null, null));
+        System.out.println("Issuer has " + issuerContacts.size() + " contacts:");
+        for (Contacting.Contact contact : issuerContacts) {
+            System.out.println("  - " + contact.getAlias() + " (" + contact.getId() + ")");
+        }
+        
+        // Check if holder can see issuer
+        List<Contacting.Contact> holderContacts = Arrays.asList(holder.client().contacts().list(null, null, null));
+        System.out.println("Holder has " + holderContacts.size() + " contacts:");
+        for (Contacting.Contact contact : holderContacts) {
+            System.out.println("  - " + contact.getAlias() + " (" + contact.getId() + ")");
+        }
+        
+        // Verify specific contact exists by name rather than prefix (since prefix might be different after OOBI resolution)
+        boolean issuerKnowsHolder = issuerContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
+        boolean holderKnowsIssuer = holderContacts.stream().anyMatch(c -> "issuer".equals(c.getAlias()));
+        
+        System.out.println("Issuer knows holder (by alias): " + issuerKnowsHolder);
+        System.out.println("Holder knows issuer (by alias): " + holderKnowsIssuer);
+        
+        if (!issuerKnowsHolder || !holderKnowsIssuer) {
+            System.out.println("WARNING: Not all contacts are properly established by alias!");
+            
+            // Try by prefix as fallback
+            boolean issuerKnowsHolderByPrefix = issuerContacts.stream().anyMatch(c -> holder.aid().prefix.equals(c.getId()));
+            boolean holderKnowsIssuerByPrefix = holderContacts.stream().anyMatch(c -> issuer.aid().prefix.equals(c.getId()));
+            System.out.println("Fallback - Issuer knows holder (by prefix): " + issuerKnowsHolderByPrefix);
+            System.out.println("Fallback - Holder knows issuer (by prefix): " + holderKnowsIssuerByPrefix);
+        } else {
+            System.out.println("All contacts verified successfully by alias!");
+        }
+    }
+    
+    public static String getContactId(SignifyClient client, String alias) throws Exception {
+        List<Contacting.Contact> contacts = Arrays.asList(client.contacts().list(null, "alias", "^" + alias + "$"));
+        if (!contacts.isEmpty()) {
+            return contacts.getFirst().getId();
+        }
+        return null;
     }
 }
