@@ -78,4 +78,85 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                         @Param("transactionId") String transactionId,
                         @Param("source") Optional<ReconciliationFilterSource> source, Pageable pageable);
 
+        @Query("""
+        SELECT
+        (SELECT COUNT(missingInERP) FROM (
+            SELECT rv.transactionId missingInERP
+            FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+            JOIN r.violations rv
+            LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+            WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+            AND tr.ledgerDispatchApproved IS TRUE
+            AND rv.rejectionCode = 'TX_NOT_IN_ERP'
+            GROUP BY rv.transactionId)
+        ) as missingInERP,
+
+        (SELECT COUNT(inProcessing) FROM (
+            SELECT rv.transactionId inProcessing
+            FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+            JOIN r.violations rv
+            LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+            WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+            AND rv.rejectionCode = 'SINK_RECONCILATION_FAIL'
+            GROUP BY rv.transactionId)
+        ) as inProcessing,
+
+        (SELECT COUNT(newInERP) FROM (
+            SELECT rv.transactionId newInERP
+            FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+            JOIN r.violations rv
+            LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+            WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+            AND rv.rejectionCode = 'TX_NOT_IN_LOB'
+            GROUP BY rv.transactionId)
+        ) as newInERP,
+
+        (SELECT COUNT(newVersionNotPublished) FROM (
+            SELECT rv.transactionId newVersionNotPublished
+            FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+            JOIN r.violations rv
+            LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+            WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+            AND rv.rejectionCode = 'SOURCE_RECONCILATION_FAIL'
+            AND tr.ledgerDispatchApproved IS FALSE
+            GROUP BY rv.transactionId)
+        ) as newVersionNotPublished,
+
+        (SELECT COUNT(newVersion) FROM (
+            SELECT rv.transactionId newVersion
+            FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+            JOIN r.violations rv
+            LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+            WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+            AND rv.rejectionCode = 'SOURCE_RECONCILATION_FAIL'
+            AND tr.ledgerDispatchApproved IS TRUE
+            GROUP BY rv.transactionId)
+        ) as newVersion,
+
+        (SELECT COUNT(txOk) FROM (
+            SELECT tx.id txOk
+            FROM accounting_reporting_core.TransactionEntity tx
+            WHERE tx.reconcilation.finalStatus = 'OK'
+            GROUP BY tx.id)
+        ) as txOk,
+
+        (SELECT COUNT(txNok) FROM (
+            SELECT rv.transactionId txNok
+            FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+            JOIN r.violations rv
+            LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+            WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+            AND ((rv.rejectionCode = 'TX_NOT_IN_ERP' AND tr.ledgerDispatchApproved IS TRUE) OR (rv.rejectionCode != 'TX_NOT_IN_ERP'))
+            GROUP BY rv.transactionId, tr.id, rv.amountLcySum, rv.transactionEntryDate, rv.transactionInternalNumber, rv.transactionType)
+        ) as txNok,
+
+        (SELECT COUNT(txNever) FROM (
+            SELECT tx.id txNever
+            FROM accounting_reporting_core.TransactionEntity tx
+            WHERE tx.lastReconcilation IS NULL
+            GROUP BY tx.id)
+        ) as txNever
+    """)
+        Object findCalcReconciliationStatistic();
+
 }
