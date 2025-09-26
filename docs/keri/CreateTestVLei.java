@@ -33,13 +33,10 @@ import org.cardanofoundation.signify.app.credentialing.registries.CreateRegistry
 import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult;
 import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.Serder;
-import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
 import org.cardanofoundation.signify.cesr.util.Utils;
 import org.cardanofoundation.signify.core.States;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-
 
 public class CreateTestVLei {
 
@@ -48,7 +45,6 @@ public class CreateTestVLei {
     }
     private record ClientAidPair(SignifyClient client, Aid aid) {
     }
-
     // Notification class similar to TestUtils
     public static class Notification {
         public String i;
@@ -97,19 +93,19 @@ public class CreateTestVLei {
         resolveOobis(
                 List.of(issuer.client(), holder.client(), legalEntity.client(), reeve.client()),
                 List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL));
-        
+
         System.out.println("Resolving AID OOBIs for inter-client communication...");
         resolveAidOobis(issuer.client, List.of(holder.aid(), legalEntity.aid(), reeve.aid()));
         resolveAidOobis(holder.client, List.of(issuer.aid(), legalEntity.aid(), reeve.aid()));
         resolveAidOobis(legalEntity.client, List.of(issuer.aid(), holder.aid(), reeve.aid()));
         resolveAidOobis(reeve.client, List.of(issuer.aid(), holder.aid(), legalEntity.aid()));
-        
+
         System.out.println("All OOBIs resolved successfully!");
-        
+
         // Verify client connections and contacts
         System.out.println("Verifying client connections...");
         verifyClientConnections();
-        
+
         System.out.println("Creating holder credential");
 
         String qviCredentialId = createCredential();
@@ -121,8 +117,92 @@ public class CreateTestVLei {
         Thread.sleep(2000); // Give some time for the grant to be processed
 
         System.out.println("Holder IPEX admit");
+        holderAdmitsCredential(qviCredentialId, holder, issuer);
+
+        System.out.println("Holder creates Legal Entity (chained) Credential");
+
+        String leCredentialId = issueLECredential(qviCredentialId);
+
+        sentIpexGrant(leCredentialId, holder.aid(), legalEntity.aid(), holder.client());
+        System.out.println("Waiting a moment for the grant to be processed...");
+        Thread.sleep(2000); // Give some time for the grant to be processed
+        holderAdmitsCredential(leCredentialId, legalEntity, holder);
+
+        Object legalEntityCredential = legalEntity.client().credentials().get(leCredentialId);
+        System.out.println("Legal Entity Credential: " + legalEntityCredential);
+    }
+
+
+    private static String issueLECredential(String qviCredentialId)
+            throws IOException, InterruptedException, DigestException {
+        LinkedHashMap<String, Object> qviCredential = (LinkedHashMap<String, Object>) holder.client().credentials().get(qviCredentialId);
+        LinkedHashMap<String, Object> sadBody = (LinkedHashMap<String, Object>) qviCredential.get("sad");
+
+        Map<String, Object> additionalProperties = new LinkedHashMap<>();
+        additionalProperties.put("LEI", CFLEI);
+        CredentialData.CredentialSubject leSubject = CredentialData.CredentialSubject.builder().build();
+        leSubject.setI(legalEntity.aid().prefix);
+        leSubject.setAdditionalProperties(additionalProperties);
+
+        // Create usage and issuance disclaimers
+        Map<String, Object> usageDisclaimer = new LinkedHashMap<>();
+        usageDisclaimer.put("l", StringData.USAGE_DISCLAIMER);
+        Map<String, Object> issuanceDisclaimer = new LinkedHashMap<>();
+        issuanceDisclaimer.put("l", StringData.ISSUANCE_DISCLAIMER);
+
+        // Create rules structure - this is the credential-specific data
+        Map<String, Object> rules = new LinkedHashMap<>();
+        rules.put("d", "");
+        rules.put("usageDisclaimer", usageDisclaimer);
+        rules.put("issuanceDisclaimer", issuanceDisclaimer);
+
+        // Create the edge structure for chaining - this links to the parent credential
+        Map<String, Object> qvi = new LinkedHashMap<>();
+        qvi.put("n", sadBody.get("d")); // Parent credential SAID
+        qvi.put("s", sadBody.get("s")); // Parent credential schema SAID
+        
+        Map<String, Object> edge = new LinkedHashMap<>();
+        edge.put("d", ""); // Will be computed
+        edge.put("qvi", qvi);
+
+        // Get the registry key from the holder's registries
+        List<Map<String, Object>> registriesList =
+                (List<Map<String, Object>>) holder.client().registries().list(holder.aid().name());
+        
+        // Build the credential data
+        CredentialData cData = CredentialData.builder().build();
+        cData.setA(leSubject);
+        cData.setRi(registriesList.getFirst().get("regk").toString());
+        cData.setS(LE_SCHEMA_SAID);
+        cData.setR(rules);
+        cData.setE(edge);
+
+        System.out.println("Issuing Legal Entity credential with:");
+        System.out.println("  Subject: " + legalEntity.aid().prefix);
+        System.out.println("  Registry: " + registriesList.getFirst().get("regk").toString());
+        System.out.println("  Schema: " + LE_SCHEMA_SAID);
+        System.out.println("  Parent credential: " + sadBody.get("d"));
+
+        IssueCredentialResult leCredentialResult =
+                holder.client().credentials().issue(holder.aid().name(), cData);
+        
+        System.out.println("Waiting for Legal Entity credential issuance operation...");
+        Operation<?> waitOp = holder.client().operations().wait(leCredentialResult.getOp());
+        
+        if (waitOp.getError() != null) {
+            throw new IllegalStateException("Legal Entity credential issuance failed: " + waitOp.getError());
+        }
+        
+        String leCredentialId = leCredentialResult.getAcdc().getKed().get("d").toString();
+        System.out.println("Legal Entity Credential ID: " + leCredentialId);
+        return leCredentialId;
+    }
+
+
+    private static void holderAdmitsCredential(String qviCredentialId, ClientAidPair holder, ClientAidPair issuer)
+            throws IOException, InterruptedException {
         List<CreateTestVLei.Notification> filteredNotifications =
-                waitForNotifications("/exn/ipex/grant");
+                waitForNotifications("/exn/ipex/grant", holder);
         if (filteredNotifications == null) {
             throw new IllegalStateException("No notifications received after retries");
         }
@@ -131,7 +211,7 @@ public class CreateTestVLei {
         if (filteredNotifications.size() > 0) {
             Notification grantNotification = filteredNotifications.getFirst();
             System.out.println("Processing grant notification: " + grantNotification.a.d);
-            
+
             // Send IPEX admit from holder
             String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
             IpexAdmitArgs iargs = IpexAdmitArgs.builder().build();
@@ -140,49 +220,55 @@ public class CreateTestVLei {
             iargs.setGrantSaid(grantNotification.a.d);
             iargs.setRecipient(issuer.aid().prefix);
             iargs.setDatetime(dt);
-
-            Exchanging.ExchangeMessageResult resultAdmit = holder.client().ipex().admit(iargs);
-            Object op = holder.client().ipex().submitAdmit(holder.aid().name, resultAdmit.exn(),
-                    resultAdmit.sigs(), resultAdmit.atc(),
-                    Collections.singletonList(issuer.aid().prefix));
-            Operation<Object> waitOp = holder.client().operations().wait(Operation.fromObject(op));
-            
-            if (!waitOp.isDone() || waitOp.getError() != null) {
-                throw new IllegalStateException("IPEX admit operation failed: " 
-                        + (waitOp.getError() != null ? waitOp.getError() : "unknown"));
+            Exchanging.ExchangeMessageResult resultAdmit;
+            try {
+                resultAdmit = holder.client().ipex().admit(iargs);
+                Object op = holder.client().ipex().submitAdmit(holder.aid().name, resultAdmit.exn(),
+                        resultAdmit.sigs(), resultAdmit.atc(),
+                        Collections.singletonList(issuer.aid().prefix));
+                Operation<Object> waitOp =
+                        holder.client().operations().wait(Operation.fromObject(op));
+                holder.client().notifications().mark(grantNotification.i);
+                if (!waitOp.isDone() || waitOp.getError() != null) {
+                    throw new IllegalStateException("IPEX admit operation failed: "
+                            + (waitOp.getError() != null ? waitOp.getError() : "unknown"));
+                }
+                holder.client().operations().delete(waitOp.getName());
+            } catch (Exception e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
             }
-            holder.client().operations().delete(waitOp.getName());
-            
-            System.out.println("Holder Credential: " + qviCredentialId + " admitted by " + holder.aid().name);
+            System.out.println(
+                    "Holder Credential: " + qviCredentialId + " admitted by " + holder.aid().name);
         }
     }
 
 
-    private static List<CreateTestVLei.Notification> waitForNotifications(String route)
+    private static List<CreateTestVLei.Notification> waitForNotifications(String route, ClientAidPair receiver)
             throws IOException, InterruptedException {
         int retryCount = 10;
         int waitTimeMs = 3000;
-        
+
         System.out.println("Waiting for notifications for route: " + route);
-        System.out.println("Holder client prefix: " + holder.aid().prefix);
-        
+        System.out.println("Receiver client prefix: " + receiver.aid().prefix);
+
         for (int i = 0; i < retryCount; i++) {
             System.out.println(
                     "Checking for notifications, attempt " + (i + 1) + " of " + retryCount);
-            
+
             try {
                 Notifying.Notifications.NotificationListResponse response =
-                        holder.client().notifications().list();
+                        receiver.client().notifications().list();
                 String notesResponse = response.notes();
                 System.out.println("Raw notification response: " + notesResponse);
-                
-                List<Notification> holderNotifications =
+
+                List<Notification> receiverNotifications =
                         Utils.fromJson(notesResponse, new TypeReference<>() {});
-                System.out.println(holderNotifications.size() + " total notifications found");
-                
+                System.out.println(receiverNotifications.size() + " total notifications found");
+
                 // Print all notifications for debugging
-                for (int j = 0; j < holderNotifications.size(); j++) {
-                    Notification note = holderNotifications.get(j);
+                for (int j = 0; j < receiverNotifications.size(); j++) {
+                    Notification note = receiverNotifications.get(j);
                     System.out.println("Notification " + j + ":");
                     System.out.println("  - i: " + note.i);
                     System.out.println("  - dt: " + note.dt);
@@ -195,18 +281,21 @@ public class CreateTestVLei {
                         System.out.println("  - a: null");
                     }
                 }
-                
-                List<Notification> filteredNotifications = holderNotifications.stream().filter(note -> {
-                    // Check if notification has not been read yet (r field should be false)
-                    boolean isUnread = !Boolean.TRUE.equals(note.r);
-                    // Check if route matches
-                    boolean routeMatches = note.a != null && route.equals(note.a.r);
-                    
-                    System.out.println("Filtering notification - isUnread: " + isUnread + ", routeMatches: " + routeMatches);
-                    return isUnread && routeMatches;
-                }).toList();
-                
-                System.out.println(filteredNotifications.size() + " matching notifications found for route: " + route);
+
+                List<Notification> filteredNotifications =
+                        receiverNotifications.stream().filter(note -> {
+                            // Check if notification has not been read yet (r field should be false)
+                            boolean isUnread = !Boolean.TRUE.equals(note.r);
+                            // Check if route matches
+                            boolean routeMatches = note.a != null && route.equals(note.a.r);
+
+                            System.out.println("Filtering notification - isUnread: " + isUnread
+                                    + ", routeMatches: " + routeMatches);
+                            return isUnread && routeMatches;
+                        }).toList();
+
+                System.out.println(filteredNotifications.size()
+                        + " matching notifications found for route: " + route);
                 if (filteredNotifications.size() > 0) {
                     return filteredNotifications;
                 }
@@ -214,7 +303,7 @@ public class CreateTestVLei {
                 System.out.println("Error retrieving notifications: " + e.getMessage());
                 e.printStackTrace();
             }
-            
+
             System.out.println("No matching notifications yet, waiting " + waitTimeMs + "ms...");
             Thread.sleep(waitTimeMs);
         }
@@ -225,7 +314,7 @@ public class CreateTestVLei {
     private static String createCredential()
             throws IOException, InterruptedException, DigestException {
         List<Map<String, Object>> registriesList =
-                (List<Map<String, Object>>) issuer.client().registries().list(issuer.aid().name);
+                (List<Map<String, Object>>) issuer.client().registries().list(issuer.aid().name());
 
         CredentialData.CredentialSubject a = CredentialData.CredentialSubject.builder().build();
         a.setI(holder.aid().prefix);
@@ -249,7 +338,7 @@ public class CreateTestVLei {
         System.out.println("Issuer: " + issuerAid.name + " (" + issuerAid.prefix + ")");
         System.out.println("Holder: " + holderAid.name + " (" + holderAid.prefix + ")");
         System.out.println("Credential ID: " + qviCredentialId);
-        
+
         String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
 
         Object issuerCredential = issuerClient.credentials().get(qviCredentialId);
@@ -259,7 +348,7 @@ public class CreateTestVLei {
         Map<String, Object> getSAD = (Map<String, Object>) issuerCredentialList.get("sad");
         Map<String, Object> getANC = (Map<String, Object>) issuerCredentialList.get("anc");
         Map<String, Object> getISS = (Map<String, Object>) issuerCredentialList.get("iss");
-        
+
         System.out.println("Building IPEX grant arguments...");
         IpexGrantArgs gArgs = IpexGrantArgs.builder().build();
         gArgs.setSenderName(issuerAid.name);
@@ -282,15 +371,15 @@ public class CreateTestVLei {
         System.out.println("Using holder contact ID: " + holderContactId);
         gArgs.setRecipient(holderContactId);
         gArgs.setDatetime(dt);
-        
+
         System.out.println("Creating IPEX grant message...");
         Exchanging.ExchangeMessageResult result = issuerClient.ipex().grant(gArgs);
-        
+
         System.out.println("Submitting IPEX grant to holder...");
         List<String> holderAidPrefix = Collections.singletonList(holderContactId);
         Object op = issuerClient.ipex().submitGrant(issuerAid.name, result.exn(), result.sigs(),
                 result.atc(), holderAidPrefix);
-        
+
         System.out.println("Waiting for IPEX grant operation to complete...");
         Operation<Object> wait2 = issuerClient.operations().wait(Operation.fromObject(op));
         if (!wait2.isDone() || wait2.getError() != null) {
@@ -379,7 +468,7 @@ public class CreateTestVLei {
 
     public static void resolveAidOobis(SignifyClient client, List<Aid> aids) throws Exception {
         for (Aid aid : aids) {
-            
+
             // Check if contact already exists
             List<Contacting.Contact> list =
                     Arrays.asList(client.contacts().list(null, "alias", "^" + aid.name + "$"));
@@ -389,7 +478,7 @@ public class CreateTestVLei {
                     continue;
                 }
             }
-            
+
             try {
                 Object op = client.oobis().resolve(aid.oobi, aid.name);
                 Operation<Object> opBody = client.operations().wait(Operation.fromObject(op));
@@ -397,7 +486,7 @@ public class CreateTestVLei {
                         (LinkedHashMap<String, Object>) opBody.getResponse();
 
                 System.out.println("OOBI resolution response: " + response);
-                
+
                 if (response.get("i") == null) {
                     aids.add(aid); // repeat it
                 }
@@ -421,38 +510,61 @@ public class CreateTestVLei {
                     "Registry " + registryName + " probably already exists for " + aid.name);
         }
     }
-    
+
     public static void verifyClientConnections() throws Exception {
-        List<Contacting.Contact> issuerContacts = Arrays.asList(issuer.client().contacts().list(null, null, null));        
-        List<Contacting.Contact> holderContacts = Arrays.asList(holder.client().contacts().list(null, null, null));
-        List<Contacting.Contact> legalEntityContacts = Arrays.asList(legalEntity.client().contacts().list(null, null, null));
-        List<Contacting.Contact> reeveContacts = Arrays.asList(reeve.client().contacts().list(null, null, null));
-        // Verify specific contact exists by name rather than prefix (since prefix might be different after OOBI resolution)
-        boolean issuerKnowsHolder = issuerContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
-        boolean holderKnowsIssuer = holderContacts.stream().anyMatch(c -> "issuer".equals(c.getAlias()));
-        boolean legalEntityKnowsHolder = legalEntityContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
-        boolean holderKnowsLegalEntity = holderContacts.stream().anyMatch(c -> "legalEntity".equals(c.getAlias()));
-        boolean reeveKnowsHolder = reeveContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
-        boolean holderKnowsReeve = holderContacts.stream().anyMatch(c -> "reeve".equals(c.getAlias()));
-        if (!issuerKnowsHolder || !holderKnowsIssuer || !legalEntityKnowsHolder || !holderKnowsLegalEntity
-                || !reeveKnowsHolder || !holderKnowsReeve) {
+        List<Contacting.Contact> issuerContacts =
+                Arrays.asList(issuer.client().contacts().list(null, null, null));
+        List<Contacting.Contact> holderContacts =
+                Arrays.asList(holder.client().contacts().list(null, null, null));
+        List<Contacting.Contact> legalEntityContacts =
+                Arrays.asList(legalEntity.client().contacts().list(null, null, null));
+        List<Contacting.Contact> reeveContacts =
+                Arrays.asList(reeve.client().contacts().list(null, null, null));
+        // Verify specific contact exists by name rather than prefix (since prefix might be
+        // different after OOBI resolution)
+        boolean issuerKnowsHolder =
+                issuerContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
+        boolean holderKnowsIssuer =
+                holderContacts.stream().anyMatch(c -> "issuer".equals(c.getAlias()));
+        boolean legalEntityKnowsHolder =
+                legalEntityContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
+        boolean holderKnowsLegalEntity =
+                holderContacts.stream().anyMatch(c -> "legalEntity".equals(c.getAlias()));
+        boolean reeveKnowsHolder =
+                reeveContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
+        boolean holderKnowsReeve =
+                holderContacts.stream().anyMatch(c -> "reeve".equals(c.getAlias()));
+        if (!issuerKnowsHolder || !holderKnowsIssuer || !legalEntityKnowsHolder
+                || !holderKnowsLegalEntity || !reeveKnowsHolder || !holderKnowsReeve) {
             System.out.println("WARNING: Not all contacts are properly established by alias!");
-            
+
             // Try by prefix as fallback
-            boolean issuerKnowsHolderByPrefix = issuerContacts.stream().anyMatch(c -> holder.aid().prefix.equals(c.getId()));
-            boolean holderKnowsIssuerByPrefix = holderContacts.stream().anyMatch(c -> issuer.aid().prefix.equals(c.getId()));
-            System.out.println("Fallback - Issuer knows holder (by prefix): " + issuerKnowsHolderByPrefix);
-            System.out.println("Fallback - Holder knows issuer (by prefix): " + holderKnowsIssuerByPrefix);
+            boolean issuerKnowsHolderByPrefix =
+                    issuerContacts.stream().anyMatch(c -> holder.aid().prefix.equals(c.getId()));
+            boolean holderKnowsIssuerByPrefix =
+                    holderContacts.stream().anyMatch(c -> issuer.aid().prefix.equals(c.getId()));
+            System.out.println(
+                    "Fallback - Issuer knows holder (by prefix): " + issuerKnowsHolderByPrefix);
+            System.out.println(
+                    "Fallback - Holder knows issuer (by prefix): " + holderKnowsIssuerByPrefix);
         } else {
             System.out.println("All contacts verified successfully by alias!");
         }
     }
-    
+
     public static String getContactId(SignifyClient client, String alias) throws Exception {
-        List<Contacting.Contact> contacts = Arrays.asList(client.contacts().list(null, "alias", "^" + alias + "$"));
+        List<Contacting.Contact> contacts =
+                Arrays.asList(client.contacts().list(null, "alias", "^" + alias + "$"));
         if (!contacts.isEmpty()) {
             return contacts.getFirst().getId();
         }
         return null;
+    }
+
+    public static class StringData {
+        public static final String USAGE_DISCLAIMER =
+                "Usage of a valid, unexpired, and non-revoked vLEI Credential, as defined in the associated Ecosystem Governance Framework, does not assert that the Legal Entity is trustworthy, honest, reputable in its business dealings, safe to do business with, or compliant with any laws or that an implied or expressly intended purpose will be fulfilled.";
+        public static final String ISSUANCE_DISCLAIMER =
+                "All information in a valid, unexpired, and non-revoked vLEI Credential, as defined in the associated Ecosystem Governance Framework, is accurate as of the date the validation process was complete. The vLEI Credential has been issued to the legal entity or person named in the vLEI Credential as the subject; and the qualified vLEI Issuer exercised reasonable care to perform the validation process set forth in the vLEI Ecosystem Governance Framework.";
     }
 }
