@@ -88,7 +88,7 @@ public class CreateTestVLei {
         holder = initClientAndAid("holder", "holderRegistry", "");
         legalEntity = initClientAndAid("legalEntity", "legalEntityRegistry", "");
         reeve = initClientAndAid("reeve", "reeveRegistry", reeveIdentifierBran);
-
+    
         System.out.println("Resolving schema OOBIs...");
         resolveOobis(
                 List.of(issuer.client(), holder.client(), legalEntity.client(), reeve.client()),
@@ -206,9 +206,10 @@ public class CreateTestVLei {
         if (filteredNotifications == null) {
             throw new IllegalStateException("No notifications received after retries");
         }
-
+        
         // Process the grant notification and send admit
         if (filteredNotifications.size() > 0) {
+            
             Notification grantNotification = filteredNotifications.getFirst();
             System.out.println("Processing grant notification: " + grantNotification.a.d);
 
