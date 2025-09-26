@@ -40,7 +40,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presenta
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.SearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
@@ -100,6 +99,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity.setLedgerDispatchApproved(Boolean.FALSE);
         transactionEntity.setOverallStatus(TransactionStatus.NOK);
         transactionEntity.setTotalAmountLcy(BigDecimal.TEN);
+        transactionEntity.setProcessingStatus(TransactionProcessingStatus.PUBLISH);
 
         transactionEntity3.setId("tx-id-3");
         transactionEntity3.setTransactionType(TransactionType.CustomerPayment);
@@ -122,6 +122,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity.setViolations(Set.of(transactionViolation));
         transactionEntity.setExtractorType("NETSUITE");
         transactionEntity3.setExtractorType("NETSUITE");
+        transactionEntity3.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
 
         transactionItem.setAccountDebit(Optional.of(accountDebit));
         transactionItem.setAccountCredit(Optional.of(accountCredit));
@@ -164,8 +165,8 @@ class AccountingCorePresentationConverterTest {
         assertEquals(TxValidationStatus.FAILED, result.get(1).getValidationStatus());
         assertEquals("tx-id2-internal", result.get(1).getInternalTransactionNumber());
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        assertEquals(LedgerDispatchStatusView.PUBLISHED, result.get(2).getStatistic());
-        assertEquals(LedgerDispatchStatusView.PUBLISH, result.get(0).getStatistic());
+        assertEquals(Optional.of(TransactionProcessingStatus.PUBLISHED), result.get(2).getStatistic());
+        assertEquals(Optional.of(TransactionProcessingStatus.PUBLISH), result.get(0).getStatistic());
         assertEquals(localDate.format(formatter).toString(), result.get(1).getEntryDate().toString());
         assertEquals("tx-item-id", result.get(0).getItems().stream().findFirst().get().getId());
 
@@ -352,64 +353,6 @@ class AccountingCorePresentationConverterTest {
                 .build()));
         accountingCorePresentationConverter.scheduleReIngestionForFailed("extractionRequest");
         Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleReIngestionForFailed("extractionRequest");
-    }
-
-    @Test
-    void allTransactionsDispatchStatus() {
-        TransactionEntity transaction = new TransactionEntity();
-        TransactionViolation transactionViolation = new TransactionViolation();
-        transactionViolation.setSource(Source.LOB);
-        TransactionItemEntity transactionItem = new TransactionItemEntity();
-
-        transaction.setViolations(Set.of(transactionViolation));
-        transaction.setItems(Set.of(transactionItem));
-        transaction.setAutomatedValidationStatus(TxValidationStatus.VALIDATED);
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
-        assertEquals(LedgerDispatchStatusView.APPROVE, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setTransactionApproved(true);
-
-        assertEquals(LedgerDispatchStatusView.PUBLISH, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setLedgerDispatchApproved(true);
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
-        assertEquals(LedgerDispatchStatusView.PUBLISHED, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.DISPATCHED);
-        assertEquals(LedgerDispatchStatusView.PUBLISHED, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.COMPLETED);
-        assertEquals(LedgerDispatchStatusView.PUBLISHED, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.FINALIZED);
-        assertEquals(LedgerDispatchStatusView.PUBLISHED, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
-        transactionItem.setRejection(Optional.of(new Rejection(RejectionReason.INCORRECT_AMOUNT)));
-        transaction.setOverallStatus(TransactionStatus.NOK);
-        assertEquals(LedgerDispatchStatusView.INVALID, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setAutomatedValidationStatus(TxValidationStatus.FAILED);
-        assertEquals(LedgerDispatchStatusView.INVALID, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
-        transactionItem.setRejection(Optional.of(new Rejection(RejectionReason.REVIEW_PARENT_PROJECT_CODE)));
-        assertEquals(LedgerDispatchStatusView.PENDING, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
-        transactionItem.setRejection(Optional.empty());
-        assertEquals(LedgerDispatchStatusView.PENDING, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transactionItem.setRejection(Optional.of(new Rejection(RejectionReason.INCORRECT_PROJECT)));
-        assertEquals(LedgerDispatchStatusView.INVALID, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transactionViolation.setSource(Source.ERP);
-        assertEquals(LedgerDispatchStatusView.INVALID, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
-
-        transaction.setAutomatedValidationStatus(TxValidationStatus.VALIDATED);
-        transactionItem.setRejection(Optional.of(new Rejection(RejectionReason.REVIEW_PARENT_COST_CENTER)));
-        transaction.setViolations(Set.of());
-        assertEquals(LedgerDispatchStatusView.PENDING, accountingCorePresentationConverter.getTransactionDispatchStatus(transaction));
     }
 
 }
