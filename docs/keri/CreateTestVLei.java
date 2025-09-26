@@ -14,7 +14,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +26,6 @@ import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Coring;
 import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.credentialing.credentials.CredentialData;
-import org.cardanofoundation.signify.app.credentialing.credentials.CredentialFilter;
 import org.cardanofoundation.signify.app.credentialing.credentials.IssueCredentialResult;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexGrantArgs;
@@ -116,15 +114,6 @@ public class CreateTestVLei {
 
         String qviCredentialId = createCredential();
 
-        // Test notification service before sending grant
-        System.out.println("Testing notification service...");
-        try {
-            Notifying.Notifications.NotificationListResponse testResponse = holder.client().notifications().list();
-            System.out.println("Notification service working, response: " + testResponse.notes());
-        } catch (Exception e) {
-            System.out.println("WARNING: Notification service may not be working: " + e.getMessage());
-        }
-        
         System.out.println("Holder Credential ID: " + qviCredentialId + " Sending IPEX grant...");
         sentIpexGrant(qviCredentialId, issuer.aid(), holder.aid(), issuer.client());
 
@@ -390,17 +379,13 @@ public class CreateTestVLei {
 
     public static void resolveAidOobis(SignifyClient client, List<Aid> aids) throws Exception {
         for (Aid aid : aids) {
-            System.out.println("Resolving OOBI for " + aid.name + " with prefix " + aid.prefix);
-            System.out.println("OOBI: " + aid.oobi);
             
             // Check if contact already exists
             List<Contacting.Contact> list =
                     Arrays.asList(client.contacts().list(null, "alias", "^" + aid.name + "$"));
             if (!list.isEmpty()) {
                 Contacting.Contact contact = list.getFirst();
-                System.out.println("Existing contact found: " + contact.getAlias() + " (" + contact.getId() + ")");
                 if (contact.getOobi().equals(aid.oobi)) {
-                    System.out.println("OOBI already resolved for " + aid.name);
                     continue;
                 }
             }
@@ -414,11 +399,7 @@ public class CreateTestVLei {
                 System.out.println("OOBI resolution response: " + response);
                 
                 if (response.get("i") == null) {
-                    System.out.println("Failed to resolve OOBI for " + aid.name + ", retrying...");
                     aids.add(aid); // repeat it
-                } else {
-                    System.out.println("Successfully resolved OOBI for " + aid.name + 
-                                     " resolved to: " + response.get("i"));
                 }
             } catch (Exception e) {
                 System.out.println("Error resolving OOBI for " + aid.name + ": " + e.getMessage());
@@ -442,30 +423,19 @@ public class CreateTestVLei {
     }
     
     public static void verifyClientConnections() throws Exception {
-        System.out.println("Verifying client connections and contacts...");
-        
-        // Check if issuer can see holder
-        List<Contacting.Contact> issuerContacts = Arrays.asList(issuer.client().contacts().list(null, null, null));
-        System.out.println("Issuer has " + issuerContacts.size() + " contacts:");
-        for (Contacting.Contact contact : issuerContacts) {
-            System.out.println("  - " + contact.getAlias() + " (" + contact.getId() + ")");
-        }
-        
-        // Check if holder can see issuer
+        List<Contacting.Contact> issuerContacts = Arrays.asList(issuer.client().contacts().list(null, null, null));        
         List<Contacting.Contact> holderContacts = Arrays.asList(holder.client().contacts().list(null, null, null));
-        System.out.println("Holder has " + holderContacts.size() + " contacts:");
-        for (Contacting.Contact contact : holderContacts) {
-            System.out.println("  - " + contact.getAlias() + " (" + contact.getId() + ")");
-        }
-        
+        List<Contacting.Contact> legalEntityContacts = Arrays.asList(legalEntity.client().contacts().list(null, null, null));
+        List<Contacting.Contact> reeveContacts = Arrays.asList(reeve.client().contacts().list(null, null, null));
         // Verify specific contact exists by name rather than prefix (since prefix might be different after OOBI resolution)
         boolean issuerKnowsHolder = issuerContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
         boolean holderKnowsIssuer = holderContacts.stream().anyMatch(c -> "issuer".equals(c.getAlias()));
-        
-        System.out.println("Issuer knows holder (by alias): " + issuerKnowsHolder);
-        System.out.println("Holder knows issuer (by alias): " + holderKnowsIssuer);
-        
-        if (!issuerKnowsHolder || !holderKnowsIssuer) {
+        boolean legalEntityKnowsHolder = legalEntityContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
+        boolean holderKnowsLegalEntity = holderContacts.stream().anyMatch(c -> "legalEntity".equals(c.getAlias()));
+        boolean reeveKnowsHolder = reeveContacts.stream().anyMatch(c -> "holder".equals(c.getAlias()));
+        boolean holderKnowsReeve = holderContacts.stream().anyMatch(c -> "reeve".equals(c.getAlias()));
+        if (!issuerKnowsHolder || !holderKnowsIssuer || !legalEntityKnowsHolder || !holderKnowsLegalEntity
+                || !reeveKnowsHolder || !holderKnowsReeve) {
             System.out.println("WARNING: Not all contacts are properly established by alias!");
             
             // Try by prefix as fallback
