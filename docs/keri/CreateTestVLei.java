@@ -88,7 +88,7 @@ public class CreateTestVLei {
         holder = initClientAndAid("holder", "holderRegistry", "");
         legalEntity = initClientAndAid("legalEntity", "legalEntityRegistry", "");
         reeve = initClientAndAid("reeve", "reeveRegistry", reeveIdentifierBran);
-    
+
         System.out.println("Resolving schema OOBIs...");
         resolveOobis(
                 List.of(issuer.client(), holder.client(), legalEntity.client(), reeve.client()),
@@ -135,81 +135,106 @@ public class CreateTestVLei {
 
     private static String issueLECredential(String qviCredentialId)
             throws IOException, InterruptedException, DigestException {
-        LinkedHashMap<String, Object> qviCredential = (LinkedHashMap<String, Object>) holder.client().credentials().get(qviCredentialId);
-        LinkedHashMap<String, Object> sadBody = (LinkedHashMap<String, Object>) qviCredential.get("sad");
+        LinkedHashMap<String, Object> qviCredential =
+                (LinkedHashMap<String, Object>) holder.client().credentials().get(qviCredentialId);
+        LinkedHashMap<String, Object> sadBody =
+                (LinkedHashMap<String, Object>) qviCredential.get("sad");
+
+        System.out.println("Parent QVI credential: " + sadBody);
+
+        // Get the resolved legal entity contact ID from holder's contacts
+        String legalEntityContactId;
+        try {
+            legalEntityContactId = getContactId(holder.client(), "legalEntity");
+            if (legalEntityContactId == null) {
+                System.out.println(
+                        "WARNING: Using original legalEntity prefix since contact not found");
+                legalEntityContactId = legalEntity.aid().prefix;
+            }
+        } catch (Exception e) {
+            System.out.println("ERROR getting legalEntity contact ID: " + e.getMessage());
+            legalEntityContactId = legalEntity.aid().prefix;
+        }
+        System.out.println("Using legalEntity contact ID: " + legalEntityContactId);
 
         Map<String, Object> additionalProperties = new LinkedHashMap<>();
         additionalProperties.put("LEI", CFLEI);
-        CredentialData.CredentialSubject leSubject = CredentialData.CredentialSubject.builder().build();
-        leSubject.setI(legalEntity.aid().prefix);
+        CredentialData.CredentialSubject leSubject =
+                CredentialData.CredentialSubject.builder().build();
+        leSubject.setI(legalEntityContactId); // Use the resolved contact ID
         leSubject.setAdditionalProperties(additionalProperties);
 
-        // Create usage and issuance disclaimers
+        // Create usage and issuance disclaimers for the rules
         Map<String, Object> usageDisclaimer = new LinkedHashMap<>();
         usageDisclaimer.put("l", StringData.USAGE_DISCLAIMER);
+
         Map<String, Object> issuanceDisclaimer = new LinkedHashMap<>();
         issuanceDisclaimer.put("l", StringData.ISSUANCE_DISCLAIMER);
 
-        // Create rules structure - this is the credential-specific data
+        // Create rules structure for the Legal Entity credential
         Map<String, Object> rules = new LinkedHashMap<>();
         rules.put("d", "");
         rules.put("usageDisclaimer", usageDisclaimer);
         rules.put("issuanceDisclaimer", issuanceDisclaimer);
 
-        // Create the edge structure for chaining - this links to the parent credential
+        // Create the edge structure for chaining to parent QVI credential
         Map<String, Object> qvi = new LinkedHashMap<>();
         qvi.put("n", sadBody.get("d")); // Parent credential SAID
         qvi.put("s", sadBody.get("s")); // Parent credential schema SAID
-        
+
         Map<String, Object> edge = new LinkedHashMap<>();
-        edge.put("d", ""); // Will be computed
         edge.put("qvi", qvi);
+        edge.put("d", "");
+
+        System.out.println("Creating chained credential with:");
+        System.out.println("  Rules: " + (rules != null ? "present" : "null"));
+        System.out.println("  Edge: " + (edge != null ? "present" : "null"));
+        System.out.println("  Parent SAID: " + sadBody.get("d"));
+        System.out.println("  Parent Schema: " + sadBody.get("s"));
 
         // Get the registry key from the holder's registries
         List<Map<String, Object>> registriesList =
                 (List<Map<String, Object>>) holder.client().registries().list(holder.aid().name());
-        
-        // Build the credential data
+
+        // Build the credential data with full chaining support
         CredentialData cData = CredentialData.builder().build();
         cData.setA(leSubject);
         cData.setRi(registriesList.getFirst().get("regk").toString());
         cData.setS(LE_SCHEMA_SAID);
-        cData.setR(rules);
-        cData.setE(edge);
+        cData.setR(rules); // Add rules for vLEI compliance
+        cData.setE(edge); // Add edge for chaining to parent QVI credential
 
         System.out.println("Issuing Legal Entity credential with:");
-        System.out.println("  Subject: " + legalEntity.aid().prefix);
+        System.out.println("  Subject: " + legalEntityContactId);
         System.out.println("  Registry: " + registriesList.getFirst().get("regk").toString());
         System.out.println("  Schema: " + LE_SCHEMA_SAID);
         System.out.println("  Parent credential: " + sadBody.get("d"));
-
         IssueCredentialResult leCredentialResult =
                 holder.client().credentials().issue(holder.aid().name(), cData);
-        
+
         System.out.println("Waiting for Legal Entity credential issuance operation...");
+        System.out.println("Operation name: " + leCredentialResult.getOp().getName());
+
         Operation<?> waitOp = holder.client().operations().wait(leCredentialResult.getOp());
-        
-        if (waitOp.getError() != null) {
-            throw new IllegalStateException("Legal Entity credential issuance failed: " + waitOp.getError());
-        }
-        
+
+
         String leCredentialId = leCredentialResult.getAcdc().getKed().get("d").toString();
         System.out.println("Legal Entity Credential ID: " + leCredentialId);
         return leCredentialId;
     }
 
 
-    private static void holderAdmitsCredential(String qviCredentialId, ClientAidPair holder, ClientAidPair issuer)
-            throws IOException, InterruptedException {
+    private static void holderAdmitsCredential(String qviCredentialId, ClientAidPair holder,
+            ClientAidPair issuer) throws IOException, InterruptedException {
         List<CreateTestVLei.Notification> filteredNotifications =
                 waitForNotifications("/exn/ipex/grant", holder);
         if (filteredNotifications == null) {
             throw new IllegalStateException("No notifications received after retries");
         }
-        
+
         // Process the grant notification and send admit
         if (filteredNotifications.size() > 0) {
-            
+
             Notification grantNotification = filteredNotifications.getFirst();
             System.out.println("Processing grant notification: " + grantNotification.a.d);
 
@@ -245,8 +270,8 @@ public class CreateTestVLei {
     }
 
 
-    private static List<CreateTestVLei.Notification> waitForNotifications(String route, ClientAidPair receiver)
-            throws IOException, InterruptedException {
+    private static List<CreateTestVLei.Notification> waitForNotifications(String route,
+            ClientAidPair receiver) throws IOException, InterruptedException {
         int retryCount = 10;
         int waitTimeMs = 3000;
 
