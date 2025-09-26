@@ -530,8 +530,16 @@ public class AccountingCorePresentationViewService {
         Set<TransactionItemEntity> items = tx.getItems();
 
         if (tx.getTransactionType().equals(TransactionType.Journal)) {
+            // The Dummy account is a finance trick organisations can use. If they don't use it we fall back to the old behaviour and sum all debit items
+            // We check if in the tx items is anything with the dummy account and if yes we only sum those
+            // If no dummy account is set or no item with the dummy account is found we sum all debit items
             Optional<String> dummyAccount = organisationPublicApiIF.findByOrganisationId(tx.getOrganisation().getId()).orElse(new org.cardanofoundation.lob.app.organisation.domain.entity.Organisation()).getDummyAccount();
-            items = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
+            Set<TransactionItemEntity> itemsWithDummy = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
+            if(!itemsWithDummy.isEmpty()){
+                items = itemsWithDummy;
+            } else {
+                items = tx.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(toSet());
+            }
         }
 
         if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
