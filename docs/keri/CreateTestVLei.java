@@ -58,7 +58,7 @@ public class CreateTestVLei {
             public String m;
         }
     }
-
+    
     private static final String vLEIServer =
             "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
     private static final String keriUrl = "http://localhost:3901";
@@ -81,192 +81,383 @@ public class CreateTestVLei {
                     "BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX");
 
     public static void main(String[] args) throws Exception {
-        System.out.println("Create Test Clients");
-        // Creating clients for issuer, holder, legal entity and reeve
-        System.out.println("Creating clients and AIDs...");
+        System.out.println("=== vLEI Test Setup Starting ===");
+        
+        // Step 1: Initialize all clients and identifiers
+        initializeClients();
+        
+        // Step 2: Establish communication channels
+        establishCommunicationChannels();
+        
+        // Step 3: Create and issue QVI credential
+        String qviCredentialId = createAndIssueQviCredential();
+        
+        // Step 4: Create and issue Legal Entity credential (chained)
+        String leCredentialId = createAndIssueLegalEntityCredential(qviCredentialId);
+        
+        // Step 5: Display final results
+        displayFinalResults(leCredentialId);
+        
+        System.out.println("=== vLEI Test Setup Complete ===");
+    }
+
+    /**
+     * Initialize all client identifiers and registries
+     */
+    private static void initializeClients() throws Exception {
+        System.out.println("\n--- Initializing Clients and AIDs ---");
         issuer = initClientAndAid("issuer", "issuerRegistry", "");
         holder = initClientAndAid("holder", "holderRegistry", "");
         legalEntity = initClientAndAid("legalEntity", "legalEntityRegistry", "");
         reeve = initClientAndAid("reeve", "reeveRegistry", reeveIdentifierBran);
+        System.out.println("All clients initialized successfully");
+    }
 
+    /**
+     * Establish communication channels between all clients
+     */
+    private static void establishCommunicationChannels() throws Exception {
+        System.out.println("\n--- Establishing Communication Channels ---");
+        
+        // Resolve schema OOBIs for all clients
         System.out.println("Resolving schema OOBIs...");
-        resolveOobis(
-                List.of(issuer.client(), holder.client(), legalEntity.client(), reeve.client()),
-                List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL));
+        List<SignifyClient> allClients = List.of(issuer.client(), holder.client(), 
+                                                legalEntity.client(), reeve.client());
+        List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL);
+        resolveOobis(allClients, schemaUrls);
 
+        // Establish peer-to-peer communication
         System.out.println("Resolving AID OOBIs for inter-client communication...");
-        resolveAidOobis(issuer.client, List.of(holder.aid(), legalEntity.aid(), reeve.aid()));
-        resolveAidOobis(holder.client, List.of(issuer.aid(), legalEntity.aid(), reeve.aid()));
-        resolveAidOobis(legalEntity.client, List.of(issuer.aid(), holder.aid(), reeve.aid()));
-        resolveAidOobis(reeve.client, List.of(issuer.aid(), holder.aid(), legalEntity.aid()));
+        establishPeerToPeerCommunication();
 
-        System.out.println("All OOBIs resolved successfully!");
-
-        // Verify client connections and contacts
+        // Verify all connections are working
         System.out.println("Verifying client connections...");
         verifyClientConnections();
+        
+        System.out.println("Communication channels established successfully");
+    }
 
-        System.out.println("Creating holder credential");
-
+    /**
+     * Create and issue the QVI (Qualified vLEI Issuer) credential
+     */
+    private static String createAndIssueQviCredential() throws Exception {
+        System.out.println("\n--- Creating QVI Credential ---");
         String qviCredentialId = createCredential();
+        System.out.println("QVI Credential created with ID: " + qviCredentialId);
+        
+        // Issue credential from issuer to holder
+        performCredentialIssuance(qviCredentialId, issuer, holder, "QVI");
+        
+        return qviCredentialId;
+    }
 
-        System.out.println("Holder Credential ID: " + qviCredentialId + " Sending IPEX grant...");
-        sentIpexGrant(qviCredentialId, issuer.aid(), holder.aid(), issuer.client());
-
-        System.out.println("Waiting a moment for the grant to be processed...");
-        Thread.sleep(2000); // Give some time for the grant to be processed
-
-        System.out.println("Holder IPEX admit");
-        holderAdmitsCredential(qviCredentialId, holder, issuer);
-
-        System.out.println("Holder creates Legal Entity (chained) Credential");
-
+    /**
+     * Create and issue the Legal Entity credential (chained to QVI)
+     */
+    private static String createAndIssueLegalEntityCredential(String qviCredentialId) throws Exception {
+        System.out.println("\n--- Creating Legal Entity Credential (Chained) ---");
         String leCredentialId = issueLECredential(qviCredentialId);
+        System.out.println("LE Credential created with ID: " + leCredentialId);
+        
+        // Issue credential from holder to legal entity
+        performCredentialIssuance(leCredentialId, holder, legalEntity, "Legal Entity");
+        
+        return leCredentialId;
+    }
 
-        sentIpexGrant(leCredentialId, holder.aid(), legalEntity.aid(), holder.client());
-        System.out.println("Waiting a moment for the grant to be processed...");
-        Thread.sleep(2000); // Give some time for the grant to be processed
-        holderAdmitsCredential(leCredentialId, legalEntity, holder);
-
+    /**
+     * Display final results and credential information
+     */
+    private static void displayFinalResults(String leCredentialId) throws Exception {
+        System.out.println("\n--- Final Results ---");
         Object legalEntityCredential = legalEntity.client().credentials().get(leCredentialId);
-        System.out.println("Legal Entity Credential: " + legalEntityCredential);
+        System.out.println("Legal Entity Credential Details:");
+        System.out.println(legalEntityCredential);
     }
 
 
+    /**
+     * Issue Legal Entity credential chained to QVI credential
+     */
     private static String issueLECredential(String qviCredentialId)
-            throws IOException, InterruptedException, DigestException {
-        LinkedHashMap<String, Object> qviCredential =
-                (LinkedHashMap<String, Object>) holder.client().credentials().get(qviCredentialId);
-        LinkedHashMap<String, Object> sadBody =
-                (LinkedHashMap<String, Object>) qviCredential.get("sad");
-
-        System.out.println("Parent QVI credential: " + sadBody);
-
-        // Get the resolved legal entity contact ID from holder's contacts
-        String legalEntityContactId;
-        try {
-            legalEntityContactId = getContactId(holder.client(), "legalEntity");
-            if (legalEntityContactId == null) {
-                System.out.println(
-                        "WARNING: Using original legalEntity prefix since contact not found");
-                legalEntityContactId = legalEntity.aid().prefix;
-            }
-        } catch (Exception e) {
-            System.out.println("ERROR getting legalEntity contact ID: " + e.getMessage());
-            legalEntityContactId = legalEntity.aid().prefix;
+            throws Exception {
+        System.out.println("Creating chained Legal Entity credential...");
+        
+        // Get parent QVI credential
+        ParentCredentialInfo parentInfo = getParentCredentialInfo(qviCredentialId);
+        System.out.println("Parent QVI credential SAID: " + parentInfo.said);
+        
+        // Build credential subject
+        CredentialData.CredentialSubject subject = buildLegalEntitySubject();
+        
+        // Build vLEI compliance structures
+        Map<String, Object> rules = buildVLeiRules();
+        Map<String, Object> edge = buildChainedEdge(parentInfo);
+        
+        // Create and issue credential
+        CredentialData credentialData = buildCredentialData(subject, rules, edge, LE_SCHEMA_SAID);
+        String leCredentialId = issueCredential(holder, credentialData, "Legal Entity");
+        
+        System.out.println("Legal Entity Credential ID: " + leCredentialId);
+        return leCredentialId;
+    }
+    
+    /**
+     * Helper class for parent credential information
+     */
+    private static class ParentCredentialInfo {
+        public final String said;
+        public final String schema;
+        
+        public ParentCredentialInfo(String said, String schema) {
+            this.said = said;
+            this.schema = schema;
         }
-        System.out.println("Using legalEntity contact ID: " + legalEntityContactId);
-
+    }
+    
+    /**
+     * Get parent credential information for chaining
+     */
+    private static ParentCredentialInfo getParentCredentialInfo(String credentialId) throws Exception {
+        LinkedHashMap<String, Object> credential = 
+                (LinkedHashMap<String, Object>) holder.client().credentials().get(credentialId);
+        LinkedHashMap<String, Object> sadBody = 
+                (LinkedHashMap<String, Object>) credential.get("sad");
+        
+        return new ParentCredentialInfo(
+            sadBody.get("d").toString(),
+            sadBody.get("s").toString()
+        );
+    }
+    
+    /**
+     * Build Legal Entity credential subject
+     */
+    private static CredentialData.CredentialSubject buildLegalEntitySubject() {
+        // Resolve legal entity contact ID
+        String legalEntityContactId = resolveContactWithFallback(
+            holder.client(), "legalEntity", legalEntity.aid().prefix);
+        
         Map<String, Object> additionalProperties = new LinkedHashMap<>();
         additionalProperties.put("LEI", CFLEI);
-        CredentialData.CredentialSubject leSubject =
-                CredentialData.CredentialSubject.builder().build();
-        leSubject.setI(legalEntityContactId); // Use the resolved contact ID
-        leSubject.setAdditionalProperties(additionalProperties);
-
-        // Create usage and issuance disclaimers for the rules
+        
+        CredentialData.CredentialSubject subject = CredentialData.CredentialSubject.builder().build();
+        subject.setI(legalEntityContactId);
+        subject.setAdditionalProperties(additionalProperties);
+        
+        return subject;
+    }
+    
+    /**
+     * Build vLEI compliance rules
+     */
+    private static Map<String, Object> buildVLeiRules() {
         Map<String, Object> usageDisclaimer = new LinkedHashMap<>();
         usageDisclaimer.put("l", StringData.USAGE_DISCLAIMER);
 
         Map<String, Object> issuanceDisclaimer = new LinkedHashMap<>();
         issuanceDisclaimer.put("l", StringData.ISSUANCE_DISCLAIMER);
 
-        // Create rules structure for the Legal Entity credential
         Map<String, Object> rules = new LinkedHashMap<>();
         rules.put("d", "");
         rules.put("usageDisclaimer", usageDisclaimer);
         rules.put("issuanceDisclaimer", issuanceDisclaimer);
-
-        // Create the edge structure for chaining to parent QVI credential
+        
+        return rules;
+    }
+    
+    /**
+     * Build chained edge structure linking to parent credential
+     */
+    private static Map<String, Object> buildChainedEdge(ParentCredentialInfo parentInfo) {
         Map<String, Object> qvi = new LinkedHashMap<>();
-        qvi.put("n", sadBody.get("d")); // Parent credential SAID
-        qvi.put("s", sadBody.get("s")); // Parent credential schema SAID
+        qvi.put("n", parentInfo.said);  // Parent credential SAID
+        qvi.put("s", parentInfo.schema); // Parent credential schema SAID
 
         Map<String, Object> edge = new LinkedHashMap<>();
         edge.put("qvi", qvi);
         edge.put("d", "");
-
-        System.out.println("Creating chained credential with:");
-        System.out.println("  Rules: " + (rules != null ? "present" : "null"));
-        System.out.println("  Edge: " + (edge != null ? "present" : "null"));
-        System.out.println("  Parent SAID: " + sadBody.get("d"));
-        System.out.println("  Parent Schema: " + sadBody.get("s"));
-
-        // Get the registry key from the holder's registries
-        List<Map<String, Object>> registriesList =
+        
+        return edge;
+    }
+    
+    /**
+     * Build complete credential data structure
+     */
+    private static CredentialData buildCredentialData(CredentialData.CredentialSubject subject,
+            Map<String, Object> rules, Map<String, Object> edge, String schemaSaid) throws Exception {
+        // Get registry information
+        List<Map<String, Object>> registriesList = 
                 (List<Map<String, Object>>) holder.client().registries().list(holder.aid().name());
-
-        // Build the credential data with full chaining support
-        CredentialData cData = CredentialData.builder().build();
-        cData.setA(leSubject);
-        cData.setRi(registriesList.getFirst().get("regk").toString());
-        cData.setS(LE_SCHEMA_SAID);
-        cData.setR(rules); // Add rules for vLEI compliance
-        cData.setE(edge); // Add edge for chaining to parent QVI credential
-
-        System.out.println("Issuing Legal Entity credential with:");
-        System.out.println("  Subject: " + legalEntityContactId);
-        System.out.println("  Registry: " + registriesList.getFirst().get("regk").toString());
-        System.out.println("  Schema: " + LE_SCHEMA_SAID);
-        System.out.println("  Parent credential: " + sadBody.get("d"));
-        IssueCredentialResult leCredentialResult =
-                holder.client().credentials().issue(holder.aid().name(), cData);
-
-        System.out.println("Waiting for Legal Entity credential issuance operation...");
-        System.out.println("Operation name: " + leCredentialResult.getOp().getName());
-
-        Operation<?> waitOp = holder.client().operations().wait(leCredentialResult.getOp());
-
-
-        String leCredentialId = leCredentialResult.getAcdc().getKed().get("d").toString();
-        System.out.println("Legal Entity Credential ID: " + leCredentialId);
-        return leCredentialId;
+        String registryKey = registriesList.getFirst().get("regk").toString();
+        
+        CredentialData credentialData = CredentialData.builder().build();
+        credentialData.setA(subject);
+        credentialData.setRi(registryKey);
+        credentialData.setS(schemaSaid);
+        credentialData.setR(rules);
+        credentialData.setE(edge);
+        
+        return credentialData;
+    }
+    
+    /**
+     * Issue credential and wait for completion
+     */
+    private static String issueCredential(ClientAidPair issuer, CredentialData credentialData, 
+            String credentialType) throws Exception {
+        System.out.println("Issuing " + credentialType + " credential...");
+        
+        IssueCredentialResult result = issuer.client().credentials().issue(
+            issuer.aid().name(), credentialData);
+        
+        System.out.println("Waiting for " + credentialType + " credential issuance...");
+        System.out.println("Operation name: " + result.getOp().getName());
+        
+        Operation<?> waitOp = issuer.client().operations().wait(result.getOp());
+        if (waitOp.getError() != null) {
+            throw new IllegalStateException(credentialType + " credential issuance failed: " + 
+                                          waitOp.getError());
+        }
+        
+        return result.getAcdc().getKed().get("d").toString();
+    }
+    
+    /**
+     * Resolve contact ID with fallback to prefix
+     */
+    private static String resolveContactWithFallback(SignifyClient client, String alias, String fallbackPrefix) {
+        try {
+            String contactId = getContactId(client, alias);
+            if (contactId != null) {
+                System.out.println("Using resolved contact ID for " + alias + ": " + contactId);
+                return contactId;
+            }
+        } catch (Exception e) {
+            System.out.println("ERROR resolving contact ID for " + alias + ": " + e.getMessage());
+        }
+        
+        System.out.println("WARNING: Using fallback prefix for " + alias + ": " + fallbackPrefix);
+        return fallbackPrefix;
     }
 
 
-    private static void holderAdmitsCredential(String qviCredentialId, ClientAidPair holder,
-            ClientAidPair issuer) throws IOException, InterruptedException {
-        List<CreateTestVLei.Notification> filteredNotifications =
-                waitForNotifications("/exn/ipex/grant", holder);
-        if (filteredNotifications == null) {
-            throw new IllegalStateException("No notifications received after retries");
+    /**
+     * Establish peer-to-peer communication between all clients
+     */
+    private static void establishPeerToPeerCommunication() throws Exception {
+        List<Aid> otherClients = List.of(holder.aid(), legalEntity.aid(), reeve.aid());
+        resolveAidOobis(issuer.client, otherClients);
+        
+        otherClients = List.of(issuer.aid(), legalEntity.aid(), reeve.aid());
+        resolveAidOobis(holder.client, otherClients);
+        
+        otherClients = List.of(issuer.aid(), holder.aid(), reeve.aid());
+        resolveAidOobis(legalEntity.client, otherClients);
+        
+        otherClients = List.of(issuer.aid(), holder.aid(), legalEntity.aid());
+        resolveAidOobis(reeve.client, otherClients);
+    }
+
+    /**
+     * Perform complete credential issuance process (grant + admit)
+     */
+    private static void performCredentialIssuance(String credentialId, ClientAidPair issuerPair, 
+            ClientAidPair holderPair, String credentialType) throws Exception {
+        System.out.println("Issuing " + credentialType + " credential from " + 
+                          issuerPair.aid().name + " to " + holderPair.aid().name);
+        
+        // Send IPEX grant
+        sendIpexGrant(credentialId, issuerPair.aid(), holderPair.aid(), issuerPair.client());
+        
+        // Wait for processing
+        waitForProcessing(2000);
+        
+        // Process admit
+        processCredentialAdmit(credentialId, holderPair, issuerPair, credentialType);
+    }
+
+    /**
+     * Process credential admit (refactored from holderAdmitsCredential)
+     */
+    private static void processCredentialAdmit(String credentialId, ClientAidPair recipient, 
+            ClientAidPair issuerPair, String credentialType) throws IOException, InterruptedException {
+        System.out.println("Processing " + credentialType + " credential admit");
+        
+        List<Notification> notifications = waitForNotifications("/exn/ipex/grant", recipient);
+        if (notifications == null || notifications.isEmpty()) {
+            throw new IllegalStateException("No grant notifications received for " + credentialType);
         }
 
-        // Process the grant notification and send admit
-        if (filteredNotifications.size() > 0) {
+        Notification grantNotification = notifications.getFirst();
+        System.out.println("Processing grant notification: " + grantNotification.a.d);
 
-            Notification grantNotification = filteredNotifications.getFirst();
-            System.out.println("Processing grant notification: " + grantNotification.a.d);
-
-            // Send IPEX admit from holder
-            String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
-            IpexAdmitArgs iargs = IpexAdmitArgs.builder().build();
-            iargs.setSenderName(holder.aid().name);
-            iargs.setMessage("");
-            iargs.setGrantSaid(grantNotification.a.d);
-            iargs.setRecipient(issuer.aid().prefix);
-            iargs.setDatetime(dt);
-            Exchanging.ExchangeMessageResult resultAdmit;
-            try {
-                resultAdmit = holder.client().ipex().admit(iargs);
-                Object op = holder.client().ipex().submitAdmit(holder.aid().name, resultAdmit.exn(),
-                        resultAdmit.sigs(), resultAdmit.atc(),
-                        Collections.singletonList(issuer.aid().prefix));
-                Operation<Object> waitOp =
-                        holder.client().operations().wait(Operation.fromObject(op));
-                holder.client().notifications().mark(grantNotification.i);
-                if (!waitOp.isDone() || waitOp.getError() != null) {
-                    throw new IllegalStateException("IPEX admit operation failed: "
-                            + (waitOp.getError() != null ? waitOp.getError() : "unknown"));
-                }
-                holder.client().operations().delete(waitOp.getName());
-            } catch (Exception e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            System.out.println(
-                    "Holder Credential: " + qviCredentialId + " admitted by " + holder.aid().name);
+        try {
+            // Build admit arguments
+            IpexAdmitArgs admitArgs = buildAdmitArgs(recipient.aid().name, 
+                                                   grantNotification.a.d, 
+                                                   issuerPair.aid().prefix);
+            
+            // Execute admit process
+            executeAdmitProcess(recipient, issuerPair, admitArgs, grantNotification.i);
+            
+            System.out.println(credentialType + " credential " + credentialId + 
+                             " successfully admitted by " + recipient.aid().name);
+        } catch (Exception e) {
+            System.err.println("Error during " + credentialType + " credential admit: " + e.getMessage());
+            throw new RuntimeException("Failed to admit " + credentialType + " credential", e);
         }
+    }
+
+    /**
+     * Build IPEX admit arguments
+     */
+    private static IpexAdmitArgs buildAdmitArgs(String senderName, String grantSaid, String recipient) {
+        String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
+        
+        IpexAdmitArgs args = IpexAdmitArgs.builder().build();
+        args.setSenderName(senderName);
+        args.setMessage("");
+        args.setGrantSaid(grantSaid);
+        args.setRecipient(recipient);
+        args.setDatetime(dt);
+        
+        return args;
+    }
+
+    /**
+     * Execute the admit process (send admit and wait for completion)
+     */
+    private static void executeAdmitProcess(ClientAidPair recipient, ClientAidPair issuerPair, 
+            IpexAdmitArgs admitArgs, String notificationId) throws Exception {
+        // Create and submit admit
+        Exchanging.ExchangeMessageResult admitResult = recipient.client().ipex().admit(admitArgs);
+        Object operation = recipient.client().ipex().submitAdmit(
+            recipient.aid().name, 
+            admitResult.exn(),
+            admitResult.sigs(), 
+            admitResult.atc(),
+            Collections.singletonList(issuerPair.aid().prefix)
+        );
+        
+        // Wait for operation completion
+        Operation<Object> waitOp = recipient.client().operations().wait(Operation.fromObject(operation));
+        if (!waitOp.isDone() || waitOp.getError() != null) {
+            throw new IllegalStateException("IPEX admit operation failed: " + 
+                    (waitOp.getError() != null ? waitOp.getError() : "unknown"));
+        }
+        
+        // Mark notification as read and cleanup
+        recipient.client().notifications().mark(notificationId);
+        recipient.client().operations().delete(waitOp.getName());
+    }
+
+    /**
+     * Helper method for consistent wait timing
+     */
+    private static void waitForProcessing(long milliseconds) throws InterruptedException {
+        System.out.println("Waiting " + milliseconds + "ms for processing...");
+        Thread.sleep(milliseconds);
     }
 
 
@@ -337,83 +528,160 @@ public class CreateTestVLei {
     }
 
 
+    /**
+     * Create basic QVI credential (legacy method)
+     */
     private static String createCredential()
             throws IOException, InterruptedException, DigestException {
+        System.out.println("Creating basic QVI credential...");
+        
+        // Build credential subject
+        CredentialData.CredentialSubject subject = CredentialData.CredentialSubject.builder().build();
+        subject.setI(holder.aid().prefix);
+        subject.setAdditionalProperties(Map.of("LEI", provenantLEI));
+        
+        // Get registry information
         List<Map<String, Object>> registriesList =
                 (List<Map<String, Object>>) issuer.client().registries().list(issuer.aid().name());
+        
+        // Build credential data
+        CredentialData credentialData = CredentialData.builder().build();
+        credentialData.setA(subject);
+        credentialData.setS(QVI_SCHEMA_SAID);
+        credentialData.setRi(registriesList.getFirst().get("regk").toString());
 
-        CredentialData.CredentialSubject a = CredentialData.CredentialSubject.builder().build();
-        a.setI(holder.aid().prefix);
-        a.setAdditionalProperties(Map.of("LEI", provenantLEI));
-        CredentialData cData = CredentialData.builder().build();
-        cData.setA(a);
-        cData.setS(QVI_SCHEMA_SAID);
-        cData.setRi(registriesList.getFirst().get("regk").toString());
-
-        IssueCredentialResult holderCredentialResult =
-                issuer.client().credentials().issue(issuer.aid().name(), cData);
-        issuer.client().operations().wait(holderCredentialResult.getOp());
-        String qviCredentialId = holderCredentialResult.getAcdc().getKed().get("d").toString();
-        return qviCredentialId;
+        // Issue and wait for completion
+        IssueCredentialResult result = issuer.client().credentials().issue(
+            issuer.aid().name(), credentialData);
+        issuer.client().operations().wait(result.getOp());
+        
+        String credentialId = result.getAcdc().getKed().get("d").toString();
+        System.out.println("Basic QVI credential created: " + credentialId);
+        return credentialId;
     }
 
 
-    private static void sentIpexGrant(String qviCredentialId, Aid issuerAid, Aid holderAid,
-            SignifyClient issuerClient) throws IOException, InterruptedException, DigestException {
+    /**
+     * Send IPEX grant (refactored from sentIpexGrant)
+     */
+    private static void sendIpexGrant(String credentialId, Aid issuerAid, Aid recipientAid,
+            SignifyClient issuerClient) throws Exception {
         System.out.println("Starting IPEX grant process...");
-        System.out.println("Issuer: " + issuerAid.name + " (" + issuerAid.prefix + ")");
-        System.out.println("Holder: " + holderAid.name + " (" + holderAid.prefix + ")");
-        System.out.println("Credential ID: " + qviCredentialId);
+        System.out.println("  From: " + issuerAid.name + " (" + issuerAid.prefix + ")");
+        System.out.println("  To: " + recipientAid.name + " (" + recipientAid.prefix + ")");
+        System.out.println("  Credential ID: " + credentialId);
 
-        String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
+        // Get credential components
+        CredentialComponents components = getCredentialComponents(issuerClient, credentialId);
+        
+        // Resolve recipient contact
+        String recipientContactId = resolveRecipientContact(issuerClient, recipientAid);
+        
+        // Build and send grant
+        IpexGrantArgs grantArgs = buildGrantArgs(issuerAid, components, recipientContactId);
+        Exchanging.ExchangeMessageResult result = issuerClient.ipex().grant(grantArgs);
 
-        Object issuerCredential = issuerClient.credentials().get(qviCredentialId);
-        LinkedHashMap<String, Object> issuerCredentialList =
-                (LinkedHashMap<String, Object>) issuerCredential;
+        // Submit grant and wait for completion
+        submitAndWaitForGrant(issuerClient, issuerAid, result, recipientContactId);
+        
+        System.out.println("IPEX grant sent successfully!");
+    }
+    
+    /**
+     * Helper class to hold credential components
+     */
+    private static class CredentialComponents {
+        public final Map<String, Object> sad;
+        public final Map<String, Object> anc;
+        public final Map<String, Object> iss;
+        
+        public CredentialComponents(Map<String, Object> sad, Map<String, Object> anc, Map<String, Object> iss) {
+            this.sad = sad;
+            this.anc = anc;
+            this.iss = iss;
+        }
+    }
+    
+    /**
+     * Extract credential components from stored credential
+     */
+    private static CredentialComponents getCredentialComponents(SignifyClient client, String credentialId) 
+            throws Exception {
+        Object credential = client.credentials().get(credentialId);
+        LinkedHashMap<String, Object> credentialMap = (LinkedHashMap<String, Object>) credential;
+        
         @SuppressWarnings("unchecked")
-        Map<String, Object> getSAD = (Map<String, Object>) issuerCredentialList.get("sad");
-        Map<String, Object> getANC = (Map<String, Object>) issuerCredentialList.get("anc");
-        Map<String, Object> getISS = (Map<String, Object>) issuerCredentialList.get("iss");
-
-        System.out.println("Building IPEX grant arguments...");
-        IpexGrantArgs gArgs = IpexGrantArgs.builder().build();
-        gArgs.setSenderName(issuerAid.name);
-        gArgs.setAcdc(new Serder(getSAD));
-        gArgs.setAnc(new Serder(getANC));
-        gArgs.setIss(new Serder(getISS));
-        gArgs.setAncAttachment(null);
-        // Get the resolved holder contact ID from issuer's contacts
-        String holderContactId;
+        Map<String, Object> sad = (Map<String, Object>) credentialMap.get("sad");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> anc = (Map<String, Object>) credentialMap.get("anc");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> iss = (Map<String, Object>) credentialMap.get("iss");
+        
+        return new CredentialComponents(sad, anc, iss);
+    }
+    
+    /**
+     * Resolve recipient contact ID with fallback
+     */
+    private static String resolveRecipientContact(SignifyClient issuerClient, Aid recipientAid) {
         try {
-            holderContactId = getContactId(issuerClient, "holder");
-            if (holderContactId == null) {
-                System.out.println("WARNING: Using original holder prefix since contact not found");
-                holderContactId = holderAid.prefix;
+            String contactId = getContactId(issuerClient, recipientAid.name);
+            if (contactId != null) {
+                System.out.println("Using resolved contact ID: " + contactId);
+                return contactId;
             }
         } catch (Exception e) {
-            System.out.println("ERROR getting contact ID: " + e.getMessage());
-            holderContactId = holderAid.prefix;
+            System.out.println("ERROR resolving contact ID: " + e.getMessage());
         }
-        System.out.println("Using holder contact ID: " + holderContactId);
-        gArgs.setRecipient(holderContactId);
+        
+        System.out.println("WARNING: Using original prefix as fallback: " + recipientAid.prefix);
+        return recipientAid.prefix;
+    }
+    
+    /**
+     * Build IPEX grant arguments
+     */
+    private static IpexGrantArgs buildGrantArgs(Aid issuerAid, CredentialComponents components, 
+            String recipientContactId) {
+        String dt = new Date().toInstant().toString().replace("Z", "000+00:00");
+        
+        IpexGrantArgs gArgs = IpexGrantArgs.builder().build();
+        gArgs.setSenderName(issuerAid.name);
+        gArgs.setAcdc(new Serder(components.sad));
+        gArgs.setAnc(new Serder(components.anc));
+        gArgs.setIss(new Serder(components.iss));
+        gArgs.setAncAttachment(null);
+        gArgs.setRecipient(recipientContactId);
         gArgs.setDatetime(dt);
-
-        System.out.println("Creating IPEX grant message...");
-        Exchanging.ExchangeMessageResult result = issuerClient.ipex().grant(gArgs);
-
-        System.out.println("Submitting IPEX grant to holder...");
-        List<String> holderAidPrefix = Collections.singletonList(holderContactId);
-        Object op = issuerClient.ipex().submitGrant(issuerAid.name, result.exn(), result.sigs(),
-                result.atc(), holderAidPrefix);
+        
+        return gArgs;
+    }
+    
+    /**
+     * Submit grant and wait for completion
+     */
+    private static void submitAndWaitForGrant(SignifyClient issuerClient, Aid issuerAid, 
+            Exchanging.ExchangeMessageResult result, String recipientContactId) 
+            throws IOException, InterruptedException {
+        System.out.println("Submitting IPEX grant...");
+        
+        Object operation = issuerClient.ipex().submitGrant(
+            issuerAid.name, 
+            result.exn(), 
+            result.sigs(),
+            result.atc(), 
+            Collections.singletonList(recipientContactId)
+        );
 
         System.out.println("Waiting for IPEX grant operation to complete...");
-        Operation<Object> wait2 = issuerClient.operations().wait(Operation.fromObject(op));
-        if (!wait2.isDone() || wait2.getError() != null) {
-            throw new IllegalStateException("IPEX grant operation failed: "
-                    + (wait2.getError() != null ? wait2.getError() : "unknown"));
+        Operation<Object> waitOp = issuerClient.operations().wait(Operation.fromObject(operation));
+        
+        if (!waitOp.isDone() || waitOp.getError() != null) {
+            throw new IllegalStateException("IPEX grant operation failed: " +
+                    (waitOp.getError() != null ? waitOp.getError() : "unknown"));
         }
-        issuerClient.operations().delete(wait2.getName());
-        System.out.println("IPEX grant sent successfully!");
+        
+        issuerClient.operations().delete(waitOp.getName());
     }
 
 
@@ -510,8 +778,6 @@ public class CreateTestVLei {
                 Operation<Object> opBody = client.operations().wait(Operation.fromObject(op));
                 LinkedHashMap<String, Object> response =
                         (LinkedHashMap<String, Object>) opBody.getResponse();
-
-                System.out.println("OOBI resolution response: " + response);
 
                 if (response.get("i") == null) {
                     aids.add(aid); // repeat it
