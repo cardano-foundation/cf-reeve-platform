@@ -18,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -186,36 +187,53 @@ public class AccountingCorePresentationViewService {
         }
 
         public Either<Problem, Pageable> convertPageable(Pageable page,
-                        Map<String, String> fieldMappings) {
-                if (page.getSort().isSorted()) {
-                        Optional<Sort.Order> notSortableProperty =
-                                        page.getSort().get().filter(order -> {
-                                                String property = Optional
-                                                                .ofNullable(fieldMappings.get(order
-                                                                                .getProperty()))
-                                                                .orElse(order.getProperty());
+                                                 Map<String, String> fieldMappings) {
+    if (page.getSort().isSorted()) {
+        Optional<Sort.Order> notSortableProperty =
+            page.getSort().get().filter(order -> {
+                String property = Optional
+                        .ofNullable(fieldMappings.get(order.getProperty()))
+                        .orElse(order.getProperty());
 
-                                                return !jpaSortFieldValidator.isSortable(
-                                                                TransactionEntity.class, property);
+                return !jpaSortFieldValidator.isSortable(TransactionEntity.class, property);
+            }).findFirst();
 
-                                        }).findFirst();
-                        if (notSortableProperty.isPresent()) {
-                                return Either.left(Problem.builder()
-                                                .withTitle("Invalid Sort Property")
-                                                .withDetail("Invalid sort: " + notSortableProperty
-                                                                .get().getProperty())
-                                                .build());
-                        }
-                        return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
-                                        Sort.by(page.getSort().get().map(order -> new Sort.Order(
-                                                        order.getDirection(),
-                                                        Optional.ofNullable(fieldMappings
-                                                                        .get(order.getProperty()))
-                                                                        .orElse(order.getProperty())))
-                                                        .toList())));
-                }
-                return Either.right(page);
+        if (notSortableProperty.isPresent()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Invalid Sort Property")
+                    .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
+                    .build());
         }
+
+        Sort sort = Sort.by(page.getSort().get().map(order -> {
+            String property = Optional
+                    .ofNullable(fieldMappings.get(order.getProperty()))
+                    .orElse(order.getProperty());
+
+            // simple enum detection – you can swap for a static Set
+            boolean isEnum = false;
+            try {
+                isEnum = TransactionEntity.class
+                        .getDeclaredField(property)
+                        .getType()
+                        .isEnum();
+            } catch (NoSuchFieldException ignored) {}
+
+            if (isEnum) {
+                // ✅ build unsafe sort instead of plain property
+                return JpaSort.unsafe(order.getDirection(), "function('enum_to_text', " + property + ")").iterator().next();
+            }
+
+            return new Sort.Order(order.getDirection(), property);
+        }).toList());
+
+        return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(), sort));
+    }
+
+    return Either.right(page);
+}
+
+
 
         public Either<Problem, Optional<BatchView>> batchDetail(String batchId,
                         List<TransactionProcessingStatus> txStatus, Pageable page,
@@ -446,8 +464,7 @@ public class AccountingCorePresentationViewService {
                                 batchFilterRequest.getCreditAccountCodes(),
                                 batchFilterRequest.getEventCodes(),
                                 batchFilterRequest.getProjectCustomerCodes(),
-                                batchFilterRequest.getParentProjectCustomerCodes(),
-                                pageable);
+                                batchFilterRequest.getParentProjectCustomerCodes(), pageable);
         }
 
         private TransactionReconciliationTransactionsView getTransactionReconciliationView(
