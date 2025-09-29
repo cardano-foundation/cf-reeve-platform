@@ -12,7 +12,11 @@ public class SortFieldMappings {
     public static final Map<String, String> TRANSACTION_ENTITY_FIELD_MAPPINGS = Map.of(
         "reconciliationSource", "reconcilation.source",
         "reconciliationSink", "reconcilation.sink",
-        "reconciliationFinalStatus", "reconcilation.finalStatus"
+        "reconciliationFinalStatus", "reconcilation.finalStatus",
+        "dataSource", "extractorType",
+        "status", "overallStatus",
+        "statistic", "processingStatus",
+        "validationStatus", "automatedValidationStatus"
     );
 
     public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS = Map.of(
