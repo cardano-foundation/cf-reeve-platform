@@ -2,8 +2,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.present
 
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
@@ -413,7 +411,7 @@ public class AccountingCorePresentationViewService {
                                 .collect(toSet());
 
                 return TransactionItemsProcessRejectView.createSuccess(tx.getId(),
-                                this.getTransactionDispatchStatus(tx), items);
+                               tx.getProcessingStatus(), items);
         }
 
         @Transactional
@@ -485,7 +483,7 @@ public class AccountingCorePresentationViewService {
                                 transactionEntity.getEntryDate(),
                                 transactionEntity.getTransactionType(), dataSourceView,
                                 Optional.of(transactionEntity.getOverallStatus()),
-                                Optional.of(getTransactionDispatchStatus(transactionEntity)),
+                                transactionEntity.getProcessingStatus(),
                                 Optional.of(transactionEntity.getAutomatedValidationStatus()),
                                 transactionEntity.getTransactionApproved(),
                                 transactionEntity.getLedgerDispatchApproved(),
@@ -574,7 +572,7 @@ public class AccountingCorePresentationViewService {
                                 transactionEntity.getEntryDate(),
                                 transactionEntity.getTransactionType(), dataSourceView,
                                 transactionEntity.getOverallStatus(),
-                                getTransactionDispatchStatus(transactionEntity),
+                                transactionEntity.getProcessingStatus(),
                                 transactionEntity.getLedgerDispatchStatusErrorReason(),
                                 transactionEntity.getAutomatedValidationStatus(),
                                 transactionEntity.getLedgerDispatchStatus(),
@@ -616,60 +614,6 @@ public class AccountingCorePresentationViewService {
                                 getViolations(transactionEntity)
 
                 );
-        }
-
-        public LedgerDispatchStatusView getTransactionDispatchStatus(
-                        TransactionEntity transactionEntity) {
-                if (FAILED == transactionEntity.getAutomatedValidationStatus()) {
-                        if (transactionEntity.getViolations().stream()
-                                        .anyMatch(v -> v.getSource() == ERP)) {
-                                return INVALID;
-                        }
-                        if (transactionEntity.hasAnyRejection()) {
-                                if (transactionEntity.getItems().stream().anyMatch(
-                                                transactionItemEntity -> transactionItemEntity
-                                                                .getRejection().stream()
-                                                                .anyMatch(rejection -> rejection
-                                                                                .getRejectionReason()
-                                                                                .getSource() == ERP))) {
-                                        return INVALID;
-                                }
-                                return PENDING;
-                        }
-                        return PENDING;
-                }
-
-                if (transactionEntity.hasAnyRejection()) {
-                        if (transactionEntity.getItems().stream()
-                                        .anyMatch(transactionItemEntity -> transactionItemEntity
-                                                        .getRejection().stream()
-                                                        .anyMatch(rejection -> rejection
-                                                                        .getRejectionReason()
-                                                                        .getSource() == ERP))) {
-                                return INVALID;
-                        }
-                        return PENDING;
-                }
-
-                switch (transactionEntity.getLedgerDispatchStatus()) {
-                        case NOT_DISPATCHED, MARK_DISPATCH -> {
-                                if (Boolean.TRUE.equals(
-                                                transactionEntity.getLedgerDispatchApproved())) {
-                                        return PUBLISHED;
-                                }
-
-                                if (Boolean.TRUE.equals(
-                                                transactionEntity.getTransactionApproved())) {
-                                        return PUBLISH;
-                                }
-                        }
-
-                        case DISPATCHED, COMPLETED, FINALIZED -> {
-                                return PUBLISHED;
-                        }
-                }
-
-                return APPROVE;
         }
 
         private TransactionReconciliationStatisticView getTransactionReconciliationStatistic(
