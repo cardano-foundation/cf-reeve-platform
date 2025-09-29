@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -19,15 +20,15 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
-import org.cardanofoundation.lob.app.organisation.service.OrganisationCurrencyService;
+import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 
 @ExtendWith(MockitoExtension.class)
-public class ReportControllerTest {
+class ReportControllerTest {
 
     @Mock
     private ReportViewService reportViewService;
     @Mock
-    private OrganisationCurrencyService organisationCurrencyService;
+    private CurrencyService currencyService;
     @Mock
     private ReportService reportService;
 
@@ -45,7 +46,7 @@ public class ReportControllerTest {
 
         ResponseEntity<ReportResponseView> reportResponseViewResponseEntity = reportController.reportGenerate(reportGenerateRequest);
 
-        assert reportResponseViewResponseEntity.getStatusCode().is4xxClientError();
+        Assertions.assertTrue(reportResponseViewResponseEntity.getStatusCode().is4xxClientError());
     }
 
     @Test

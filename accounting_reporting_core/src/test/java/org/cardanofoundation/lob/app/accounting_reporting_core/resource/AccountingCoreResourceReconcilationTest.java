@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -9,6 +8,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.http.ResponseEntity;
@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRequest;
@@ -44,16 +45,19 @@ class AccountingCoreResourceReconcilationTest {
 
     @Test
     void testReconciliationTrigger_shouldReturnProblem() {
-        when(accountingCoreService.scheduleReconcilation(anyString(), any(LocalDate.class),any(LocalDate.class)))
+        when(accountingCoreService.scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of()))
                 .thenReturn(Either.left(Problem.builder().withStatus(Status.BAD_REQUEST).build()));
         ReconciliationRequest request = mock(ReconciliationRequest.class);
         when(request.getOrganisationId()).thenReturn("orgId");
         when(request.getDateFrom()).thenReturn(LocalDate.now());
         when(request.getDateTo()).thenReturn(LocalDate.now());
+        when(request.getExtractorType()).thenReturn(ExtractorType.NETSUITE);
+        when(request.getFile()).thenReturn(null);
+        when(request.getParameters()).thenReturn(Map.of());
         ResponseEntity<ReconcileResponseView> reconcileResponseViewResponseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(request);
         Assertions.assertEquals(Status.BAD_REQUEST.getStatusCode(), reconcileResponseViewResponseEntity.getStatusCode().value());
 
-        verify(accountingCoreService).scheduleReconcilation(anyString(), any(LocalDate.class),any(LocalDate.class));
+        verify(accountingCoreService).scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of());
         verifyNoMoreInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationService);
 
@@ -61,16 +65,19 @@ class AccountingCoreResourceReconcilationTest {
 
     @Test
     void testReconciliationTrigger_successFull() {
-        when(accountingCoreService.scheduleReconcilation(anyString(), any(LocalDate.class),any(LocalDate.class)))
+        when(accountingCoreService.scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of()))
                 .thenReturn(Either.right(null));
         ReconciliationRequest request = mock(ReconciliationRequest.class);
         when(request.getOrganisationId()).thenReturn("orgId");
         when(request.getDateFrom()).thenReturn(LocalDate.now());
         when(request.getDateTo()).thenReturn(LocalDate.now());
+        when(request.getExtractorType()).thenReturn(ExtractorType.NETSUITE);
+        when(request.getFile()).thenReturn(null);
+        when(request.getParameters()).thenReturn(Map.of());
         ResponseEntity<ReconcileResponseView> reconcileResponseViewResponseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(request);
         Assertions.assertEquals(200, reconcileResponseViewResponseEntity.getStatusCode().value());
 
-        verify(accountingCoreService).scheduleReconcilation(anyString(), any(LocalDate.class),any(LocalDate.class));
+        verify(accountingCoreService).scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of());
         verifyNoMoreInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationService);
     }

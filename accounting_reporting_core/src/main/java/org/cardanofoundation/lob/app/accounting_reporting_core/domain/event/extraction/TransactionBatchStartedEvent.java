@@ -7,6 +7,7 @@ import lombok.*;
 
 import org.jmolecules.event.annotation.DomainEvent;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
@@ -29,6 +30,9 @@ public class TransactionBatchStartedEvent {
 
     @NotBlank
     private String organisationId;
+
+    @Builder.Default
+    private ExtractorType extractorType = ExtractorType.NETSUITE;
 
     @NotNull
     private UserExtractionParameters userExtractionParameters;

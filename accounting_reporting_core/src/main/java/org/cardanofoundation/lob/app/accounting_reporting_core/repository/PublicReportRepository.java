@@ -25,31 +25,31 @@ public class PublicReportRepository {
 
 
     public Set<ReportEntity> findAllByTypeAndPeriod(String organisationId, ReportType reportType, IntervalType intervalType, short year, short period) {
-        String query = STR."""
+        String query = """
                 SELECT r FROM accounting_reporting_core.report.ReportEntity r
                 LEFT JOIN accounting_reporting_core.report.ReportEntity r2 on r.idControl = r2.idControl and r.ver < r2.ver
                 """;
 
-        String where = STR."""
+        String where = """
                 WHERE r2.idControl IS NULL
-                AND r.ledgerDispatchStatus = '\{FINALIZED}'
-                AND r.organisation.id = '\{organisationId}'
-                """;
+                AND r.ledgerDispatchStatus = '%s'
+                AND r.organisation.id = '%s'
+                """.formatted(FINALIZED, organisationId);
 
         if (null != reportType) {
-            where += STR."""
-             AND r.type = '\{reportType}'
-             """;
+            where += """
+             AND r.type = '%s'
+             """.formatted(reportType);
         }
         if (null != intervalType) {
-            where += STR."""
-             AND r.intervalType = '\{intervalType}'
-             AND r.year = \{year}
-             AND r.period = \{period}
-             """;
+            where += """
+             AND r.intervalType = '%s'
+             AND r.year = %d
+             AND r.period = %d
+             """.formatted(intervalType, year, period);
         }
 
-        where += STR."""
+        where += """
                 ORDER BY r.createdAt ASC, r.reportId ASC
                 """;
 

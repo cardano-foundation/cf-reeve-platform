@@ -1,9 +1,13 @@
 server:
   port: 19000
 
+logging:
+  level:
+    org.hibernate.sql: DEBUG
+
 spring:
   datasource:
-    name: ${DB_NAME:lob_service}
+    name: ${DB_NAME:postgres}
     url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=lob_service}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
@@ -15,18 +19,14 @@ spring:
     enabled: false
   flyway:
     out-of-order: false
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres}
-    user: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:postgres}
-    schemas: ${DB_SCHEMA:lob_service}
     # baselineOnMigrate this will create a baseline version if none exists (https://flywaydb.org/documentation/configuration/parameters/baselineOnMigrate)
     baselineOnMigrate: true
     enabled: true
     validateMigrationNaming: true
     cleanDisabled: false
     locations:
-      - classpath:db/migration/{vendor}/common
-      - classpath:db/migration/{vendor}/dev
+      - classpath:db/migration/postgresql/common
+      - classpath:db/migration/postgresql/test
     driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
     clean-on-validation-error: true
 
@@ -50,6 +50,8 @@ lob:
   #  LOB_BLOCKCHAIN_READER_ENABLED=true
   #  LOB_BLOCKCHAIN_PUBLISHER_ENABLED=true
   #  LOB_NETSUITE_ENABLED=true
+  csv:
+    delimiter: ","
   blockchain-reader:
     enabled: false
   blockchain-publisher:

@@ -1,0 +1,59 @@
+package org.cardanofoundation.lob.app.organisation.domain.entity;
+
+import java.math.BigDecimal;
+
+import jakarta.persistence.*;
+
+import lombok.*;
+
+import org.springframework.data.domain.Persistable;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import org.hibernate.envers.Audited;
+
+import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
+
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@Setter
+@Entity
+@Table(name = "organisation_vat")
+@Audited
+@Builder
+@EntityListeners({AuditingEntityListener.class})
+public class Vat extends CommonEntity implements Persistable<Vat.Id> {
+
+    @EmbeddedId
+    @AttributeOverrides({
+            @AttributeOverride(name = "organisationId", column = @Column(name = "organisation_id")),
+            @AttributeOverride(name = "customerCode", column = @Column(name = "customer_code"))
+    })
+    private Id id;
+
+    @Column(name = "rate", nullable = false)
+    private BigDecimal rate;
+
+    @Column(name = "description")
+    private String description;
+
+    @Column(name = "country_code")
+    private String countryCode;
+
+    @Column(name = "active", nullable = false)
+    @Builder.Default
+    private Boolean active = true;
+
+    @Embeddable
+    @AllArgsConstructor
+    @NoArgsConstructor
+    @Getter
+    @EqualsAndHashCode
+    public static class Id {
+
+        private String organisationId;
+        private String customerCode;
+
+    }
+
+}

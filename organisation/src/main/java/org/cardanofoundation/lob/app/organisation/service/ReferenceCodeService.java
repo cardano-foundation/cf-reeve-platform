@@ -2,13 +2,19 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
+import org.springframework.web.multipart.MultipartFile;
 
+import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
@@ -17,6 +23,8 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 
 @Service
 @Slf4j
@@ -26,6 +34,9 @@ public class ReferenceCodeService {
 
     private final ReferenceCodeRepository referenceCodeRepository;
     private final OrganisationService organisationService;
+    private final CsvParser<ReferenceCodeUpdate> csvParser;
+    private final AccountEventService accountEventService;
+    private final Validator validator;
 
     public List<ReferenceCodeView> getAllReferenceCodes(String orgId) {
         return referenceCodeRepository.findAllByOrgId(orgId).stream()
@@ -39,46 +50,63 @@ public class ReferenceCodeService {
     }
 
     @Transactional
-    public ReferenceCodeView insertReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate) {
+    public ReferenceCodeView insertReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate, boolean isUpsert) {
 
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate);
         }
-        Optional<ReferenceCode> parentReferenceCode = Optional.empty();
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
-            parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
+            Optional<ReferenceCode> parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
                 return ReferenceCodeView.createFail(Problem.builder()
-                        .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
-                        .withDetail(STR."Unable to find parent reference Id: \{referenceCodeUpdate.getParentReferenceCode()}")
+                        .withTitle(ErrorTitleConstants.PARENT_REFERENCE_CODE_NOT_FOUND)
+                        .withDetail("Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()))
                         .withStatus(Status.NOT_FOUND)
-                        .build());
+                        .build(),
+                        referenceCodeUpdate);
+            }
+            if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
+                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
             }
         }
 
         Optional<ReferenceCode> referenceCodeOpt = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode());
-        if(referenceCodeOpt.isPresent()){
-            return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_ALREADY_EXIST")
-                    .withDetail(STR."The reference code with code :\{referenceCodeUpdate.getReferenceCode()} already exists")
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
-        }
-
         ReferenceCode referenceCode = ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCodeUpdate.getReferenceCode()))
                 .build();
+        if(referenceCodeOpt.isPresent()){
+            if(isUpsert) {
+                referenceCode = referenceCodeOpt.get();
+            } else {
+                return ReferenceCodeView.createFail(Problem.builder()
+                                .withTitle(ErrorTitleConstants.REFERENCE_CODE_ALREADY_EXIST)
+                                .withDetail("The reference code with code :%s already exists".formatted(referenceCodeUpdate.getReferenceCode()))
+                                .withStatus(Status.CONFLICT)
+                                .build(),
+                        referenceCodeUpdate);
+            }
+        }
+
+
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
-        referenceCode.setActive(referenceCodeUpdate.isActive());
+        referenceCode.setActive(referenceCodeUpdate.getActive());
+        ReferenceCode savedEntity = referenceCodeRepository.save(referenceCode);
+        // updating event codes
+        accountEventService.updateStatus(orgId, savedEntity.getId().getReferenceCode());
         // The reference code returning is not the latest version after save
-        return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
+        return ReferenceCodeView.fromEntity(savedEntity);
     }
 
     @Transactional
@@ -87,20 +115,28 @@ public class ReferenceCodeService {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate);
         }
-        Optional<ReferenceCode> parentReferenceCode = Optional.empty();
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
-            parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
+            Optional<ReferenceCode>  parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
                 return ReferenceCodeView.createFail(Problem.builder()
-                        .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
-                        .withDetail(STR."Unable to find parent reference Id: \{referenceCodeUpdate.getParentReferenceCode()}")
+                        .withTitle(ErrorTitleConstants.PARENT_REFERENCE_CODE_NOT_FOUND)
+                        .withDetail("Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()))
                         .withStatus(Status.NOT_FOUND)
-                        .build());
+                        .build(),
+                        referenceCodeUpdate);
+            }
+            if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
+                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
             }
         }
 
@@ -108,57 +144,43 @@ public class ReferenceCodeService {
 
         if(referenceCodeOpt.isEmpty()){
             return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find reference Id: \{referenceCodeUpdate.getReferenceCode()}")
+                    .withTitle(ErrorTitleConstants.REFERENCE_CODE_NOT_FOUND)
+                    .withDetail("Unable to find reference Id: %s".formatted(referenceCodeUpdate.getReferenceCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build());
+                    .build(),
+                    referenceCodeUpdate);
         }
 
         ReferenceCode referenceCode = referenceCodeOpt.get();
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
-        referenceCode.setActive(referenceCodeUpdate.isActive());
+        referenceCode.setActive(referenceCodeUpdate.getActive());
         // The reference code returning is not the latest version after save
-        return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
+        referenceCode = referenceCodeRepository.save(referenceCode);
+        accountEventService.updateStatus(orgId, referenceCode.getId().getReferenceCode());
+
+        return ReferenceCodeView.fromEntity(referenceCode);
     }
 
-
-    @Deprecated
     @Transactional
-    public ReferenceCodeView upsertReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate) {
-
-        Optional<Organisation> organisationChe = organisationService.findById(orgId);
-        if (organisationChe.isEmpty()) {
-            return ReferenceCodeView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
-        }
-        Optional<ReferenceCode> parentReferenceCode = Optional.empty();
-        if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
-            parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
-            if (parentReferenceCode.isEmpty()) {
-                return ReferenceCodeView.createFail(Problem.builder()
-                        .withTitle("PARENT_REFERENCE_CODE_NOT_FOUND")
-                        .withDetail(STR."Unable to find parent reference Id: \{referenceCodeUpdate.getParentReferenceCode()}")
-                        .withStatus(Status.NOT_FOUND)
-                        .build());
-            }
-        }
-
-        ReferenceCode referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode()).orElse(
-                ReferenceCode.builder()
-                        .id(new ReferenceCode.Id(orgId, referenceCodeUpdate.getReferenceCode()))
-                        .build()
+    public Either<List<Problem>, List<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
+        return csvParser.parseCsv(file, ReferenceCodeUpdate.class).fold(
+                problem -> Either.left(List.of(problem)),
+                referenceCodeUpdates -> Either.right(referenceCodeUpdates.stream().map(
+                        refCodeUpdate -> {
+                            Errors errors = validator.validateObject(refCodeUpdate);
+                            List<ObjectError> allErrors = errors.getAllErrors();
+                            if (!allErrors.isEmpty()) {
+                                return ReferenceCodeView.createFail(Problem.builder()
+                                        .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
+                                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                                        .withStatus(Status.BAD_REQUEST)
+                                        .build(), refCodeUpdate);
+                            }
+                            return insertReferenceCode(orgId, refCodeUpdate, true);
+                        }).toList())
         );
-
-        referenceCode.setName(referenceCodeUpdate.getName());
-        referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
-
-        referenceCode.setActive(referenceCodeUpdate.isActive());
-        // The reference code returning is not the latest version after save
-        return ReferenceCodeView.fromEntity(referenceCodeRepository.save(referenceCode));
     }
+
 }

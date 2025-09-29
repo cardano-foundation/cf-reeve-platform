@@ -37,8 +37,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
@@ -182,18 +182,27 @@ public class AccountingCorePresentationViewService {
 
     @Transactional
     public Either<Problem, Void> extractionTrigger(ExtractionRequest body) {
+        UserExtractionParameters fp = getUserExtractionParameters(body);
+
+        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
+    }
+
+    private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
         ArrayList<String> transactionNumbers = new ArrayList<>(body.getTransactionNumbers());
         transactionNumbers.removeIf(String::isEmpty);
 
-        UserExtractionParameters fp = UserExtractionParameters.builder()
-                .from(LocalDate.parse(body.getDateFrom()))
-                .to(LocalDate.parse(body.getDateTo()))
+        return UserExtractionParameters.builder()
+                .from(body.getDateFrom().isEmpty() ? LocalDate.EPOCH : LocalDate.parse(body.getDateFrom()))
+                .to(body.getDateTo().isEmpty() ? LocalDate.now() : LocalDate.parse(body.getDateTo()))
                 .organisationId(body.getOrganisationId())
                 .transactionTypes(body.getTransactionType())
                 .transactionNumbers(transactionNumbers)
                 .build();
+    }
 
-        return accountingCoreService.scheduleIngestion(fp);
+    public Either<List<Problem>, Void> extractionValidation(ExtractionRequest body) {
+        UserExtractionParameters userExtractionParameters = getUserExtractionParameters(body);
+        return accountingCoreService.validateIngestion(userExtractionParameters, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
     }
 
     @Transactional
@@ -355,15 +364,22 @@ public class AccountingCorePresentationViewService {
     }
 
     private TransactionView getTransactionView(TransactionEntity transactionEntity) {
+        DataSourceView dataSourceView = DataSourceView.UNKNOWN;
+        try {
+            dataSourceView = DataSourceView.valueOf(transactionEntity.getExtractorType());
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid extractorType '{}' for transaction {}", transactionEntity.getExtractorType(), transactionEntity.getId(), e);
+        }
         return new TransactionView(
                 transactionEntity.getId(),
                 transactionEntity.getTransactionInternalNumber(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(),
-                DataSourceView.NETSUITE,
+                dataSourceView,
                 transactionEntity.getOverallStatus(),
                 getTransactionDispatchStatus(transactionEntity),
                 transactionEntity.getAutomatedValidationStatus(),
+                transactionEntity.getLedgerDispatchStatus(),
                 transactionEntity.getTransactionApproved(),
                 transactionEntity.getLedgerDispatchApproved(),
                 getAmountLcyTotalForAllDebitItems(transactionEntity),
@@ -446,11 +462,11 @@ public class AccountingCorePresentationViewService {
 
     private Set<TransactionItemView> getTransactionItemView(TransactionEntity transaction) {
         return transaction.getItems().stream().map(item -> {
-            Optional<OrganisationCostCenter> itemCostCenter = Optional.empty();
-            Optional<OrganisationProject> itemProject = Optional.empty();
+            Optional<CostCenter> itemCostCenter = Optional.empty();
+            Optional<Project> itemProject = Optional.empty();
             if (transaction.getOrganisation() != null) {
-                itemCostCenter = costCenterRepository.findById(new OrganisationCostCenter.Id(transaction.getOrganisation().getId(), item.getCostCenter().map(CostCenter::getCustomerCode).orElse("")));
-                itemProject = projectMappingRepository.findById(new OrganisationProject.Id(transaction.getOrganisation().getId(), item.getProject().map(Project::getCustomerCode).orElse("")));
+                itemCostCenter = costCenterRepository.findById(new CostCenter.Id(transaction.getOrganisation().getId(), item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse("")));
+                itemProject = projectMappingRepository.findById(new Project.Id(transaction.getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse("")));
             }
             return new TransactionItemView(
                     item.getId(),
@@ -463,16 +479,14 @@ public class AccountingCorePresentationViewService {
                     item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountFcy().negate() : item.getAmountFcy(),
                     item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountLcy().negate() : item.getAmountLcy(),
                     item.getFxRate(),
-                    item.getCostCenter().map(CostCenter::getCustomerCode).orElse(""),
-                    item.getCostCenter().flatMap(CostCenter::getExternalCustomerCode).orElse(""),
-                    item.getCostCenter().flatMap(CostCenter::getName).orElse(""),
-                    itemCostCenter.map(costCenter -> costCenter.getParent().map(OrganisationCostCenter::getExternalCustomerCode).orElse("")).orElse(""),
-                    itemCostCenter.map(costCenter -> costCenter.getParent().map(OrganisationCostCenter::getName).orElse("")).orElse(""),
-                    item.getProject().map(Project::getCustomerCode).orElse(""),
-                    item.getProject().flatMap(Project::getName).orElse(""),
-                    item.getProject().flatMap(Project::getExternalCustomerCode).orElse(""),
-                    itemProject.map(costCenter -> costCenter.getParent().map(OrganisationProject::getExternalCustomerCode).orElse("")).orElse(""),
-                    itemProject.map(costCenter -> costCenter.getParent().map(OrganisationProject::getName).orElse("")).orElse(""),
+                    item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
+                    item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getName).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParentCustomerCode()).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParent().map(CostCenter::getName).orElse("")).orElse(""),
+                    item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                    item.getProject().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getName).orElse(""),
+                    itemProject.map(Project::getParentCustomerCode).orElse(""),
+                    itemProject.map(project -> project.getParent().map(Project::getName).orElse("")).orElse(""),
                     item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
                     item.getAccountEvent().map(AccountEvent::getName).orElse(""),
                     item.getDocument().map(Document::getNum).orElse(""),
@@ -516,8 +530,16 @@ public class AccountingCorePresentationViewService {
         Set<TransactionItemEntity> items = tx.getItems();
 
         if (tx.getTransactionType().equals(TransactionType.Journal)) {
+            // The Dummy account is a finance trick organisations can use. If they don't use it we fall back to the old behaviour and sum all debit items
+            // We check if in the tx items is anything with the dummy account and if yes we only sum those
+            // If no dummy account is set or no item with the dummy account is found we sum all debit items
             Optional<String> dummyAccount = organisationPublicApiIF.findByOrganisationId(tx.getOrganisation().getId()).orElse(new org.cardanofoundation.lob.app.organisation.domain.entity.Organisation()).getDummyAccount();
-            items = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
+            Set<TransactionItemEntity> itemsWithDummy = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
+            if(!itemsWithDummy.isEmpty()){
+                items = itemsWithDummy;
+            } else {
+                items = tx.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(toSet());
+            }
         }
 
         if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {

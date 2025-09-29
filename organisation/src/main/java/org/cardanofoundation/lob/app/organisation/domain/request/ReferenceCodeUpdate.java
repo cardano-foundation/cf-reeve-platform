@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.domain.request;
 
+import jakarta.validation.constraints.NotNull;
+
 import javax.annotation.Nullable;
 
 import lombok.AllArgsConstructor;
@@ -7,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import com.opencsv.bean.CsvBindByName;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
@@ -18,22 +21,29 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 public class ReferenceCodeUpdate {
 
     @Schema(example = "0000")
+    @CsvBindByName(column = "Reference Code")
+    @NotNull(message = "Reference Code is required")
     private String referenceCode;
 
     @Schema(example = "Example reference code")
+    @CsvBindByName(column = "Name")
+    @NotNull(message = "Name is required")
     private String name;
 
     @Nullable
+    @CsvBindByName(column = "Parent Reference Code")
     private String parentReferenceCode;
 
     @Schema(example = "true")
-    private boolean isActive = true;
+    @CsvBindByName(column = "Active")
+    @NotNull(message = "Active is required")
+    private Boolean active;
 
     public ReferenceCode toEntity(String orgId) {
         return ReferenceCode.builder()
                 .id(new ReferenceCode.Id(orgId, referenceCode))
                 .name(name)
-                .isActive(isActive)
+                .isActive(active)
                 .parentReferenceCode(parentReferenceCode.isEmpty() ? null : parentReferenceCode)
                 .build();
     }

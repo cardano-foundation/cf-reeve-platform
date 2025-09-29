@@ -8,12 +8,15 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal.NetSuiteExtractionService;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal.NetSuiteReconcilationService;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.Constants;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -28,7 +31,10 @@ public class NetSuiteEventHandler {
     @Async
     public void handleScheduledIngestionEvent(ScheduledIngestionEvent event) {
         log.info("Handling handleScheduledIngestionEvent...");
-
+        if(event.getExtractorType() != ExtractorType.NETSUITE) {
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE_LOG, event.getExtractorType());
+            return;
+        }
         netSuiteExtractionService.startNewERPExtraction(
                 event.getOrganisationId(),
                 event.getMetadata().getUser(),
@@ -40,9 +46,29 @@ public class NetSuiteEventHandler {
 
     @EventListener
     @Async
+    public void handleValidateIngestionEvent(ValidateIngestionEvent event) {
+        log.info("Handling handleValidateIngestionEvent...");
+        ScheduledIngestionEvent scheduledIngestionEvent = event.getScheduledIngestionEvent();
+        if(scheduledIngestionEvent.getExtractorType() != ExtractorType.NETSUITE) {
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE_LOG, scheduledIngestionEvent.getExtractorType());
+            return;
+        }
+        netSuiteExtractionService.validateIngestion(
+                event.getCorrelationId(),
+                scheduledIngestionEvent.getOrganisationId(),
+                scheduledIngestionEvent.getMetadata().getUser()
+        );
+        log.info("Handled handleValidateIngestionEvent.");
+    }
+
+    @EventListener
+    @Async
     public void handleTransactionBatchCreatedEvent(TransactionBatchCreatedEvent transactionBatchCreatedEvent) {
         log.info("Handling handleTransactionBatchCreatedEvent...");
-
+        if(transactionBatchCreatedEvent.getExtractorType() != ExtractorType.NETSUITE) {
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE_LOG, transactionBatchCreatedEvent.getExtractorType());
+            return;
+        }
         netSuiteExtractionService.continueERPExtraction(
                 transactionBatchCreatedEvent.getBatchId(),
                 transactionBatchCreatedEvent.getOrganisationId(),
@@ -57,7 +83,10 @@ public class NetSuiteEventHandler {
     @Async
     public void handleScheduledReconciliationEvent(ScheduledReconcilationEvent scheduledReconcilationEvent) {
         log.info("Handling handleScheduledReconciliationEvent...");
-
+        if (scheduledReconcilationEvent.getExtractorType() != ExtractorType.NETSUITE) {
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE_LOG, scheduledReconcilationEvent.getExtractorType());
+            return;
+        }
         netSuiteReconcilationService.startERPReconcilation(
                 scheduledReconcilationEvent.getOrganisationId(),
                 scheduledReconcilationEvent.getMetadata().getUser(),
@@ -72,7 +101,10 @@ public class NetSuiteEventHandler {
     @Async
     public void handleCreatedReconciliationEvent(ReconcilationCreatedEvent reconcilationCreatedEvent) {
         log.info("Handling handleCreatedReconciliationEvent...");
-
+        if (reconcilationCreatedEvent.getExtractorType() != ExtractorType.NETSUITE) {
+            log.info(Constants.IGNORING_EVENT_FOR_EXTRACTOR_TYPE_LOG, reconcilationCreatedEvent.getExtractorType());
+            return;
+        }
         netSuiteReconcilationService.continueReconcilation(
                 reconcilationCreatedEvent.getReconciliationId(),
                 reconcilationCreatedEvent.getOrganisationId(),

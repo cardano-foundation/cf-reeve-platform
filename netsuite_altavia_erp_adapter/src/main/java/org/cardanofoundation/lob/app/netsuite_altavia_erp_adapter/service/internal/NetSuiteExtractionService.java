@@ -6,6 +6,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
@@ -29,6 +31,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserE
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
@@ -55,6 +59,29 @@ public class NetSuiteExtractionService {
 
     @Value("${lob.events.netsuite.to.core.netsuite.instance.debug.mode:true}")
     private final boolean isNetSuiteInstanceDebugMode;
+
+    public void validateIngestion(String correlationId, String organisationId, String user) {
+        log.info("Validating ingestion for organisationId: {}, user: {}, correlationId: {}", organisationId, user, correlationId);
+        Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
+
+        List<Problem> errors = new ArrayList<>();
+        if (systemExtractionParametersE.isLeft()) {
+            errors.add(systemExtractionParametersE.getLeft());
+        }
+
+        Either<Problem, Void> connection = netSuiteClient.testConnection();
+        if (connection.isLeft()) {
+            log.error("Error testing NetSuite connection: {}", connection.getLeft().getDetail());
+            errors.add(connection.getLeft());
+        }
+
+        ValidateIngestionResponseEvent build = ValidateIngestionResponseEvent.builder()
+                .correlationId(correlationId)
+                .errors(errors.stream().map(Problem::getDetail).toList())
+                .valid(errors.isEmpty())
+                .build();
+        applicationEventPublisher.publishEvent(build);
+    }
 
     public void startNewERPExtraction(String organisationId,
                                       String user,
@@ -151,6 +178,7 @@ public class NetSuiteExtractionService {
                     .organisationId(userExtractionParameters.getOrganisationId())
                     .userExtractionParameters(userExtractionParameters)
                     .systemExtractionParameters(systemExtractionParameters)
+                    .extractorType(ExtractorType.NETSUITE)
                     .build()
             );
 
@@ -317,5 +345,4 @@ public class NetSuiteExtractionService {
             applicationEventPublisher.publishEvent(batchFailedEvent);
         }
     }
-
 }

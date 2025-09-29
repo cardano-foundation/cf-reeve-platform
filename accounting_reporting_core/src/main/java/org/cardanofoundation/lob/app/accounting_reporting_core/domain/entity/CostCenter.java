@@ -27,17 +27,10 @@ public class CostCenter {
     private String customerCode;
 
     @Nullable
-    private String externalCustomerCode;
-
-    @Nullable
     private String name;
 
     public Optional<String> getName() {
         return Optional.ofNullable(name);
-    }
-
-    public Optional<String> getExternalCustomerCode() {
-        return Optional.ofNullable(externalCustomerCode);
     }
 
 }

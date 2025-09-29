@@ -1,6 +1,6 @@
 # On-Chain Format
 For Reeve we are using a specific on-chain format, which is dealt under the label 1447.
-The label was chosen in reference to the birth year of [Luca Pacioli](https://en.wikipedia.org/wiki/Luca_Pacioli), the renowned accountant widely regarded as the father of accounting.
+The label was chosen in reference to the death year of [Luca Pacioli](https://en.wikipedia.org/wiki/Luca_Pacioli), the renowned accountant widely regarded as the father of accounting.
 
 ## General structure
 The general structure contains the definition of the organisation and general metadata for the particular transactions.

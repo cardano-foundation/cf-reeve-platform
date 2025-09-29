@@ -51,6 +51,9 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Tr
 @RequiredArgsConstructor
 public class NetSuiteClient {
 
+    public static final String ERROR_PARSING_JSON_RESPONSE_FROM_NET_SUITE_API = "Error parsing JSON response from NetSuite API: {}";
+    public static final String ERROR_REFRESHING_NET_SUITE_ACCESS_TOKEN = "Error refreshing NetSuite access token: {}";
+    public static final String NETSUITE_RESPONSE_SUCCESS_CUSTOMER_CODE_MESSAGE = "Netsuite response success...customerCode:{}, message:{}";
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
 
@@ -110,7 +113,10 @@ public class NetSuiteClient {
             return;
         }
         // Encode parameters
-        String requestBody = STR."grant_type=\{URLEncoder.encode("client_credentials", StandardCharsets.UTF_8)}&client_assertion_type=\{URLEncoder.encode("urn:ietf:params:oauth:client-assertion-type:jwt-bearer", StandardCharsets.UTF_8)}&client_assertion=\{URLEncoder.encode(jwtToken, StandardCharsets.UTF_8)}";
+        String requestBody = "grant_type=%s&client_assertion_type=%s&client_assertion=%s"
+                .formatted(URLEncoder.encode("client_credentials", StandardCharsets.UTF_8),
+                        URLEncoder.encode("urn:ietf:params:oauth:client-assertion-type:jwt-bearer", StandardCharsets.UTF_8),
+                        URLEncoder.encode(jwtToken, StandardCharsets.UTF_8));
         // Create the request
         try {
             ResponseEntity<String> entity = restClient.post()
@@ -125,16 +131,16 @@ public class NetSuiteClient {
                 try {
                     tokenResponse = objectMapper.readValue(entity.getBody(), TokenReponse.class);
                 } catch (JsonProcessingException e) {
-                    log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
+                    log.error(ERROR_PARSING_JSON_RESPONSE_FROM_NET_SUITE_API, e.getMessage());
                 }
                 accessTokenExpiration = Optional.of(LocalDateTime.now().plusSeconds(tokenResponse.getExpiresIn()));
                 accessToken = Optional.of(tokenResponse.getAccessToken());
                 log.info("NetSuite access token refreshed successfully...");
             } else {
-                log.error("Error refreshing NetSuite access token: {}", entity.getBody());
+                log.error(ERROR_REFRESHING_NET_SUITE_ACCESS_TOKEN, entity.getBody());
             }
         } catch (Exception e) {
-            log.error("Error refreshing NetSuite access token: {}", e.getMessage());
+            log.error(ERROR_REFRESHING_NET_SUITE_ACCESS_TOKEN, e.getMessage());
         }
     }
 
@@ -154,7 +160,7 @@ public class NetSuiteClient {
                     try {
                         TransactionDataSearchResult transactionDataSearchResult = objectMapper.readValue(searchResultString.get(), TransactionDataSearchResult.class);
                         lines.add(searchResultString.get());
-                        if(transactionDataSearchResult.more()) {
+                        if (transactionDataSearchResult.more()) {
                             hasMore = true;
                             start += 1;
                         } else {
@@ -162,14 +168,40 @@ public class NetSuiteClient {
                         }
                     } catch (JsonProcessingException e) {
                         hasMore = false;
-                        log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
+                        log.error(ERROR_PARSING_JSON_RESPONSE_FROM_NET_SUITE_API, e.getMessage());
                     }
                 }
 
             }
-        } while(hasMore);
+        } while (hasMore);
         log.info("Netsuite response success...customerCode:{}, messageCount:{}", 200, lines.size());
         return Either.right(Optional.of(lines));
+    }
+
+    public Either<Problem, Void> testConnection() {
+        ResponseEntity<String> response = null;
+        try {
+            response = callForTransactionLinesData(LocalDate.now(), LocalDate.now(), Optional.empty());
+        } catch (IOException e) {
+            log.error("Error calling NetSuite API: {}", e.getMessage());
+            return Either.left(Problem.builder()
+                    .withStatus(Status.INTERNAL_SERVER_ERROR)
+                    .withTitle(NETSUITE_API_ERROR)
+                    .withDetail(e.getMessage())
+                    .build());
+        }
+
+        if(response.getStatusCode().is2xxSuccessful() || response.getStatusCode().is1xxInformational()) {
+            log.info(NETSUITE_RESPONSE_SUCCESS_CUSTOMER_CODE_MESSAGE, response.getStatusCode().value(), response.getBody());
+            return Either.right(null);
+        } else {
+            log.error("Netsuite response error...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
+            return Either.left(Problem.builder()
+                    .withStatus(Status.valueOf(response.getStatusCode().value()))
+                    .withTitle(NETSUITE_API_ERROR)
+                    .withDetail(response.getBody())
+                    .build());
+        }
     }
 
     private Either<Problem, Optional<String>> retrieveTransactionLineData(LocalDate extractionFrom, LocalDate extractionTo, Optional<Integer> start) {
@@ -210,7 +242,7 @@ public class NetSuiteClient {
 
                 return Either.right(Optional.of(body));
             } catch (JsonProcessingException e) {
-                log.error("Error parsing JSON response from NetSuite API: {}", e.getMessage());
+                log.error(ERROR_PARSING_JSON_RESPONSE_FROM_NET_SUITE_API, e.getMessage());
 
                 return Either.left(Problem.builder()
                         .withStatus(Status.valueOf(response.getStatusCode().value()))
@@ -219,8 +251,8 @@ public class NetSuiteClient {
                         .build());
             }
         }
-        if(response.getStatusCode().is1xxInformational()) {
-            log.info("Netsuite response success...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
+        if (response.getStatusCode().is1xxInformational()) {
+            log.info(NETSUITE_RESPONSE_SUCCESS_CUSTOMER_CODE_MESSAGE, response.getStatusCode().value(), response.getBody());
             return Either.right(Optional.empty());
         }
 
@@ -234,14 +266,14 @@ public class NetSuiteClient {
     private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) throws IOException {
         log.info("Retrieving data from NetSuite...");
 
-        if(LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
+        if (LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
             refreshToken();
         }
-        String baseUrl = this.baseUrl;
+        String url = this.baseUrl;
         // Remove the recordspercall parameter if it exists, since we are setting it by ourselves
         // This is just to be sure that we are not sending multiple recordspercall parameters
-        baseUrl = baseUrl.replaceAll("&recordspercall=\\d+", "");
-        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(baseUrl);
+        url = url.replaceAll("&recordspercall=\\d+", "");
+        UriComponentsBuilder uriComponentsBuilder = UriComponentsBuilder.fromHttpUrl(url);
         uriComponentsBuilder = uriComponentsBuilder.queryParam("recordspercall", recordsPerCall);
         uriComponentsBuilder = uriComponentsBuilder.queryParam("trandate", "within:" + isoFormatDates(from, to));
         if (start.isPresent()) {
@@ -250,7 +282,7 @@ public class NetSuiteClient {
         String uriString = uriComponentsBuilder.toUriString();
         log.info("Call to url: {}", uriString);
         RestClient.RequestHeadersSpec<?> uri = restClient.get().uri(uriString);
-        accessToken.ifPresent(s -> uri.header("Authorization", STR."Bearer \{s}"));
+        accessToken.ifPresent(s -> uri.header("Authorization", "Bearer %s".formatted(s)));
         return uri.retrieve().toEntity(String.class);
     }
 

@@ -16,13 +16,13 @@ import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CoreCurrency;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.CoreCurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 
 @RequiredArgsConstructor
 public class DocumentConversionTaskItem implements PipelineTaskItem {
@@ -51,21 +51,21 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
         updateDocument(txItem, document, enrichedCoreCurrencyM, enrichedVatM);
     }
 
-    private Optional<Vat> enrichVat(String organisationId,
-                                    TransactionEntity tx,
-                                    TransactionItemEntity txItem,
-                                    Document document) {
+    private Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat> enrichVat(String organisationId,
+                                                                                                        TransactionEntity tx,
+                                                                                                        TransactionItemEntity txItem,
+                                                                                                        Document document) {
         /** Always recalculate the value. */
         return document.getVat()
                 .flatMap(vat -> {
-                    val vatM = organisationPublicApi.findOrganisationByVatAndCode(organisationId, vat.getCustomerCode());
+                    Optional<Vat> vatM = organisationPublicApi.findOrganisationByVatAndCode(organisationId, vat.getCustomerCode());
 
-                    return vatM.map(v -> new Vat(vat.getCustomerCode(), Optional.of(v.getRate())))
+                    return vatM.map(v -> new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat(vat.getCustomerCode(), Optional.of(v.getRate())))
                             .or(() -> {
 
                                 addViolation(tx, txItem, VAT_DATA_NOT_FOUND, Map.of("customerCode", vat.getCustomerCode(), "transactionNumber", tx.getTransactionInternalNumber()));
-
-                                return Optional.empty();
+                                // We save the wrong value to allow the reprocess read it and compare it against the database
+                                return Optional.of(new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat(vat.getCustomerCode(), Optional.empty()));
                             });
                 });
     }
@@ -108,7 +108,7 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
     private void updateDocument(TransactionItemEntity txItem,
                                 Document document,
                                 Optional<CoreCurrency> enrichedCoreCurrencyM,
-                                Optional<Vat> enrichedVatM) {
+                                Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat> enrichedVatM) {
         val updatedDocument = document.toBuilder()
                 .currency(document.getCurrency().toBuilder()
                         .id(enrichedCoreCurrencyM.map(CoreCurrency::toExternalId).orElse(null))
@@ -121,7 +121,7 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
 
     @Nullable
     private org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat getUpdatedVat(Document document,
-                                                                                                    Optional<Vat> enrichedVatM) {
+                                                                                                    Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Vat> enrichedVatM) {
         if (document.getVat().isEmpty()) {
             return null;
         }

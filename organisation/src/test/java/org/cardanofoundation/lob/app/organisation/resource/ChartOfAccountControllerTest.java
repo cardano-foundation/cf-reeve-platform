@@ -6,7 +6,9 @@ import static org.mockito.Mockito.*;
 import java.util.*;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
+import io.vavr.control.Either;
 import org.mockito.*;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -32,14 +34,44 @@ class ChartOfAccountControllerTest {
     }
 
     @Test
+    void insertReferenceCodeByCsv_error() {
+        when(chartOfAccountsService.insertChartOfAccountByCsv("orgId", null)).thenReturn(Either.left(
+                List.of(Problem.builder()
+                .withTitle("Error")
+                .withStatus(Status.BAD_REQUEST)
+                .build())));
+
+        ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        assertThat(((List<?>) response.getBody())).hasSize(1);
+    }
+
+    @Test
+    void insertReferenceCodeByCsv_success() {
+        MultipartFile file = mock(MultipartFile.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
+        when(chartOfAccountsService.insertChartOfAccountByCsv("orgId", file)).thenReturn(Either.right(
+                List.of(view)));
+
+        ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", file);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).isInstanceOf(List.class);
+        assertThat(((List<?>) response.getBody())).hasSize(1);
+        assertThat(((List<?>) response.getBody()).iterator().next()).isEqualTo(view);
+    }
+
+    @Test
     void getChartOfAccounts_returnsAccounts() {
         String orgId = "org-1";
-        Set<OrganisationChartOfAccountView> accounts = Set.of(mock(OrganisationChartOfAccountView.class));
+        Set<ChartOfAccountView> accounts = Set.of(mock(ChartOfAccountView.class));
         when(chartOfAccountsService.getAllChartOfAccount(orgId)).thenReturn(accounts);
 
-        ResponseEntity<Set<OrganisationChartOfAccountView>> response = controller.getChartOfAccounts(orgId);
+        ResponseEntity<Set<ChartOfAccountView>> response = controller.getChartOfAccounts(orgId);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(accounts);
         verify(chartOfAccountsService).getAllChartOfAccount(orgId);
     }
@@ -48,13 +80,13 @@ class ChartOfAccountControllerTest {
     void insertChartOfAccount_success() {
         String orgId = "org-1";
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
         when(view.getError()).thenReturn(Optional.empty());
-        when(chartOfAccountsService.insertChartOfAccount(orgId, update)).thenReturn(view);
+        when(chartOfAccountsService.insertChartOfAccount(orgId, update, false)).thenReturn(view);
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -62,18 +94,18 @@ class ChartOfAccountControllerTest {
     void insertChartOfAccount_withError() {
         String orgId = "org-1";
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
 
         when(view.getError()).thenReturn(Optional.of(Problem.builder()
                 .withTitle("Error")
                 .withDetail("Invalid")
                 .withStatus(Status.BAD_REQUEST)
                 .build()));
-        when(chartOfAccountsService.insertChartOfAccount(orgId, update)).thenReturn(view);
+        when(chartOfAccountsService.insertChartOfAccount(orgId, update, false)).thenReturn(view);
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(400);
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -81,32 +113,13 @@ class ChartOfAccountControllerTest {
     void updateChartOfAccount_success() {
         String orgId = "org-1";
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
+        ChartOfAccountView view = mock(ChartOfAccountView.class);
         when(view.getError()).thenReturn(Optional.empty());
         when(chartOfAccountsService.updateChartOfAccount(orgId, update)).thenReturn(view);
 
         ResponseEntity<?> response = controller.updateChartOfAccount(orgId, update);
 
-        assertThat(response.getStatusCodeValue()).isEqualTo(200);
-        assertThat(response.getBody()).isEqualTo(view);
-    }
-
-    @Test
-    void upsertChartOfAccount_withError() {
-        String orgId = "org-1";
-        ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
-        OrganisationChartOfAccountView view = mock(OrganisationChartOfAccountView.class);
-
-        when(view.getError()).thenReturn(Optional.of(Problem.builder()
-                .withTitle("Error")
-                .withDetail("Invalid")
-                .withStatus(Status.BAD_REQUEST)
-                .build()));
-        when(chartOfAccountsService.upsertChartOfAccount(orgId, update)).thenReturn(view);
-
-        ResponseEntity<?> response = controller.upsertChartOfAccount(orgId, update);
-
-        assertThat(response.getStatusCodeValue()).isEqualTo(400);
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
     }
 

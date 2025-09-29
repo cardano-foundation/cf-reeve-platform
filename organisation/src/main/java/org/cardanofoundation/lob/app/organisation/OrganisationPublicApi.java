@@ -17,8 +17,8 @@ import org.cardanofoundation.lob.app.organisation.service.*;
 public class OrganisationPublicApi implements OrganisationPublicApiIF {
 
     private final OrganisationService organisationService;
-    private final OrganisationCurrencyService organisationCurrencyService;
-    private final OrganisationVatService organisationVatService;
+    private final CurrencyService currencyService;
+    private final VatService vatService;
     private final CostCenterService costCenterService;
     private final ProjectCodeService projectCodeService;
     private final ChartOfAccountsService chartOfAccountsService;
@@ -32,28 +32,28 @@ public class OrganisationPublicApi implements OrganisationPublicApiIF {
         return organisationService.findById(id);
     }
 
-    public Optional<OrganisationCurrency> findCurrencyByCustomerCurrencyCode(String organisationId,
-                                                                             String customerCurrencyCode) {
-        return organisationCurrencyService.findByOrganisationIdAndCode(organisationId, customerCurrencyCode);
+    public Optional<Currency> findCurrencyByCustomerCurrencyCode(String organisationId,
+                                                                 String customerCurrencyCode) {
+        return currencyService.findByOrganisationIdAndCode(organisationId, customerCurrencyCode);
     }
 
-    public Optional<OrganisationVat> findOrganisationByVatAndCode(String organisationId, String customerCode) {
-        return organisationVatService.findByOrganisationAndCode(organisationId, customerCode);
+    public Optional<Vat> findOrganisationByVatAndCode(String organisationId, String customerCode) {
+        return vatService.findByOrganisationAndCode(organisationId, customerCode);
     }
 
-    public Optional<OrganisationCostCenter> findCostCenter(String organisationId, String customerCode) {
+    public Optional<CostCenter> findCostCenter(String organisationId, String customerCode) {
         return costCenterService.getCostCenter(organisationId, customerCode);
     }
 
-    public Optional<OrganisationProject> findProject(String organisationId, String customerCode) {
+    public Optional<Project> findProject(String organisationId, String customerCode) {
         return projectCodeService.getProject(organisationId, customerCode);
     }
 
-    public Optional<OrganisationChartOfAccount> getChartOfAccounts(String organisationId, String customerCode) {
+    public Optional<ChartOfAccount> getChartOfAccounts(String organisationId, String customerCode) {
         return chartOfAccountsService.getChartAccount(organisationId, customerCode);
     }
 
     public Optional<AccountEvent> findEventCode(String organisationId, String debitcustomerCode, String creditCustomerCode) {
-        return accountEventService.findById(organisationId, debitcustomerCode, creditCustomerCode);
+        return accountEventService.findByIdAndActive(organisationId, debitcustomerCode, creditCustomerCode);
     }
 }

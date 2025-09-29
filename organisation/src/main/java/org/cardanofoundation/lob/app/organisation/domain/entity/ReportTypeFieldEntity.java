@@ -61,7 +61,7 @@ public class ReportTypeFieldEntity extends CommonEntity {
             inverseJoinColumns = @JoinColumn(name = "sub_type_id")
     )
     @Builder.Default
-    private List<OrganisationChartOfAccountSubType> mappingTypes = new ArrayList<>();
+    private List<ChartOfAccountSubType> mappingTypes = new ArrayList<>();
 
     @ManyToMany
     @JoinTable(
@@ -69,6 +69,7 @@ public class ReportTypeFieldEntity extends CommonEntity {
             joinColumns = @JoinColumn(name = "field_id"),
             inverseJoinColumns = @JoinColumn(name = "report_field_id")
     )
+    @Builder.Default
     private List<ReportTypeFieldEntity> mappingReportTypes = new ArrayList<>();
 
     private boolean accumulated; // Accumulated at all or is it checked period by period

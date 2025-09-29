@@ -10,6 +10,7 @@ import lombok.Getter;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
+import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUpdate;
 
 @Getter
 @Builder
@@ -18,7 +19,8 @@ public class ReferenceCodeView {
 
     String referenceCode;
     String description;
-    ReferenceCodeView parentReferenceCode;
+    ReferenceCodeView parent;
+    String parentReferenceCode;
     boolean isActive;
 
     private Optional<Problem> error;
@@ -30,16 +32,17 @@ public class ReferenceCodeView {
                 .isActive(referenceCode.isActive())
                 .error(Optional.empty());
         if(referenceCode.getParent().isPresent()) {
-            builder.parentReferenceCode(ReferenceCodeView.fromEntity(referenceCode.getParent().get()));
+            builder.parent(ReferenceCodeView.fromEntity(referenceCode.getParent().get()));
         }
         return builder.build();
     }
 
-    public static ReferenceCodeView createFail(Problem error) {
+    public static ReferenceCodeView createFail(Problem error, ReferenceCodeUpdate referenceCodeUpdate) {
         return ReferenceCodeView.builder()
-                //.name(error.getTitle())
-                //.subType(chartOfAccount.getSubType().getId())
-                //.type(chartOfAccount.getSubType().getType().getId())
+                .referenceCode(referenceCodeUpdate.getReferenceCode())
+                .description(referenceCodeUpdate.getName())
+                .parentReferenceCode(referenceCodeUpdate.getParentReferenceCode())
+                .isActive(Optional.ofNullable(referenceCodeUpdate.getActive()).orElse(false))
                 .error(Optional.of(error))
                 .build();
     }

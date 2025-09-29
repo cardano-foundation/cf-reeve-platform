@@ -57,11 +57,11 @@ public class TransactionItemExtractionRepository {
             jpql.append("""
                     AND (
                         ti.accountDebit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN :accountSubTypes
                         )
                         OR ti.accountCredit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN :accountSubTypes
                         )
                     )
@@ -72,16 +72,16 @@ public class TransactionItemExtractionRepository {
             jpql.append("""
                     AND (
                         ti.accountDebit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN (
-                                SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                SELECT st.id FROM ChartOfAccountSubType st
                                 WHERE st.type.id IN :accountTypes
                             )
                         )
                         OR ti.accountCredit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN (
-                                SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                SELECT st.id FROM ChartOfAccountSubType st
                                 WHERE st.type.id IN :accountTypes
                             )
                         )
@@ -124,7 +124,7 @@ public class TransactionItemExtractionRepository {
     public long countItemsByAccountDateAggregated(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash) {
         String jpql = """
                 SELECT COUNT(1) FROM accounting_reporting_core.TransactionItemEntity ti
-                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
+                    JOIN ti.transaction te LEFT JOIN CostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
@@ -142,7 +142,7 @@ public class TransactionItemExtractionRepository {
         String jpql = """
                     SELECT NEW org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView(MIN(ti.id), SUM(ti.amountLcy), SUM(ti.amountFcy))
                     FROM accounting_reporting_core.TransactionItemEntity ti
-                    JOIN ti.transaction te LEFT JOIN OrganisationCostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
+                    JOIN ti.transaction te LEFT JOIN CostCenter cc ON ti.costCenter.customerCode = cc.id.customerCode
                 """;
 
         String where = constructWhereClauseForExtraction(orgId, event, currency, minAmount, maxAmount, transactionHash);
@@ -175,45 +175,45 @@ public class TransactionItemExtractionRepository {
         maxAmount = Optional.ofNullable(maxAmount).orElse(Optional.empty());
 
 
-        String where = STR."""
+        String where = """
                 WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
-                AND te.organisation.id = '\{orgId}'
-                AND ti.status = '\{TxItemValidationStatus.OK}'
-                """;
+                AND te.organisation.id = '%s'
+                AND ti.status = '%s'
+                """.formatted(orgId, TxItemValidationStatus.OK);
 
         if (!event.isEmpty()) {
-            where += STR."""
-            AND (ti.accountEvent.code in (\{event.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}) )
-            """;
+            where += """
+            AND (ti.accountEvent.code in (%s) )
+            """.formatted(event.stream().map(code -> "'" + code + "'").collect(Collectors.joining(",")));
         }
 
         if (!currency.isEmpty()) {
-            where += STR."""
-            AND (ti.document.currency.customerCode in (\{currency.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}) )
-            """;
+            where += """
+            AND (ti.document.currency.customerCode in (%s) )
+            """.formatted(currency.stream().map(code -> "'" + code + "'").collect(Collectors.joining(",")));
         }
 
         if (minAmount.isPresent()) {
-            where += STR."""
-            AND ABS(ti.amountFcy) >= \{minAmount.get()}
-            """;
+            where += """
+            AND ABS(ti.amountFcy) >= %s
+            """.formatted(minAmount.get());
         }
 
         if (maxAmount.isPresent()) {
-            where += STR."""
-            AND ABS(ti.amountFcy) <= \{maxAmount.get()}
-            """;
+            where += """
+            AND ABS(ti.amountFcy) <= %s
+            """.formatted(maxAmount.get());
         }
 
         if (!transactionHash.isEmpty() && 0 < transactionHash.stream().count()) {
-            where += STR."""
-            AND (te.ledgerDispatchReceipt.primaryBlockchainHash in (\{transactionHash.stream().map(code -> "'" + code + "'").collect(Collectors.joining(","))}))
-            """;
+            where += """
+            AND (te.ledgerDispatchReceipt.primaryBlockchainHash in (%s))
+            """.formatted(transactionHash.stream().map(code -> "'" + code + "'").collect(Collectors.joining(",")));
         }
 
-        where += STR."""
-        AND te.ledgerDispatchStatus = '\{LedgerDispatchStatus.FINALIZED}'
-        """;
+        where += """
+        AND te.ledgerDispatchStatus = '%s'
+        """.formatted(LedgerDispatchStatus.FINALIZED);
         return where;
     }
 

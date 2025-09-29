@@ -7,7 +7,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -20,10 +19,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCurrency;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
@@ -34,24 +33,14 @@ class OrganisationServiceTest {
 
     @Mock
     private OrganisationRepository organisationRepository;
-
-    @Mock
-    private CostCenterService costCenterService;
-
-    @Mock
-    private ProjectMappingRepository projectMappingRepository;
-
-    @Mock
-    private OrganisationChartOfAccountTypeRepository organisationChartOfAccountTypeRepository;
-
-    @Mock
-    private ChartOfAccountRepository organisationChartOfAccountRepository;
-
     @Mock
     private AccountEventRepository accountEventRepository;
-
     @Mock
-    private OrganisationCurrencyService organisationCurrencyService;
+    private CurrencyService currencyService;
+    @Mock
+    private CostCenterService costCenterService;
+    @Mock
+    private ProjectCodeService projectCodeService;
 
     @InjectMocks
     private OrganisationService organisationService;
@@ -89,23 +78,9 @@ class OrganisationServiceTest {
         assertEquals(1, result.size());
     }
 
-    @Test
-    void testGetAllCostCenter() {
-        Set<OrganisationCostCenter> costCenters = new HashSet<>();
-        when(costCenterService.getAllCostCenter("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0")).thenReturn(costCenters);
-        Set<OrganisationCostCenter> result = organisationService.getAllCostCenter("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
-        assertEquals(costCenters, result);
-    }
 
-    @Test
-    void testGetAllProjects() {
-        Set<OrganisationProject> projects = new HashSet<>();
-        when(projectMappingRepository.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0")).thenReturn(projects);
-        Set<OrganisationProject> result = organisationService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
-        assertEquals(projects, result);
-        verify(projectMappingRepository).findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
-        verifyNoMoreInteractions(projectMappingRepository);
-    }
+
+
 
     @Test
     void testUpsertOrganisation_NewOrganisation() {
@@ -123,7 +98,7 @@ class OrganisationServiceTest {
 
         when(organisationRepository.saveAndFlush(any())).thenReturn(organisation);
 
-        Organisation result = organisationService.upsertOrganisation(organisation, organisationUpdate).get();
+        Organisation result = organisationService.updateOrganisation(organisation, organisationUpdate).get();
         assertNotNull(result);
         assertEquals("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0",result.getId());
         assertEquals("Street",result.getAddress());
@@ -178,9 +153,9 @@ class OrganisationServiceTest {
         org.setWebsiteUrl("webSite");
         org.setLogo("logo");
 
-        when(costCenterService.getAllCostCenter(anyString())).thenReturn(Set.of(new OrganisationCostCenter()));
-        when(projectMappingRepository.findAllByOrganisationId(anyString())).thenReturn(Set.of(new OrganisationProject()));
-        when(organisationCurrencyService.findAllByOrganisationId(anyString())).thenReturn(Set.of(new OrganisationCurrency()));
+        when(costCenterService.getAllCostCenter(anyString())).thenReturn(Set.of(new CostCenter()));
+        when(projectCodeService.getAllProjects(anyString())).thenReturn(Set.of(new Project()));
+        when(currencyService.findAllByOrganisationId(anyString())).thenReturn(Set.of(new Currency()));
 
         OrganisationView organisationView = organisationService.getOrganisationView(org);
 
@@ -203,16 +178,8 @@ class OrganisationServiceTest {
         assertEquals(1, organisationView.getOrganisationCurrencies().size());
 
         verify(costCenterService).getAllCostCenter(anyString());
-        verify(projectMappingRepository).findAllByOrganisationId(anyString());
-        verify(organisationCurrencyService).findAllByOrganisationId(anyString());
-        verifyNoMoreInteractions(costCenterService, projectMappingRepository, organisationCurrencyService);
-    }
-
-    @Test
-    void getOrganisationCurrencies() {
-        Set<OrganisationCurrency> organisationCurrencies = new HashSet<>();
-        when(organisationCurrencyService.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0")).thenReturn(organisationCurrencies);
-        Set<OrganisationCurrency> result = organisationService.getOrganisationCurrencies("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0");
-        assertEquals(organisationCurrencies, result);
+        verify(projectCodeService).getAllProjects(anyString());
+        verify(currencyService).findAllByOrganisationId(anyString());
+        verifyNoMoreInteractions(costCenterService, projectCodeService, currencyService);
     }
 }

@@ -61,11 +61,8 @@ public class Report {
                             short year,
                             long ver,
                             Optional<Short> period) {
-        return period.map(p -> {
-            return digestAsHex(STR."\{organisationId}::\{reportType}::\{intervalType}::\{year}::\{ver}::\{p}");
-        }).orElseGet(() -> {
-            return digestAsHex(STR."\{organisationId}::\{reportType}::\{intervalType}::\{year}::\{ver}");
-        });
+        return period.map(p -> digestAsHex("%s::%s::%s::%s::%s::%s".formatted(organisationId, reportType, intervalType, year, ver, p)))
+                .orElseGet(() -> digestAsHex("%s::%s::%s::%s::%s".formatted(organisationId, reportType, intervalType, year, ver)));
     }
 
     public static String idControl(String organisationId,
@@ -73,11 +70,8 @@ public class Report {
                             IntervalType intervalType,
                             short year,
                             Optional<Short> period) {
-        return period.map(p -> {
-            return digestAsHex(STR."\{organisationId}::\{reportType}::\{intervalType}::\{year}::\{p}");
-        }).orElseGet(() -> {
-            return digestAsHex(STR."\{organisationId}::\{reportType}::\{intervalType}::\{year}");
-        });
+        return period.map(p -> digestAsHex("%s::%s::%s::%s::%s".formatted(organisationId, reportType, intervalType, year, p)))
+                .orElseGet(() -> digestAsHex("%s::%s::%s::%s".formatted(organisationId, reportType, intervalType, year)));
     }
 
     public void setBalanceSheetData(Optional<BalanceSheetData> balanceSheetData) {

@@ -4,7 +4,6 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
 
@@ -64,7 +63,7 @@ public class PublicInterfaceController {
         if (orgM.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{reportSearchRequest.getOrganisationId()}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(reportSearchRequest.getOrganisationId()))
                     .withStatus(NOT_FOUND)
                     .build();
 
@@ -77,7 +76,7 @@ public class PublicInterfaceController {
                         reportSearchRequest.getIntervalType(),
                         reportSearchRequest.getYear(),
                         reportSearchRequest.getPeriod()
-                ).stream().map(reportViewService::responseView).collect(Collectors.toList()))
+                ).stream().map(reportViewService::responseView).toList())
         );
     }
 
@@ -98,7 +97,7 @@ public class PublicInterfaceController {
         if (orgM.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{transactionsRequest.getOrganisationId()}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(transactionsRequest.getOrganisationId()))
                     .withStatus(NOT_FOUND)
                     .build();
 

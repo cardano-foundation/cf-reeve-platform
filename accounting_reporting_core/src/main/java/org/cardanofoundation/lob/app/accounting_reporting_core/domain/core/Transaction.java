@@ -73,7 +73,10 @@ public class Transaction {
 
     public static String id(String organisationId,
                             String internalTransactionNumber) {
-        return digestAsHex(STR."\{organisationId}::\{internalTransactionNumber}");
+        return digestAsHex("%s::%s".formatted(
+                organisationId,
+                internalTransactionNumber
+        ));
     }
 
 }

@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
@@ -51,7 +52,7 @@ public class ExperimentalAccountingCoreResource {
                 //.transactionNumbers(List.of("JOURNAL226", "JOURNAL227"))
                 .build();
 
-        return accountingCoreService.scheduleIngestion(userExtractionParameters).fold(problem -> {
+        return accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, null, null).fold(problem -> {
             return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
         }, success -> {
             return ResponseEntity.ok().build();
@@ -88,7 +89,7 @@ public class ExperimentalAccountingCoreResource {
         val fromDate = LocalDate.now().minusYears(20);
         val toDate = LocalDate.now().minusDays(1);
 
-        return accountingCoreService.scheduleReconcilation(orgId, fromDate, toDate).fold(problem -> {
+        return accountingCoreService.scheduleReconcilation(orgId, fromDate, toDate, ExtractorType.NETSUITE, null, null).fold(problem -> {
             return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
         }, success -> {
             return ResponseEntity.ok().build();

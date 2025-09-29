@@ -1,26 +1,41 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.OPENING_BALANCE_VALIDATION_ERROR;
+import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
+import org.cardanofoundation.lob.app.organisation.domain.csv.ChartOfAccountUpdateCsv;
 import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationChartOfAccountView;
+import org.cardanofoundation.lob.app.organisation.domain.view.ChartOfAccountView;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
-import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountSubTypeRepository;
-import org.cardanofoundation.lob.app.organisation.repository.OrganisationChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -29,182 +44,297 @@ import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeReposi
 public class ChartOfAccountsService {
 
     private final ChartOfAccountRepository chartOfAccountRepository;
-    private final OrganisationChartOfAccountTypeRepository organisationChartOfAccountTypeRepository;
-    private final OrganisationChartOfAccountSubTypeRepository organisationChartOfAccountSubTypeRepository;
+    private final ChartOfAccountTypeRepository chartOfAccountTypeRepository;
+    private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
     private final ReferenceCodeRepository referenceCodeRepository;
+    private final CurrencyRepository currencyRepository;
     private final OrganisationService organisationService;
+    private final CsvParser<ChartOfAccountUpdateCsv> csvParser;
+    private final Validator validator;
+    @PersistenceContext
+    private EntityManager entityManager;
 
-    public Optional<OrganisationChartOfAccount> getChartAccount(String organisationId, String customerCode) {
-        return chartOfAccountRepository.findById(new OrganisationChartOfAccount.Id(organisationId, customerCode));
+    public Optional<ChartOfAccount> getChartAccount(String organisationId, String customerCode) {
+        return chartOfAccountRepository.findByIdAndActive(new ChartOfAccount.Id(organisationId, customerCode), true);
     }
 
     @Transactional
-    public Set<OrganisationChartOfAccountType> getAllChartType(String organisationId) {
-        return organisationChartOfAccountTypeRepository.findAllByOrganisationId(organisationId);
+    public Set<ChartOfAccountType> getAllChartType(String organisationId) {
+        return chartOfAccountTypeRepository.findAllByOrganisationId(organisationId);
     }
 
-    public Set<OrganisationChartOfAccount> getBySubTypeId(Long subType) {
+    public Set<ChartOfAccount> getBySubTypeId(Long subType) {
         return chartOfAccountRepository.findAllByOrganisationIdSubTypeId(subType);
     }
 
-    public Set<OrganisationChartOfAccountView> getAllChartOfAccount(String organisationId) {
-        return chartOfAccountRepository.findAllByOrganisationId(organisationId).stream().map(OrganisationChartOfAccountView::createSuccess).collect(Collectors.toSet());
+    public Set<ChartOfAccountView> getAllChartOfAccount(String organisationId) {
+        return chartOfAccountRepository.findAllByOrganisationId(organisationId).stream().map(ChartOfAccountView::createSuccess).collect(Collectors.toSet());
     }
 
     @Transactional
-    public OrganisationChartOfAccountView updateChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+    public ChartOfAccountView updateChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
 
-        Either<OrganisationChartOfAccountView, Void> organisationAvaliable = isOrganisationAvaliable(orgId);
+        Either<ChartOfAccountView, Void> organisationAvaliable = isOrganisationAvaliable(orgId, chartOfAccountUpdate);
         if (organisationAvaliable.isLeft()) return organisationAvaliable.getLeft();
 
-        Either<OrganisationChartOfAccountView, Void> referenceCodeAvailable = isReferenceCodeAvailable(orgId, chartOfAccountUpdate);
+        Either<ChartOfAccountView, Void> referenceCodeAvailable = isReferenceCodeAvailable(orgId, chartOfAccountUpdate);
         if (referenceCodeAvailable.isLeft()) return referenceCodeAvailable.getLeft();
 
-        Either<OrganisationChartOfAccountView, OrganisationChartOfAccountSubType> subType = isSubTypeAvailable(orgId, chartOfAccountUpdate);
+        Either<ChartOfAccountView, ChartOfAccountSubType> subType = isSubTypeAvailable(orgId, chartOfAccountUpdate);
         if (subType.isLeft()) return subType.getLeft();
 
-        Either<OrganisationChartOfAccountView, Void> parentCodeAvailable = isParentCodeAvailable(orgId, chartOfAccountUpdate);
+        Either<ChartOfAccountView, Void> parentCodeAvailable = isParentCodeAvailable(orgId, chartOfAccountUpdate);
         if (parentCodeAvailable.isLeft()) return parentCodeAvailable.getLeft();
 
-        Either<OrganisationChartOfAccountView, OrganisationChartOfAccount> chartOfAccountOpt = isChartOfAccountAvailable(orgId, chartOfAccountUpdate);
+        Either<ChartOfAccountView, ChartOfAccount> chartOfAccountOpt = isChartOfAccountAvailable(orgId, chartOfAccountUpdate);
         if (chartOfAccountOpt.isLeft()) return chartOfAccountOpt.getLeft();
 
-        OrganisationChartOfAccount chartOfAccount = chartOfAccountOpt.get();
+        ChartOfAccount chartOfAccount = chartOfAccountOpt.get();
         return updateAndSaveChartOfAccount(chartOfAccountUpdate, subType, chartOfAccount);
 
     }
 
-    private Either<OrganisationChartOfAccountView, OrganisationChartOfAccount> isChartOfAccountAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
-        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
+    private Either<ChartOfAccountView, ChartOfAccount> isChartOfAccountAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+        Optional<ChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
         if (chartOfAccountOpt.isEmpty()) {
-            return Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
+            return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("CHART_OF_ACCOUNT_NOT_FOUND")
-                    .withDetail(STR."Unable to find the chart of account with code :\{chartOfAccountUpdate.getCustomerCode()}")
+                    .withDetail("Unable to find the chart of account with code :%s".formatted(chartOfAccountUpdate.getCustomerCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build()));
+                    .build(), chartOfAccountUpdate));
         }
         return Either.right(chartOfAccountOpt.get());
     }
 
-    private Either<OrganisationChartOfAccountView, Void> isOrganisationAvaliable(String orgId) {
+    private Either<ChartOfAccountView, Void> isOrganisationAvaliable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
-            return Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
+            return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail(STR."Unable to find Organisation by Id: \{orgId}")
+                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
                     .withStatus(Status.NOT_FOUND)
-                    .build()));
+                    .build(), chartOfAccountUpdate));
         }
         return Either.right(null);
     }
 
-    private Either<OrganisationChartOfAccountView, Void> isReferenceCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+    private Either<ChartOfAccountView, Void> isReferenceCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
         if (referenceCode.isEmpty()) {
-            return Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
+            return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail(STR."Unable to find event ref code: \{chartOfAccountUpdate.getEventRefCode()}")
+                    .withDetail("Unable to find event ref code: %s".formatted(chartOfAccountUpdate.getEventRefCode()))
                     .withStatus(Status.NOT_FOUND)
-                    .build()));
+                    .build(), chartOfAccountUpdate));
         }
         return Either.right(null);
     }
 
-    private Either<OrganisationChartOfAccountView, OrganisationChartOfAccountSubType> isSubTypeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
-        Optional<OrganisationChartOfAccountSubType> subType = organisationChartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType());
-        return subType.<Either<OrganisationChartOfAccountView, OrganisationChartOfAccountSubType>>map(Either::right)
-                .orElseGet(() -> Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
-                .withTitle("SUBTYPE_NOT_FOUND")
-                .withDetail(STR."Unable to find subtype code :\{chartOfAccountUpdate.getSubType()}")
-                .withStatus(Status.NOT_FOUND)
-                .build())));
+    private Either<ChartOfAccountView, ChartOfAccountSubType> isSubTypeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+        Optional<ChartOfAccountSubType> subType = chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType());
+        return subType.<Either<ChartOfAccountView, ChartOfAccountSubType>>map(Either::right)
+                .orElseGet(() -> Either.left(ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("SUBTYPE_NOT_FOUND")
+                        .withDetail("Unable to find subtype code :%s".formatted(chartOfAccountUpdate.getSubType()))
+                        .withStatus(Status.NOT_FOUND)
+                        .build(), chartOfAccountUpdate)));
     }
 
-    Either<OrganisationChartOfAccountView, Void> isParentCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+    Either<ChartOfAccountView, Void> isParentCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
-            Optional<OrganisationChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
+            Optional<ChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
             if (parentChartOfAccount.isEmpty()) {
-                return Either.left(OrganisationChartOfAccountView.createFail(Problem.builder()
+                return Either.left(ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("PARENT_ACCOUNT_NOT_FOUND")
-                        .withDetail(STR."Unable to find the parent chart of account with code :\{chartOfAccountUpdate.getParentCustomerCode()}")
+                        .withDetail("Unable to find the parent chart of account with code :%s".formatted(chartOfAccountUpdate.getParentCustomerCode()))
                         .withStatus(Status.NOT_FOUND)
-                        .build()));
+                        .build(), chartOfAccountUpdate));
+            }
+            if (parentChartOfAccount.get().getId().getCustomerCode().equals(chartOfAccountUpdate.getCustomerCode())) {
+                return Either.left(ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("PARENT_ACCOUNT_CANNOT_BE_SELF")
+                        .withDetail("The parent chart of account cannot be the same as the account itself :%s".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate));
             }
         }
         return Either.right(null);
     }
 
     @Transactional
-    public OrganisationChartOfAccountView insertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
+    public ChartOfAccountView insertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate, boolean isUpsert) {
 
-        Either<OrganisationChartOfAccountView, Void> organisationAvaliable = isOrganisationAvaliable(orgId);
+        Either<ChartOfAccountView, Void> organisationAvaliable = isOrganisationAvaliable(orgId, chartOfAccountUpdate);
         if (organisationAvaliable.isLeft()) return organisationAvaliable.getLeft();
 
-        Either<OrganisationChartOfAccountView, Void> referenceCodeAvailable = isReferenceCodeAvailable(orgId, chartOfAccountUpdate);
+        Either<ChartOfAccountView, Void> referenceCodeAvailable = isReferenceCodeAvailable(orgId, chartOfAccountUpdate);
         if (referenceCodeAvailable.isLeft()) return referenceCodeAvailable.getLeft();
 
-        Either<OrganisationChartOfAccountView, Void> parentCodeAvailable = isParentCodeAvailable(orgId, chartOfAccountUpdate);
+        Either<ChartOfAccountView, Void> parentCodeAvailable = isParentCodeAvailable(orgId, chartOfAccountUpdate);
         if (parentCodeAvailable.isLeft()) return parentCodeAvailable.getLeft();
 
-        Either<OrganisationChartOfAccountView, OrganisationChartOfAccountSubType> subTypeAvailable = isSubTypeAvailable(orgId, chartOfAccountUpdate);
+        Either<ChartOfAccountView, ChartOfAccountSubType> subTypeAvailable = isSubTypeAvailable(orgId, chartOfAccountUpdate);
         if (subTypeAvailable.isLeft()) return subTypeAvailable.getLeft();
 
-        Optional<OrganisationChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
-        if (chartOfAccountOpt.isPresent()) {
-            return OrganisationChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
-                    .withDetail(STR."The chart of account with code :\{chartOfAccountUpdate.getCustomerCode()} already exists")
-                    .withStatus(Status.CONFLICT)
-                    .build());
-        }
-
-        OrganisationChartOfAccount chartOfAccount = OrganisationChartOfAccount.builder()
-                .id(new OrganisationChartOfAccount.Id(orgId, chartOfAccountUpdate.getCustomerCode()))
+        Optional<ChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
+        ChartOfAccount chartOfAccount = ChartOfAccount.builder()
+                .id(new ChartOfAccount.Id(orgId, chartOfAccountUpdate.getCustomerCode()))
                 .build();
+        if (chartOfAccountOpt.isPresent()) {
+            if (isUpsert) {
+                chartOfAccount = chartOfAccountOpt.get();
+            } else {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
+                        .withDetail("The chart of account with code :%s already exists".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withStatus(Status.CONFLICT)
+                        .build(), chartOfAccountUpdate);
+            }
+        }
 
         return updateAndSaveChartOfAccount(chartOfAccountUpdate, subTypeAvailable, chartOfAccount);
 
     }
 
-    @Deprecated
-    @Transactional
-    public OrganisationChartOfAccountView upsertChartOfAccount(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
-
-        Either<OrganisationChartOfAccountView, Void> organisationAvaliable = isOrganisationAvaliable(orgId);
-        if (organisationAvaliable.isLeft()) return organisationAvaliable.getLeft();
-
-        Either<OrganisationChartOfAccountView, Void> referenceCodeAvailable = isReferenceCodeAvailable(orgId, chartOfAccountUpdate);
-        if (referenceCodeAvailable.isLeft()) return referenceCodeAvailable.getLeft();
-
-        Either<OrganisationChartOfAccountView, OrganisationChartOfAccountSubType> subType = isSubTypeAvailable(orgId, chartOfAccountUpdate);
-        if (subType.isLeft()) return subType.getLeft();
-
-        Either<OrganisationChartOfAccountView, Void> parentCodeAvailable = isParentCodeAvailable(orgId, chartOfAccountUpdate);
-        if (parentCodeAvailable.isLeft()) return parentCodeAvailable.getLeft();
-
-        OrganisationChartOfAccount chartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()).orElse(
-                OrganisationChartOfAccount.builder()
-                        .id(new OrganisationChartOfAccount.Id(orgId, chartOfAccountUpdate.getCustomerCode()))
-
-                        .build()
-        );
-
-        return updateAndSaveChartOfAccount(chartOfAccountUpdate, subType, chartOfAccount);
-
-    }
-
-    private OrganisationChartOfAccountView updateAndSaveChartOfAccount(ChartOfAccountUpdate chartOfAccountUpdate, Either<OrganisationChartOfAccountView, OrganisationChartOfAccountSubType> subType, OrganisationChartOfAccount chartOfAccount) {
-        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
+    private ChartOfAccountView updateAndSaveChartOfAccount(ChartOfAccountUpdate chartOfAccountUpdate, Either<ChartOfAccountView, ChartOfAccountSubType> subType, ChartOfAccount chartOfAccount) {
         chartOfAccount.setName(chartOfAccountUpdate.getName());
-        chartOfAccount.setRefCode(chartOfAccountUpdate.getRefCode());
+        chartOfAccount.setEventRefCode(chartOfAccountUpdate.getEventRefCode());
         chartOfAccount.setSubType(subType.get());
         chartOfAccount.setParentCustomerCode(chartOfAccountUpdate.getParentCustomerCode() == null || chartOfAccountUpdate.getParentCustomerCode().isEmpty() ? null : chartOfAccountUpdate.getParentCustomerCode());
+        String currency = Optional.ofNullable(chartOfAccountUpdate.getCurrency()).orElse("");
+        if (!currency.isEmpty()) {
+            Optional<Currency> byId = currencyRepository.findById(new Currency.Id(chartOfAccount.getId().getOrganisationId(), currency));
+            if (byId.isEmpty()) {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("CURRENCY_NOT_FOUND")
+                        .withDetail("Unable to find currency with id: %s".formatted(currency))
+                        .withStatus(Status.NOT_FOUND)
+                        .build(), chartOfAccountUpdate);
+            }
+        }
         chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
+
         chartOfAccount.setCounterParty(chartOfAccountUpdate.getCounterParty());
         chartOfAccount.setActive(chartOfAccountUpdate.getActive());
+
+        // If opening balance and fcy currency is set then it must be equal to the currency
+        if (Optional.ofNullable(chartOfAccountUpdate.getOpeningBalance()).isPresent() && !chartOfAccountUpdate.getOpeningBalance().allNull()) {
+            Errors errors = validator.validateObject(chartOfAccountUpdate.getOpeningBalance());
+            List<ObjectError> allErrors = errors.getAllErrors();
+            if (!allErrors.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle(OPENING_BALANCE_VALIDATION_ERROR)
+                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                return ChartOfAccountView.createFail(error, chartOfAccountUpdate);
+            }
+            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
+                        .withDetail("The opening balance FCY currency must match the chart of account currency.")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate);
+            }
+            Organisation organisation = organisationService.findById(chartOfAccount.getId().getOrganisationId()).orElseThrow();
+            Currency organisationCurrency = currencyRepository.findByCurrencyId(chartOfAccount.getId().getOrganisationId(), organisation.getCurrencyId()).orElseThrow(() -> new RuntimeException("Organisation currency not found"));
+            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisationCurrency.getId().getCustomerCode())) {
+                return ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
+                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCustomerCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate);
+            }
+        }
+
+
         chartOfAccount.setOpeningBalance(chartOfAccountUpdate.getOpeningBalance());
 
-        OrganisationChartOfAccount chartOfAccountResult = chartOfAccountRepository.save(chartOfAccount);
-        return OrganisationChartOfAccountView.createSuccess(chartOfAccountResult);
+        ChartOfAccount chartOfAccountResult = chartOfAccountRepository.save(chartOfAccount);
+        return ChartOfAccountView.createSuccess(chartOfAccountResult);
+    }
+
+    @Transactional
+    public Either<List<Problem>, List<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
+
+
+        Either<Problem, List<ChartOfAccountUpdateCsv>> lists = csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class);
+
+        if (lists.isLeft()) {
+            return Either.left(List.of(lists.getLeft()));
+        }
+
+        List<ChartOfAccountUpdateCsv> chartOfAccountUpdates = lists.get();
+        List<ChartOfAccountView> accountEventViews = new ArrayList<>();
+        for (ChartOfAccountUpdateCsv chartOfAccountUpdateCsv : chartOfAccountUpdates) {
+            Errors errors = validator.validateObject(chartOfAccountUpdateCsv);
+            List<ObjectError> allErrors = errors.getAllErrors();
+            if (!allErrors.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle(VALIDATION_ERROR)
+                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
+                continue;
+            }
+
+            // A workAround to fill the nested object
+            try {
+                chartOfAccountUpdateCsv.fillOpeningBalance();
+            } catch (Exception e) {
+                Problem error = Problem.builder()
+                        .withTitle("OPENING_BALANCE_ERROR")
+                        .withDetail(e.getMessage())
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
+                continue;
+            }
+
+
+            Optional<ChartOfAccountType> type = chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, chartOfAccountUpdateCsv.getType());
+            if( type.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle("CHART_OF_ACCOUNT_TYPE_NOT_FOUND")
+                        .withDetail("Chart of account type: %s not found. Please provide a valid type.".formatted(chartOfAccountUpdateCsv.getType()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
+                continue;
+            }
+            Optional<ChartOfAccountSubType> subType = chartOfAccountSubTypeRepository.findFirstByNameAndOrganisationIdAndParentName(orgId, chartOfAccountUpdateCsv.getSubType(), chartOfAccountUpdateCsv.getType());
+            if (subType.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle("CHART_OF_ACCOUNT_SUBTYPE_NOT_FOUND")
+                        .withDetail("Chart of account subtype: %s not found for type: %s. Please provide a valid subtype.".formatted(chartOfAccountUpdateCsv.getSubType(), chartOfAccountUpdateCsv.getType()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
+                continue;
+            }
+            chartOfAccountUpdateCsv.setType(String.valueOf(type.get().getId()));
+            chartOfAccountUpdateCsv.setSubType(String.valueOf(subType.get().getId()));
+            ChartOfAccountView accountEventView = insertChartOfAccount(orgId, chartOfAccountUpdateCsv, true);
+
+            accountEventViews.add(accountEventView);
+        }
+        return Either.right(accountEventViews);
+    }
+
+    private ChartOfAccountSubType saveTypeAndSubType(String orgId, ChartOfAccountUpdateCsv chartOfAccountUpdateCsv) {
+
+        ChartOfAccountType chartOfAccountType = ChartOfAccountType.builder()
+                .organisationId(orgId)
+                .name(chartOfAccountUpdateCsv.getType())
+                .build();
+        ChartOfAccountSubType chartOfAccountSubType = ChartOfAccountSubType.builder()
+                .organisationId(orgId)
+                .name(chartOfAccountUpdateCsv.getSubType())
+                .type(chartOfAccountType)
+                .build();
+        chartOfAccountType.setSubTypes(Set.of(chartOfAccountSubType));
+        ChartOfAccountType save = chartOfAccountTypeRepository.save(chartOfAccountType);
+        return save.getSubTypes().stream().iterator().next();
     }
 }

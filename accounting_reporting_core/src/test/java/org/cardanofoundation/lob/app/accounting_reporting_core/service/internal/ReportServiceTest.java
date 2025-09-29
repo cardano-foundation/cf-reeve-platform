@@ -42,11 +42,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccount;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 
@@ -74,6 +70,79 @@ class ReportServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    void approveReportForLedgerDispatch_reportNotFound() {
+        when(reportRepository.findById(REPORT_ID)).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> reportEntities = reportService.approveReportForLedgerDispatch(REPORT_ID);
+
+        assertThat(reportEntities.isLeft()).isTrue();
+        assertThat(reportEntities.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void storeIncomeStatementAsExample_orgNotFound() {
+        when(organisationPublicApi.findByOrganisationId("orgId")).thenReturn(Optional.empty());
+
+        Either<Problem, Void> storeIncomeStatementAsExample = reportService.storeIncomeStatementAsExample("orgId");
+        assertThat(storeIncomeStatementAsExample.isLeft()).isTrue();
+        assertThat(storeIncomeStatementAsExample.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
+    void storeBalancesheetAsExample_orgNotFound() {
+        when(organisationPublicApi.findByOrganisationId("orgId")).thenReturn(Optional.empty());
+
+        Either<Problem, Void> storeBalancesheetAsExample = reportService.storeBalanceSheetAsExample("orgId");
+
+        assertThat(storeBalancesheetAsExample.isLeft()).isTrue();
+        assertThat(storeBalancesheetAsExample.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
+    void storeReport_invalidReportType() {
+        CreateReportView createReportView = mock(CreateReportView.class);
+        when(createReportView.getBalanceSheetData()).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> reportEntities = reportService.storeReport(BALANCE_SHEET, createReportView, IntervalType.YEAR, (short) 2023, (short) 1);
+        assertThat(reportEntities.isLeft()).isTrue();
+        assertThat(reportEntities.getLeft().getTitle()).isEqualTo("INVALID_REPORT_TYPE");
+    }
+
+    @Test
+    void exists_reportNotFound() {
+        when(reportRepository.findLatestByIdControl("orgId", REPORT_ID)).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> exists = reportService.exist("orgId", BALANCE_SHEET, IntervalType.YEAR, (short) 2023, (short) 1);
+
+        assertThat(exists.isLeft()).isTrue();
+        assertThat(exists.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void isReportValid_reportNotFound() {
+        when(reportRepository.findById(REPORT_ID)).thenReturn(Optional.empty());
+
+        Either<Problem, Boolean> isReportValid = reportService.isReportValid(REPORT_ID);
+
+        assertThat(isReportValid.isLeft()).isTrue();
+        assertThat(isReportValid.getLeft().getTitle()).isEqualTo("REPORT_NOT_FOUND");
+    }
+
+    @Test
+    void storeReport_orgNotFound() {
+        CreateReportView createReportView = mock(CreateReportView.class);
+        BalanceSheetData balanceSheetData = mock(BalanceSheetData.class);
+        when(createReportView.getBalanceSheetData()).thenReturn(Optional.of(balanceSheetData));
+        when(createReportView.getOrganisationId()).thenReturn("orgId");
+
+        when(organisationPublicApi.findByOrganisationId("orgId")).thenReturn(Optional.empty());
+
+        Either<Problem, ReportEntity> reportEntities = reportService.storeReport(BALANCE_SHEET, createReportView, IntervalType.YEAR, (short) 2023, (short) 1);
+        assertThat(reportEntities.isLeft()).isTrue();
+        assertThat(reportEntities.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
     }
 
     @Test
@@ -1293,9 +1362,9 @@ class ReportServiceTest {
         request.setOrganisationId(organisationId);
         ReportTypeFieldEntity reportTypeFieldEntityCapital = mock(ReportTypeFieldEntity.class);
         ReportTypeFieldEntity reportTypeFieldEntityProfit = mock(ReportTypeFieldEntity.class);
-        OrganisationChartOfAccountSubType organisationChartOfAccountSubType = mock(OrganisationChartOfAccountSubType.class);
-        OrganisationChartOfAccount organisationChartOfAccount = mock(OrganisationChartOfAccount.class);
-        OrganisationChartOfAccount.Id organisationChartOfAccountId = mock(OrganisationChartOfAccount.Id.class);
+        ChartOfAccountSubType chartOfAccountSubType = mock(ChartOfAccountSubType.class);
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
+        ChartOfAccount.Id organisationChartOfAccountId = mock(ChartOfAccount.Id.class);
         TransactionItemEntity transactionItemEntity = mock(TransactionItemEntity.class);
         LocalDate startDate = LocalDate.of(2025, 1, 1);
         LocalDate endDate = LocalDate.of(2025, 12, 31);
@@ -1306,12 +1375,12 @@ class ReportServiceTest {
         when(reportTypeFieldEntityCapital.getName()).thenReturn("CAPITAL");
         when(reportTypeFieldEntityProfit.getName()).thenReturn("PROFIT_FOR_THE_YEAR");
         when(reportTypeFieldEntityCapital.getChildFields()).thenReturn(List.of(reportTypeFieldEntityProfit));
-        when(reportTypeFieldEntityProfit.getMappingTypes()).thenReturn(List.of(organisationChartOfAccountSubType));
-        when(organisationChartOfAccountSubType.getId()).thenReturn(1L);
-        when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(List.of(1L))).thenReturn(Set.of(organisationChartOfAccount));
+        when(reportTypeFieldEntityProfit.getMappingTypes()).thenReturn(List.of(chartOfAccountSubType));
+        when(chartOfAccountSubType.getId()).thenReturn(1L);
+        when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(List.of(1L))).thenReturn(Set.of(chartOfAccount));
         when(reportTypeFieldEntityProfit.isAccumulated()).thenReturn(false);
         when(reportTypeFieldEntityProfit.isAccumulatedYearly()).thenReturn(false);
-        when(organisationChartOfAccount.getId()).thenReturn(organisationChartOfAccountId);
+        when(chartOfAccount.getId()).thenReturn(organisationChartOfAccountId);
         when(organisationChartOfAccountId.getCustomerCode()).thenReturn("CustomerCode");
         when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(List.of("CustomerCode"), startDate, endDate)).thenReturn(List.of(transactionItemEntity));
         when(transactionItemEntity.getStatus()).thenReturn(TxItemValidationStatus.OK);

@@ -60,7 +60,7 @@ dependencies {
     implementation("com.querydsl:querydsl-jpa")
     annotationProcessor("com.querydsl:querydsl-apt")
 
-    val cardanoClientVersion = "0.6.0"
+    val cardanoClientVersion = "0.6.6"
     implementation("com.bloxbean.cardano:cardano-client-crypto:$cardanoClientVersion")
     implementation("com.bloxbean.cardano:cardano-client-backend-blockfrost:$cardanoClientVersion")
 
@@ -69,10 +69,11 @@ dependencies {
     implementation("io.vavr:vavr:0.10.4")
 
     // yaci-store dependencies
-    implementation("com.bloxbean.cardano:yaci-store-spring-boot-starter:0.1.0-rc5")
-    implementation("com.bloxbean.cardano:yaci-store-blocks-spring-boot-starter:0.1.0-rc5")
-    implementation("com.bloxbean.cardano:yaci-store-transaction-spring-boot-starter:0.1.0-rc5")
-    implementation("com.bloxbean.cardano:yaci-store-metadata-spring-boot-starter:0.1.0-rc5")
+    val yaciStoreVersion = "0.1.4"
+    implementation("com.bloxbean.cardano:yaci-store-spring-boot-starter:$yaciStoreVersion")
+    implementation("com.bloxbean.cardano:yaci-store-blocks-spring-boot-starter:$yaciStoreVersion")
+    implementation("com.bloxbean.cardano:yaci-store-transaction-spring-boot-starter:$yaciStoreVersion")
+    implementation("com.bloxbean.cardano:yaci-store-metadata-spring-boot-starter:$yaciStoreVersion")
     
     runtimeOnly("org.postgresql:postgresql")
 
@@ -93,4 +94,8 @@ tasks.jacocoTestReport {
     reports {
         csv.required.set(true)
     }
+}
+
+tasks.bootJar {
+    archiveClassifier = "all"
 }

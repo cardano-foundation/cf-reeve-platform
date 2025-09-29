@@ -88,7 +88,7 @@ public class BlockchainTransactionsDispatcher {
         int submittedTxCount = blockchainTransactions.submittedTransactions().size();
         int remainingTxCount = blockchainTransactions.remainingTransactions().size();
         transactionEntityRepositoryGateway.unlockTransactions(blockchainTransactions.remainingTransactions());
-
+        transactionEntityRepositoryGateway.unlockTransactions(blockchainTransactions.submittedTransactions());
         log.info("Submitted tx count:{}, remainingTxCount:{}", submittedTxCount, remainingTxCount);
     }
 
@@ -131,7 +131,7 @@ public class BlockchainTransactionsDispatcher {
         return Optional.empty();
     }
 
-    private void sendTransactionOnChainAndUpdateDb(API1BlockchainTransactions blockchainTransactions) throws ApiException {
+    private void sendTransactionOnChainAndUpdateDb(API1BlockchainTransactions blockchainTransactions) throws ApiException, InterruptedException {
         byte[] txData = blockchainTransactions.serialisedTxData();
         L1Submission l1SubmissionData = transactionSubmissionService.submitTransactionWithPossibleConfirmation(txData, blockchainTransactions.receiverAddress());
         String organisationId = blockchainTransactions.organisationId();

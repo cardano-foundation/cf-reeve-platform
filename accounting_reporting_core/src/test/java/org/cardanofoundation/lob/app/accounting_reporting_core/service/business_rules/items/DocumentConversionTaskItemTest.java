@@ -10,8 +10,6 @@ import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 
-import lombok.val;
-
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -24,11 +22,11 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.CoreCurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCurrency;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationVat;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 
 @ExtendWith(MockitoExtension.class)
-public class DocumentConversionTaskItemTest {
+class DocumentConversionTaskItemTest {
 
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
@@ -39,34 +37,34 @@ public class DocumentConversionTaskItemTest {
     private DocumentConversionTaskItem documentConversionTaskItem;
 
     @BeforeEach
-    public void setup() {
+    void setup() {
         this.documentConversionTaskItem = new DocumentConversionTaskItem(organisationPublicApi, coreCurrencyRepository);
     }
 
     @Test
-    public void testVatDataNotFoundAddsViolation() {
-        val txId = "1";
-        val txInternalNumber = "txn123";
-        val organisationId = "org1";
-        val customerCode = "custCode";
+    void testVatDataNotFoundAddsViolation() {
+        String txId = "1";
+        String txInternalNumber = "txn123";
+        String organisationId = "org1";
+        String customerCode = "custCode";
 
-        val document = Document.builder()
-                .vat(Vat.builder()
+        Document document = Document.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode("USD")
                         .build())
                 .build();
 
-        val txItem = new TransactionItemEntity();
+        TransactionItemEntity txItem = new TransactionItemEntity();
         txItem.setId(TransactionItem.id(txId, "0"));
         txItem.setDocument(Optional.of(document));
 
-        val items = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> items = new LinkedHashSet<TransactionItemEntity>();
         items.add(txItem);
 
-        val transaction = new TransactionEntity();
+        TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
         transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
@@ -84,26 +82,26 @@ public class DocumentConversionTaskItemTest {
     }
 
     @Test
-    public void testCurrencyNotFoundAddsViolation() {
-        val txId = "1";
-        val txInternalNumber = "txn123";
-        val organisationId = "org1";
-        val customerCurrencyCode = "USD";
+    void testCurrencyNotFoundAddsViolation() {
+        String txId = "1";
+        String txInternalNumber = "txn123";
+        String organisationId = "org1";
+        String customerCurrencyCode = "USD";
 
-        val document = Document.builder()
-                .currency(Currency.builder()
+        Document document = Document.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode(customerCurrencyCode)
                         .build())
                 .build();
 
-        val txItem = new TransactionItemEntity();
+        TransactionItemEntity txItem = new TransactionItemEntity();
         txItem.setId(TransactionItem.id(txId, "0"));
         txItem.setDocument(Optional.of(document));
 
-        val items = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> items = new LinkedHashSet<TransactionItemEntity>();
         items.add(txItem);
 
-        val transaction = new TransactionEntity();
+        TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
         transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
@@ -120,30 +118,30 @@ public class DocumentConversionTaskItemTest {
     }
 
     @Test
-    public void testSuccessfulDocumentConversion() {
-        val txId = "1";
-        val txInternalNumber = "txn123";
-        val organisationId = "org1";
-        val customerCurrencyCode = "USD";
-        val customerVatCode = "VAT123";
-        val currencyId = "ISO_4217:USD";
+    void testSuccessfulDocumentConversion() {
+        String txId = "1";
+        String txInternalNumber = "txn123";
+        String organisationId = "org1";
+        String customerCurrencyCode = "USD";
+        String customerVatCode = "VAT123";
+        String currencyId = "ISO_4217:USD";
 
-        val document = Document.builder()
-                .vat(Vat.builder()
+        Document document = Document.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode(customerCurrencyCode)
                         .build())
                 .build();
 
-        val txItem = new TransactionItemEntity();
+        TransactionItemEntity txItem = new TransactionItemEntity();
         txItem.setDocument(Optional.of(document));
 
-        val items = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> items = new LinkedHashSet<TransactionItemEntity>();
         items.add(txItem);
 
-        val transaction = new TransactionEntity();
+        TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
         transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
@@ -152,10 +150,13 @@ public class DocumentConversionTaskItemTest {
         transaction.setItems(items);
 
         when(organisationPublicApi.findOrganisationByVatAndCode(organisationId, customerVatCode))
-                .thenReturn(Optional.of(new OrganisationVat(new OrganisationVat.Id(organisationId, customerVatCode), BigDecimal.valueOf(0.2))));
+                .thenReturn(Optional.of(Vat.builder()
+                                .id(new Vat.Id(organisationId, customerVatCode))
+                                .rate(BigDecimal.valueOf(0.2))
+                        .build()));
 
         when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(organisationId, customerCurrencyCode))
-                .thenReturn(Optional.of(new OrganisationCurrency(new OrganisationCurrency.Id(organisationId, customerCurrencyCode), currencyId)));
+                .thenReturn(Optional.of(new Currency(new Currency.Id(organisationId, customerCurrencyCode), currencyId)));
 
         when(coreCurrencyRepository.findByCurrencyId(currencyId))
                 .thenReturn(Optional.of(CoreCurrency.builder()
@@ -174,29 +175,29 @@ public class DocumentConversionTaskItemTest {
     }
 
     @Test
-    public void testDocumentConversionWithMultipleViolations() {
-        val txId = "1";
-        val txInternalNumber = "txn123";
-        val organisationId = "org1";
-        val customerCurrencyCode = "UNKNOWN_CURRENCY";
-        val customerVatCode = "UNKNOWN_VAT";
+    void testDocumentConversionWithMultipleViolations() {
+        String txId = "1";
+        String txInternalNumber = "txn123";
+        String organisationId = "org1";
+        String customerCurrencyCode = "UNKNOWN_CURRENCY";
+        String customerVatCode = "UNKNOWN_VAT";
 
-        val document = Document.builder()
-                .vat(Vat.builder()
+        Document document = Document.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode(customerCurrencyCode)
                         .build())
                 .build();
 
-        val txItem = new TransactionItemEntity();
+        TransactionItemEntity txItem = new TransactionItemEntity();
         txItem.setDocument(Optional.of(document));
 
-        val items = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> items = new LinkedHashSet<TransactionItemEntity>();
         items.add(txItem);
 
-        val transaction = new TransactionEntity();
+        TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
         transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()
@@ -218,29 +219,28 @@ public class DocumentConversionTaskItemTest {
     }
 
     @Test
-    public void testDocumentConversionWithNoCurrenciInDocument() {
-        val txId = "1";
-        val txInternalNumber = "txn123";
-        val organisationId = "org1";
-        val customerCurrencyCode = "UNKNOWN_CURRENCY";
-        val customerVatCode = "UNKNOWN_VAT";
+    void testDocumentConversionWithNoCurrencyInDocument() {
+        String txId = "1";
+        String txInternalNumber = "txn123";
+        String organisationId = "org1";
+        String customerVatCode = "UNKNOWN_VAT";
 
-        val document = Document.builder()
-                .vat(Vat.builder()
+        Document document = Document.builder()
+                .vat(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat.builder()
                         .customerCode(customerVatCode)
                         .build())
-                .currency(Currency.builder()
+                .currency(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency.builder()
                         .customerCode("")
                         .build())
                 .build();
 
-        val txItem = new TransactionItemEntity();
+        TransactionItemEntity txItem = new TransactionItemEntity();
         txItem.setDocument(Optional.of(document));
 
-        val items = new LinkedHashSet<TransactionItemEntity>();
+        LinkedHashSet<TransactionItemEntity> items = new LinkedHashSet<TransactionItemEntity>();
         items.add(txItem);
 
-        val transaction = new TransactionEntity();
+        TransactionEntity transaction = new TransactionEntity();
         transaction.setId(txId);
         transaction.setTransactionInternalNumber(txInternalNumber);
         transaction.setOrganisation(Organisation.builder()

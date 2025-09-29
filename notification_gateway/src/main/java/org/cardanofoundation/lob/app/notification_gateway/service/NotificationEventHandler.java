@@ -13,7 +13,7 @@
 //    @ApplicationModuleListener
 //    public void handleNotification(NotificationEvent notification) {
 //        if (notification.severity() == ERROR) {
-//            log.error(STR."\{notification}");
+//            log.error(notification");
 //        }
 //    }
 //

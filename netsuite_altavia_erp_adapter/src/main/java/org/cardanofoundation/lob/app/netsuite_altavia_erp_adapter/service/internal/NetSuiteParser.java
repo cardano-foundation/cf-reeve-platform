@@ -48,7 +48,7 @@ public class NetSuiteParser {
 
             return Either.left(Problem.builder()
                     .withTitle("JSON_PARSE_ERROR")
-                    .withDetail(STR."JSON rrror parsing NetSuite search error: \{e.getMessage()}")
+                    .withDetail("JSON rrror parsing NetSuite search error: %s".formatted(e.getMessage()))
                     .build());
         }
     }
@@ -103,9 +103,7 @@ public class NetSuiteParser {
         netSuiteIngestion.setCreatedAt(LocalDateTime.now(clock));
         netSuiteIngestion.setUpdatedAt(LocalDateTime.now(clock));
         this.addLinesToNetsuiteIngestion(bodyM, netSuiteIngestion, batchId, isNetSuiteInstanceDebugMode, user);
-        NetSuiteIngestionEntity storedNetsuiteIngestion = ingestionRepository.saveAndFlush(netSuiteIngestion);
-
-        return storedNetsuiteIngestion;
+        return ingestionRepository.saveAndFlush(netSuiteIngestion);
     }
 
 }

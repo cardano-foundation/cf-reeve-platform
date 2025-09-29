@@ -4,6 +4,7 @@ import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -12,8 +13,8 @@ import jakarta.annotation.PostConstruct;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
+import co.nstant.in.cbor.model.Map;
 import com.bloxbean.cardano.client.account.Account;
 import com.bloxbean.cardano.client.api.model.Amount;
 import com.bloxbean.cardano.client.backend.api.BackendService;
@@ -22,6 +23,7 @@ import com.bloxbean.cardano.client.exception.CborSerializationException;
 import com.bloxbean.cardano.client.function.helper.SignerProviders;
 import com.bloxbean.cardano.client.metadata.Metadata;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
+import com.bloxbean.cardano.client.metadata.MetadataMap;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataMap;
 import com.bloxbean.cardano.client.metadata.helper.MetadataToJsonNoSchemaConverter;
 import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
@@ -69,21 +71,21 @@ public class API3L1TransactionCreator {
     private Either<Problem, API3BlockchainTransaction> handleTransactionCreation(ReportEntity reportEntity,
                                                                                  long creationSlot) {
         try {
-            val metadataMap =
+            MetadataMap metadataMap =
                     api3MetadataSerialiser.serialiseToMetadataMap(reportEntity, creationSlot);
 
-            val data = metadataMap.getMap();
-            val bytes = CborSerializationUtil.serialize(data);
+            Map data = metadataMap.getMap();
+            byte[] bytes = CborSerializationUtil.serialize(data);
 
             // we use json only for validation with json schema and for debugging (storing to a tmp file)
-            val json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
+            String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
 
-            val metadata = MetadataBuilder.createMetadata();
-            val cborMetadataMap = new CBORMetadataMap(data);
+            Metadata metadata = MetadataBuilder.createMetadata();
+            CBORMetadataMap cborMetadataMap = new CBORMetadataMap(data);
 
             metadata.put(metadataLabel, cborMetadataMap);
 
-            val isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
+            boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
 
             if (!isValid) {
                 return Either.left(Problem.builder()
@@ -96,9 +98,9 @@ public class API3L1TransactionCreator {
 
             log.info("Metadata for tx validated, gonna serialise tx now...");
 
-            val serialisedTxBytes = serialiseTransaction(metadata);
+            byte[] serialisedTxBytes = serialiseTransaction(metadata);
 
-            val serializedTx = new SerializedCardanoL1Transaction(serialisedTxBytes, bytes, json);
+            SerializedCardanoL1Transaction serializedTx = new SerializedCardanoL1Transaction(serialisedTxBytes, bytes, json);
 
             potentiallyStoreTxs(creationSlot, serializedTx);
 
@@ -117,10 +119,13 @@ public class API3L1TransactionCreator {
     // for debug and inspection only
     private void potentiallyStoreTxs(long creationSlot, SerializedCardanoL1Transaction tx) throws IOException {
         if (debugStoreOutputTx) {
-            val timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
-            val name = STR."lob-txs-api3-metadata-\{runId}-\{timestamp}-\{creationSlot}";
-            val tmpJsonTxFile = Files.createTempFile(name, ".json");
-            val tmpCborFile = Files.createTempFile(name, ".cbor");
+            String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+            String name = "lob-txs-api3-metadata-%s-%s-%s".formatted(
+                    runId,
+                    timestamp,
+                    creationSlot);
+            Path tmpJsonTxFile = Files.createTempFile(name, ".json");
+            Path tmpCborFile = Files.createTempFile(name, ".cbor");
 
             log.info("DebugStoreTx enabled, storing JSON tx metadata to file: {}", tmpJsonTxFile);
             Files.writeString(tmpJsonTxFile, tx.metadataJson());
@@ -131,9 +136,9 @@ public class API3L1TransactionCreator {
     }
 
     protected byte[] serialiseTransaction(Metadata metadata) throws CborSerializationException {
-        val quickTxBuilder = new QuickTxBuilder(backendService);
+        QuickTxBuilder quickTxBuilder = new QuickTxBuilder(backendService);
 
-        val tx = new Tx()
+        Tx tx = new Tx()
                 .payToAddress(organiserAccount.baseAddress(), Amount.ada(2.0))
                 .attachMetadata(metadata)
                 .from(organiserAccount.baseAddress());

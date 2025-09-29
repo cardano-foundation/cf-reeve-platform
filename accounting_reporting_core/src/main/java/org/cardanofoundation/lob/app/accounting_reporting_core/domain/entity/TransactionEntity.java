@@ -74,12 +74,18 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Column(name = "processing_status")
     @Enumerated(STRING)
     @Setter
+    @DiffIgnore
     private TransactionProcessingStatus processingStatus;
 
-    @Column(name = "accounting_period", nullable = false)
+    @Column(name = "accounting_period")
     @Getter
     @Setter
     private YearMonth accountingPeriod;
+
+    @Column(name = "extractor_type", nullable = false)
+    @Getter
+    @Setter
+    private String extractorType;
 
     @Column(name = "type", nullable = false)
     @Enumerated(STRING)
@@ -89,7 +95,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @JdbcType(PostgreSQLEnumJdbcType.class)
     private TransactionType transactionType;
 
-    @Column(name = "entry_date", nullable = false)
+    @Column(name = "entry_date")
     @LOBVersionSourceRelevant
     @Getter
     @Setter
@@ -108,7 +114,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
             @AttributeOverride(name = "primaryBlockchainType", column = @Column(name = "primary_blockchain_type")),
             @AttributeOverride(name = "primaryBlockchainHash", column = @Column(name = "primary_blockchain_hash"))
     })
-    @Getter
     @Setter
     @Nullable
     private LedgerDispatchReceipt ledgerDispatchReceipt;
@@ -135,11 +140,13 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Column(name = "transaction_approved", nullable = false)
     @Getter
     @Setter
+    @DiffIgnore
     private Boolean transactionApproved = false;
 
     @Column(name = "ledger_dispatch_approved", nullable = false)
     @Getter
     @Setter
+    @DiffIgnore
     private Boolean ledgerDispatchApproved = false;
 
     @OneToMany(mappedBy = "transaction", orphanRemoval = true, fetch = EAGER, cascade = CascadeType.ALL)
@@ -278,7 +285,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     }
 
     public boolean hasAnyRejection(Source source) {
-        for (val txItem : items) {
+        for (TransactionItemEntity txItem : items) {
             if (txItem.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == source)) {
                 return true;
             }
@@ -376,7 +383,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        val that = (TransactionEntity) o;
+        TransactionEntity that = (TransactionEntity) o;
 
         return Objects.equal(id, that.id);
     }
@@ -393,6 +400,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @Override
     public String toString() {
-        return STR."TransactionEntity{id='\{id}\{'\''}, transactionInternalNumber='\{transactionInternalNumber}\{'\''}, batchId='\{batchId}'}";
+        return "TransactionEntity{id='%s, transactionInternalNumber='%s, batchId='%s'}".formatted(
+                id, transactionInternalNumber, batchId);
     }
 }

@@ -15,6 +15,8 @@ import org.zalando.problem.Problem;
 
 import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
 
+import java.util.Optional;
+
 @Slf4j
 @RequiredArgsConstructor
 public class YaciChainTipService implements BlockchainDataChainTipService {
@@ -44,9 +46,11 @@ public class YaciChainTipService implements BlockchainDataChainTipService {
 
         var chainSync = chainSyncService.getSyncStatus(true);
 
+        Optional<Integer> currentEpoch = eraService.getTipAndCurrentEpoch().isPresent() ? Optional.of(eraService.getTipAndCurrentEpoch().get()._2) : Optional.empty();
+
         return Either.right(ChainTip.builder()
                 .blockHash(latestBlock.getHash())
-                .epochNo(eraService.getCurrentEpoch())
+                .epochNo(currentEpoch)
                 .absoluteSlot(latestBlock.getSlot())
                 .network(network)
                 .isSynced(chainSync.isSynced())

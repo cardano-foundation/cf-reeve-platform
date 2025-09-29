@@ -26,8 +26,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Curre
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.FinancialPeriodSource;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
-import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreBigDecimal;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreString;
+import org.cardanofoundation.lob.app.support.calc.MoreBigDecimal;
 import org.cardanofoundation.lob.app.support.collections.Optionals;
 
 @RequiredArgsConstructor
@@ -146,7 +146,15 @@ public class TransactionConverter {
                             accountCreditCodeM.map(accountCreditCode -> {
                                         return Account.builder().name(accountCreditNameM.get().describeConstable()).code(accountCreditCode).build();
                                     }
-                            )).project(projectCodeM.map(pc -> Project.builder().customerCode(pc).build())).costCenter(costCenterM.map(cc -> CostCenter.builder().customerCode(cc).build())).document(documentM).fxRate(fxRate).amountLcy(amountLcy).amountFcy(amountFcy).operationType(operationType).build();
+                            ))
+                    .project(projectCodeM.map(pc -> Project.builder().customerCode(pc).build()))
+                    .costCenter(costCenterM.map(cc -> CostCenter.builder().customerCode(cc).build()))
+                    .document(documentM)
+                    .fxRate(fxRate)
+                    .amountLcy(amountLcy)
+                    .amountFcy(amountFcy)
+                    .operationType(operationType)
+                    .build();
 
             txItems.add(txItem);
         }

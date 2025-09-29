@@ -21,7 +21,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.*;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 
 @Service
 @Slf4j
@@ -65,7 +65,7 @@ public class TransactionConverter {
                     TransactionItemEntity aggregatedItem = itemSet.iterator().next();
                     aggregatedItem.setAmountFcy(itemSet.stream()
                             .map(TransactionItemEntity::getAmountFcy)
-                            .reduce(ZERO,BigDecimal::add));
+                            .reduce(ZERO, BigDecimal::add));
                     return aggregatedItem;
                 })
                 .collect(Collectors.toSet());
@@ -130,27 +130,28 @@ public class TransactionConverter {
         txItemEntity.setDocument(convertDocument(txItem.getDocument().orElseThrow()));
 
         txItemEntity.setCostCenter(txItem.getCostCenter().map(cc -> {
-            CostCenter.CostCenterBuilder ccBuilder = CostCenter.builder();
-
+            if(Optional.ofNullable(cc.getCustomerCode()).isEmpty()) {
+                return null;
+            }
+            org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.CostCenterBuilder ccBuilder = org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.builder();
+            cc.getName().ifPresent(ccBuilder::name);
+            ccBuilder.customerCode(cc.getCustomerCode());
             // If the cost center is not associated with the parent organisation, we do not set it.
             // Note: Only one parent level.
-            Optional<OrganisationCostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
+            Optional<CostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
             if (costCenterS.isPresent()) {
-                OrganisationCostCenter costCenter = costCenterS.get();
+                CostCenter costCenter = costCenterS.get();
                 if (costCenter.getParent().isPresent()) {
                     ccBuilder.customerCode(costCenter.getParent().get().getId().getCustomerCode());
                     ccBuilder.name(costCenter.getParent().get().getName());
                     return ccBuilder.build();
                 }
             }
-            cc.getExternalCustomerCode().ifPresent(ccBuilder::customerCode);
-            cc.getName().ifPresent(ccBuilder::name);
-
             return ccBuilder.build();
         }).orElse(null));
 
         txItemEntity.setProject(txItem.getProject().map(pc -> Project.builder()
-                .customerCode(pc.getExternalCustomerCode().orElseThrow())
+                .customerCode(pc.getCustomerCode())
                 .name(pc.getName().orElseThrow())
                 .build()).orElse(null)
         );

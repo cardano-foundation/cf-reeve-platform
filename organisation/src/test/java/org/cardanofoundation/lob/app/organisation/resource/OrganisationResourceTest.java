@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -14,7 +13,6 @@ import org.springframework.http.ResponseEntity;
 
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.junit.jupiter.api.Test;
@@ -22,17 +20,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCostCenter;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationCurrency;
-import org.cardanofoundation.lob.app.organisation.domain.entity.OrganisationProject;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCostCenterView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationCurrencyView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationEventView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationProjectView;
-import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationValidationView;
+import org.cardanofoundation.lob.app.organisation.domain.view.EventView;
 import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
+import org.cardanofoundation.lob.app.organisation.domain.view.ValidationView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -85,60 +77,17 @@ class OrganisationResourceTest {
     }
 
     @Test
-    void organisationCostCenter() {
-        OrganisationCostCenter costCenter = mock(OrganisationCostCenter.class);
-        OrganisationCostCenterView view = mock(OrganisationCostCenterView.class);
-        when(organisationService.getAllCostCenter("123")).thenReturn(Set.of(costCenter));
-
-        try(MockedStatic<OrganisationCostCenterView> mock = mockStatic(OrganisationCostCenterView.class)) {
-            mock.when(() -> OrganisationCostCenterView.fromEntity(costCenter)).thenReturn(view);
-            ResponseEntity<Set<OrganisationCostCenterView>> responseEntity = organisationResource.organisationCostCenter("123");
-
-            assertEquals(200, responseEntity.getStatusCode().value());
-            assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
-            assertEquals(view, responseEntity.getBody().iterator().next());
-        }
-    }
-
-    @Test
-    void organisationProject() {
-        OrganisationProject project = mock(OrganisationProject.class);
-        OrganisationProjectView view = mock(OrganisationProjectView.class);
-        when(organisationService.getAllProjects("123")).thenReturn(Set.of(project));
-
-        try(MockedStatic<OrganisationProjectView> mock = mockStatic(OrganisationProjectView.class)) {
-            mock.when(() -> OrganisationProjectView.fromEntity(project)).thenReturn(view);
-            ResponseEntity<Set<OrganisationProjectView>> responseEntity = organisationResource.organisationProject("123");
-
-            assertEquals(200, responseEntity.getStatusCode().value());
-            assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
-            assertEquals(view, responseEntity.getBody().iterator().next());
-        }
-    }
-
-    @Test
     void organisationEvent() {
         when(organisationService.getOrganisationEventCode("123")).thenReturn(Set.of(AccountEvent.builder()
                         .id(new AccountEvent.Id("123", "456", "789"))
                         .name("Test Event")
                         .customerCode("Test Code")
                 .build()));
-        ResponseEntity<List<OrganisationEventView>> responseEntity = organisationResource.organisationEvent("123");
+        ResponseEntity<List<EventView>> responseEntity = organisationResource.organisationEvent("123");
         assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
         assertEquals("Test Event", responseEntity.getBody().getFirst().getName());
 
-    }
-
-    @Test
-    void organisationCurrencies() {
-        when(organisationService.getOrganisationCurrencies("123")).thenReturn(
-                Set.of(new OrganisationCurrency(new OrganisationCurrency.Id("123", "456"), "Test Currency")));
-        ResponseEntity<Set<OrganisationCurrencyView>> responseEntity = organisationResource.organisationCurrencies("123");
-
-        assertEquals(200, responseEntity.getStatusCode().value());
-        assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
-        assertEquals("456", responseEntity.getBody().iterator().next().getCustomerCode());
     }
 
     @Test
@@ -196,7 +145,7 @@ class OrganisationResourceTest {
         OrganisationUpdate request = mock(OrganisationUpdate.class);
         Organisation org = mock(Organisation.class);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
-        when(organisationService.upsertOrganisation(org, request)).thenReturn(Optional.empty());
+        when(organisationService.updateOrganisation(org, request)).thenReturn(Optional.empty());
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
         assertEquals(404, responseEntity.getStatusCode().value());
@@ -208,7 +157,7 @@ class OrganisationResourceTest {
         Organisation org = mock(Organisation.class);
         OrganisationView view = mock(OrganisationView.class);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
-        when(organisationService.upsertOrganisation(org, request)).thenReturn(Optional.of(org));
+        when(organisationService.updateOrganisation(org, request)).thenReturn(Optional.of(org));
         when(organisationService.getOrganisationView(org)).thenReturn(view);
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
@@ -236,7 +185,7 @@ class OrganisationResourceTest {
     @Test
     void validateOrganisation_success() {
         Organisation org = mock(Organisation.class);
-        OrganisationValidationView validationView = mock(OrganisationValidationView.class);
+        ValidationView validationView = mock(ValidationView.class);
         when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.validateOrganisation(org)).thenReturn(validationView);

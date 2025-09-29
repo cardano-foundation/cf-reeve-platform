@@ -58,9 +58,9 @@ public class TransactionConverter {
                 .build();
     }
 
-    public Set<TransactionEntity> convertToDbDetached(Set<Transaction> transactions) {
+    public Set<TransactionEntity> convertToDbDetached(Set<Transaction> transactions, Optional<TransactionBatchEntity> batch) {
         return transactions.stream()
-                .map(this::convertToDbDetached)
+                .map(tx -> convertToDbDetached(tx, batch))
                 .collect(Collectors.toSet());
     }
 
@@ -70,7 +70,7 @@ public class TransactionConverter {
                 .collect(Collectors.toSet());
     }
 
-    private TransactionEntity convertToDbDetached(Transaction transaction) {
+    private TransactionEntity convertToDbDetached(Transaction transaction, Optional<TransactionBatchEntity> batch) {
         Set<TransactionViolation> violations = transaction.getViolations()
                 .stream()
                 .map(violation -> {
@@ -139,7 +139,7 @@ public class TransactionConverter {
         txEntity.setAccountingPeriod(transaction.getAccountingPeriod());
         txEntity.setTransactionApproved(transaction.isTransactionApproved());
         txEntity.setLedgerDispatchApproved(transaction.isLedgerDispatchApproved());
-
+        txEntity.setExtractorType(batch.map(TransactionBatchEntity::getExtractorType).orElse(null));
         txItems.forEach(i -> i.setTransaction(txEntity));
 
         txEntity.setViolations(violations);
@@ -151,7 +151,6 @@ public class TransactionConverter {
     private Optional<Project> convertProject(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project> projectM) {
         return projectM.map(p -> Project.builder()
                         .customerCode(p.getCustomerCode())
-                        .externalCustomerCode(p.getExternalCustomerCode().orElse(null))
                         .name(p.getName().orElse(null))
                         .build());
     }
@@ -159,7 +158,6 @@ public class TransactionConverter {
     private Optional<CostCenter> convertCostCenter(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CostCenter> costCenter) {
         return costCenter.map(cc -> CostCenter.builder()
                         .customerCode(cc.getCustomerCode())
-                        .externalCustomerCode(cc.getExternalCustomerCode().orElse(null))
                         .name(cc.getName().orElse(null))
                         .build());
     }
@@ -226,13 +224,11 @@ public class TransactionConverter {
 
                         .project(txItemEntity.getProject().map(project -> org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project.builder()
                                 .customerCode(project.getCustomerCode())
-                                .externalCustomerCode(project.getExternalCustomerCode())
                                 .name(project.getName())
                                 .build()))
 
                         .costCenter(txItemEntity.getCostCenter().map(costCenter -> org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CostCenter.builder()
                                 .customerCode(costCenter.getCustomerCode())
-                                .externalCustomerCode(costCenter.getExternalCustomerCode())
                                 .name(costCenter.getName())
                                 .build()))
 

@@ -59,7 +59,6 @@ public class CostCenterConversionTaskItem implements PipelineTaskItem {
 
             txItem.setCostCenter(Optional.of(costCenter.toBuilder()
                     .customerCode(customerCode)
-                    .externalCustomerCode(costCenterMapping.getExternalCustomerCode())
                     .name(costCenterMapping.getName())
                     .build())
             );

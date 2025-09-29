@@ -106,7 +106,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 //where += "AND (rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' AND tr.ledgerDispatchApproved IS TRUE ) ";
             }
 
-            where = STR." AND ( rv.rejectionCode IN (\{condition.stream().map(code -> "'" + code.name() + "'").collect(Collectors.joining(","))}) " + where + " )";
+            where = " AND ( rv.rejectionCode IN (%s) %s )".formatted(condition.stream().map(code -> "'" + code.name() + "'").collect(Collectors.joining(",")), where);
         }
 
         if (getDateFrom.isPresent()) {
@@ -201,7 +201,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "JOIN r.violations rv " +
                 "LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id " +
                 "WHERE (r.id = tr.lastReconcilation.id or tr.lastReconcilation IS NULL) AND tr.ledgerDispatchApproved IS TRUE " +
-                STR."AND rv.rejectionCode = '" + ReconcilationRejectionCode.TX_NOT_IN_ERP + "' " +
+                "AND rv.rejectionCode = '" + ReconcilationRejectionCode.TX_NOT_IN_ERP + "' " +
                 "GROUP BY rv.transactionId " +
                 ") ";
 
@@ -271,7 +271,9 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 "GROUP BY tx.id " +
                 ") ";
 
-        String finalQuery = STR."select (\{missingInERP}) missingInERP,(\{inProcessing}) inProcessing ,(\{newInERP}) newInERP ,(\{newVersionNotPublished}) newVersionNotPublished ,(\{newVersion}) newVersion ,(\{txOk}) txOk ,(\{txNok}) txNok ,(\{txNever}) txNever ";
+        String finalQuery = "select (%s) missingInERP,(%s) inProcessing ,(%s) newInERP ,(%s) newVersionNotPublished ,(%s) newVersion ,(%s) txOk ,(%s) txNok ,(%s) txNever "
+                .formatted(
+                        missingInERP, inProcessing, newInERP, newVersionNotPublished, newVersion, txOk, txNok, txNever);
 
         Query reconciliationQuery = em.createQuery(finalQuery);
 
@@ -309,7 +311,7 @@ public class CustomTransactionRepositoryImpl implements CustomTransactionReposit
                 condition.add(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
                 //where += "AND (rv.rejectionCode = '" + ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL + "' AND tr.ledgerDispatchApproved IS TRUE ) ";
             }
-            where += STR." AND rv.rejectionCode IN (\{condition.stream().map(code -> "'" + code.name() + "'").collect(Collectors.joining(","))}) ";
+            where += " AND rv.rejectionCode IN (%s) ".formatted(condition.stream().map(code -> "'" + code.name() + "'").collect(Collectors.joining(",")));
         }
 
         if (getDateFrom.isPresent()) {

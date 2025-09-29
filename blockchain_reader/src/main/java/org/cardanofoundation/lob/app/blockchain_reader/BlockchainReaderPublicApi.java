@@ -4,6 +4,7 @@ import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -11,7 +12,6 @@ import jakarta.annotation.PostConstruct;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestClient;
@@ -20,6 +20,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
@@ -31,6 +32,10 @@ import org.cardanofoundation.lob.app.blockchain_reader.domain.LOBOnChainTxStatus
 @Slf4j
 public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
 
+    public static final String NETWORK_MISMATCH_S_S = "Network mismatch: %s != %s";
+    public static final String NETWORK_MISMATCH = "NETWORK_MISMATCH";
+    public static final String ERROR_FROM_THE_CLIENT_S = "Error from the client: %s";
+    public static final String INTERNAL_SERVER_ERROR_REASON_S = "Internal server error, reason: %s";
     private final RestClient restClient;
     private final CardanoNetwork network;
 
@@ -45,16 +50,16 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     @Override
     public Either<Problem, ChainTip> getChainTip() {
         try {
-            val chainTip = restClient.get()
-                    .uri(STR."\{lobFollowerBaseUrl}/tip")
+            ChainTip chainTip = restClient.get()
+                    .uri("%s/v1/tip".formatted(lobFollowerBaseUrl))
                     .retrieve()
                     .body(ChainTip.class);
 
             if (chainTip.getNetwork() != network) {
-                val problem = Problem.builder()
-                        .withTitle("NETWORK_MISMATCH")
+                ThrowableProblem problem = Problem.builder()
+                        .withTitle(NETWORK_MISMATCH)
                         .withStatus(BAD_REQUEST)
-                        .withDetail(STR."Network mismatch: \{chainTip.getNetwork()} != \{network}")
+                        .withDetail(NETWORK_MISMATCH_S_S.formatted(chainTip.getNetwork(), network))
                         .build();
 
                 return Either.left(problem);
@@ -62,18 +67,18 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
 
             return Either.right(chainTip);
         } catch (RestClientResponseException ex) {
-            val problem = Problem.builder()
+            ThrowableProblem problem = Problem.builder()
                     .withTitle("CHAIN_TIP_ERROR")
                     .withStatus(BAD_REQUEST)
-                    .withDetail(STR."Error from the client: \{ex.getResponseBodyAsString()}")
+                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
                     .build();
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
             log.error("Error while fetching chain tip", ex);
-            val problem = Problem.builder()
+            ThrowableProblem problem = Problem.builder()
                     .withTitle("CHAIN_TIP_ERROR")
                     .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail(STR."Internal server error, reason: \{ex.getMessage()}")
+                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
                     .build();
 
             return Either.left(problem);
@@ -83,16 +88,16 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     @Override
     public Either<Problem, Optional<OnChainTxDetails>> getTxDetails(String transactionHash) {
         try {
-            val txDetails = restClient.get()
-                    .uri(STR."\{lobFollowerBaseUrl}/tx-details/\{transactionHash}")
+            OnChainTxDetails txDetails = restClient.get()
+                    .uri("%s/v1/tx-details/%s".formatted(lobFollowerBaseUrl, transactionHash))
                     .retrieve()
                     .body(OnChainTxDetails.class);
 
-            if (txDetails.getNetwork() != network) {
-                val problem = Problem.builder()
-                        .withTitle("NETWORK_MISMATCH")
+            if (Objects.requireNonNull(txDetails).getNetwork() != network) {
+                ThrowableProblem problem = Problem.builder()
+                        .withTitle(NETWORK_MISMATCH)
                         .withStatus(BAD_REQUEST)
-                        .withDetail(STR."Network mismatch: \{txDetails.getNetwork()} != \{network}")
+                        .withDetail(NETWORK_MISMATCH_S_S.formatted(txDetails.getNetwork(), network))
                         .build();
 
                 return Either.left(problem);
@@ -101,27 +106,27 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
             return Either.right(Optional.of(txDetails));
         } catch (RestClientResponseException ex) {
             if (ex.getStatusCode().value() == 404) {
-                val responseText = ex.getResponseBodyAsString();
+                String responseText = ex.getResponseBodyAsString();
 
                 if (responseText.contains("TX_NOT_FOUND")) { // let's really check that lob-follower returned TX_NOT_FOUND in the response to avoid misconfiguration of a firewall / load balancer
                     return Either.right(Optional.empty());
                 }
             }
 
-            val problem = Problem.builder()
+            ThrowableProblem problem = Problem.builder()
                     .withTitle("TX_DETAILS_ERROR")
                     .withStatus(BAD_REQUEST)
-                    .withDetail(STR."Error from the client: \{ex.getResponseBodyAsString()}")
+                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
                     .build();
 
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
             log.error("Error while fetching tx details", ex);
 
-            val problem = Problem.builder()
+            ThrowableProblem problem = Problem.builder()
                     .withTitle("TX_DETAILS_ERROR")
                     .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail(STR."Internal server error, reason: \{ex.getMessage()}")
+                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
                     .build();
 
             return Either.left(problem);
@@ -131,17 +136,17 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     @Override
     public Either<Problem, Map<String, Boolean>> isOnChain(Set<String> transactionIds) {
         try {
-            val lobOnChainDetailsResponse = restClient.post()
-                    .uri(STR."\{lobFollowerBaseUrl}/on-chain-statuses")
+            LOBOnChainTxStatusResponse lobOnChainDetailsResponse = restClient.post()
+                    .uri("%s/v1/on-chain-statuses".formatted(lobFollowerBaseUrl))
                     .body(new LOBOnChainTxStatusRequest(transactionIds))
                     .retrieve()
                     .body(LOBOnChainTxStatusResponse.class);
 
             if (lobOnChainDetailsResponse.getNetwork() != network) {
-                val problem = Problem.builder()
-                        .withTitle("NETWORK_MISMATCH")
+                ThrowableProblem problem = Problem.builder()
+                        .withTitle(NETWORK_MISMATCH)
                         .withStatus(BAD_REQUEST)
-                        .withDetail(STR."Network mismatch: \{lobOnChainDetailsResponse.getNetwork()} != \{network}")
+                        .withDetail(NETWORK_MISMATCH_S_S.formatted(lobOnChainDetailsResponse.getNetwork(), network))
                         .build();
 
                 return Either.left(problem);
@@ -149,20 +154,20 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
 
             return Either.right(lobOnChainDetailsResponse.getTransactionStatuses());
         } catch (RestClientResponseException ex) {
-            val problem = Problem.builder()
+            ThrowableProblem problem = Problem.builder()
                     .withTitle("LOB_TX_STATUSES_ERROR")
                     .withStatus(BAD_REQUEST)
-                    .withDetail(STR."Error from the client: \{ex.getResponseBodyAsString()}")
+                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
                     .build();
 
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
             log.error("Error while fetching on-chain statuses", ex);
 
-            val problem = Problem.builder()
+            ThrowableProblem problem = Problem.builder()
                     .withTitle("LOB_TX_STATUSES_ERROR")
                     .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail(STR."Internal server error, reason: \{ex.getMessage()}")
+                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
                     .build();
 
             return Either.left(problem);

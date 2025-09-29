@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 
 import org.flywaydb.core.Flyway;
@@ -46,7 +47,8 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 @SpringBootTest(classes = {JaversConfig.class, TimeConfig.class, JpaConfig.class})
 @TestPropertySource(properties = "spring.main.allow-bean-definition-overriding=true")
 @EnableAutoConfiguration
-@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.blockchain_publisher","org.cardanofoundation.lob.app.organisation","org.cardanofoundation.lob.app.blockchain_reader"})
+@ContextConfiguration(classes = TestContainerConfig.class)
+@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.blockchain_publisher","org.cardanofoundation.lob.app.organisation","org.cardanofoundation.lob.app.blockchain_reader","org.cardanofoundation.lob.app.support.security"})
 class BlockchainPublisherServiceDuplicateEventsTest {
 
     @Autowired

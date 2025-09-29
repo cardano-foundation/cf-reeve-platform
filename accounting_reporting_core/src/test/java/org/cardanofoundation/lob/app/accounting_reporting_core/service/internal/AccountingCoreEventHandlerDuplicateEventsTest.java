@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 
 import org.flywaydb.core.Flyway;
@@ -46,6 +47,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledg
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.functionalTests.TestContainerConfig;
 import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
@@ -56,6 +58,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 @SpringBootTest(classes = {JaversConfig.class, TimeConfig.class, JpaConfig.class})
 @TestPropertySource(properties = "spring.main.allow-bean-definition-overriding=true")
 @EnableAutoConfiguration
+@ContextConfiguration(classes = TestContainerConfig.class)
 @ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core","org.cardanofoundation.lob.app.organisation","org.cardanofoundation.lob.app.blockchain_reader","org.cardanofoundation.lob.app.support.security", "org.cardanofoundation.lob.app.accounting_reporting_core.job"})
 class AccountingCoreEventHandlerDuplicateEventsTest {
 
@@ -89,6 +92,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
                         .accountingPeriodFrom(LocalDate.now().minusYears(1))
                         .accountingPeriodTo(LocalDate.now().plusYears(1))
                 .build());
+        transactionBatchEntity.setExtractorType("NETSUITE");
         transactionBatchRepository.save(transactionBatchEntity);
 
         TransactionEntity transactionEntity = new TransactionEntity();
@@ -100,6 +104,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         transactionEntity.setEntryDate(LocalDate.now());
         transactionEntity.setTransactionType(TransactionType.BillCredit);
         transactionEntity.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        transactionEntity.setExtractorType("NETSUITE");
         accountingCoreTransactionRepository.saveAndFlush(transactionEntity);
 
         TxsLedgerUpdatedEvent build = TxsLedgerUpdatedEvent.builder()
@@ -162,6 +167,7 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
                 .accountingPeriodFrom(LocalDate.now().minusYears(1))
                 .accountingPeriodTo(LocalDate.now().plusYears(1))
                 .build());
+        transactionBatchEntity.setExtractorType("NETSUITE");
         transactionBatchRepository.saveAndFlush(transactionBatchEntity);
         TransactionBatchFailedEvent event = TransactionBatchFailedEvent.builder()
                 .batchId("batchId")

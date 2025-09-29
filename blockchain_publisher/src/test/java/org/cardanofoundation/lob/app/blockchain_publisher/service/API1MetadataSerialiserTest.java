@@ -10,8 +10,6 @@ import java.math.BigInteger;
 import java.time.*;
 import java.util.Set;
 
-import lombok.val;
-
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataList;
 
@@ -25,18 +23,18 @@ class API1MetadataSerialiserTest {
 
     private Clock fixedClock;
 
-    private API1MetadataSerialiser API1MetadataSerialiser;
+    private API1MetadataSerialiser api1MetadataSerialiser;
 
     @BeforeEach
     void setUp() {
         fixedClock = Clock.fixed(Instant.parse("2023-06-01T10:15:30.00Z"), ZoneId.of("UTC"));
-        API1MetadataSerialiser = new API1MetadataSerialiser(fixedClock);
+        api1MetadataSerialiser = new API1MetadataSerialiser(fixedClock);
     }
 
     @Test
     void testSerialiseToMetadataMap() {
         // Given
-        val accountingPeriod = YearMonth.of(2023, 2);
+        YearMonth accountingPeriod = YearMonth.of(2023, 2);
 
         String organisationId = "org123";
         Organisation organisation = new Organisation();
@@ -116,7 +114,7 @@ class API1MetadataSerialiserTest {
         long creationSlot = 12345;
 
         // When
-        MetadataMap result = API1MetadataSerialiser.serialiseToMetadataMap(organisationId, transactions, creationSlot);
+        MetadataMap result = api1MetadataSerialiser.serialiseToMetadataMap(organisationId, transactions, creationSlot);
 
         // Then
         assertThat(result).isNotNull();
@@ -139,7 +137,7 @@ class API1MetadataSerialiserTest {
         assertThat(result.get("data")).isInstanceOf(CBORMetadataList.class);
         CBORMetadataList txsList = (CBORMetadataList) result.get("data");
 
-        assertThat(txsList.size() == 1).isEqualTo(true);
+        assertThat(txsList.size()).isSameAs(1);
         MetadataMap txMap = (MetadataMap) txsList.getValueAt(0);
 
         assertThat(txMap.get("id")).isEqualTo(transaction.getId());
@@ -150,9 +148,9 @@ class API1MetadataSerialiserTest {
         assertThat(txMap.get("accounting_period")).isEqualTo(accountingPeriod.toString());
 
         assertThat(txMap.get("items")).isInstanceOf(CBORMetadataList.class);
-        val itemsList = (CBORMetadataList) txMap.get("items");
+        CBORMetadataList itemsList = (CBORMetadataList) txMap.get("items");
 
-        assertThat(itemsList.size() == 3).isEqualTo(true);
+        assertThat(itemsList.size()).isSameAs(3);
 
         for (int i = 0; i < itemsList.size(); i++) {
             MetadataMap itemMap = (MetadataMap) itemsList.getValueAt(i);
@@ -166,9 +164,9 @@ class API1MetadataSerialiserTest {
             assertThat(itemMap.get("document")).isInstanceOf(MetadataMap.class);
         }
 
-        val itemMap1 = assertContainsItem("item1", itemsList);
-        val itemMap2 = assertContainsItem("item2", itemsList);
-        val itemMap3 = assertContainsItem("item3", itemsList);
+        MetadataMap itemMap1 = assertContainsItem("item1", itemsList);
+        MetadataMap itemMap2 = assertContainsItem("item2", itemsList);
+        MetadataMap itemMap3 = assertContainsItem("item3", itemsList);
 
         assertThat(itemMap1.get("id")).isEqualTo("item1");
         assertThat(itemMap1.get("amount")).isEqualTo(BigDecimals.normaliseEngineeringString(item1.getAmountFcy()));
@@ -177,24 +175,24 @@ class API1MetadataSerialiserTest {
         assertThat(itemMap1.get("project")).isInstanceOf(MetadataMap.class); // only for item 1
         assertThat(itemMap1.get("cost_center")).isInstanceOf(MetadataMap.class); // only for item 1
 
-        val documentMap = (MetadataMap) itemMap1.get("document");
+        MetadataMap documentMap = (MetadataMap) itemMap1.get("document");
         assertThat(documentMap.get("number")).isEqualTo("doc1");
         assertThat(documentMap.get("currency")).isInstanceOf(MetadataMap.class);
         assertThat(documentMap.get("counterparty")).isInstanceOf(MetadataMap.class);
         assertThat(documentMap.get("vat")).isInstanceOf(MetadataMap.class);
-        val counterParty = (MetadataMap) documentMap.get("counterparty");
+        MetadataMap counterParty = (MetadataMap) documentMap.get("counterparty");
         assertThat(counterParty.get("cust_code")).isEqualTo("CP 000001");
         assertThat(counterParty.get("type")).isEqualTo("VENDOR");
 
-        val vat = (MetadataMap) documentMap.get("vat");
+        MetadataMap vat = (MetadataMap) documentMap.get("vat");
         assertThat(vat.get("cust_code")).isEqualTo("CH-VH-3.8");
         assertThat(vat.get("rate")).isEqualTo("0.038");
 
-        val projectMap = (MetadataMap) itemMap1.get("project");
+        MetadataMap projectMap = (MetadataMap) itemMap1.get("project");
         assertThat(projectMap.get("cust_code")).isEqualTo("AN 000001 2023");
         assertThat(projectMap.get("name")).isEqualTo("Summit");
 
-        val costCenterMap = (MetadataMap) itemMap1.get("cost_center");
+        MetadataMap costCenterMap = (MetadataMap) itemMap1.get("cost_center");
         assertThat(costCenterMap.get("cust_code")).isEqualTo("CC 000001");
         assertThat(costCenterMap.get("name")).isEqualTo("Cost Center");
 
@@ -218,7 +216,7 @@ class API1MetadataSerialiserTest {
             }
         }
 
-        throw new AssertionError(STR."Item with id \{id} not found");
+        throw new AssertionError("Item with id %s not found".formatted(id));
     }
 
 }
