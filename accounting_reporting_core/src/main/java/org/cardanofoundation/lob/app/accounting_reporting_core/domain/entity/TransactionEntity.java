@@ -152,7 +152,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @OneToMany(mappedBy = "transaction", orphanRemoval = true, fetch = EAGER, cascade = CascadeType.ALL)
     private Set<TransactionItemEntity> items = new LinkedHashSet<>();
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "reconcilation_id")
     @Nullable
     private ReconcilationEntity lastReconcilation;

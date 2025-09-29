@@ -13,7 +13,6 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -38,9 +37,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     public static final String INTERNAL_SERVER_ERROR_REASON_S = "Internal server error, reason: %s";
     private final RestClient restClient;
     private final CardanoNetwork network;
-
-    @Value("${lob.blockchain_reader.lob_follower_base_url:http://localhost:9090/api}")
-    private String lobFollowerBaseUrl;
+    private final String lobFollowerBaseUrl;
 
     @PostConstruct
     public void init() {
@@ -50,6 +47,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     @Override
     public Either<Problem, ChainTip> getChainTip() {
         try {
+            log.info("Get chain tip from {}", "%s/tip".formatted(lobFollowerBaseUrl));
             ChainTip chainTip = restClient.get()
                     .uri("%s/v1/tip".formatted(lobFollowerBaseUrl))
                     .retrieve()

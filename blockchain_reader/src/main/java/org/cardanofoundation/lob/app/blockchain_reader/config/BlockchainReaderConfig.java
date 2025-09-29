@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.blockchain_reader.config;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,12 +17,15 @@ import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApi
 @Slf4j
 public class BlockchainReaderConfig {
 
+    @Value("${lob.blockchain_reader.lob_follower_base_url:http://localhost:9090/api}")
+    private String lobFollowerUrl;
+
     @Bean
     @ConditionalOnProperty(prefix = "lob.blockchain_reader", value = "enabled", havingValue = "true", matchIfMissing = true)
     public BlockchainReaderPublicApiIF blockchainReaderPublicApiReal(@Qualifier("blockchainReaderRestClient") RestClient restClient, CardanoNetwork network) {
         log.info("Creating BlockchainReaderPublicApi with real YACI service, blockchain_reader enabled.");
 
-        return new BlockchainReaderPublicApi(restClient, network);
+        return new BlockchainReaderPublicApi(restClient, network, lobFollowerUrl);
     }
 
     @Bean
