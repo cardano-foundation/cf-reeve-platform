@@ -144,7 +144,7 @@ public class CreateTestVLei {
     );
     
     // Client instances
-    private static ClientAidPair issuer, holder, legalEntity, reeve;
+    private static ClientAidPair gleif, qvi, legalEntity, reeve;
 
     // ============================================================================
     // MAIN EXECUTION FLOW
@@ -167,7 +167,7 @@ public class CreateTestVLei {
         try {
             // Step 1: Initialize all clients and identifiers
             initializeClients();
-            
+
             // Step 2: Establish communication channels
             establishCommunicationChannels();
             
@@ -178,11 +178,14 @@ public class CreateTestVLei {
             displayCredentialChain(credentialChain);
             
             System.out.println("=== vLEI Credential Chain Setup Complete ===");
-        } catch (Exception e) {
+
+                    } catch (Exception e) {
             System.err.println("ERROR: Credential chain setup failed: " + e.getMessage());
             e.printStackTrace();
             throw e;
         }
+
+        
     }
     
     // ============================================================================
@@ -217,7 +220,7 @@ public class CreateTestVLei {
         chain.add(qviCredential);
         
         // Step 2: Legal Entity credential (Holder → LegalEntity, chained to QVI)
-        CredentialInfo leCredential = createChainedCredential(qviCredential, holder, legalEntity, 
+        CredentialInfo leCredential = createChainedCredential(qviCredential, qvi, legalEntity, 
                 LE_SCHEMA_SAID, CredentialType.LEGAL_ENTITY, CFLEI);
         chain.add(leCredential);
         
@@ -236,7 +239,7 @@ public class CreateTestVLei {
     private static CredentialInfo createRootCredential() throws Exception {
         System.out.println("Creating root QVI credential...");
         String credentialId = createAndIssueQviCredential();
-        return new CredentialInfo(credentialId, QVI_SCHEMA_SAID, issuer, holder, CredentialType.QVI);
+        return new CredentialInfo(credentialId, QVI_SCHEMA_SAID, gleif, qvi, CredentialType.QVI);
     }
     
     /**
@@ -315,8 +318,8 @@ public class CreateTestVLei {
      */
     private static void initializeClients() throws Exception {
         System.out.println("\n--- Initializing Clients and AIDs ---");
-        issuer = initClientAndAid("issuer", "issuerRegistry", "", true);
-        holder = initClientAndAid("holder", "holderRegistry", "", true);
+        gleif = initClientAndAid("gleif", "gleifRegistry", "", true);
+        qvi = initClientAndAid("qvi", "qviRegistry", "", true);
         legalEntity = initClientAndAid("legalEntity", "legalEntityRegistry", "", true);
         reeve = initClientAndAid("reeve", "reeveRegistry", reeveIdentifierBran, false);
         System.out.println("All clients initialized successfully");
@@ -334,7 +337,7 @@ public class CreateTestVLei {
         
         // Resolve schema OOBIs for all clients
         System.out.println("Resolving schema OOBIs...");
-        List<SignifyClient> allClients = List.of(issuer.client(), holder.client(), 
+        List<SignifyClient> allClients = List.of(gleif.client(), qvi.client(), 
                                                 legalEntity.client(), reeve.client());
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL);
         resolveOobis(allClients, schemaUrls);
@@ -359,7 +362,7 @@ public class CreateTestVLei {
         System.out.println("QVI Credential created with ID: " + qviCredentialId);
         
         // Issue credential from issuer to holder
-        performCredentialIssuance(qviCredentialId, issuer, holder, CredentialType.QVI);
+        performCredentialIssuance(qviCredentialId, gleif, qvi, CredentialType.QVI);
         
         return qviCredentialId;
     }
@@ -383,7 +386,7 @@ public class CreateTestVLei {
         System.out.println("Creating chained Legal Entity credential...");
         
         // Get parent QVI credential
-        ParentCredentialInfo parentInfo = getParentCredentialInfo(qviCredentialId, holder.client());
+        ParentCredentialInfo parentInfo = getParentCredentialInfo(qviCredentialId, qvi.client());
         System.out.println("Parent QVI credential SAID: " + parentInfo.said);
         
         // Build credential subject
@@ -395,7 +398,7 @@ public class CreateTestVLei {
         
         // Create and issue credential
         CredentialData credentialData = buildCredentialData(subject, rules, edge, LE_SCHEMA_SAID);
-        String leCredentialId = issueCredential(holder, credentialData, CredentialType.LEGAL_ENTITY);
+        String leCredentialId = issueCredential(qvi, credentialData, CredentialType.LEGAL_ENTITY);
 
         System.out.println("Legal Entity Credential ID: " + leCredentialId);
         return leCredentialId;
@@ -403,8 +406,7 @@ public class CreateTestVLei {
     
     private static CredentialData.CredentialSubject buildLegalEntitySubject() {
         // Resolve legal entity contact ID
-        String legalEntityContactId = resolveContactWithFallback(
-            holder.client(), "legalEntity", legalEntity.aid().prefix);
+        String legalEntityContactId = legalEntity.aid().prefix;
         
         Map<String, Object> additionalProperties = new LinkedHashMap<>();
         additionalProperties.put("LEI", CFLEI);
@@ -504,7 +506,7 @@ public class CreateTestVLei {
             Map<String, Object> rules, Map<String, Object> edge, String schemaSaid) throws Exception {
         // Get registry information
         List<Map<String, Object>> registriesList = 
-                (List<Map<String, Object>>) holder.client().registries().list(holder.aid().name());
+                (List<Map<String, Object>>) qvi.client().registries().list(qvi.aid().name());
         String registryKey = registriesList.getFirst().get("regk").toString();
         
         CredentialData credentialData = CredentialData.builder().build();
@@ -538,40 +540,21 @@ public class CreateTestVLei {
         
         return result.getAcdc().getKed().get("d").toString();
     }
-    
-    /**
-     * Resolve contact ID with fallback to prefix
-     */
-    private static String resolveContactWithFallback(SignifyClient client, String alias, String fallbackPrefix) {
-        try {
-            String contactId = getContactId(client, alias);
-            if (contactId != null) {
-                System.out.println("Using resolved contact ID for " + alias + ": " + contactId);
-                return contactId;
-            }
-        } catch (Exception e) {
-            System.out.println("ERROR resolving contact ID for " + alias + ": " + e.getMessage());
-        }
-        
-        System.out.println("WARNING: Using fallback prefix for " + alias + ": " + fallbackPrefix);
-        return fallbackPrefix;
-    }
-
 
     /**
      * Establish peer-to-peer communication between all clients
      */
     private static void establishPeerToPeerCommunication() throws Exception {
-        List<Aid> otherClients = List.of(holder.aid(), legalEntity.aid(), reeve.aid());
-        resolveAidOobis(issuer.client, otherClients);
+        List<Aid> otherClients = List.of(qvi.aid(), legalEntity.aid(), reeve.aid());
+        resolveAidOobis(gleif.client, otherClients);
         
-        otherClients = List.of(issuer.aid(), legalEntity.aid(), reeve.aid());
-        resolveAidOobis(holder.client, otherClients);
+        otherClients = List.of(gleif.aid(), legalEntity.aid(), reeve.aid());
+        resolveAidOobis(qvi.client, otherClients);
         
-        otherClients = List.of(issuer.aid(), holder.aid(), reeve.aid());
+        otherClients = List.of(gleif.aid(), qvi.aid(), reeve.aid());
         resolveAidOobis(legalEntity.client, otherClients);
         
-        otherClients = List.of(issuer.aid(), holder.aid(), legalEntity.aid());
+        otherClients = List.of(gleif.aid(), qvi.aid(), legalEntity.aid());
         resolveAidOobis(reeve.client, otherClients);
     }
 
@@ -585,9 +568,6 @@ public class CreateTestVLei {
 
         // Send IPEX grant
         sendIpexGrant(credentialId, issuerPair.aid(), holderPair.aid(), issuerPair.client());
-        
-        // Wait for processing
-        waitForProcessing(2000);
         
         // Process admit
         processCredentialAdmit(credentialId, holderPair, issuerPair, credentialType);
@@ -753,13 +733,13 @@ public class CreateTestVLei {
         
         // Build credential subject
         CredentialData.CredentialSubject subject = CredentialData.CredentialSubject.builder().build();
-        subject.setI(resolveRecipientContact(issuer.client(), holder.aid()));
+        subject.setI(resolveRecipientContact(gleif.client(), qvi.aid()));
         subject.setAdditionalProperties(Map.of("LEI", provenantLEI));
         
         // Get registry information
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> registriesList =
-                (List<Map<String, Object>>) issuer.client().registries().list(issuer.aid().name());
+                (List<Map<String, Object>>) gleif.client().registries().list(gleif.aid().name());
         
         // Build credential data
         CredentialData credentialData = CredentialData.builder().build();
@@ -768,9 +748,9 @@ public class CreateTestVLei {
         credentialData.setRi(registriesList.getFirst().get("regk").toString());
 
         // Issue and wait for completion
-        IssueCredentialResult result = issuer.client().credentials().issue(
-            issuer.aid().name(), credentialData);
-        issuer.client().operations().wait(result.getOp());
+        IssueCredentialResult result = gleif.client().credentials().issue(
+            gleif.aid().name(), credentialData);
+        gleif.client().operations().wait(result.getOp());
         
         String credentialId = result.getAcdc().getKed().get("d").toString();
         System.out.println("Basic QVI credential created: " + credentialId);
@@ -1017,9 +997,9 @@ public class CreateTestVLei {
 
     public static void verifyClientConnections() throws Exception {
         List<Contacting.Contact> issuerContacts =
-                Arrays.asList(issuer.client().contacts().list(null, null, null));
+                Arrays.asList(gleif.client().contacts().list(null, null, null));
         List<Contacting.Contact> holderContacts =
-                Arrays.asList(holder.client().contacts().list(null, null, null));
+                Arrays.asList(qvi.client().contacts().list(null, null, null));
         List<Contacting.Contact> legalEntityContacts =
                 Arrays.asList(legalEntity.client().contacts().list(null, null, null));
         List<Contacting.Contact> reeveContacts =
@@ -1044,9 +1024,9 @@ public class CreateTestVLei {
 
             // Try by prefix as fallback
             boolean issuerKnowsHolderByPrefix =
-                    issuerContacts.stream().anyMatch(c -> holder.aid().prefix.equals(c.getId()));
+                    issuerContacts.stream().anyMatch(c -> qvi.aid().prefix.equals(c.getId()));
             boolean holderKnowsIssuerByPrefix =
-                    holderContacts.stream().anyMatch(c -> issuer.aid().prefix.equals(c.getId()));
+                    holderContacts.stream().anyMatch(c -> gleif.aid().prefix.equals(c.getId()));
             System.out.println(
                     "Fallback - Issuer knows holder (by prefix): " + issuerKnowsHolderByPrefix);
             System.out.println(
