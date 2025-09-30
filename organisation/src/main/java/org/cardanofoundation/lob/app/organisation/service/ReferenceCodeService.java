@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -73,6 +72,13 @@ public class ReferenceCodeService {
                         .build(),
                         referenceCodeUpdate);
             }
+            if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
+                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
+            }
         }
 
         Optional<ReferenceCode> referenceCodeOpt = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode());
@@ -96,11 +102,10 @@ public class ReferenceCodeService {
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
-        referenceCode.setActive(referenceCodeUpdate.isActive());
+        referenceCode.setActive(referenceCodeUpdate.getActive());
         ReferenceCode savedEntity = referenceCodeRepository.save(referenceCode);
         // updating event codes
         accountEventService.updateStatus(orgId, savedEntity.getId().getReferenceCode());
-
         // The reference code returning is not the latest version after save
         return ReferenceCodeView.fromEntity(savedEntity);
     }
@@ -127,6 +132,13 @@ public class ReferenceCodeService {
                         .build(),
                         referenceCodeUpdate);
             }
+            if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
+                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
+            }
         }
 
         Optional<ReferenceCode> referenceCodeOpt = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode());
@@ -144,7 +156,7 @@ public class ReferenceCodeService {
         referenceCode.setName(referenceCodeUpdate.getName());
         referenceCode.setParentReferenceCode(referenceCodeUpdate.getParentReferenceCode() == null || referenceCodeUpdate.getParentReferenceCode().isEmpty() ? null : referenceCodeUpdate.getParentReferenceCode());
 
-        referenceCode.setActive(referenceCodeUpdate.isActive());
+        referenceCode.setActive(referenceCodeUpdate.getActive());
         // The reference code returning is not the latest version after save
         referenceCode = referenceCodeRepository.save(referenceCode);
         accountEventService.updateStatus(orgId, referenceCode.getId().getReferenceCode());
@@ -153,9 +165,9 @@ public class ReferenceCodeService {
     }
 
     @Transactional
-    public Either<Set<Problem>, Set<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
+    public Either<List<Problem>, List<ReferenceCodeView>> insertReferenceCodeByCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, ReferenceCodeUpdate.class).fold(
-                problem -> Either.left(Set.of(problem)),
+                problem -> Either.left(List.of(problem)),
                 referenceCodeUpdates -> Either.right(referenceCodeUpdates.stream().map(
                         refCodeUpdate -> {
                             Errors errors = validator.validateObject(refCodeUpdate);
@@ -168,7 +180,7 @@ public class ReferenceCodeService {
                                         .build(), refCodeUpdate);
                             }
                             return insertReferenceCode(orgId, refCodeUpdate, true);
-                        }).collect(Collectors.toSet()))
+                        }).toList())
         );
     }
 

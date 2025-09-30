@@ -4,7 +4,7 @@ import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstant
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CHART_OF_ACCOUNT_MAPPINGS;
 
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -161,6 +161,13 @@ public class ChartOfAccountsService {
                         .withStatus(Status.NOT_FOUND)
                         .build(), chartOfAccountUpdate));
             }
+            if (parentChartOfAccount.get().getId().getCustomerCode().equals(chartOfAccountUpdate.getCustomerCode())) {
+                return Either.left(ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("PARENT_ACCOUNT_CANNOT_BE_SELF")
+                        .withDetail("The parent chart of account cannot be the same as the account itself :%s".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate));
+            }
         }
         return Either.right(null);
     }
@@ -259,17 +266,17 @@ public class ChartOfAccountsService {
     }
 
     @Transactional
-    public Either<Set<Problem>, Set<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
+    public Either<List<Problem>, List<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
 
 
         Either<Problem, List<ChartOfAccountUpdateCsv>> lists = csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class);
 
         if (lists.isLeft()) {
-            return Either.left(Set.of(lists.getLeft()));
+            return Either.left(List.of(lists.getLeft()));
         }
 
         List<ChartOfAccountUpdateCsv> chartOfAccountUpdates = lists.get();
-        Set<ChartOfAccountView> accountEventViews = new HashSet<>();
+        List<ChartOfAccountView> accountEventViews = new ArrayList<>();
         for (ChartOfAccountUpdateCsv chartOfAccountUpdateCsv : chartOfAccountUpdates) {
             Errors errors = validator.validateObject(chartOfAccountUpdateCsv);
             List<ObjectError> allErrors = errors.getAllErrors();

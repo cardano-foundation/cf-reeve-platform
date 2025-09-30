@@ -1,11 +1,11 @@
 package org.cardanofoundation.lob.app.organisation.service;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.ACCOUNT_EVENT_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -88,7 +88,7 @@ class AccountEventServiceTest {
                 .build();
 
         mockOrganisation = new Organisation(ORG_ID,"testOrg","testCity","testPostCode","testProvince","testAddress","testPhone","testTaxId","IE","00000000",false,false,7305,"ISO_4217:CHF","ISO_4217:CHF","http://testWeb","email@test.com",null);
-        mockEventCodeUpdate = new EventCodeUpdate(DEBIT_REF_CODE, CREDIT_REF_CODE, "Updated Name", true);
+        mockEventCodeUpdate = new EventCodeUpdate(DEBIT_REF_CODE, CREDIT_REF_CODE, "Updated Name");
     }
 
     @Test
@@ -96,7 +96,7 @@ class AccountEventServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.left(Problem.builder().build()));
 
-        Either<Set<Problem>, Set<AccountEventView>> ret = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<Problem>, List<AccountEventView>> ret = accountEventService.insertAccountEventByCsv(ORG_ID, file);
 
         assertTrue(ret.isLeft());
         assertEquals(1, ret.getLeft().size());
@@ -117,7 +117,7 @@ class AccountEventServiceTest {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        Either<Set<Problem>, Set<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<Problem>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
 
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
@@ -136,7 +136,7 @@ class AccountEventServiceTest {
 
         when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.right(List.of(update)));
 
-        Either<Set<Problem>, Set<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<Problem>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
 
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
@@ -163,7 +163,7 @@ class AccountEventServiceTest {
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
         when(accountEventRepository.save(any(AccountEvent.class))).thenReturn(mockAccountEvent);
 
-        Either<Set<Problem>, Set<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<Problem>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }

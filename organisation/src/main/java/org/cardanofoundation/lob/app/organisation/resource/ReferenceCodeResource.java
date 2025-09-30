@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 import jakarta.validation.Valid;
 
@@ -94,12 +93,12 @@ public class ReferenceCodeResource {
     @PostMapping(value = "/{orgId}/reference-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                @RequestParam(value = "file") MultipartFile file) {
-        Either<Set<Problem>, Set<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+                                                       @RequestParam(value = "file") MultipartFile file) {
+        Either<List<Problem>, List<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         if (refCodeE.isLeft()) {
             return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(refCodeE.getLeft());
         }
-        Set<ReferenceCodeView> referenceCodeViews = refCodeE.get();
+        List<ReferenceCodeView> referenceCodeViews = refCodeE.get();
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(referenceCodeViews);
     }
 

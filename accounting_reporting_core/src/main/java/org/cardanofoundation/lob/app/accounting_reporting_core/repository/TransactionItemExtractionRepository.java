@@ -57,11 +57,11 @@ public class TransactionItemExtractionRepository {
             jpql.append("""
                     AND (
                         ti.accountDebit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN :accountSubTypes
                         )
                         OR ti.accountCredit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN :accountSubTypes
                         )
                     )
@@ -72,16 +72,16 @@ public class TransactionItemExtractionRepository {
             jpql.append("""
                     AND (
                         ti.accountDebit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN (
-                                SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                SELECT st.id FROM ChartOfAccountSubType st
                                 WHERE st.type.id IN :accountTypes
                             )
                         )
                         OR ti.accountCredit.code IN (
-                            SELECT oc.Id.customerCode FROM OrganisationChartOfAccount oc
+                            SELECT oc.Id.customerCode FROM ChartOfAccount oc
                             WHERE oc.subType.id IN (
-                                SELECT st.id FROM OrganisationChartOfAccountSubType st
+                                SELECT st.id FROM ChartOfAccountSubType st
                                 WHERE st.type.id IN :accountTypes
                             )
                         )

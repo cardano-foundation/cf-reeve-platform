@@ -25,5 +25,6 @@ public class CurrencyUpdate {
     @NotNull(message = "Currency ID is required")
     private String currencyId;
     @CsvBindByName(column = "Active")
-    private boolean active = true;
+    @NotNull(message = "Active is required")
+    private Boolean active;
 }
