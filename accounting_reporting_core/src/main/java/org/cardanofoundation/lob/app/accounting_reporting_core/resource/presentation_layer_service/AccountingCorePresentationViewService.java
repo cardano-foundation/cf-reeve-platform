@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.present
 
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
@@ -187,51 +186,56 @@ public class AccountingCorePresentationViewService {
         }
 
         public Either<Problem, Pageable> convertPageable(Pageable page,
-                                                 Map<String, String> fieldMappings) {
-    if (page.getSort().isSorted()) {
-        Optional<Sort.Order> notSortableProperty =
-            page.getSort().get().filter(order -> {
-                String property = Optional
-                        .ofNullable(fieldMappings.get(order.getProperty()))
-                        .orElse(order.getProperty());
+                        Map<String, String> fieldMappings) {
+                if (page.getSort().isSorted()) {
+                        Optional<Sort.Order> notSortableProperty =
+                                        page.getSort().get().filter(order -> {
+                                                String property = Optional
+                                                                .ofNullable(fieldMappings.get(order
+                                                                                .getProperty()))
+                                                                .orElse(order.getProperty());
 
-                return !jpaSortFieldValidator.isSortable(TransactionEntity.class, property);
-            }).findFirst();
+                                                return !jpaSortFieldValidator.isSortable(
+                                                                TransactionEntity.class, property);
+                                        }).findFirst();
 
-        if (notSortableProperty.isPresent()) {
-            return Either.left(Problem.builder()
-                    .withTitle("Invalid Sort Property")
-                    .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
-                    .build());
+                        if (notSortableProperty.isPresent()) {
+                                return Either.left(Problem.builder()
+                                                .withTitle("Invalid Sort Property")
+                                                .withDetail("Invalid sort: " + notSortableProperty
+                                                                .get().getProperty())
+                                                .build());
+                        }
+
+                        Sort sort = Sort.by(page.getSort().get().map(order -> {
+                                String property = Optional
+                                                .ofNullable(fieldMappings.get(order.getProperty()))
+                                                .orElse(order.getProperty());
+
+                                // simple enum detection – you can swap for a static Set
+                                boolean isEnum = false;
+                                try {
+                                        isEnum = TransactionEntity.class.getDeclaredField(property)
+                                                        .getType().isEnum();
+                                } catch (NoSuchFieldException ignored) {
+                                }
+
+                                if (isEnum) {
+                                        return JpaSort.unsafe(order.getDirection(),
+                                                        "function('enum_to_text', " + property
+                                                                        + ")")
+                                                        .iterator().next();
+                                }
+
+                                return new Sort.Order(order.getDirection(), property);
+                        }).toList());
+
+                        return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
+                                        sort));
+                }
+
+                return Either.right(page);
         }
-
-        Sort sort = Sort.by(page.getSort().get().map(order -> {
-            String property = Optional
-                    .ofNullable(fieldMappings.get(order.getProperty()))
-                    .orElse(order.getProperty());
-
-            // simple enum detection – you can swap for a static Set
-            boolean isEnum = false;
-            try {
-                isEnum = TransactionEntity.class
-                        .getDeclaredField(property)
-                        .getType()
-                        .isEnum();
-            } catch (NoSuchFieldException ignored) {}
-
-            if (isEnum) {
-                // ✅ build unsafe sort instead of plain property
-                return JpaSort.unsafe(order.getDirection(), "function('enum_to_text', " + property + ")").iterator().next();
-            }
-
-            return new Sort.Order(order.getDirection(), property);
-        }).toList());
-
-        return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(), sort));
-    }
-
-    return Either.right(page);
-}
 
 
 
@@ -411,7 +415,7 @@ public class AccountingCorePresentationViewService {
                                 .collect(toSet());
 
                 return TransactionItemsProcessRejectView.createSuccess(tx.getId(),
-                               tx.getProcessingStatus(), items);
+                                tx.getProcessingStatus(), items);
         }
 
         @Transactional
