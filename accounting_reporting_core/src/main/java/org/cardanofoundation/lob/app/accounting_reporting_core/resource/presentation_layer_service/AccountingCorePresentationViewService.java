@@ -2,9 +2,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.present
 
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
@@ -20,6 +17,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -199,8 +197,8 @@ public class AccountingCorePresentationViewService {
 
                                                 return !jpaSortFieldValidator.isSortable(
                                                                 TransactionEntity.class, property);
-
                                         }).findFirst();
+
                         if (notSortableProperty.isPresent()) {
                                 return Either.left(Problem.builder()
                                                 .withTitle("Invalid Sort Property")
@@ -208,16 +206,38 @@ public class AccountingCorePresentationViewService {
                                                                 .get().getProperty())
                                                 .build());
                         }
+
+                        Sort sort = Sort.by(page.getSort().get().map(order -> {
+                                String property = Optional
+                                                .ofNullable(fieldMappings.get(order.getProperty()))
+                                                .orElse(order.getProperty());
+
+                                // simple enum detection – you can swap for a static Set
+                                boolean isEnum = false;
+                                try {
+                                        isEnum = TransactionEntity.class.getDeclaredField(property)
+                                                        .getType().isEnum();
+                                } catch (NoSuchFieldException ignored) {
+                                }
+
+                                if (isEnum) {
+                                        return JpaSort.unsafe(order.getDirection(),
+                                                        "function('enum_to_text', " + property
+                                                                        + ")")
+                                                        .iterator().next();
+                                }
+
+                                return new Sort.Order(order.getDirection(), property);
+                        }).toList());
+
                         return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
-                                        Sort.by(page.getSort().get().map(order -> new Sort.Order(
-                                                        order.getDirection(),
-                                                        Optional.ofNullable(fieldMappings
-                                                                        .get(order.getProperty()))
-                                                                        .orElse(order.getProperty())))
-                                                        .toList())));
+                                        sort));
                 }
+
                 return Either.right(page);
         }
+
+
 
         public Either<Problem, Optional<BatchView>> batchDetail(String batchId,
                         List<TransactionProcessingStatus> txStatus, Pageable page,
@@ -395,7 +415,7 @@ public class AccountingCorePresentationViewService {
                                 .collect(toSet());
 
                 return TransactionItemsProcessRejectView.createSuccess(tx.getId(),
-                                this.getTransactionDispatchStatus(tx), items);
+                                tx.getProcessingStatus(), items);
         }
 
         @Transactional
@@ -448,8 +468,7 @@ public class AccountingCorePresentationViewService {
                                 batchFilterRequest.getCreditAccountCodes(),
                                 batchFilterRequest.getEventCodes(),
                                 batchFilterRequest.getProjectCustomerCodes(),
-                                batchFilterRequest.getParentProjectCustomerCodes(),
-                                pageable);
+                                batchFilterRequest.getParentProjectCustomerCodes(), pageable);
         }
 
         private TransactionReconciliationTransactionsView getTransactionReconciliationView(
@@ -468,7 +487,7 @@ public class AccountingCorePresentationViewService {
                                 transactionEntity.getEntryDate(),
                                 transactionEntity.getTransactionType(), dataSourceView,
                                 Optional.of(transactionEntity.getOverallStatus()),
-                                Optional.of(getTransactionDispatchStatus(transactionEntity)),
+                                transactionEntity.getProcessingStatus(),
                                 Optional.of(transactionEntity.getAutomatedValidationStatus()),
                                 transactionEntity.getTransactionApproved(),
                                 transactionEntity.getLedgerDispatchApproved(),
@@ -557,7 +576,7 @@ public class AccountingCorePresentationViewService {
                                 transactionEntity.getEntryDate(),
                                 transactionEntity.getTransactionType(), dataSourceView,
                                 transactionEntity.getOverallStatus(),
-                                getTransactionDispatchStatus(transactionEntity),
+                                transactionEntity.getProcessingStatus(),
                                 transactionEntity.getLedgerDispatchStatusErrorReason(),
                                 transactionEntity.getAutomatedValidationStatus(),
                                 transactionEntity.getLedgerDispatchStatus(),
@@ -599,60 +618,6 @@ public class AccountingCorePresentationViewService {
                                 getViolations(transactionEntity)
 
                 );
-        }
-
-        public LedgerDispatchStatusView getTransactionDispatchStatus(
-                        TransactionEntity transactionEntity) {
-                if (FAILED == transactionEntity.getAutomatedValidationStatus()) {
-                        if (transactionEntity.getViolations().stream()
-                                        .anyMatch(v -> v.getSource() == ERP)) {
-                                return INVALID;
-                        }
-                        if (transactionEntity.hasAnyRejection()) {
-                                if (transactionEntity.getItems().stream().anyMatch(
-                                                transactionItemEntity -> transactionItemEntity
-                                                                .getRejection().stream()
-                                                                .anyMatch(rejection -> rejection
-                                                                                .getRejectionReason()
-                                                                                .getSource() == ERP))) {
-                                        return INVALID;
-                                }
-                                return PENDING;
-                        }
-                        return PENDING;
-                }
-
-                if (transactionEntity.hasAnyRejection()) {
-                        if (transactionEntity.getItems().stream()
-                                        .anyMatch(transactionItemEntity -> transactionItemEntity
-                                                        .getRejection().stream()
-                                                        .anyMatch(rejection -> rejection
-                                                                        .getRejectionReason()
-                                                                        .getSource() == ERP))) {
-                                return INVALID;
-                        }
-                        return PENDING;
-                }
-
-                switch (transactionEntity.getLedgerDispatchStatus()) {
-                        case NOT_DISPATCHED, MARK_DISPATCH -> {
-                                if (Boolean.TRUE.equals(
-                                                transactionEntity.getLedgerDispatchApproved())) {
-                                        return PUBLISHED;
-                                }
-
-                                if (Boolean.TRUE.equals(
-                                                transactionEntity.getTransactionApproved())) {
-                                        return PUBLISH;
-                                }
-                        }
-
-                        case DISPATCHED, COMPLETED, FINALIZED -> {
-                                return PUBLISHED;
-                        }
-                }
-
-                return APPROVE;
         }
 
         private TransactionReconciliationStatisticView getTransactionReconciliationStatistic(

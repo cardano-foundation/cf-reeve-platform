@@ -1,11 +1,11 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -82,7 +82,7 @@ class ReferenceCodeServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("ParseError").build()));
 
-        Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
 
         assertTrue(result.isLeft());
         assertEquals(1, result.getLeft().size());
@@ -100,7 +100,7 @@ class ReferenceCodeServiceTest {
         when(validator.validateObject(refCodeUpdate)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
 
-        Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
@@ -122,7 +122,7 @@ class ReferenceCodeServiceTest {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrganisation));
         when(referenceCodeRepository.save(any(ReferenceCode.class))).thenReturn(referenceCode);
 
-        Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
     }
@@ -140,7 +140,7 @@ class ReferenceCodeServiceTest {
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
 
         when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(refCodeUpdate)));
-        Either<Set<Problem>, Set<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals("Default Message", result.get().iterator().next().getError().get().getDetail());

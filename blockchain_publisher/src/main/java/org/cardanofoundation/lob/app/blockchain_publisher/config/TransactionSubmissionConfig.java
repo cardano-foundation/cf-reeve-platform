@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.config;
 
 import java.net.http.HttpClient;
 import java.time.Clock;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +20,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.API1L1Transact
 import org.cardanofoundation.lob.app.blockchain_publisher.service.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.API3MetadataSerialiser;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
@@ -82,7 +84,10 @@ public class TransactionSubmissionConfig {
                                                              @Qualifier("api3JsonSchemaMetadataChecker") MetadataChecker metadataChecker,
                                                              Account organiserAccount,
                                                              @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
-                                                             @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
+                                                             @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx,
+                                                             @Value("${lob.blockchain_publisher.keri.enabled:false}") boolean keriEnabled,
+                                                             Optional<KeriService> keriService,
+                                                             @Value("${lob.blockchain_publisher.keri.metadata_label:1}") int keriMetadataLabel
     ) {
         return new API3L1TransactionCreator(backendService,
                 metadataSerialiser,
@@ -90,7 +95,10 @@ public class TransactionSubmissionConfig {
                 metadataChecker,
                 organiserAccount,
                 metadataLabel,
-                debugStoreOutputTx
+                debugStoreOutputTx,
+                keriEnabled,
+                keriService,
+                keriMetadataLabel
         );
     }
 

@@ -155,7 +155,7 @@ public class CustomTransactionBatchRepositoryImpl implements CustomTransactionBa
         }
 
         if (body.getBatchId() != null && !body.getBatchId().isEmpty()) {
-            andPredicates.add(builder.and(builder.equal(rootEntry.get("id"), body.getBatchId())));
+            andPredicates.add(builder.and(builder.like(rootEntry.get("id"), "%" + body.getBatchId() + "%")));
             // if the batchId is set then we search only for batchId and organisationId
             //andPredicates = Collections.singleton(builder.and(builder.equal(rootEntry.get("id"), body.getBatchId()), builder.equal(rootEntry.get("filteringParameters").get("organisationId"), body.getOrganisationId())));
         }

@@ -20,4 +20,6 @@ public class Constants {
     public static final String IGNORING_EVENT_FOR_EXTRACTOR_TYPE = "Ignoring event for extractor type: {}";
     public static final String BATCH_ID = "batchId";
     public static final String TEMPORARY_FILE_CACHE_SIZE_LOG = "Temporary file cache size: {}";
+    public static final String CONVERSION_FAILED = "CONVERSION_FAILED";
+    public static final String DATE_PARSE_EXCEPTION = "DATE_PARSE_EXCEPTION";
 }

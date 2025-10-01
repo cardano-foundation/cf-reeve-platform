@@ -11,7 +11,6 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
-import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
 
 
@@ -38,7 +37,7 @@ public class VatView {
         return VatView.builder()
                 .customerCode(vat.getId().getCustomerCode())
                 .organisationId(vat.getId().getOrganisationId())
-                .rate(BigDecimals.normaliseString(vat.getRate()))
+                .rate(vat.getRate().stripTrailingZeros().toPlainString())
                 .countryCode(vat.getCountryCode())
                 .description(vat.getDescription())
                 .active(vat.getActive())
@@ -48,7 +47,7 @@ public class VatView {
     public static VatView createFail(VatUpdate vatUpdate, Problem error) {
         return VatView.builder()
                 .customerCode(vatUpdate.getCustomerCode())
-                .rate(Optional.ofNullable(vatUpdate.getRate()).map(BigDecimal::toPlainString).orElse(null))
+                .rate(Optional.ofNullable(vatUpdate.getRate()).map(BigDecimal::stripTrailingZeros).map(BigDecimal::toPlainString).orElse(null))
                 .countryCode(vatUpdate.getCountryCode())
                 .description(vatUpdate.getDescription())
                 .active(vatUpdate.getActive())

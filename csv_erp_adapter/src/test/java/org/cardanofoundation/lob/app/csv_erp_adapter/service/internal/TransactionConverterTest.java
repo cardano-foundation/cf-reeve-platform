@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,10 +44,14 @@ class TransactionConverterTest {
         TransactionLine line = mock(TransactionLine.class);
         when(line.getTxNumber()).thenReturn("TxNumber");
         when(line.getType()).thenReturn("UNKOWN_TYPE");
+        when(line.getDate()).thenReturn("2023-10-01");
 
         Either<Problem, List<Transaction>> lists = transactionConverter.convertToTransaction("orgId", "batchId", List.of(line));
-        Assertions.assertTrue(lists.isLeft());
-        Assertions.assertEquals("Transaction type not found", lists.getLeft().getTitle());
+
+        Assertions.assertTrue(lists.isRight());
+        Assertions.assertEquals(1, lists.get().size());
+        Assertions.assertEquals("TxNumber", lists.get().getFirst().getInternalTransactionNumber());
+        Assertions.assertEquals(TransactionType.Unknown, lists.get().getFirst().getTransactionType());
     }
 
     @Test

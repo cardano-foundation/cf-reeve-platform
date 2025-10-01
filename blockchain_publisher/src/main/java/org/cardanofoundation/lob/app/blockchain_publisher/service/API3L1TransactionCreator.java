@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -49,6 +50,9 @@ public class API3L1TransactionCreator {
 
     private final int metadataLabel;
     private final boolean debugStoreOutputTx;
+    private final boolean keriEnabled;
+    private final Optional<KeriService> keriService;
+    private final int keriMetadataLabel;
 
     private String runId;
 
@@ -74,6 +78,7 @@ public class API3L1TransactionCreator {
             MetadataMap metadataMap =
                     api3MetadataSerialiser.serialiseToMetadataMap(reportEntity, creationSlot);
 
+
             Map data = metadataMap.getMap();
             byte[] bytes = CborSerializationUtil.serialize(data);
 
@@ -84,7 +89,13 @@ public class API3L1TransactionCreator {
             CBORMetadataMap cborMetadataMap = new CBORMetadataMap(data);
 
             metadata.put(metadataLabel, cborMetadataMap);
-
+            if (keriEnabled) {
+                metadata.put(
+                        keriMetadataLabel,
+                        keriService.orElseThrow(
+                                () -> new IllegalStateException("KeriService not available"))
+                                .interactWithIdentifier(cborMetadataMap)); // using the complete data for KERI
+            }
             boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
 
             if (!isValid) {

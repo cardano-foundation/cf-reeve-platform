@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.cardanofoundation.lob.app.blockchain_publisher.service.API1MetadataSerialiser.VERSION;
+import static org.cardanofoundation.lob.app.blockchain_publisher.service.API3MetadataSerialiser.VERSION;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;

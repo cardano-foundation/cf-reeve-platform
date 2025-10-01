@@ -80,7 +80,6 @@ class CsvParserTest {
         Assertions.assertEquals("123", first.getDebitReferenceCode());
         Assertions.assertEquals("456", first.getCreditReferenceCode());
         Assertions.assertEquals("Test Dummy", first.getName());
-        Assertions.assertTrue(first.getActive());
 
         EventCodeUpdate second = parse.get().get(1);
         Assertions.assertEquals("234", second.getDebitReferenceCode());

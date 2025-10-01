@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.organisation.service;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.COST_CENTER_MAPPINGS;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -74,9 +73,19 @@ public class CostCenterService {
                                     .build()
                     );
                 }
+                if (costCenterOptional.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
+                    return CostCenterView.createFail(
+                            costCenterUpdate,
+                            Problem.builder()
+                                    .withStatus(Status.BAD_REQUEST)
+                                    .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
+                                    .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
+                                    .build()
+                    );
+                }
             }
             costCenter.setParentCustomerCode(costCenterUpdate.getParentCustomerCode() == null || costCenterUpdate.getParentCustomerCode().isBlank() ? null : costCenterUpdate.getParentCustomerCode());
-            costCenter.setActive(costCenterUpdate.isActive());
+            costCenter.setActive(costCenterUpdate.getActive());
             return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
         }
         return CostCenterView.createFail(
@@ -109,7 +118,7 @@ public class CostCenterService {
             costCenter = costCenterFound.get();
         }
         costCenter.setName(costCenterUpdate.getName());
-        costCenter.setActive(costCenterUpdate.isActive());
+        costCenter.setActive(costCenterUpdate.getActive());
 
         // check if parent exists
         if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
@@ -123,8 +132,18 @@ public class CostCenterService {
                                 .build()
                 );
             }
-                costCenter.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
+            if (parent.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
+                return CostCenterView.createFail(
+                        costCenterUpdate,
+                        Problem.builder()
+                                .withStatus(Status.BAD_REQUEST)
+                                .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
+                                .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
+                                .build()
+                );
+            }
         }
+        costCenter.setParentCustomerCode(costCenterUpdate.getParentCustomerCode() == null || costCenterUpdate.getParentCustomerCode().isBlank() ? null : costCenterUpdate.getParentCustomerCode());
 
         return CostCenterView.fromEntity(costCenterRepository.save(costCenter));
     }
