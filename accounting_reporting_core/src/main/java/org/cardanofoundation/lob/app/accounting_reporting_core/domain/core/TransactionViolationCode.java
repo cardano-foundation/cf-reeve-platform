@@ -27,4 +27,5 @@ public enum TransactionViolationCode {
     NET_OFF_TX,
     TX_INTERNAL_NUMBER_MUST_BE_PRESENT,
     FX_RATE_MUST_BE_GREATER_THAN_ZERO,
+    ENTRY_DATE_MUST_BE_PRESENT
 }
