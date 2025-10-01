@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.items;
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -28,9 +27,6 @@ public class TransactionFillAggregationFieldsTaskItem implements PipelineTaskIte
 
     @Override
     public void run(TransactionEntity tx) {
-        if (tx.getAutomatedValidationStatus() == FAILED) {
-            return;
-        }
         tx.setTotalAmountLcy(getAmountLcyTotalForAllDebitItems(tx));
         tx.setItemCount(tx.getItems().size());
     }
