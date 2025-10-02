@@ -118,7 +118,8 @@ public class CreateTestVLei {
         }
     }
 
-    private record DecentralizationInfo(String prefix, String[] oobi, JsonNode[] vcp, String[] attachements) {}
+    private record DecentralizationInfo(String prefix, String[] oobi, JsonNode[] vcp, 
+            JsonNode credentialChainAcdc) {}
 
     // ============================================================================
     // CONFIGURATION CONSTANTS
@@ -190,12 +191,12 @@ public class CreateTestVLei {
             System.out.println("Decentralization Information:");
             System.out.println("Reeve AID Prefix: " + reeve.aid().prefix);
             System.out.println("Reeve AID OOBI: " + reeve.aid().oobi);
+            Object credential = reeve.client().credentials().get(credentialChain.get(2).id, true);
             DecentralizationInfo decentralizationInfo = new DecentralizationInfo(reeve.aid().prefix,
                     new String[]{gleif.aid().oobi, qvi.aid().oobi, legalEntity.aid().oobi, reeve.aid().oobi},
                     new JsonNode[]{gleif.vcp, qvi.vcp, legalEntity.vcp, reeve.vcp},
-                    new String[]{gleif.vcpAttachement, qvi.vcpAttachement, legalEntity.vcpAttachement, reeve.vcpAttachement});
+                    objectMapper.readTree(objectMapper.writeValueAsString(credential)));
             String decentralizationJson = objectMapper.writeValueAsString(decentralizationInfo);
-            System.out.println("Decentralization Info JSON: " + decentralizationJson);
             Files.writeString(Path.of("decentralization_info.json"), decentralizationJson);
         } catch (Exception e) {
             System.err.println("ERROR: Credential chain setup failed: " + e.getMessage());
@@ -340,7 +341,7 @@ public class CreateTestVLei {
         gleif = initClientAndAid("gleif", "gleifRegistry", "", true);
         qvi = initClientAndAid("qvi", "qviRegistry", "", true);
         legalEntity = initClientAndAid("legalEntity", "legalEntityRegistry", "", true);
-        reeve = initClientAndAid("reeve", "reeveRegistry6", reeveIdentifierBran, false);
+        reeve = initClientAndAid("reeve", "reeveRegistry11", reeveIdentifierBran, false);
         System.out.println("All clients initialized successfully");
     }
 
