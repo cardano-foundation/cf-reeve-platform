@@ -114,7 +114,7 @@ public class AccountingCorePresentationViewService {
 
         public ReconciliationResponseView allReconciliationTransaction(
                         ReconciliationFilterRequest body, Pageable pageable) {
-                Object transactionsStatistic = accountingCoreTransactionRepository
+                Object transactionsStatistic = reconcilationRepository
                                 .findCalcReconciliationStatistic();
                 Optional<ReconcilationEntity> latestReconcilation =
                                 transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
@@ -801,6 +801,17 @@ public class AccountingCorePresentationViewService {
                                                                                                 .name())
                                                                                 .build())
                                                                 .toList());
+
+                                case RECONCILIATION_REJECTION_CODES -> filterOptionsListMap.put(filterOption,
+                                        Arrays.stream(ReconciliationRejectionCodeRequest.values())
+                                                .map(type -> FilteringOptionsListResponse
+                                                        .builder()
+                                                        .name(type.name())
+                                                        .description(type
+                                                                .name())
+                                                        .build())
+                                                .toList());
+
 
                         }
                 }

@@ -14,10 +14,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 
-public interface AccountingCoreTransactionRepository extends JpaRepository<TransactionEntity, String>, CustomTransactionRepository {
+public interface AccountingCoreTransactionRepository extends JpaRepository<TransactionEntity, String> {
 
     @Query("""
             SELECT t FROM accounting_reporting_core.TransactionEntity t
@@ -129,4 +130,14 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             Pageable page
     );
 
+    @Query("""
+            SELECT t FROM accounting_reporting_core.TransactionEntity t
+            WHERE t.organisation.id = :organisationId
+            AND (:validationStatuses IS NULL OR t.automatedValidationStatus in (:validationStatuses))
+            AND (:transactionTypes IS NULL OR t.transactionType in (:transactionTypes))
+            """)
+    List<TransactionEntity> findAllByStatus(@Param("organisationId") String organisationId,
+                                            @Param("validationStatuses") List<TxValidationStatus> validationStatuses,
+                                            @Param("transactionTypes") List<TransactionType> transactionTypes,
+                                            Pageable pageable);
 }

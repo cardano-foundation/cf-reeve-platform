@@ -69,7 +69,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconiciliationTransaction_successfulUnprocessed() {
-        when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
                 eq(null), eq(Optional.empty()), eq(Pageable.unpaged()))).thenReturn(Page.empty());
@@ -93,7 +93,7 @@ class AccountingCorePresentationViewServiceTest {
         Assertions.assertEquals(Optional.empty(), responseView.getLastReconciledDate());
 
 
-        verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
+        verify(reconcilationRepository).findCalcReconciliationStatistic();
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository, transactionRepositoryGateway);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway);
@@ -101,7 +101,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconiciliationTransaction_successfulUnReconciled() {
-        when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -110,7 +110,7 @@ class AccountingCorePresentationViewServiceTest {
 
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
-        verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
+        verify(reconcilationRepository).findCalcReconciliationStatistic();
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
