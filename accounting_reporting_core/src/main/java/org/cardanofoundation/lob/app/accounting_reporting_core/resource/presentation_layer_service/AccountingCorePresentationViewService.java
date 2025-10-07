@@ -161,7 +161,7 @@ public class AccountingCorePresentationViewService {
                                                         body.getDateTo().orElse(null),
                                                         body.getTransactionTypes().isEmpty() ? null
                                                                         : body.getTransactionTypes(),
-                                                        body.getTransactionId(), body.getSource(),
+                                                        body.getTransactionId(), body.getSource().map(t -> t.name()).orElse(null),
                                                         pageable);
                         count = pagedTransactions.getTotalElements();
                         transactions = pagedTransactions.stream()

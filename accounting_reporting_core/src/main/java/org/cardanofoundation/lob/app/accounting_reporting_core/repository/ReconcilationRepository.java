@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 import java.time.LocalDate;
-import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.domain.Page;
@@ -15,7 +14,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterSource;
 
 public interface ReconcilationRepository extends JpaRepository<ReconcilationEntity, String> {
 
@@ -76,7 +74,7 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                         @Param("endDate") LocalDate endDate,
                         @Param("transactionTypes") Set<TransactionType> transactionTypes,
                         @Param("transactionId") String transactionId,
-                        @Param("source") Optional<ReconciliationFilterSource> source, Pageable pageable);
+                        @Param("source") String source, Pageable pageable);
 
         @Query("""
         SELECT
