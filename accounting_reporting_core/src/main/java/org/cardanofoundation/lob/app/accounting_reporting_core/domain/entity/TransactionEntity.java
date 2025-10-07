@@ -13,6 +13,7 @@ import java.time.YearMonth;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
@@ -232,6 +233,44 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @PrePersist
     @PreUpdate
+    public void preUpdate() {
+        updateItemCount();
+        updateTotalAmountLcy();
+        updateProcessingStatus();
+    }
+
+    public void updateItemCount() {
+        this.itemCount = (int) items.stream().filter(item -> item.getStatus().isOK()).count();
+    }
+
+    public void updateTotalAmountLcy() {
+        this.totalAmountLcy = getAmountLcyTotalForAllDebitItems();
+    }
+
+    public BigDecimal getAmountLcyTotalForAllDebitItems() {
+        Set<TransactionItemEntity> items = this.getItems();
+
+        if (this.getTransactionType().equals(TransactionType.Journal)) {
+            items = this.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(Collectors.toSet());
+        }
+
+        if (this.getTransactionType().equals(TransactionType.FxRevaluation)) {
+            BigDecimal totalCredit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            BigDecimal totalDebit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.DEBIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            return totalCredit.subtract(totalDebit).abs();
+        }
+        return items.stream().map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add).abs();
+    }
+
     public void updateProcessingStatus() {
         recalcValidationStatus();
         if (getAutomatedValidationStatus() == FAILED) {

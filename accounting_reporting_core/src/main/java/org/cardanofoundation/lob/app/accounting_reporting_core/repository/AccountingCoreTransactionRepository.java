@@ -67,7 +67,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     WHERE b.id = :batchId
     AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
     AND (:types IS NULL OR t.transactionType IN :types)
-    AND (:internalTransactionNumber IS NULL OR LOWER(t.internalTransactionNumber) LIKE LOWER(CONCAT('%', :internalTransactionNumber, '%')))
+    AND (:internalTransactionNumber IS NULL OR LOWER(t.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:internalTransactionNumber AS string), '%')))
     AND (:minTotalLcy IS NULL OR t.totalAmountLcy >= :minTotalLcy)
     AND (:maxTotalLcy IS NULL OR t.totalAmountLcy <= :maxTotalLcy)
     AND t.entryDate >= COALESCE(:dateFrom, t.entryDate)
@@ -77,7 +77,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         WHERE
             i2.status = 'OK'
             AND (
-            (:documentNumber IS NOT NULL AND LOWER(i2.document.num) NOT LIKE LOWER(CONCAT('%', :documentNumber, '%')))
+            (:documentNumber IS NOT NULL AND i2.document.num NOT LIKE %:documentNumber%)
             OR (:documentNumbers IS NOT NULL AND (i2.document.num IS NULL OR i2.document.num NOT IN :documentNumbers))
             OR (:currencyCustomerCodes IS NOT NULL AND (i2.document.currency.customerCode is NULL OR i2.document.currency.customerCode NOT IN :currencyCustomerCodes))
             OR (:minFCY IS NOT NULL AND i2.amountFcy < :minFCY)

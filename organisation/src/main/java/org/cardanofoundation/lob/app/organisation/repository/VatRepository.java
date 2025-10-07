@@ -18,10 +18,10 @@ public interface VatRepository extends JpaRepository<Vat, Vat.Id> {
 
     @Query("""
         SELECT t FROM Vat t WHERE t.id.organisationId = :organisationId
-        AND (:customerCode IS NULL OR LOWER(t.id.customerCode) LIKE LOWER(CONCAT('%', :customerCode, '%')))
+        AND (:customerCode IS NULL OR LOWER(t.id.customerCode) LIKE LOWER(CONCAT('%', CAST(:customerCode AS string), '%')))
         AND (:minRate IS NULL OR t.rate > :minRate)
         AND (:maxRate IS NULL OR t.rate < :maxRate)
-        AND (:description IS NULL OR LOWER(t.description) LIKE LOWER(CONCAT('%', :description, '%')))
+        AND (:description IS NULL OR LOWER(t.description) LIKE LOWER(CONCAT('%', CAST(:description AS string), '%')))
         AND (:countryCodes IS NULL OR t.countryCode IN :countryCodes)
         AND (:active IS NULL OR t.active = :active)
         """)
