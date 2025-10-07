@@ -17,8 +17,8 @@ public interface AccountEventRepository extends JpaRepository<AccountEvent, Acco
     @Query("""
             SELECT a FROM AccountEvent a
             WHERE a.id.organisationId = :organisationId
-            AND (:customerCode IS NULL OR a.customerCode LIKE %:customerCode%)
-            AND (:name IS NULL OR a.name LIKE %:name%)
+            AND (:customerCode IS NULL OR LOWER(a.customerCode) LIKE LOWER(CONCAT('%', :customerCode, '%')))
+            AND (:name IS NULL OR LOWER(a.name) LIKE LOWER(CONCAT('%', :name, '%')))
             AND (:creditRefCodes IS NULL OR a.id.creditReferenceCode IN :creditRefCodes)
             AND (:debitRefCodes IS NULL OR a.id.debitReferenceCode IN :debitRefCodes)
             AND (:active IS NULL OR a.active = :active)

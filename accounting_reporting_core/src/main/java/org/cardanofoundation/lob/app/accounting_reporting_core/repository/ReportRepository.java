@@ -48,7 +48,7 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
             AND (:currencyCode IS NULL OR r.organisation.currencyId = :currencyCode)
             AND (:year IS NULL OR r.year = :year)
             AND (:period IS NULL OR r.period = :period)
-            AND (:txHash IS NULL OR r.ledgerDispatchReceipt.primaryBlockchainHash LIKE %:txHash%)
+            AND (:txHash IS NULL OR LOWER(r.ledgerDispatchReceipt.primaryBlockchainHash) LIKE LOWER(CONCAT('%', :txHash, '%')))
             """)
     Page<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId,
             @Param("reportType") String reportType, @Param("currencyCode") String currencyCode,
