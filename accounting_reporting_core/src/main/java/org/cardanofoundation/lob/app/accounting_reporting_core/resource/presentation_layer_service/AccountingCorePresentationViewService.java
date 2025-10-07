@@ -74,10 +74,10 @@ public class AccountingCorePresentationViewService {
         private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
         private static final Map<String, String> RV_FIELD_MAP =
-                        Map.of("id", "transactionId", 
+                        Map.of("id", "transactionId",
                                 "internalNumber", "transactionInternalNumber",
-                                "entryDate", "transactionEntryDate", 
-                                "transactionType", "transactionType", 
+                                "entryDate", "transactionEntryDate",
+                                "transactionType", "transactionType",
                                 "totalAmountLcy", "amountLcySum"
                         );
 
