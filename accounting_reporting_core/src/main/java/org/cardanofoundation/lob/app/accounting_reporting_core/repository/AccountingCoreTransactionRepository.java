@@ -84,7 +84,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
                 WHERE
                         i2.status = 'OK'
                         AND (
-                        (:documentNumber IS NULL OR i2.document.num LIKE CONCAT('%', :documentNumber, '%'))
+                        (:documentNumber IS NULL OR i2.document.num LIKE CONCAT('%', CAST(:documentNumber AS string), '%'))
                         AND (:documentNumbers IS NULL OR i2.document.num IN :documentNumbers)
                         AND (:currencyCustomerCodes IS NULL OR i2.document.currency.customerCode IN :currencyCustomerCodes)
                         AND (:minFCY IS NULL OR i2.amountFcy >= :minFCY)
