@@ -74,10 +74,11 @@ public class AccountingCorePresentationViewService {
         private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
         private static final Map<String, String> RV_FIELD_MAP =
-                        Map.of("id", "transactionId", "internalNumber", "transactionInternalNumber",
-                                        "entryDate", "transactionEntryDate", "transactionType",
-                                        "transactionType", "totalAmountLcy", "amountLcySum"
-                        // add more mappings here
+                        Map.of("id", "transactionId",
+                                "internalNumber", "transactionInternalNumber",
+                                "entryDate", "transactionEntryDate",
+                                "transactionType", "transactionType",
+                                "totalAmountLcy", "amountLcySum"
                         );
 
         // This function is to add dynamically sort for violations, since we are
