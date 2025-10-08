@@ -15,6 +15,7 @@ import org.hibernate.envers.Audited;
 @AllArgsConstructor
 @Builder(toBuilder = true)
 @Getter
+@Setter
 @EqualsAndHashCode
 @Audited
 public class Details {

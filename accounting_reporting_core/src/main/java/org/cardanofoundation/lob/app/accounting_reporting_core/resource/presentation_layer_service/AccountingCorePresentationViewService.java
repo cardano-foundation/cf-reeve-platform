@@ -21,6 +21,8 @@ import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
@@ -276,10 +278,10 @@ public class AccountingCorePresentationViewService {
                                                         transactions.stream().map(
                                                                         this::getTransactionView)
                                                                         .toList(),
-                                                        transactionBatchEntity.getDetails()
-                                                                        .orElse(Details.builder()
-                                                                                        .build())
-                                                                        .getBag(),
+                                                        convertBagToJson(transactionBatchEntity.getDetails()
+                                                                .orElse(Details.builder()
+                                                                        .build()))
+                                                                .getBag(),
                                                         transactions.getTotalElements());
                                 }));
         }
@@ -313,10 +315,10 @@ public class AccountingCorePresentationViewService {
                                                                         transactionBatchEntity
                                                                                         .getFilteringParameters()),
                                                         List.of(),
-                                                        transactionBatchEntity.getDetails()
-                                                                        .orElse(Details.builder()
-                                                                                        .build())
-                                                                        .getBag(),
+                                                        convertBagToJson(transactionBatchEntity.getDetails()
+                                                                .orElse(Details.builder()
+                                                                        .build()))
+                                                                .getBag(),
                                                         null // transactions are not loaded here
                                         );
                                 }).toList();
@@ -817,4 +819,57 @@ public class AccountingCorePresentationViewService {
                 }
                 return filterOptionsListMap;
         }
+
+    private Map<String, Object> parse(Map<String, Object> bag) {
+        return (Map<String, Object>) expandTree(new HashMap<>(bag));
+    }
+
+    private static Object expandTree(Object currentNode) {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        if (currentNode instanceof Map) {
+            Map<String, Object> currentMap = (Map<String, Object>) currentNode;
+            currentMap.replaceAll((key, value) -> expandTree(value));
+            return currentMap;
+        }
+        else if (currentNode instanceof List) {
+            List<Object> currentList = (List<Object>) currentNode;
+            return currentList.stream()
+                    .map(AccountingCorePresentationViewService::expandTree)
+                    .collect(Collectors.toList());
+        }
+        else if (currentNode instanceof String) {
+            String currentString = (String) currentNode;
+            int firstBrace = currentString.indexOf('{');
+            int lastBrace = currentString.lastIndexOf('}');
+
+            if (firstBrace != -1 && lastBrace > firstBrace) {
+                String jsonCandidate = currentString.substring(firstBrace, lastBrace + 1);
+                String prefixText = currentString.substring(0, firstBrace).trim();
+
+                try {
+                    Object parsedJson = objectMapper.readValue(jsonCandidate, Object.class);
+                    if (parsedJson instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> resultMap = (Map<String, Object>) parsedJson;
+                        resultMap.put("message", prefixText);
+                    }
+
+                    return expandTree(parsedJson);
+                } catch (JsonProcessingException e) {
+
+                }
+            }
+            return currentString;
+        }
+
+        return currentNode;
+    }
+
+
+    private Details convertBagToJson(Details details) {
+        details.setBag(parse(details.getBag()));
+        return details;
+
+    }
 }
