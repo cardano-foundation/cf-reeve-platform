@@ -24,6 +24,7 @@ public class SortFieldMappings {
         "status", "overallStatus",
         "amountTotalLcy", "totalAmountLcy",
         "reconciliationSource", "reconcilation.source",
-        "reconcilationSink", "reconcilation.sink"
+        "reconcilationSink", "reconcilation.sink",
+        "reconciliationDate", "lastReconcilation.createdAt"
     );
 }
