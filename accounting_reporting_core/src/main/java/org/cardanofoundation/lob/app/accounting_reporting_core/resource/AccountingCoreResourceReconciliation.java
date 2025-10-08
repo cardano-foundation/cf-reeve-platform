@@ -26,6 +26,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
@@ -45,6 +46,7 @@ public class AccountingCoreResourceReconciliation {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final AccountingCoreService accountingCoreService;
+    private final SortFieldMappings sortFieldMappings;
 
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @Operation(description = "Start the Reconciliation", responses = {
@@ -76,8 +78,8 @@ public class AccountingCoreResourceReconciliation {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        Either<Problem, Pageable> pageableEither = accountingCorePresentationService.convertPageable(pageable,
-                        SortFieldMappings.RECONCILATION_FIELD_MAPPINGS);
+        Either<Problem, Pageable> pageableEither = sortFieldMappings.convertPageable(pageable,
+                        SortFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return ResponseEntity.badRequest().body(pageableEither.getLeft());
         }
