@@ -5,7 +5,6 @@ import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -16,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -42,7 +43,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ex
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 
 @RestController
 @RequestMapping("/api/v1/extraction")
@@ -67,13 +67,12 @@ public class ExtractionController {
                     })
             }
     )
-    public ResponseEntity<ExtractionTransactionView> transactionSearch(@Valid @RequestBody ExtractionTransactionsRequest transactionsRequest) {
+    public ResponseEntity<ExtractionTransactionView> transactionSearch(@Valid @RequestBody ExtractionTransactionsRequest transactionsRequest,
+                        @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         try {
-            LocalDate dateFrom = FlexibleDateParser.parse(transactionsRequest.getDateFrom());
-            LocalDate dateTo = FlexibleDateParser.parse(transactionsRequest.getDateTo());
             return ResponseEntity
                     .ok()
-                    .body(extractionItemService.findTransactionItems(dateFrom, dateTo, transactionsRequest.getAccountCode(), transactionsRequest.getCostCenter(), transactionsRequest.getProject(), transactionsRequest.getAccountType(), transactionsRequest.getAccountSubType()));
+                    .body(extractionItemService.findTransactionItems(transactionsRequest, pageable));
         } catch (Exception e) {
             log.error("Error occurred while searching transactions: {}",e.getMessage());
             return ResponseEntity.status(500).body(null);

@@ -11,6 +11,8 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.recon
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
@@ -31,6 +35,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 @Transactional
 public class ExtractionItemService {
     private final TransactionItemExtractionRepository transactionItemRepositoryImpl;
+    private final TransactionItemRepository transactionItemRepository;
     private final OrganisationPublicApi organisationPublicApi;
 
     @Transactional(readOnly = true)
@@ -104,5 +109,39 @@ public class ExtractionItemService {
         item.setParentProjectCustomerCode(null);
 
         return item;
+    }
+
+    public ExtractionTransactionView findTransactionItems(ExtractionTransactionsRequest transactionsRequest, Pageable pageable) {
+        Page<TransactionItemEntity> transactionItem = transactionItemRepository.searchItems(
+                Optional.ofNullable(transactionsRequest.getDateFrom())
+                                .orElse(LocalDate.of(1970, 1, 1)),
+                Optional.ofNullable(transactionsRequest.getDateTo())
+                                .orElse(LocalDate.now()),
+                transactionsRequest.getAccountCode(),
+                transactionsRequest.getCostCenter(),
+                transactionsRequest.getProject(),
+                transactionsRequest.getBlockchainHash(),
+                transactionsRequest.getTransactionNumber(),
+                transactionsRequest.getDocumentNumber(),
+                transactionsRequest.getCurrencys(),
+                transactionsRequest.getMinFcy(),
+                transactionsRequest.getMaxFcy(),
+                transactionsRequest.getMinLcy(),
+                transactionsRequest.getMaxLcy(),
+                transactionsRequest.getVatCodes(),
+                transactionsRequest.getCounterPartyId(),
+                transactionsRequest.getCounterPartyName(),
+                transactionsRequest.getCounterPartyTypes(),
+                transactionsRequest.getEventCodes(),
+                transactionsRequest.getReconciled(),
+                transactionsRequest.getParentCostcenters(),
+                transactionsRequest.getParentProjects(),
+                transactionsRequest.getAccountCodesDebit(),
+                transactionsRequest.getAccountCodesCredit(),
+                pageable
+                );
+        List<ExtractionTransactionItemView> extractionItemViews = transactionItem.getContent().stream().map(this::extractionTransactionItemViewBuilder).toList();
+        return ExtractionTransactionView.createSuccess(
+                extractionItemViews, transactionItem.getTotalElements(), pageable.getPageNumber(), extractionItemViews.size() < pageable.getPageSize() ? extractionItemViews.size() : pageable.getPageSize());
     }
 }

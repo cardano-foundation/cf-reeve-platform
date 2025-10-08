@@ -11,6 +11,7 @@ import static org.zalando.problem.Status.BAD_REQUEST;
 
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,11 +55,10 @@ class ExtractionControllerTest {
     @Test
     void transactionSearch_error() {
         ExtractionTransactionsRequest request = mock(ExtractionTransactionsRequest.class);
-        when(request.getDateFrom()).thenReturn("2023-01-01");
-        when(request.getDateTo()).thenReturn("2023-12-31");
         when(extractionItemService.findTransactionItems(any(),any(),any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
 
-        ResponseEntity<ExtractionTransactionView> extractionTransactionViewResponseEntity = extractionController.transactionSearch(request);
+        ResponseEntity<ExtractionTransactionView> extractionTransactionViewResponseEntity = extractionController.transactionSearch(request,
+                Pageable.unpaged());
         assertEquals(500, extractionTransactionViewResponseEntity.getStatusCode().value());
         assertNull(extractionTransactionViewResponseEntity.getBody());
     }
@@ -66,13 +66,11 @@ class ExtractionControllerTest {
     @Test
     void transactionSearch_success() {
         ExtractionTransactionsRequest request = mock(ExtractionTransactionsRequest.class);
-        when(request.getDateFrom()).thenReturn("2023-01-01");
-        when(request.getDateTo()).thenReturn("2023-12-31");
         ExtractionTransactionView expectedResponse = mock(ExtractionTransactionView.class);
 
-        when(extractionItemService.findTransactionItems(any(),any(),any(), any(), any(), any(), any())).thenReturn(expectedResponse);
+        when(extractionItemService.findTransactionItems(request, Pageable.unpaged())).thenReturn(expectedResponse);
 
-        ResponseEntity<ExtractionTransactionView> extractionTransactionViewResponseEntity = extractionController.transactionSearch(request);
+        ResponseEntity<ExtractionTransactionView> extractionTransactionViewResponseEntity = extractionController.transactionSearch(request, Pageable.unpaged());
         assertEquals(200, extractionTransactionViewResponseEntity.getStatusCode().value());
         assertEquals(expectedResponse, extractionTransactionViewResponseEntity.getBody());
     }
