@@ -71,9 +71,6 @@ public class AccountingCorePresentationViewService {
         private final JpaSortFieldValidator jpaSortFieldValidator;
         private final TransactionItemRepository transactionItemRepository;
         private final ReconcilationRepository reconcilationRepository;
-        /**
-         * TODO: waiting for refactoring the layer to remove this
-         */
         private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
 
         private static final Map<String, String> RV_FIELD_MAP =
@@ -97,14 +94,27 @@ public class AccountingCorePresentationViewService {
                 pageable.getSort().forEach(order -> {
                         String field = order.getProperty();
 
-                        // always add tr.<field>
-                        newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
+                        if(field.contains("function('enum_to_text', ")) {
+                                field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
+                                Sort newSort = JpaSort.unsafe(order.getDirection(), field);
+                                newOrders.add(newSort.iterator().next());
+                        } else {
+                                newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
+                        }
+
 
                         // if field has an rv mapping → also add rv.<mappedField>
                         if (RV_FIELD_MAP.containsKey(field) && mapRv) {
                                 String rvField = RV_FIELD_MAP.get(field);
+                                if(field.contains("function('enum_to_text', ")) {
+                                        rvField = field.replace("function('enum_to_text', tr.", "function('enum_to_text', rv.");
+                                        Sort newSort = JpaSort.unsafe(order.getDirection(),
+                                                        rvField);
+                                        newOrders.add(newSort.iterator().next());
+                                } else {
                                 newOrders.add(new Sort.Order(order.getDirection(),
                                                 "rv." + rvField));
+                                }
                         }
                 });
 
@@ -151,7 +161,7 @@ public class AccountingCorePresentationViewService {
                                                         body.getDateTo().orElse(null),
                                                         body.getTransactionTypes().isEmpty() ? null
                                                                         : body.getTransactionTypes(),
-                                                        body.getTransactionId(), body.getSource(),
+                                                        body.getTransactionId(), body.getSource().map(t -> t.name()).orElse(null),
                                                         pageable);
                         count = pagedTransactions.getTotalElements();
                         transactions = pagedTransactions.stream()
