@@ -143,7 +143,7 @@ public class API1MetadataSerialiser {
     private static MetadataMap serialise(Vat vat) {
         val vatMetadataMap = MetadataBuilder.createMap();
         vatMetadataMap.put("cust_code", vat.getCustomerCode());
-        vatMetadataMap.put("rate", BigDecimals.normaliseEngineeringString(vat.getRate()));
+        vatMetadataMap.put("rate", BigDecimals.normaliseString(vat.getRate()));
 
         return vatMetadataMap;
     }
@@ -152,13 +152,13 @@ public class API1MetadataSerialiser {
         val metadataMap = MetadataBuilder.createMap();
 
         metadataMap.put("id", transactionItemEntity.getId());
-        metadataMap.put("amount", BigDecimals.normaliseEngineeringString(transactionItemEntity.getAmountFcy()));
+        metadataMap.put("amount", BigDecimals.normaliseString(transactionItemEntity.getAmountFcy()));
 
         transactionItemEntity.getAccountEvent().ifPresent(accountEvent -> metadataMap.put("event", serialise(accountEvent)));
         transactionItemEntity.getProject().ifPresent(project -> metadataMap.put("project", serialise(project)));
         transactionItemEntity.getCostCenter().ifPresent(costCenter -> metadataMap.put("cost_center", serialise(costCenter)));
 
-        metadataMap.put("fx_rate", BigDecimals.normaliseEngineeringString(transactionItemEntity.getFxRate()));
+        metadataMap.put("fx_rate", BigDecimals.normaliseString(transactionItemEntity.getFxRate()));
         metadataMap.put("document", serialise(transactionItemEntity.getDocument()));
 
         return metadataMap;
