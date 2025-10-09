@@ -25,18 +25,24 @@ public class SortFieldMappings {
 
         private final JpaSortFieldValidator jpaSortFieldValidator;
 
-        public static final Map<String, String> TRANSACTION_ENTITY_FIELD_MAPPINGS =
-                        Map.of("reconciliationSource", "reconcilation.source", "reconciliationSink",
-                                        "reconcilation.sink", "reconciliationFinalStatus",
-                                        "reconcilation.finalStatus", "dataSource", "extractorType",
-                                        "status", "overallStatus", "statistic", "processingStatus",
-                                        "validationStatus", "automatedValidationStatus");
+        public static final Map<String, String> TRANSACTION_ENTITY_FIELD_MAPPINGS = Map.of(
+        "reconciliationSource", "reconcilation.source",
+        "reconciliationSink", "reconcilation.sink",
+        "reconciliationFinalStatus", "reconcilation.finalStatus",
+        "dataSource", "extractorType",
+        "status", "overallStatus",
+        "statistic", "processingStatus",
+        "validationStatus", "automatedValidationStatus"
+        );
 
-        public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS =
-                        Map.of("dataSource", "extractorType", "status", "overallStatus",
-                                        "amountTotalLcy", "totalAmountLcy", "reconciliationSource",
-                                        "reconcilation.source", "reconcilationSink",
-                                        "reconcilation.sink", "entryDate", "transaction.entryDate");
+        public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS = Map.of(
+            "dataSource", "extractorType",
+            "status", "overallStatus",
+            "amountTotalLcy", "totalAmountLcy",
+            "reconciliationSource", "reconcilation.source",
+            "reconcilationSink", "reconcilation.sink",
+            "reconciliationDate", "lastReconcilation.createdAt"
+        );
 
         public static final Map<String, String> EXTRACTION_SEARCH_FIELD_MAPPINGS = Map.ofEntries(
                         Map.entry("transactionInternalNumber",

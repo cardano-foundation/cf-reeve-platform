@@ -62,45 +62,55 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     Set<TransactionEntity> findAllByBatchId(String batchId);
 
     @Query("""
-    SELECT t FROM accounting_reporting_core.TransactionEntity t
-    JOIN t.batches b
-    WHERE b.id = :batchId
-    AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
-    AND (:types IS NULL OR t.transactionType IN :types)
-    AND (:internalTransactionNumber IS NULL OR t.internalTransactionNumber LIKE %:internalTransactionNumber%)
-    AND (:minTotalLcy IS NULL OR t.totalAmountLcy >= :minTotalLcy)
-    AND (:maxTotalLcy IS NULL OR t.totalAmountLcy <= :maxTotalLcy)
-    AND t.entryDate >= COALESCE(:dateFrom, t.entryDate)
-    AND t.entryDate <= COALESCE(:dateTo, t.entryDate)
-    AND NOT EXISTS (
-        SELECT 1 FROM t.items i2
-        WHERE
-            i2.status = 'OK'
-            AND (
-            (:documentNumber IS NOT NULL AND i2.document.num NOT LIKE %:documentNumber%)
-            OR (:documentNumbers IS NOT NULL AND (i2.document.num IS NULL OR i2.document.num NOT IN :documentNumbers))
-            OR (:currencyCustomerCodes IS NOT NULL AND (i2.document.currency.customerCode is NULL OR i2.document.currency.customerCode NOT IN :currencyCustomerCodes))
-            OR (:minFCY IS NOT NULL AND i2.amountFcy < :minFCY)
-            OR (:maxFCY IS NOT NULL AND i2.amountFcy > :maxFCY)
-            OR (:minLCY IS NOT NULL AND i2.amountLcy < :minLCY)
-            OR (:maxLCY IS NOT NULL AND i2.amountLcy > :maxLCY)
-            OR (:vatCustomerCodes IS NOT NULL AND (i2.document.vat.customerCode IS NULL OR i2.document.vat.customerCode NOT IN :vatCustomerCodes))
-            OR (:costCenterCustomerCodes IS NOT NULL AND (i2.costCenter.customerCode IS NULL OR i2.costCenter.customerCode NOT IN :costCenterCustomerCodes))
-            OR (:projectCustomerCodes IS NOT NULL AND (i2.project.customerCode IS NULL OR i2.project.customerCode NOT IN :projectCustomerCodes))
-            OR (:counterPartyCustomerCodes IS NOT NULL AND (i2.document.counterparty.customerCode IS NULL OR i2.document.counterparty.customerCode NOT IN :counterPartyCustomerCodes))
-            OR (:counterPartyTypes IS NOT NULL AND (i2.document.counterparty.type IS NULL OR i2.document.counterparty.type NOT IN :counterPartyTypes))
-            OR (:debitAccountCodes IS NOT NULL AND (i2.accountDebit.code IS NULL OR i2.accountDebit.code NOT IN :debitAccountCodes))
-            OR (:creditAccountCodes IS NOT NULL AND (i2.accountCredit.code IS NULL OR i2.accountCredit.code NOT IN :creditAccountCodes))
-            OR (:eventCodes IS NOT NULL AND (i2.accountEvent.code IS NULL OR i2.accountEvent.code NOT IN :eventCodes))
-            OR (:parentCostCenterCustomerCodes IS NOT NULL AND (i2.costCenter.customerCode IS NULL OR NOT EXISTS (
-                SELECT 1 FROM CostCenter cc
-                WHERE cc.id.customerCode = i2.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostCenterCustomerCodes)))
-            OR (:parentProjectCustomerCodes IS NOT NULL AND (i2.project.customerCode IS NULL OR NOT EXISTS (
-                SELECT 1 FROM Project cc
-                WHERE cc.id.customerCode = i2.project.customerCode AND cc.parentCustomerCode IN :parentProjectCustomerCodes)))
+        SELECT t FROM accounting_reporting_core.TransactionEntity t
+        JOIN t.batches b
+        WHERE b.id = :batchId
+        AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
+        AND (:types IS NULL OR t.transactionType IN :types)
+        AND (:internalTransactionNumber IS NULL OR LOWER(t.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:internalTransactionNumber AS string), '%')))
+        AND (:minTotalLcy IS NULL OR t.totalAmountLcy >= :minTotalLcy)
+        AND (:maxTotalLcy IS NULL OR t.totalAmountLcy <= :maxTotalLcy)
+        AND t.entryDate >= COALESCE(:dateFrom, t.entryDate)
+        AND t.entryDate <= COALESCE(:dateTo, t.entryDate)
+        AND (
+                (:documentNumber IS NULL AND :documentNumbers IS NULL AND :currencyCustomerCodes IS NULL AND
+                :minFCY IS NULL AND :maxFCY IS NULL AND :minLCY IS NULL AND :maxLCY IS NULL AND
+                :vatCustomerCodes IS NULL AND :costCenterCustomerCodes IS NULL AND :projectCustomerCodes IS NULL AND
+                :counterPartyCustomerCodes IS NULL AND :counterPartyTypes IS NULL AND
+                :debitAccountCodes IS NULL AND :creditAccountCodes IS NULL AND :eventCodes IS NULL AND
+                :parentCostCenterCustomerCodes IS NULL AND :parentProjectCustomerCodes IS NULL)
+                OR EXISTS (
+                SELECT 1 FROM t.items i2
+                WHERE
+                        i2.status = 'OK'
+                        AND (
+                        (:documentNumber IS NULL OR i2.document.num LIKE CONCAT('%', CAST(:documentNumber AS string), '%'))
+                        AND (:documentNumbers IS NULL OR i2.document.num IN :documentNumbers)
+                        AND (:currencyCustomerCodes IS NULL OR i2.document.currency.customerCode IN :currencyCustomerCodes)
+                        AND (:minFCY IS NULL OR i2.amountFcy >= :minFCY)
+                        AND (:maxFCY IS NULL OR i2.amountFcy <= :maxFCY)
+                        AND (:minLCY IS NULL OR i2.amountLcy >= :minLCY)
+                        AND (:maxLCY IS NULL OR i2.amountLcy <= :maxLCY)
+                        AND (:vatCustomerCodes IS NULL OR i2.document.vat.customerCode IN :vatCustomerCodes)
+                        AND (:costCenterCustomerCodes IS NULL OR i2.costCenter.customerCode IN :costCenterCustomerCodes)
+                        AND (:projectCustomerCodes IS NULL OR i2.project.customerCode IN :projectCustomerCodes)
+                        AND (:counterPartyCustomerCodes IS NULL OR i2.document.counterparty.customerCode IN :counterPartyCustomerCodes)
+                        AND (:counterPartyTypes IS NULL OR i2.document.counterparty.type IN :counterPartyTypes)
+                        AND (:debitAccountCodes IS NULL OR i2.accountDebit.code IN :debitAccountCodes)
+                        AND (:creditAccountCodes IS NULL OR i2.accountCredit.code IN :creditAccountCodes)
+                        AND (:eventCodes IS NULL OR i2.accountEvent.code IN :eventCodes)
+                        AND (:parentCostCenterCustomerCodes IS NULL OR EXISTS (
+                                SELECT 1 FROM CostCenter cc
+                                WHERE cc.id.customerCode = i2.costCenter.customerCode
+                                AND cc.parentCustomerCode IN :parentCostCenterCustomerCodes))
+                        AND (:parentProjectCustomerCodes IS NULL OR EXISTS (
+                                SELECT 1 FROM Project cc
+                                WHERE cc.id.customerCode = i2.project.customerCode
+                                AND cc.parentCustomerCode IN :parentProjectCustomerCodes))
+                        )
+                )
         )
-    )
-            """)
+        """)
     Page<TransactionEntity> findAllByBatchId(
             @Param("batchId") String batchId,
             @Param("txStatus") List<TransactionProcessingStatus> txStatus,
