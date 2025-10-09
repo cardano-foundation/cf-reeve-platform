@@ -822,6 +822,13 @@ public class AccountingCorePresentationViewService {
                                                                 .name())
                                                         .build())
                                                 .toList());
+                                case RECONCILIATION_SOURCES -> filterOptionsListMap.put(filterOption,
+                                        Arrays.stream(ReconciliationFilterSource.values())
+                                                .map(type -> FilteringOptionsListResponse
+                                                        .builder()
+                                                        .name(type.name())
+                                                        .build())
+                                                .toList());
 
 
                         }
