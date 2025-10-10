@@ -1,6 +1,7 @@
 package org.cardanofoundation;
 
 import java.io.IOException;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.DigestException;
@@ -40,6 +41,9 @@ import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.Serder;
 import org.cardanofoundation.signify.cesr.util.Utils;
 import org.cardanofoundation.signify.core.States;
+import org.cardanofoundation.signify.core.States.HabState;
+import org.cardanofoundation.utils.Constants;
+import org.cardanofoundation.utils.UtilFunctions;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -107,7 +111,9 @@ public class CreateVlei {
                 }
             }
             System.out.println("All VCP Events: " + allVcpEvents);
-            CredentialSerializationData decentralizationInfo = new CredentialSerializationData(List.of(gleif.aid().prefix(),qvi.aid().prefix(), legalEntity.aid().prefix(), reeve.aid().prefix()),
+
+            CredentialSerializationData decentralizationInfo = new CredentialSerializationData(List.of(
+                    gleif.aid().prefix(),qvi.aid().prefix(), legalEntity.aid().prefix(), reeve.aid().prefix()),
                     new EventDataAndAttachement(allVcpEvents, allVcpAttachments),
                     new EventDataAndAttachement(allIssEvents, allIssAttachments), allAcdcEvents);
             String credentialSerializationData = objectMapper.writeValueAsString(decentralizationInfo);
@@ -821,42 +827,66 @@ public class CreateVlei {
     public static Aid createAid(SignifyClient client, String name) throws Exception {
         Object id = null;
         String eid = "";
-        try {
-            States.HabState identifier = client.identifiers().get(name).orElseThrow();
-            id = identifier.getPrefix();
-        } catch (Exception e) {
-            CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
-            kArgs.setToad(Constants.witnessIds.size());
-            kArgs.setWits(Constants.witnessIds);
+        CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
+        kArgs.setToad(Constants.witnessIds.size());
+        kArgs.setWits(Constants.witnessIds);
+        Object op, ops;
+        Optional<States.HabState> optionalIdentifier = client.identifiers().get(name);
+        if (optionalIdentifier.isPresent()) {
+            id = optionalIdentifier.get().getPrefix();
+
+        } else {
             EventResult result = client.identifiers().create(name, kArgs);
-            Object op = client.operations().wait(Operation.fromObject(result.op()));
-            if (op instanceof String) {
-                try {
-                    @SuppressWarnings("unchecked")
-                    HashMap<String, Object> map =
-                            objectMapper.readValue((String) op, HashMap.class);
-                    @SuppressWarnings("unchecked")
-                    HashMap<String, Object> idMap = (HashMap<String, Object>) map.get("response");
-                    id = idMap.get("i");
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
+            op = result.op();
+            op = client.operations().wait(Operation.fromObject(op));
+            LinkedHashMap<String, Object> resp = (LinkedHashMap<String, Object>) (Operation.fromObject(op).getResponse());
+        
+            id = resp.get("i");
             if (client.getAgent() != null && client.getAgent().getPre() != null) {
                 eid = client.getAgent().getPre();
             } else {
                 throw new IllegalStateException("Agent or pre is null");
             }
-            EventResult results = client.identifiers().addEndRole(name, "agent", eid, null);
-            client.operations().wait(Operation.fromObject(results.op()));
+            if (!hasEndRole(client, name, "agent", eid)) {
+                EventResult results = client.identifiers().addEndRole(name, "agent", eid, null);
+                ops = results.op();
+                ops = client.operations().wait(Operation.fromObject(ops));
+            }
         }
 
-        Object oobi = client.oobis().get(name, "agent");
-        @SuppressWarnings("unchecked")
-        String getOobi = ((Optional<LinkedHashMap<String, Object>>) oobi).orElseThrow().get("oobis").toString()
-                .replaceAll("[\\[\\]]", "");
-        String[] result = new String[] {id != null ? id.toString() : eid, getOobi};
+        Object oobi = client.oobis().get(name, "agent").get();
+        String getOobi = ((LinkedHashMap) oobi).get("oobis").toString().replaceAll("[\\[\\]]", "");
+        String[] result = new String[] {id != null ? id.toString() : null, getOobi};
         return new Aid(name, result[0], result[1]);
+    }
+
+    public static Boolean hasEndRole(SignifyClient client, String alias, String role, String eid)
+            throws Exception {
+        List<Map<String, Object>> list = getEndRoles(client, alias, role);
+        for (Map<String, Object> endRoleMap : list) {
+            String endRole = (String) endRoleMap.get("role");
+            String endRoleEid = (String) endRoleMap.get("eid");
+
+            if (endRole != null && endRoleEid != null && endRole.equals(role)
+                    && endRoleEid.equals(eid)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+     public static List<Map<String, Object>> getEndRoles(SignifyClient client, String alias, String role) throws Exception {
+        String path = (role != null)
+                ? "/identifiers/" + alias + "/endroles/" + role
+                : "/identifiers/" + alias + "/endroles";
+
+        HttpResponse<String> response = client.fetch(path, "GET", alias, null);
+        String responseBody = response.body();
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        List<Map<String, Object>> result = objectMapper.readValue(responseBody, new TypeReference<>() {
+        });
+        return result;
     }
 
     public static void resolveOobis(List<SignifyClient> clients, List<String> oobis)

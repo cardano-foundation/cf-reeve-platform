@@ -1,4 +1,4 @@
-package org.cardanofoundation;
+package org.cardanofoundation.utils;
 
 import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;

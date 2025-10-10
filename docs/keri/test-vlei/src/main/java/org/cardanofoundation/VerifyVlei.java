@@ -2,6 +2,8 @@ package org.cardanofoundation;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -11,6 +13,9 @@ import org.cardanofoundation.domain.CredentialSerializationData;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.cesr.Serder;
+import org.cardanofoundation.signify.core.States.HabState;
+import org.cardanofoundation.utils.Constants;
+import org.cardanofoundation.utils.UtilFunctions;
 import com.fasterxml.jackson.core.exc.StreamReadException;
 import com.fasterxml.jackson.databind.DatabindException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,14 +41,17 @@ public class VerifyVlei {
 
         verifierClient = UtilFunctions.getOrCreateClient(""); // creating client with random bran
 
-        resolveOobis(oobiFile);
+        List<String> oobis = resolveOobis(oobiFile);
 
+
+        Optional<HabState> optional = verifierClient.identifiers().get(oobis.getFirst());
         verifyVcps(csd);
-
+        System.out.println("Querying key states to ensure all events are processed by verifier");
         for (String prefix : csd.prefix()) {
             Object query = verifierClient.keyStates().query(prefix, "1");
             verifierClient.operations().wait(Operation.fromObject(query));
         }
+        System.out.println("All key states are processed by verifier");
 
         // Verify each credential in the chain (ISS + ACDC pairs)
         for (int i = 0; i < Math.min(csd.iss().events().size(), csd.acdc().size()); i++) {
@@ -125,13 +133,18 @@ public class VerifyVlei {
         }
     }
 
-    private static void resolveOobis(String oobiFile)
+    private static List<String> resolveOobis(String oobiFile)
             throws IOException, StreamReadException, DatabindException, InterruptedException {
         String[] oobis = objectMapper.readValue(new File(oobiFile), String[].class);
+        List<String> resolved = new java.util.ArrayList<>();
         for (String oobi : oobis) {
             Object resolve = verifierClient.oobis().resolve(oobi, null);
-            verifierClient.operations().wait(Operation.fromObject(resolve));
+            Operation<Object> wait = verifierClient.operations().wait(Operation.fromObject(resolve));
+            LinkedHashMap<String, Object> response = (LinkedHashMap<String, Object>) wait.getResponse();
+            resolved.add((String) response.get("i"));
+            System.out.println(wait.isDone());
         }
+        return resolved;
     }
 
 }

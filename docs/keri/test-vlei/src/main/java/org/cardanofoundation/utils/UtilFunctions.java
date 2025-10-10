@@ -1,4 +1,4 @@
-package org.cardanofoundation;
+package org.cardanofoundation.utils;
 
 import java.util.Map;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
