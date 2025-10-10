@@ -40,6 +40,11 @@ public class VerifyVlei {
 
         verifyVcps(csd);
 
+        for (String prefix : csd.prefix()) {
+            Object query = verifierClient.keyStates().query(prefix, "1");
+            verifierClient.operations().wait(Operation.fromObject(query));
+        }
+
         // Verify each credential in the chain (ISS + ACDC pairs)
         for (int i = 0; i < Math.min(csd.iss().events().size(), csd.acdc().size()); i++) {
             Map<String, Object> issEvent = csd.iss().events().get(i);
@@ -80,13 +85,13 @@ public class VerifyVlei {
         }
 
         // Verify the credential is available from verifier
-        Optional<Object> verifiedLeCredential =
-                verifierClient.credentials().get(csd.prefix(), false);
-        if (verifiedLeCredential.isPresent()) {
-            System.out.println("✓ Verified LE credential is retrievable from verifier");
-        } else {
-            System.out.println("⚠ Verified LE credential is NOT retrievable from verifier");
-        }
+        // Optional<Object> verifiedLeCredential =
+        //         verifierClient.credentials().get(csd.prefix(), false);
+        // if (verifiedLeCredential.isPresent()) {
+        //     System.out.println("✓ Verified LE credential is retrievable from verifier");
+        // } else {
+        //     System.out.println("⚠ Verified LE credential is NOT retrievable from verifier");
+        // }
     }
 
     private static void verifyVcps(CredentialSerializationData csd)

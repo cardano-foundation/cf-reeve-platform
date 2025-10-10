@@ -107,7 +107,7 @@ public class CreateVlei {
                 }
             }
             System.out.println("All VCP Events: " + allVcpEvents);
-            CredentialSerializationData decentralizationInfo = new CredentialSerializationData(reeve.aid().prefix(),
+            CredentialSerializationData decentralizationInfo = new CredentialSerializationData(List.of(gleif.aid().prefix(),qvi.aid().prefix(), legalEntity.aid().prefix(), reeve.aid().prefix()),
                     new EventDataAndAttachement(allVcpEvents, allVcpAttachments),
                     new EventDataAndAttachement(allIssEvents, allIssAttachments), allAcdcEvents);
             String credentialSerializationData = objectMapper.writeValueAsString(decentralizationInfo);
