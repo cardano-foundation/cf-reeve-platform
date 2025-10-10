@@ -19,6 +19,8 @@ import org.cardanofoundation.domain.ClientAidPair;
 import org.cardanofoundation.domain.CredentialComponents;
 import org.cardanofoundation.domain.CredentialInfo;
 import org.cardanofoundation.domain.CredentialType;
+import org.cardanofoundation.domain.CredentialData;
+import org.cardanofoundation.domain.EventDataAndAttachement;
 import org.cardanofoundation.domain.Notification;
 import org.cardanofoundation.domain.ParentCredentialInfo;
 import org.cardanofoundation.signify.app.Contacting;
@@ -71,17 +73,48 @@ public class Main {
             System.out.println("Reeve AID Prefix: " + reeve.aid().prefix());
             System.out.println("Reeve AID OOBI: " + reeve.aid().oobi());
 
-            // Optional<Object> credential = reeve.client().credentials().get(credentialChain.get(2).id(), true);
-            // String credentialCesr = (String) credential.orElseThrow();
-            // List<Map<String, Object>> cesrData = parseCESRData(credentialCesr);
-            // System.out.println("Reeve Credential CESR Data: " + cesrData);
-
-            // DecentralizationInfo decentralizationInfo = new DecentralizationInfo(reeve.aid().prefix(),
-            //         new String[]{gleif.aid().oobi(), qvi.aid().oobi(), legalEntity.aid().oobi(), reeve.aid().oobi()},
-            //         new JsonNode[]{gleif.vcp(), qvi.vcp(), legalEntity.vcp(), reeve.vcp()},
-            //         objectMapper.readTree(objectMapper.writeValueAsString(credential)));
-            // String decentralizationJson = objectMapper.writeValueAsString(decentralizationInfo);
-            // Files.writeString(Path.of("decentralization_info.json"), decentralizationJson);
+            Optional<Object> credential = reeve.client().credentials().get(credentialChain.get(2).id(), true);
+            System.out.println("Reeve Credential (raw): " + credential);
+            String credentialCesr = (String) credential.orElseThrow();
+            List<Map<String, Object>> cesrData = parseCESRData(credentialCesr);
+            System.out.println("Reeve Credential CESR Data: " + cesrData);
+            List<Map<String, Object>> allVcpEvents = new ArrayList<>();
+            List<String> allVcpAttachments = new ArrayList<>();
+            List<Map<String, Object>> allIssEvents = new ArrayList<>();
+            List<String> allIssAttachments = new ArrayList<>();
+            List<Map<String, Object>> allAcdcEvents = new ArrayList<>();
+            for (Map<String, Object> eventData : cesrData) {
+                Map<String, Object> event = (Map<String, Object>) eventData.get("event");
+                Object eventTypeObj = event.get("t");
+                if (eventTypeObj != null) {
+                    String eventType = eventTypeObj.toString();
+                    switch (eventType) {
+                        case "vcp":
+                            allVcpEvents.add(event);
+                            allVcpAttachments.add((String) eventData.get("atc"));
+                            break;
+                        case "iss":
+                            allIssEvents.add(event);
+                            allIssAttachments.add((String) eventData.get("atc"));
+                            break;
+                    }
+                } else {
+                    // Check if this is an ACDC (credential data) without "t" field
+                    if (event.containsKey("s") && event.containsKey("a")
+                            && event.containsKey("i")) {
+                        Object schemaObj = event.get("s");
+                        if (schemaObj != null) {
+                            allAcdcEvents.add(event);
+                        }
+                    }
+                }
+            }
+            System.out.println("All VCP Events: " + allVcpEvents);
+            CredentialData decentralizationInfo = new CredentialData(reeve.aid().prefix(),
+                    new EventDataAndAttachement(allVcpEvents, allVcpAttachments),
+                    new EventDataAndAttachement(allIssEvents, allIssAttachments), allAcdcEvents);
+            String decentralizationJson = objectMapper.writeValueAsString(decentralizationInfo);
+            Files.writeString(Path.of("vlei_credentialData.json"), decentralizationJson);
         } catch (Exception e) {
             System.err.println("ERROR: Credential chain setup failed: " + e.getMessage());
             e.printStackTrace();
@@ -102,7 +135,7 @@ public class Main {
     private static ParentCredentialInfo getParentCredentialInfo(String credentialId,
             SignifyClient client) throws Exception {
         LinkedHashMap<String, Object> credential =
-                (LinkedHashMap<String, Object>) client.credentials().get(credentialId);
+                (LinkedHashMap<String, Object>)((Optional<Object>) client.credentials().get(credentialId)).get();
         LinkedHashMap<String, Object> sadBody =
                 (LinkedHashMap<String, Object>) credential.get("sad");
 
@@ -695,7 +728,7 @@ public class Main {
     private static CredentialComponents getCredentialComponents(SignifyClient client,
             String credentialId) throws Exception {
         Object credential = client.credentials().get(credentialId);
-        LinkedHashMap<String, Object> credentialMap = (LinkedHashMap<String, Object>) credential;
+        LinkedHashMap<String, Object> credentialMap = ((Optional<LinkedHashMap<String, Object>>) credential).orElseThrow();
 
         Map<String, Object> sad = (Map<String, Object>) credentialMap.get("sad");
         Map<String, Object> anc = (Map<String, Object>) credentialMap.get("anc");
@@ -803,7 +836,7 @@ public class Main {
         Object id = null;
         String eid = "";
         try {
-            States.HabState identifier = client.identifiers().get(name);
+            States.HabState identifier = client.identifiers().get(name).orElseThrow();
             id = identifier.getPrefix();
         } catch (Exception e) {
             CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
@@ -834,7 +867,7 @@ public class Main {
 
         Object oobi = client.oobis().get(name, "agent");
         @SuppressWarnings("unchecked")
-        String getOobi = ((LinkedHashMap<String, Object>) oobi).get("oobis").toString()
+        String getOobi = ((Optional<LinkedHashMap<String, Object>>) oobi).orElseThrow().get("oobis").toString()
                 .replaceAll("[\\[\\]]", "");
         String[] result = new String[] {id != null ? id.toString() : eid, getOobi};
         return new Aid(name, result[0], result[1]);

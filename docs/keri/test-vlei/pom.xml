@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.cardanofoundation</groupId>
-    <artifactId>test-vlei</artifactId>
+    <artifactId>create-test-vlei</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>
@@ -17,7 +17,7 @@
         <dependency>
             <groupId>org.cardanofoundation</groupId>
             <artifactId>signify</artifactId>
-            <version>0.1.1</version>
+            <version>0.1.3-af01d93-SNAPSHOT</version>
         </dependency>
         <dependency> 
                 <groupId>com.fasterxml.jackson.core</groupId>
