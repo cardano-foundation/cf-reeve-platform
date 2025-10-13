@@ -46,12 +46,14 @@ public class KeriService {
 
             EventResult interact = client.identifiers().interact(identifierConfig.getPrefix(),
                     diger.getQb64());
+            String qb = diger.getQb64();
             client.operations().wait(Operation.fromObject(interact.op()));
             Map<String, Object> ked = interact.serder().getKed();
             MetadataMap metadataMap = MetadataBuilder.createMap();
             metadataMap.put("s", ked.get("s").toString());
             metadataMap.put("i", identifierConfig.getPrefix());
-            metadataMap.put("d", diger.getQb64());
+            metadataMap.put("d", ked.get("d").toString());
+            metadataMap.put("a", diger.getQb64());
             metadataMap.put("type", "KERI");
             return metadataMap;
 
