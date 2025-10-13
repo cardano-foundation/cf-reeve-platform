@@ -53,6 +53,25 @@ public class VerifyVlei {
         }
         System.out.println("All key states are processed by verifier");
 
+        // Re-resolve schemas before credential verification
+        System.out.println("Re-resolving schemas...");
+        List<String> schemaOobis = List.of(
+            Constants.QVI_SCHEMA_URL,
+            Constants.LE_SCHEMA_URL,
+            Constants.REEVE_SCHEMA_URL
+        );
+        
+        for (String schemaOobi : schemaOobis) {
+            try {
+                Object resolve = verifierClient.oobis().resolve(schemaOobi, null);
+                Operation<Object> wait = verifierClient.operations().wait(Operation.fromObject(resolve));
+                System.out.println("Re-resolved schema: " + schemaOobi + " -> " + wait.isDone());
+            } catch (Exception e) {
+                System.out.println("Failed to re-resolve schema: " + schemaOobi + " - " + e.getMessage());
+            }
+        }
+        System.out.println("Schema re-resolution completed");
+
         // Verify each credential in the chain (ISS + ACDC pairs)
         for (int i = 0; i < Math.min(csd.iss().events().size(), csd.acdc().size()); i++) {
             Map<String, Object> issEvent = csd.iss().events().get(i);
@@ -83,6 +102,27 @@ public class VerifyVlei {
                         + " verification completed successfully");
                 System.out
                         .println("  Credential Operation Status: " + credentialOperation.isDone());
+
+                        // verifier can get the credential right after verification
+                        if (credentialOperation.isDone()) {
+                            // Get and print credential details
+                            Object credentialResponse = credentialOperation.getResponse();
+                            System.out.println("  Credential Response: " + credentialResponse);
+                            
+                            // Try to get the credential from the verifier client
+                            try {
+                                String credentialId = (String) acdcEvent.get("d");
+                                Optional<Object> credential = verifierClient.credentials().get(credentialId);
+                                if (credential.isPresent()) {
+                                    System.out.println("  Retrieved Credential ID: " + credentialId);
+                                    System.out.println("  Credential Details: " + credential.get());
+                                } else {
+                                    System.out.println("  Credential not found in verifier for ID: " + credentialId);
+                                }
+                            } catch (Exception e) {
+                                System.out.println("  Error retrieving credential: " + e.getMessage());
+                            }
+                        }
             } catch (TimeoutException e) {
                 System.out.println("⚠ " + credentialType + " credential #" + (i + 1)
                         + " verification timed out after 30 seconds");
