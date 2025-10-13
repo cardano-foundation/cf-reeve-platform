@@ -123,7 +123,10 @@ public class CreateVlei {
                     gleif.aid().oobi(),
                     qvi.aid().oobi(),
                     legalEntity.aid().oobi(),
-                    reeve.aid().oobi());
+                    reeve.aid().oobi(),
+                    Constants.QVI_SCHEMA_URL,
+                    Constants.LE_SCHEMA_URL,
+                    Constants.REEVE_SCHEMA_URL);
             String oobis = objectMapper.writeValueAsString(oobList);
             Files.writeString(Path.of("oobis.json"), oobis);
         } catch (Exception e) {
@@ -834,7 +837,6 @@ public class CreateVlei {
         Optional<States.HabState> optionalIdentifier = client.identifiers().get(name);
         if (optionalIdentifier.isPresent()) {
             id = optionalIdentifier.get().getPrefix();
-
         } else {
             EventResult result = client.identifiers().create(name, kArgs);
             op = result.op();

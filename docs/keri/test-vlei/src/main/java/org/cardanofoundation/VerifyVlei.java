@@ -41,10 +41,9 @@ public class VerifyVlei {
 
         verifierClient = UtilFunctions.getOrCreateClient(""); // creating client with random bran
 
-        List<String> oobis = resolveOobis(oobiFile);
+        resolveOobis(oobiFile);
 
 
-        Optional<HabState> optional = verifierClient.identifiers().get(oobis.getFirst());
         verifyVcps(csd);
         System.out.println("Querying key states to ensure all events are processed by verifier");
         for (String prefix : csd.prefix()) {
@@ -52,25 +51,6 @@ public class VerifyVlei {
             verifierClient.operations().wait(Operation.fromObject(query));
         }
         System.out.println("All key states are processed by verifier");
-
-        // Re-resolve schemas before credential verification
-        System.out.println("Re-resolving schemas...");
-        List<String> schemaOobis = List.of(
-            Constants.QVI_SCHEMA_URL,
-            Constants.LE_SCHEMA_URL,
-            Constants.REEVE_SCHEMA_URL
-        );
-        
-        for (String schemaOobi : schemaOobis) {
-            try {
-                Object resolve = verifierClient.oobis().resolve(schemaOobi, null);
-                Operation<Object> wait = verifierClient.operations().wait(Operation.fromObject(resolve));
-                System.out.println("Re-resolved schema: " + schemaOobi + " -> " + wait.isDone());
-            } catch (Exception e) {
-                System.out.println("Failed to re-resolve schema: " + schemaOobi + " - " + e.getMessage());
-            }
-        }
-        System.out.println("Schema re-resolution completed");
 
         // Verify each credential in the chain (ISS + ACDC pairs)
         for (int i = 0; i < Math.min(csd.iss().events().size(), csd.acdc().size()); i++) {
@@ -115,7 +95,8 @@ public class VerifyVlei {
                                 Optional<Object> credential = verifierClient.credentials().get(credentialId);
                                 if (credential.isPresent()) {
                                     System.out.println("  Retrieved Credential ID: " + credentialId);
-                                    System.out.println("  Credential Details: " + credential.get());
+                                    
+                                    // System.out.println("  Credential Details: " + credential.get());
                                 } else {
                                     System.out.println("  Credential not found in verifier for ID: " + credentialId);
                                 }
