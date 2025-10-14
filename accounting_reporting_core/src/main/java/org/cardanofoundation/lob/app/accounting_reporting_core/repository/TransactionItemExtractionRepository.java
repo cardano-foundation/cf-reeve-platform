@@ -90,7 +90,14 @@ public class TransactionItemExtractionRepository {
         }
 
         if (costCenter != null && !costCenter.isEmpty()) {
-            jpql.append(" AND ti.costCenter.customerCode IN :costCenters");
+            jpql.append("""
+                    AND ti.costCenter.customerCode IN (SELECT cc.Id.customerCode from CostCenter cc
+                    WHERE
+                    cc.Id.customerCode in :costCenters OR
+                    cc.parent.Id.customerCode in :costCenters OR
+                    cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.customerCode in :costCenters)
+                    )
+                    """);
         }
 
         if (project != null && !project.isEmpty()) {

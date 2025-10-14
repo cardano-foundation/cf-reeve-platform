@@ -84,7 +84,8 @@ class TransactionItemExtractionRepositoryTest {
                     )
                 )
             )
-            AND ti.costCenter.customerCode IN :costCenters AND ti.project.customerCode IN :projects
+            AND ti.costCenter.customerCode IN (SELECT cc.Id.customerCode from CostCenter cc WHERE cc.Id.customerCode in :costCenters OR cc.parent.Id.customerCode in :costCenters OR cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.customerCode in :costCenters) )
+            AND ti.project.customerCode IN :projects
             """;
 
         assertEquals(normalize(expectedQuery), normalize(queryCaptor.getValue()));
