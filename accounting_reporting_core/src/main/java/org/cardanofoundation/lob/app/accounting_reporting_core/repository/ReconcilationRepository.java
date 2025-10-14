@@ -24,8 +24,8 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                 LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
                 WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation.id IS NULL) AND ((rv.rejectionCode = 'TX_NOT_IN_ERP' AND tr.ledgerDispatchApproved = true) OR (rv.rejectionCode != 'TX_NOT_IN_ERP'))
                 AND (:rejectionCodes IS NULL OR rv.rejectionCode IN :rejectionCodes)
-                AND (CAST(:startDate AS date) IS NULL OR tr.entryDate >= :startDate OR rv.transactionEntryDate >= :startDate)
-                AND (CAST(:endDate AS date) IS NULL OR tr.entryDate <= :endDate OR rv.transactionEntryDate <= :endDate)
+                AND (CAST(:startDate AS date) IS NULL OR (tr.entryDate >= :startDate OR rv.transactionEntryDate >= :startDate))
+                AND (CAST(:endDate AS date) IS NULL OR (tr.entryDate <= :endDate OR rv.transactionEntryDate <= :endDate))
                 AND (:source IS NULL OR ( :source = 'ERP' AND tr.reconcilation.source = 'OK' ) OR ( :source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK') )
                 AND (:transactionTypes IS NULL OR tr.transactionType IN :transactionTypes OR rv.transactionType IN :transactionTypes)
                 AND (:transactionId IS NULL OR LOWER(tr.id) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')) OR LOWER(rv.transactionId) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')))
@@ -55,12 +55,6 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                                 )
                             OR (:filter = 'UNRECONCILED'
                                 AND tr.reconcilation.source IS NULL
-                                AND tr.id in (
-                                    SELECT rv.transactionId
-                                    FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
-                                    JOIN r.violations rv
-                                    WHERE rv.rejectionCode = 'TX_NOT_IN_LOB'
-                                    GROUP BY rv.transactionId)
                                 )
                         """, countQuery = """
                         SELECT COUNT(tr)
