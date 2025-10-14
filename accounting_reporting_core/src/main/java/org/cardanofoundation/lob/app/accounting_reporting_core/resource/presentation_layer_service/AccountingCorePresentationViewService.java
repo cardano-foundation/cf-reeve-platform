@@ -44,11 +44,11 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
-import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.javers.BagParser;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
@@ -69,10 +69,10 @@ public class AccountingCorePresentationViewService {
     private final TransactionReconcilationRepository transactionReconcilationRepository;
     private final CostCenterRepository costCenterRepository;
     private final ProjectRepository projectRepository;
-    private final JpaSortFieldValidator jpaSortFieldValidator;
     private final TransactionItemRepository transactionItemRepository;
     private final ReconcilationRepository reconcilationRepository;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
+    private final SortFieldMappings sortFieldMappings;
 
     private static final Map<String, String> RV_FIELD_MAP =
             Map.of("id", "transactionId",
@@ -197,64 +197,12 @@ public class AccountingCorePresentationViewService {
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Either<Problem, Pageable> convertPageable(Pageable page,
-                                                     Map<String, String> fieldMappings) {
-        if (page.getSort().isSorted()) {
-            Optional<Sort.Order> notSortableProperty =
-                    page.getSort().get().filter(order -> {
-                        String property = Optional
-                                .ofNullable(fieldMappings.get(order
-                                        .getProperty()))
-                                .orElse(order.getProperty());
-
-                        return !jpaSortFieldValidator.isSortable(
-                                TransactionEntity.class, property);
-                    }).findFirst();
-
-            if (notSortableProperty.isPresent()) {
-                return Either.left(Problem.builder()
-                        .withTitle("Invalid Sort Property")
-                        .withDetail("Invalid sort: " + notSortableProperty
-                                .get().getProperty())
-                        .build());
-            }
-
-            Sort sort = Sort.by(page.getSort().get().map(order -> {
-                String property = Optional
-                        .ofNullable(fieldMappings.get(order.getProperty()))
-                        .orElse(order.getProperty());
-
-                // simple enum detection – you can swap for a static Set
-                boolean isEnum = false;
-                try {
-                    isEnum = TransactionEntity.class.getDeclaredField(property)
-                            .getType().isEnum();
-                } catch (NoSuchFieldException ignored) {
-                }
-
-                if (isEnum) {
-                    return JpaSort.unsafe(order.getDirection(),
-                                    "function('enum_to_text', " + property
-                                            + ")")
-                            .iterator().next();
-                }
-
-                return new Sort.Order(order.getDirection(), property);
-            }).toList());
-
-            return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
-                    sort));
-        }
-
-        return Either.right(page);
-    }
-
 
     public Either<Problem, Optional<BatchView>> batchDetail(String batchId,
                                                             List<TransactionProcessingStatus> txStatus, Pageable page,
                                                             BatchFilterRequest batchFilterRequest) {
         Either<Problem, Pageable> pageableEither =
-                convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS);
+                        sortFieldMappings.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return Either.left(pageableEither.getLeft());
         }

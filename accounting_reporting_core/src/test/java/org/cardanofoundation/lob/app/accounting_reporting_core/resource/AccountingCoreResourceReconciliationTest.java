@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -20,11 +21,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceReconciliationTest {
@@ -33,6 +36,8 @@ class AccountingCoreResourceReconciliationTest {
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
     @Mock
     private AccountingCoreService accountingCoreService;
+    @Mock
+    private SortFieldMappings sortFieldMappings;
 
     @InjectMocks
     private AccountingCoreResourceReconciliation accountingCoreResourceReconciliation;
@@ -64,7 +69,7 @@ class AccountingCoreResourceReconciliationTest {
     @Test
     void testReconcileStart() {
         when(accountingCorePresentationViewService.allReconciliationTransaction(any(), any())).thenReturn(null);
-        when(accountingCorePresentationViewService.convertPageable(any(Pageable.class), any())).thenReturn(Either.right(Pageable.unpaged()));
+        when(sortFieldMappings.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), Pageable.unpaged());
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
         verify(accountingCorePresentationViewService).allReconciliationTransaction(any(), any());
