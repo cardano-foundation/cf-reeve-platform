@@ -55,6 +55,12 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                                 )
                             OR (:filter = 'UNRECONCILED'
                                 AND tr.reconcilation.source IS NULL
+                                AND tr.id in (
+                                    SELECT rv.transactionId
+                                    FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+                                    JOIN r.violations rv
+                                    WHERE rv.rejectionCode = 'TX_NOT_IN_LOB'
+                                    GROUP BY rv.transactionId)
                                 )
                         """, countQuery = """
                         SELECT COUNT(tr)
