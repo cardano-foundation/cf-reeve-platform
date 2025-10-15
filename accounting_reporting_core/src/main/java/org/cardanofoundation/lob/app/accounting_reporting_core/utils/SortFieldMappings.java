@@ -2,8 +2,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
 
 import static org.zalando.problem.Status.BAD_REQUEST;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -45,6 +43,10 @@ public class SortFieldMappings {
             "amountTotalLcy", "totalAmountLcy",
             "reconciliationSource", "reconcilation.source",
             "reconcilationSink", "reconcilation.sink",
+            "reconciliationDate", "lastReconcilation.createdAt"
+        );
+
+    public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS_VIOLATION = Map.of(
             "reconciliationDate", "createdAt"
     );
 
@@ -78,36 +80,36 @@ public class SortFieldMappings {
      *
      * @param page          El Pageable original.
      * @param fieldMappings El mapa de mapeo de campos.
-     * @param classTypes    Una lista de clases de entidad contra las que validar.
+     * @param previousPageable    Una lista de clases de entidad contra las que validar.
      * @return Un Either conteniendo un Problema si falla, o el Pageable combinado si tiene éxito.
      */
-    public Either<Problem, Pageable> convertPageables(Pageable page,
-                                                     Map<String, String> fieldMappings,
-                                                     List<Class<?>> classTypes) {
+    public Either<Problem, Pageable> convertPageables(Either<Problem, Pageable> previousPageable,Pageable page,
+                                                      Map<String, String> fieldMappings,
+                                                      Class<?> classType) {
         if (!page.getSort().isSorted()) {
-            log.info("\n\n#### Yo diría que es error ###\n\n");
+            log.info("\n\n##### AH!\n");
             return Either.right(page);
         }
 
-        List<Sort.Order> combinedOrders = new ArrayList<>();
-
-        for (Class<?> classType : classTypes) {
-            Either<Problem, Pageable> singleResult = this.convertPageable(page, fieldMappings, classType);
-
-            if (singleResult.isLeft()) {
-                log.info("\n\nDa error el {}\n\n", classType);
-
-                return singleResult;
-            }
-
-            Pageable validatedPageable = singleResult.get();
-            validatedPageable.getSort().forEach(combinedOrders::add);
+        if (previousPageable.isLeft()) {
+            log.info("\n\n#####Es left el ANTERIOR\n");
+            return previousPageable;
         }
 
-        Sort finalSort = Sort.by(combinedOrders.stream().distinct().toList());
-        Pageable finalPageable = PageRequest.of(page.getPageNumber(), page.getPageSize(), finalSort);
-        log.info("\n\n#### DONE! ###\n\n");
-        return Either.right(finalPageable);
+        Either<Problem, Pageable> currentPageable = this.convertPageable(page, fieldMappings, classType);
+
+        if (currentPageable.isLeft()) {
+            log.info("\n\n#####Es left el ESTE\n");
+            return previousPageable;
+        }
+        Sort combinedSort = previousPageable.get().getSort().and(currentPageable.get().getSort());
+
+        Pageable mergedPageable = PageRequest.of(
+                previousPageable.get().getPageNumber(),
+                previousPageable.get().getPageSize(),
+                combinedSort
+        );
+        return Either.right(mergedPageable);
     }
 
     public Either<Problem, Pageable> convertPageable(Pageable page,
