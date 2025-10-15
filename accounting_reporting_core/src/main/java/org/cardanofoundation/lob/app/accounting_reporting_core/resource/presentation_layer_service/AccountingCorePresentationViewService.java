@@ -137,6 +137,7 @@ public class AccountingCorePresentationViewService {
                 .map(ReconciliationRejectionCodeRequest::toReconcilationRejectionCode)
                 .collect(Collectors.toSet());
         if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
+            log.info("\n\n\n##################### LLEGA #####################\n\n\n");
             pageable = expandSorts(pageable, true);
             Page<TransactionWithViolationDto> allReconciliationSpecial =
                     reconcilationRepository.findAllReconciliationSpecial(
