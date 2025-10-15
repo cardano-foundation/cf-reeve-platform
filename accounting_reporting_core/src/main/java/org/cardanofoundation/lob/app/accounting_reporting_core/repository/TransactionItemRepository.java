@@ -65,7 +65,12 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         AND ti.transaction.entryDate >= :dateFrom
         AND ti.transaction.entryDate <= :dateTo
         AND (:accountCode IS NULL OR (ti.accountDebit.code IN :accountCode) OR (ti.accountCredit.code IN :accountCode))
-        AND (:costCenter IS NULL OR ti.costCenter.customerCode IN :costCenter)
+        AND (:costCenter IS NULL OR ti.costCenter.customerCode IN (SELECT cc.Id.customerCode from CostCenter cc
+                    WHERE
+                    cc.Id.customerCode in :costCenter OR
+                    cc.parent.Id.customerCode in :costCenter OR
+                    cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.customerCode in :costCenter)
+                    ))
         AND (:project IS NULL OR ti.project.customerCode IN :project)
         AND (:blockchainHash IS NULL OR LOWER(ti.transaction.ledgerDispatchReceipt.primaryBlockchainHash) LIKE LOWER(CONCAT('%', CAST(:blockchainHash AS string), '%')))
         AND (:transactionNumber IS NULL OR LOWER(ti.transaction.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:transactionNumber AS string), '%')))
