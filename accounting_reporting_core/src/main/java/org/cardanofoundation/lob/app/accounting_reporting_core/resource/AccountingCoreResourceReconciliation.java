@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -78,9 +79,10 @@ public class AccountingCoreResourceReconciliation {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        Either<Problem, Pageable> pageableEither = sortFieldMappings.convertPageable(pageable,
-                        SortFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
+        Either<Problem, Pageable> pageableEither = sortFieldMappings.convertPageables(pageable,
+                        SortFieldMappings.RECONCILATION_FIELD_MAPPINGS, List.of(TransactionEntity.class));
         if (pageableEither.isLeft()) {
+            log.info("\n\n\n############## Hubo error {} ##############\n\n", pageableEither.getLeft().getDetail());
             return ResponseEntity.badRequest().body(pageableEither.getLeft());
         }
         ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, pageableEither.get());

@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +24,7 @@ import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 // This class contains mappings if any needed for sorting entities
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class SortFieldMappings {
 
     private final JpaSortFieldValidator jpaSortFieldValidator;
@@ -43,7 +45,7 @@ public class SortFieldMappings {
             "amountTotalLcy", "totalAmountLcy",
             "reconciliationSource", "reconcilation.source",
             "reconcilationSink", "reconcilation.sink",
-            "reconciliationDate", "r.createdAt"
+            "reconciliationDate", "createdAt"
     );
 
     public static final Map<String, String> EXTRACTION_SEARCH_FIELD_MAPPINGS = Map.ofEntries(
@@ -79,10 +81,11 @@ public class SortFieldMappings {
      * @param classTypes    Una lista de clases de entidad contra las que validar.
      * @return Un Either conteniendo un Problema si falla, o el Pageable combinado si tiene éxito.
      */
-    public Either<Problem, Pageable> convertPageable(Pageable page,
+    public Either<Problem, Pageable> convertPageables(Pageable page,
                                                      Map<String, String> fieldMappings,
                                                      List<Class<?>> classTypes) {
         if (!page.getSort().isSorted()) {
+            log.info("\n\n#### Yo diría que es error ###\n\n");
             return Either.right(page);
         }
 
@@ -92,6 +95,8 @@ public class SortFieldMappings {
             Either<Problem, Pageable> singleResult = this.convertPageable(page, fieldMappings, classType);
 
             if (singleResult.isLeft()) {
+                log.info("\n\nDa error el {}\n\n", classType);
+
                 return singleResult;
             }
 
@@ -101,7 +106,7 @@ public class SortFieldMappings {
 
         Sort finalSort = Sort.by(combinedOrders.stream().distinct().toList());
         Pageable finalPageable = PageRequest.of(page.getPageNumber(), page.getPageSize(), finalSort);
-
+        log.info("\n\n#### DONE! ###\n\n");
         return Either.right(finalPageable);
     }
 
