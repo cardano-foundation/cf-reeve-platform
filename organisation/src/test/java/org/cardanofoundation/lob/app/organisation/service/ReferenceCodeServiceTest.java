@@ -30,6 +30,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.SortFieldMappings;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
@@ -149,7 +150,8 @@ class ReferenceCodeServiceTest {
     @Test
     void testGetAllReferenceCodes() {
         when(referenceCodeRepository.findAllByOrgId(ORG_ID, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(referenceCode)));
-
+        when(jpaSortFieldValidator.validateEntity(ReferenceCode.class, Pageable.unpaged(), SortFieldMappings.REFERENCE_CODE_MAPPINGS))
+                .thenReturn(Either.right(Pageable.unpaged()));
         Either<Problem, List<ReferenceCodeView>> result = referenceCodeService.getAllReferenceCodes(ORG_ID, null, null, null, null, Pageable.unpaged());
 
         assertTrue(result.isRight());

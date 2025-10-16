@@ -26,6 +26,8 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.repository.ReferenceCodeRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.util.SortFieldMappings;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @Service
 @Slf4j
@@ -38,8 +40,16 @@ public class ReferenceCodeService {
     private final CsvParser<ReferenceCodeUpdate> csvParser;
     private final AccountEventService accountEventService;
     private final Validator validator;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     public Either<Problem, List<ReferenceCodeView>> getAllReferenceCodes(String orgId, String referenceCode, String name, List<String> parentCodes, Boolean active, Pageable pageable) {
+        Either<Problem, Pageable> validateEntity = jpaSortFieldValidator.validateEntity(
+                ReferenceCode.class, pageable,
+                SortFieldMappings.REFERENCE_CODE_MAPPINGS);
+        if(validateEntity.isLeft()) {
+            return Either.left(validateEntity.getLeft());
+        }
+        pageable = validateEntity.get();
         if(parentCodes != null) {
             // Lower case to avoid case sensitivity issues
             parentCodes = parentCodes.stream().filter(s -> s != null && !s.isEmpty()).map(String::toLowerCase).collect(Collectors.toList());
