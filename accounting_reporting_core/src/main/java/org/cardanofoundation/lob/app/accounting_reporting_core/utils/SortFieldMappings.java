@@ -44,10 +44,10 @@ public class SortFieldMappings {
             "reconciliationSource", "reconcilation.source",
             "reconcilationSink", "reconcilation.sink",
             "reconciliationDate", "lastReconcilation.createdAt"
-        );
+    );
 
     public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS_VIOLATION = Map.of(
-            "reconciliationDate", "createdAt"
+            "reconciliationDate", "r.createdAt"
     );
 
     public static final Map<String, String> EXTRACTION_SEARCH_FIELD_MAPPINGS = Map.ofEntries(
@@ -74,33 +74,20 @@ public class SortFieldMappings {
             Map.entry("vatRate", "document.vat.rate")
     );
 
-    /**
-     * Wrapper que valida y convierte un Pageable contra múltiples tipos de entidad.
-     * Combina las reglas de ordenación de todas las validaciones exitosas.
-     *
-     * @param page          El Pageable original.
-     * @param fieldMappings El mapa de mapeo de campos.
-     * @param previousPageable    Una lista de clases de entidad contra las que validar.
-     * @return Un Either conteniendo un Problema si falla, o el Pageable combinado si tiene éxito.
-     */
-    public Either<Problem, Pageable> convertPageables(Either<Problem, Pageable> previousPageable,Pageable page,
-                                                      Map<String, String> fieldMappings,
-                                                      Class<?> classType) {
-        if (!page.getSort().isSorted()) {
-            log.info("\n\n##### AH!\n");
-            return Either.right(page);
+    public Either<Problem, Pageable> mergePageables(Either<Problem, Pageable> previousPageable, Either<Problem, Pageable> currentPageable
+    ) {
+        if (previousPageable.isLeft()) {
+            return previousPageable;
         }
 
         if (previousPageable.isLeft()) {
-            log.info("\n\n#####Es left el ANTERIOR\n");
+            log.info("\n\n#####Es left el OLD\n");
             return previousPageable;
         }
 
-        Either<Problem, Pageable> currentPageable = this.convertPageable(page, fieldMappings, classType);
-
         if (currentPageable.isLeft()) {
-            log.info("\n\n#####Es left el ESTE\n");
-            return previousPageable;
+            log.info("\n\n#####Es left el NEW\n");
+            return currentPageable;
         }
         Sort combinedSort = previousPageable.get().getSort().and(currentPageable.get().getSort());
 
@@ -110,6 +97,21 @@ public class SortFieldMappings {
                 combinedSort
         );
         return Either.right(mergedPageable);
+    }
+
+    public Either<Problem, Pageable> convertPageableSingle(Pageable page,
+                                                     Map<String, String> fieldMappings) {
+        Sort sort = Sort.by(page.getSort().get().map(order -> {
+            String property = Optional
+                    .ofNullable(fieldMappings.get(order.getProperty()))
+                    .orElse(order.getProperty());
+            log.info("\n\n#### Entra aquí {}\n\n",property);
+            return JpaSort.unsafe(order.getDirection(),property).iterator().next();
+        }).toList());
+
+        return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
+                sort));
+
     }
 
     public Either<Problem, Pageable> convertPageable(Pageable page,
@@ -130,7 +132,7 @@ public class SortFieldMappings {
                 return Either.left(Problem.builder().withStatus(BAD_REQUEST)
                         .withTitle("Invalid Sort Property")
                         .withDetail("Invalid sort: " + notSortableProperty
-                                .get().getProperty())
+                                .get().getProperty() + " Y " + classType)
                         .build());
             }
 
@@ -138,6 +140,7 @@ public class SortFieldMappings {
                 String property = Optional
                         .ofNullable(fieldMappings.get(order.getProperty()))
                         .orElse(order.getProperty());
+                        log.info("\n\n#### Entra Otro {}\n\n",property);
 
                 // simple enum detection – you can swap for a static Set
                 boolean isEnum = false;
