@@ -82,7 +82,7 @@ public class AccountingCorePresentationViewService {
                     "totalAmountLcy", "amountLcySum"
             );
     private static final Map<String, String> R_FIELD_MAP =
-            Map.of("entryDate", "createdAt"
+            Map.of("reconciliationDate", "createdAt"
             );
 
     // This function is to add dynamically sort for violations, since we are
@@ -95,18 +95,21 @@ public class AccountingCorePresentationViewService {
         }
 
         List<Sort.Order> newOrders = new ArrayList<>();
-
+        log.info("\n\n\n###################### EMPIEZA ######################\n\n");
         pageable.getSort().forEach(order -> {
+            log.info("\n-> {}\n", order.getProperty());
             String field = order.getProperty();
 
-            if (field.contains("function('enum_to_text', ")) {
-                field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
-                Sort newSort = JpaSort.unsafe(order.getDirection(), field);
-                newOrders.add(newSort.iterator().next());
-            } else{
-                newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
+            if (!R_FIELD_MAP.containsKey(field)) {
+                if (field.contains("function('enum_to_text', ")) {
+                    field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
+                    Sort newSort = JpaSort.unsafe(order.getDirection(), field);
+                    newOrders.add(newSort.iterator().next());
+                } else {
+                    log.info("\n normal => {}\n", order.getProperty());
+                    newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
+                }
             }
-
 
             // if field has an rv mapping → also add rv.<mappedField>
             if (RV_FIELD_MAP.containsKey(field) && mapRv) {
@@ -117,6 +120,7 @@ public class AccountingCorePresentationViewService {
                             rvField);
                     newOrders.add(newSort.iterator().next());
                 } else {
+                    log.info("\n  rv => {}\n", rvField);
                     newOrders.add(new Sort.Order(order.getDirection(),
                             "rv." + rvField));
                 }
@@ -124,17 +128,22 @@ public class AccountingCorePresentationViewService {
 
             // if field has an r mapping → also add r.<mappedField>
             if (R_FIELD_MAP.containsKey(field) && mapRv) {
-                String rvField = RV_FIELD_MAP.get(field);
+                String rvField = R_FIELD_MAP.get(field);
                 if (field.contains("function('enum_to_text', ")) {
                     rvField = field.replace("function('enum_to_text', r.", "function('enum_to_text', v.");
                     Sort newSort = JpaSort.unsafe(order.getDirection(),
                             rvField);
                     newOrders.add(newSort.iterator().next());
                 } else {
+                    log.info("\n  erre => {}\n", rvField);
                     newOrders.add(new Sort.Order(order.getDirection(),
                             "r." + rvField));
                 }
             }
+
+        });
+        newOrders.forEach(order -> {
+            log.info("\n\n Cribado de todos es {}\n", order.getProperty());
         });
 
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
