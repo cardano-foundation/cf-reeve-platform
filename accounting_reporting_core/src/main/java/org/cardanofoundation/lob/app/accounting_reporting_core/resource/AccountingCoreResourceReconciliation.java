@@ -88,7 +88,6 @@ public class AccountingCoreResourceReconciliation {
         pageableEither = sortFieldMappings.mergePageables(pageableEither2, pageableEither);
 
         if (pageableEither.isLeft()) {
-            log.info("\n\n\n############## Hubo error {} ##############\n\n", pageableEither.getLeft().getDetail());
             return ResponseEntity.badRequest().body(pageableEither.getLeft());
         }
 
