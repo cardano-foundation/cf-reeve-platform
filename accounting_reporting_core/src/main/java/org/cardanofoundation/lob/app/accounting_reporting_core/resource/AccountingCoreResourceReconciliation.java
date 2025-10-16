@@ -92,7 +92,7 @@ public class AccountingCoreResourceReconciliation {
             return ResponseEntity.badRequest().body(pageableEither.getLeft());
         }
 
-        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, pageableEither2.get());
+        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, pageableEither.get());
 
         return ResponseEntity.ok().body(reconciliationResponseView);
     }
