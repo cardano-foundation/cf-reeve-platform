@@ -50,6 +50,10 @@ public class ReferenceCodeService {
             return Either.left(validateEntity.left().get());
         }
         pageable = validateEntity.get();
+        if(parentCodes != null) {
+            // Lower case to avoid case sensitivity issues
+            parentCodes = parentCodes.stream().filter(s -> s != null && !s.isEmpty()).map(String::toLowerCase).collect(Collectors.toList());
+        }
         return Either.right(referenceCodeRepository.findAllByOrgId(orgId, referenceCode, name, parentCodes, active, pageable).stream()
                 .map(ReferenceCodeView::fromEntity)
                 .toList());

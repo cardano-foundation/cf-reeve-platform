@@ -20,7 +20,7 @@ public interface ReferenceCodeRepository extends JpaRepository<ReferenceCode, Re
         SELECT rc FROM ReferenceCode rc WHERE rc.id.organisationId = :orgId
         AND (:referenceCode IS NULL OR LOWER(rc.id.referenceCode) LIKE LOWER(CONCAT('%', CAST(:referenceCode AS string), '%')))
         AND (:name IS NULL OR LOWER(rc.name) LIKE LOWER(CONCAT('%', CAST(:name AS string), '%')))
-        AND (:parentCodes IS NULL OR rc.parentReferenceCode IN :parentCodes)
+        AND (:parentCodes IS NULL OR LOWER(rc.parentReferenceCode) IN :parentCodes)
         AND (:active IS NULL OR rc.isActive = :active)
         """)
     Page<ReferenceCode> findAllByOrgId(@Param("orgId") String orgId,

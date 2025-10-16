@@ -51,6 +51,10 @@ public class VatService {
             return Either.left(pageables.getLeft());
         }
         pageable = pageables.get();
+        if(countryCodes != null) {
+            // Lower case to avoid case sensitivity issues
+            countryCodes = countryCodes.stream().filter(s -> s != null && !s.isEmpty()).map(String::toLowerCase).collect(Collectors.toList());
+        }
         return Either.right(vatRepository.findAllByOrganisationId(organisationId,customerCode, minRate, maxRate, description, countryCodes, active, pageable).stream()
                 .map(VatView::convertFromEntity)
                 .toList());
