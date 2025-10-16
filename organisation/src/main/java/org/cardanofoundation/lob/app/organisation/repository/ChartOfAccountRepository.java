@@ -27,7 +27,7 @@ public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, 
             WHERE t.Id.organisationId = :orgId
             AND (:customerCode IS NULL OR LOWER(t.id.customerCode) LIKE LOWER(CONCAT('%', CAST(:customerCode AS string), '%')))
             AND (:name IS NULL or LOWER(t.name) LIKE LOWER(CONCAT('%', CAST(:name AS string), '%')))
-            AND (:currencies IS NULL OR t.currencyId IN :currencies)
+            AND (:currencies IS NULL OR LOWER(t.currencyId) IN :currencies)
             AND (:counterPartyIds IS NULL OR t.counterParty IN :counterPartyIds)
             AND (:types IS NULL OR (t.subType IS NOT NULL AND t.subType.type IS NOT NULL AND t.subType.type.id IN :types))
             AND (:subTypes IS NULL OR (t.subType IS NOT NULL AND t.subType.id IN :subTypes))

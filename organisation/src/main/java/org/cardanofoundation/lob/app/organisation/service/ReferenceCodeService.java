@@ -40,6 +40,10 @@ public class ReferenceCodeService {
     private final Validator validator;
 
     public Either<Problem, List<ReferenceCodeView>> getAllReferenceCodes(String orgId, String referenceCode, String name, List<String> parentCodes, Boolean active, Pageable pageable) {
+        if(parentCodes != null) {
+            // Lower case to avoid case sensitivity issues
+            parentCodes = parentCodes.stream().filter(s -> s != null && !s.isEmpty()).map(String::toLowerCase).collect(Collectors.toList());
+        }
         return Either.right(referenceCodeRepository.findAllByOrgId(orgId, referenceCode, name, parentCodes, active, pageable).stream()
                 .map(ReferenceCodeView::fromEntity)
                 .toList());
