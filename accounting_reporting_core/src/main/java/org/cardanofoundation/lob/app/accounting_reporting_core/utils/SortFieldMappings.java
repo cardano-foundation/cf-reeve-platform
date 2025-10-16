@@ -102,9 +102,7 @@ public class SortFieldMappings {
     public Either<Problem, Pageable> convertPageableSingle(Pageable page,
                                                      Map<String, String> fieldMappings) {
         Sort sort = Sort.by(page.getSort().get().map(order -> {
-            String property = Optional
-                    .ofNullable(fieldMappings.get(order.getProperty()))
-                    .orElse(order.getProperty());
+            String property = "r.createdAt";
             log.info("\n\n#### Entra aquí {}\n\n",property);
             return JpaSort.unsafe(order.getDirection(),property).iterator().next();
         }).toList());

@@ -18,7 +18,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rec
 public interface ReconcilationRepository extends JpaRepository<ReconcilationEntity, String> {
 
         @Query("""
-                SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto(tr, rv)
+                SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto(tr, rv, r)
                 FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
                 JOIN r.violations rv
                 LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
