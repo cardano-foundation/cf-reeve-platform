@@ -47,7 +47,7 @@ public class ReferenceCodeService {
                 ReferenceCode.class, pageable,
                 SortFieldMappings.REFERENCE_CODE_MAPPINGS);
         if(validateEntity.isLeft()) {
-            return Either.left(validateEntity.left().get());
+            return Either.left(validateEntity.getLeft());
         }
         pageable = validateEntity.get();
         if(parentCodes != null) {
