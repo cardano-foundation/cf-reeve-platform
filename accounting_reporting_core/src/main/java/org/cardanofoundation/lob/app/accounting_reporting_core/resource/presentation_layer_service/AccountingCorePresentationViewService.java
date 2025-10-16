@@ -81,6 +81,9 @@ public class AccountingCorePresentationViewService {
                     "transactionType", "transactionType",
                     "totalAmountLcy", "amountLcySum"
             );
+    private static final Map<String, String> R_FIELD_MAP =
+            Map.of("entryDate", "createdAt"
+            );
 
     // This function is to add dynamically sort for violations, since we are
     // querying two types at the same time for performance.
@@ -100,9 +103,6 @@ public class AccountingCorePresentationViewService {
                 field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
                 Sort newSort = JpaSort.unsafe(order.getDirection(), field);
                 newOrders.add(newSort.iterator().next());
-            } else if (field.contains("r.")) {
-                newOrders.add(new Sort.Order(order.getDirection(),  field));
-
             } else{
                 newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
             }
@@ -119,6 +119,20 @@ public class AccountingCorePresentationViewService {
                 } else {
                     newOrders.add(new Sort.Order(order.getDirection(),
                             "rv." + rvField));
+                }
+            }
+
+            // if field has an r mapping → also add r.<mappedField>
+            if (R_FIELD_MAP.containsKey(field) && mapRv) {
+                String rvField = RV_FIELD_MAP.get(field);
+                if (field.contains("function('enum_to_text', ")) {
+                    rvField = field.replace("function('enum_to_text', r.", "function('enum_to_text', v.");
+                    Sort newSort = JpaSort.unsafe(order.getDirection(),
+                            rvField);
+                    newOrders.add(newSort.iterator().next());
+                } else {
+                    newOrders.add(new Sort.Order(order.getDirection(),
+                            "r." + rvField));
                 }
             }
         });

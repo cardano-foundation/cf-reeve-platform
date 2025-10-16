@@ -78,15 +78,18 @@ public class AccountingCoreResourceReconciliation {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        Either<Problem, Pageable> pageableEither = sortFieldMappings.convertPageable(pageable,
-                SortFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
-        Either<Problem, Pageable> pageableEither2 = sortFieldMappings.convertPageableSingle(pageableEither.get(),
+
+        Either<Problem, Pageable> pageableEither2 = sortFieldMappings.convertPageableSingle(pageable,
                 SortFieldMappings.RECONCILATION_FIELD_MAPPINGS_VIOLATION);
 
+        Either<Problem, Pageable> pageableEither = sortFieldMappings.convertPageable(pageable,
+                SortFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
 
-        if (pageableEither2.isLeft()) {
-            log.info("\n\n\n############## Hubo error {} ##############\n\n", pageableEither2.getLeft().getDetail());
-            return ResponseEntity.badRequest().body(pageableEither2.getLeft());
+        pageableEither = sortFieldMappings.mergePageables(pageableEither2, pageableEither);
+
+        if (pageableEither.isLeft()) {
+            log.info("\n\n\n############## Hubo error {} ##############\n\n", pageableEither.getLeft().getDetail());
+            return ResponseEntity.badRequest().body(pageableEither.getLeft());
         }
 
         ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, pageableEither2.get());

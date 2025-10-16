@@ -25,19 +25,19 @@ import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 @Slf4j
 public class SortFieldMappings {
 
-    private final JpaSortFieldValidator jpaSortFieldValidator;
+        private final JpaSortFieldValidator jpaSortFieldValidator;
 
-    public static final Map<String, String> TRANSACTION_ENTITY_FIELD_MAPPINGS = Map.of(
-            "reconciliationSource", "reconcilation.source",
-            "reconciliationSink", "reconcilation.sink",
-            "reconciliationFinalStatus", "reconcilation.finalStatus",
-            "dataSource", "extractorType",
-            "status", "overallStatus",
-            "statistic", "processingStatus",
-            "validationStatus", "automatedValidationStatus"
-    );
+        public static final Map<String, String> TRANSACTION_ENTITY_FIELD_MAPPINGS = Map.of(
+        "reconciliationSource", "reconcilation.source",
+        "reconciliationSink", "reconcilation.sink",
+        "reconciliationFinalStatus", "reconcilation.finalStatus",
+        "dataSource", "extractorType",
+        "status", "overallStatus",
+        "statistic", "processingStatus",
+        "validationStatus", "automatedValidationStatus"
+        );
 
-    public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS = Map.of(
+        public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS = Map.of(
             "dataSource", "extractorType",
             "status", "overallStatus",
             "amountTotalLcy", "totalAmountLcy",
@@ -47,7 +47,7 @@ public class SortFieldMappings {
     );
 
     public static final Map<String, String> RECONCILATION_FIELD_MAPPINGS_VIOLATION = Map.of(
-            "reconciliationDate", "r.createdAt"
+            "reconciliationDate", "createdAt"
     );
 
     public static final Map<String, String> EXTRACTION_SEARCH_FIELD_MAPPINGS = Map.ofEntries(
@@ -102,7 +102,9 @@ public class SortFieldMappings {
     public Either<Problem, Pageable> convertPageableSingle(Pageable page,
                                                      Map<String, String> fieldMappings) {
         Sort sort = Sort.by(page.getSort().get().map(order -> {
-            String property = "r.createdAt";
+            String property = Optional
+                    .ofNullable(fieldMappings.get(order.getProperty()))
+                    .orElse(order.getProperty());
             log.info("\n\n#### Entra aquí {}\n\n",property);
             return JpaSort.unsafe(order.getDirection(),property).iterator().next();
         }).toList());
