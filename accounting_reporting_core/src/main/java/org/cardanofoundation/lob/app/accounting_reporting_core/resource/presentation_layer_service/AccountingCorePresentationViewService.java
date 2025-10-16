@@ -100,7 +100,10 @@ public class AccountingCorePresentationViewService {
                 field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
                 Sort newSort = JpaSort.unsafe(order.getDirection(), field);
                 newOrders.add(newSort.iterator().next());
-            } else {
+            } else if (field.contains("r.")) {
+                newOrders.add(new Sort.Order(order.getDirection(),  field));
+
+            } else{
                 newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
             }
 
@@ -203,7 +206,7 @@ public class AccountingCorePresentationViewService {
                                                             List<TransactionProcessingStatus> txStatus, Pageable page,
                                                             BatchFilterRequest batchFilterRequest) {
         Either<Problem, Pageable> pageableEither =
-                        sortFieldMappings.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
+                sortFieldMappings.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return Either.left(pageableEither.getLeft());
         }
