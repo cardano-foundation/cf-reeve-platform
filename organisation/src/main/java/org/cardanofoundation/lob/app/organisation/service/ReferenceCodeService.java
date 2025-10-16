@@ -43,7 +43,6 @@ public class ReferenceCodeService {
     private final JpaSortFieldValidator jpaSortFieldValidator;
 
     public Either<Problem, List<ReferenceCodeView>> getAllReferenceCodes(String orgId, String referenceCode, String name, List<String> parentCodes, Boolean active, Pageable pageable) {
-<<<<<<< HEAD
         Either<Problem, Pageable> validateEntity = jpaSortFieldValidator.validateEntity(
                 ReferenceCode.class, pageable,
                 SortFieldMappings.REFERENCE_CODE_MAPPINGS);
@@ -51,8 +50,6 @@ public class ReferenceCodeService {
             return Either.left(validateEntity.left().get());
         }
         pageable = validateEntity.get();
-=======
->>>>>>> release/1.2.0
         if(parentCodes != null) {
             // Lower case to avoid case sensitivity issues
             parentCodes = parentCodes.stream().filter(s -> s != null && !s.isEmpty()).map(String::toLowerCase).collect(Collectors.toList());
