@@ -1,0 +1,1 @@
+Transaction Number,Transaction Date,Transaction Type,Fx Rate,AmountLCY Debit,AmountLCY Credit,AmountFCY Debit,AmountFCY Credit,Debit Code,Debit Name,Credit Code,Credit Name,Project Code,Document Name,Currency,VAT Rate,VAT Code,Cost Center Code,Counterparty Code,Counterparty Name

@@ -1,0 +1,28 @@
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+.auth/
+.logs/
+.reports/
+/resources/
+allure-results
+**/.features-gen/**/*.spec.js
+
+# production
+/build
+
+# misc
+.DS_Store
+../.env
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/resources
+
