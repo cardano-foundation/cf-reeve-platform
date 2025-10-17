@@ -41,7 +41,7 @@ public class SortFieldMappings {
             "amountTotalLcy", "totalAmountLcy",
             "reconciliationSource", "reconcilation.source",
             "reconcilationSink", "reconcilation.sink",
-            "reconciliationDate", "lastReconcilation.createdAt"
+            "reconciliationDate", "createdAt"
         );
 
         public static final Map<String, String> EXTRACTION_SEARCH_FIELD_MAPPINGS = Map.ofEntries(
