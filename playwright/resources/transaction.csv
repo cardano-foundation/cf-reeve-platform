@@ -1,0 +1,3 @@
+Transaction Number,Transaction Date,Transaction Type,Fx Rate,AmountLCY Debit,AmountLCY Credit,AmountFCY Debit,AmountFCY Credit,Debit Code,Debit Name,Credit Code,Credit Name,Project Code,Document Name,Currency,VAT Rate,VAT Code,Cost Center Code,Counterparty Code,Counterparty Name
+TEST-hbnxs19w,17/08/2025,ExpenseReport,1,2693,,2693,,1206310100,120631 VAT input Tax - Services from Abroad,2101120102,Accounts Payable ADA (Ambassador fees),,TEST-bq930hx0,CHF,,,,,
+TEST-hbnxs19w,17/08/2025,ExpenseReport,1,,2693,,2693,1206350100,120635 Swiss VAT on goods and services - 2.5%,2101110102,Accounts Payable USD,,TEST-bq930hx0,CHF,,,,,
