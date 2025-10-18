@@ -14,8 +14,11 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.google.common.base.Objects;
 import org.hibernate.annotations.JdbcType;
+import org.hibernate.annotations.JoinColumnOrFormula;
+import org.hibernate.annotations.JoinFormula;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
@@ -106,6 +109,14 @@ public class TransactionItemEntity extends CommonEntity implements Persistable<S
     @Nullable
     private Project project;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumnOrFormula(column = @JoinColumn(name = "project_customer_code", referencedColumnName = "customer_code", insertable = false, updatable = false))
+    @JoinColumnOrFormula(formula = @JoinFormula(value = "(SELECT t.organisation_id FROM accounting_core_transaction t WHERE t.transaction_id = transaction_id)", referencedColumnName = "organisation_id"))
+    @NotAudited
+    @Nullable
+    @Setter
+    private org.cardanofoundation.lob.app.organisation.domain.entity.Project mappedProject;
+
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(name = "customerCode", column = @Column(name = "cost_center_customer_code")),
@@ -114,6 +125,14 @@ public class TransactionItemEntity extends CommonEntity implements Persistable<S
     })
     @Nullable
     private CostCenter costCenter;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumnOrFormula(column = @JoinColumn(name = "cost_center_customer_code", referencedColumnName = "customer_code", insertable = false, updatable = false))
+    @JoinColumnOrFormula(formula = @JoinFormula(value = "(SELECT t.organisation_id FROM accounting_core_transaction t WHERE t.transaction_id = transaction_id)", referencedColumnName = "organisation_id"))
+    @NotAudited
+    @Nullable
+    @Setter
+    private org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter mappedCostCenter;
 
     @Embedded
     @AttributeOverrides({
@@ -209,6 +228,15 @@ public class TransactionItemEntity extends CommonEntity implements Persistable<S
 
     public void setRejection(Optional<Rejection> rejection) {
         this.rejection = rejection.orElse(null);
+    }
+
+    // Helper methods for mapped entities
+    public Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Project> getMappedProject() {
+        return Optional.ofNullable(mappedProject);
+    }
+
+    public Optional<org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter> getMappedCostCenter() {
+        return Optional.ofNullable(mappedCostCenter);
     }
 
     @Override

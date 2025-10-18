@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
@@ -41,6 +42,10 @@ public class ExtractionTransactionsRequest extends BaseRequest {
     @ArraySchema(arraySchema = @Schema(example = "[\"AN 000001 2023\",\"CF 000001 2023\"]"))
     @Nullable
     private List<String> project;
+
+    @ArraySchema(arraySchema = @Schema(example = "[\"JOURNAL\",\"VendorBill\"]"))
+    @Nullable
+    private List<TransactionType> transactionType;
 
     @Schema(example = "abc123hashfromblockchain")
     @Nullable

@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 
 public interface TransactionItemRepository extends JpaRepository<TransactionItemEntity, String> {
@@ -74,6 +75,7 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         AND (:project IS NULL OR ti.project.customerCode IN :project)
         AND (:blockchainHash IS NULL OR LOWER(ti.transaction.ledgerDispatchReceipt.primaryBlockchainHash) LIKE LOWER(CONCAT('%', CAST(:blockchainHash AS string), '%')))
         AND (:transactionNumber IS NULL OR LOWER(ti.transaction.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:transactionNumber AS string), '%')))
+        AND (:transactionTypes IS NULL OR ti.transaction.transactionType IN :transactionTypes)
         AND (:documentNumber IS NULL OR LOWER(ti.document.num) LIKE LOWER(CONCAT('%', CAST(:documentNumber AS string), '%')))
         AND (:currencys IS NULL OR ti.document.currency.customerCode IN :currencys)
         AND (:minFcy IS NULL OR ti.amountFcy >= :minFcy)
@@ -97,7 +99,7 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         """)
     Page<TransactionItemEntity> searchItems(@Param("dateFrom") LocalDate dateFrom, @Param("dateTo") LocalDate dateTo, @Param("accountCode") List<String> accountCode,
             @Param("costCenter") List<String> costCenter, @Param("project") List<String> project, @Param("blockchainHash") String blockchainHash,
-            @Param("transactionNumber") String transactionNumber, @Param("documentNumber") String documentNumber, @Param("currencys") List<String> currencys,
+            @Param("transactionNumber") String transactionNumber, @Param("transactionTypes") List<TransactionType> transactionTypes, @Param("documentNumber") String documentNumber, @Param("currencys") List<String> currencys,
             @Param("minFcy") BigDecimal minFcy, @Param("maxFcy") BigDecimal maxFcy, @Param("minLcy") BigDecimal minLcy, @Param("maxLcy") BigDecimal maxLcy,
             @Param("vatCodes") List<String> vatCodes, @Param("counterPartyId") String counterPartyId, @Param("counterPartyName") String counterPartyName,
             @Param("counterPartyTypes") List<Counterparty.Type> counterPartyTypes, @Param("eventCodes") List<String> eventCodes, @Param("reconciled") Boolean reconciled,
