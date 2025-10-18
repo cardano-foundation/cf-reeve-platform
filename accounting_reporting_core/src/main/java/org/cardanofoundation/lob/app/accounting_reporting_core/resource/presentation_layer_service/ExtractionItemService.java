@@ -122,6 +122,7 @@ public class ExtractionItemService {
                 transactionsRequest.getProject(),
                 transactionsRequest.getBlockchainHash(),
                 transactionsRequest.getTransactionNumber(),
+                transactionsRequest.getTransactionType(),
                 transactionsRequest.getDocumentNumber(),
                 transactionsRequest.getCurrencys(),
                 transactionsRequest.getMinFcy(),
