@@ -150,4 +150,10 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
                                             @Param("validationStatuses") List<TxValidationStatus> validationStatuses,
                                             @Param("transactionTypes") List<TransactionType> transactionTypes,
                                             Pageable pageable);
+
+        @Query("""
+            SELECT DISTINCT t.internalTransactionNumber FROM accounting_reporting_core.TransactionEntity t
+            WHERE t.organisation.id = :organisationId
+            """)
+        List<String> findAllTransactionNumbers(@Param("organisationId") String organisationId);
 }

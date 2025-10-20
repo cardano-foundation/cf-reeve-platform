@@ -728,6 +728,17 @@ public class AccountingCorePresentationViewService {
                                         .build())
                                 .toList());
 
+                case TRANSACTION_NUMBERS -> filterOptionsListMap.put(filterOption,
+                        accountingCoreTransactionRepository
+                                .findAllTransactionNumbers(orgId)
+                                .stream()
+                                .map(transactionNumber -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(transactionNumber)
+                                        .description(transactionNumber)
+                                        .build())
+                                .toList());
+
                 case TRANSACTION_TYPES -> filterOptionsListMap.put(filterOption,
                         Arrays.stream(TransactionType.values()).map(
                                         type -> FilteringOptionsListResponse
@@ -738,8 +749,20 @@ public class AccountingCorePresentationViewService {
                                                 .build())
                                 .toList());
 
+                case COUNTER_PARTY_NAMES -> filterOptionsListMap.put(filterOption,
+                        transactionItemRepository.getAllCounterParty(orgId)
+                                .stream()
+                                .map(document -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(document
+                                                .get("name"))
+                                        .description(document
+                                                .get("name"))
+                                        .build())
+                                .toList());
+
                 case COUNTER_PARTY -> filterOptionsListMap.put(filterOption,
-                        transactionItemRepository.getAllCounterParty()
+                        transactionItemRepository.getAllCounterParty(orgId)
                                 .stream()
                                 .map(document -> FilteringOptionsListResponse
                                         .builder()

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -154,7 +155,7 @@ class AccountingCorePresentationViewServiceTest {
         when(transactionItemRepository.getAllDocumentNumbers()).thenReturn(List.of("Doc12"));
 
 
-        when(transactionItemRepository.getAllCounterParty()).thenReturn(List.of(
+        when(transactionItemRepository.getAllCounterParty("org123")).thenReturn(List.of(
                 Map.of("CustCode001","Customer code 1"),
                 Map.of("CustCode002","Customer code 2"),
                 Map.of("CustCode003","Customer code 3")
@@ -174,7 +175,7 @@ class AccountingCorePresentationViewServiceTest {
         verify(transactionBatchRepositoryGateway).findBatchUsersList("org123");
         verifyNoMoreInteractions(transactionBatchRepositoryGateway);
         verify(transactionItemRepository).getAllDocumentNumbers();
-        verify(transactionItemRepository).getAllCounterParty();
+        verify(transactionItemRepository, times(2)).getAllCounterParty("org123");
         verifyNoMoreInteractions(transactionItemRepository);
         verifyNoMoreInteractions(organisationPublicApiIF);
 

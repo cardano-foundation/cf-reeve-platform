@@ -50,12 +50,12 @@ public class ExtractionTransactionsRequest extends BaseRequest {
     @Schema(example = "abc123hashfromblockchain")
     @Nullable
     private String blockchainHash;
-    @Schema(example = "JOUNRAL123")
+    @ArraySchema(arraySchema = @Schema(example = "[\"JOURNAL\",\"VendorBill\"]"))
     @Nullable
-    private String transactionNumber;
-    @Schema(example = "DOC123")
+    private List<String> transactionNumbers;
+    @ArraySchema(arraySchema = @Schema(example = "[\"DOC123\",\"DOC456\"]"))
     @Nullable
-    private String documentNumber;
+    private List<String> documentNumbers;
     @ArraySchema(arraySchema = @Schema(example = "[\"USD\",\"EUR\"]"))
     @Nullable
     private List<String> currencys;
@@ -74,12 +74,12 @@ public class ExtractionTransactionsRequest extends BaseRequest {
     @ArraySchema(arraySchema = @Schema(example = "[\"VAT21\",\"VAT7\"]"))
     @Nullable
     private List<String> vatCodes;
-    @Schema(example = "CUST123")
+    @ArraySchema(arraySchema = @Schema(example = "[\"Counterparty1\",\"Counterparty2\"]"))
     @Nullable
-    private String counterPartyId;
-    @Schema(example = "Example Corp")
+    private List<String> counterPartyIds;
+    @ArraySchema(arraySchema = @Schema(example = "[\"Example Corp\",\"Another Corp\"]"))
     @Nullable
-    private String counterPartyName;
+    private List<String> counterPartyNames;
     @ArraySchema(arraySchema = @Schema(example = "[\"EMPLOYEE\",\"VENDOR\",\"DONOR\",\"CLIENT\"]"))
     @Nullable
     private List<Counterparty.Type> counterPartyTypes;
