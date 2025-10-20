@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 
 public interface TransactionItemRepository extends JpaRepository<TransactionItemEntity, String> {
@@ -41,8 +42,9 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
 
     @Query("""
         SELECT DISTINCT t.document.counterparty.customerCode as customerCode, t.document.counterparty.name as name FROM accounting_reporting_core.TransactionItemEntity t
+        WHERE t.transaction.organisation.id = :organisationId
         """)
-    List<Map<String, String>> getAllCounterParty();
+    List<Map<String, String>> getAllCounterParty(@Param("organisationId") String organisationId);
 
     @Query("""
             SELECT t FROM accounting_reporting_core.TransactionItemEntity t
@@ -73,16 +75,17 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
                     ))
         AND (:project IS NULL OR ti.project.customerCode IN :project)
         AND (:blockchainHash IS NULL OR LOWER(ti.transaction.ledgerDispatchReceipt.primaryBlockchainHash) LIKE LOWER(CONCAT('%', CAST(:blockchainHash AS string), '%')))
-        AND (:transactionNumber IS NULL OR LOWER(ti.transaction.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:transactionNumber AS string), '%')))
-        AND (:documentNumber IS NULL OR LOWER(ti.document.num) LIKE LOWER(CONCAT('%', CAST(:documentNumber AS string), '%')))
+        AND (:transactionNumbers IS NULL OR ti.transaction.internalTransactionNumber IN :transactionNumbers)
+        AND (:transactionTypes IS NULL OR ti.transaction.transactionType IN :transactionTypes)
+        AND (:documentNumbers IS NULL OR ti.document.num IN :documentNumbers)
         AND (:currencys IS NULL OR ti.document.currency.customerCode IN :currencys)
         AND (:minFcy IS NULL OR ti.amountFcy >= :minFcy)
         AND (:maxFcy IS NULL OR ti.amountFcy <= :maxFcy)
         AND (:minLcy IS NULL OR ti.amountLcy >= :minLcy)
         AND (:maxLcy IS NULL OR ti.amountLcy <= :maxLcy)
         AND (:vatCodes IS NULL OR ti.document.vat.customerCode IN :vatCodes)
-        AND (:counterPartyId IS NULL OR LOWER(ti.document.counterparty.customerCode) LIKE LOWER(CONCAT('%', CAST(:counterPartyId AS string), '%')))
-        AND (:counterPartyName IS NULL OR LOWER(ti.document.counterparty.name) LIKE LOWER(CONCAT('%', CAST(:counterPartyName AS string), '%')))
+        AND (:counterPartyIds IS NULL OR ti.document.counterparty.customerCode IN :counterPartyIds)
+        AND (:counterPartyNames IS NULL OR ti.document.counterparty.name IN :counterPartyNames)
         AND (:counterPartyTypes IS NULL OR ti.document.counterparty.type IN :counterPartyTypes)
         AND (:eventCodes IS NULL OR ti.accountEvent.code IN :eventCodes)
         AND (:reconciled IS NULL OR (:reconciled = True AND ti.transaction.reconcilation.finalStatus = 'OK') OR (:reconciled = False AND (ti.transaction.reconcilation IS NULL OR ti.transaction.reconcilation.finalStatus <> 'OK')))
@@ -97,9 +100,9 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         """)
     Page<TransactionItemEntity> searchItems(@Param("dateFrom") LocalDate dateFrom, @Param("dateTo") LocalDate dateTo, @Param("accountCode") List<String> accountCode,
             @Param("costCenter") List<String> costCenter, @Param("project") List<String> project, @Param("blockchainHash") String blockchainHash,
-            @Param("transactionNumber") String transactionNumber, @Param("documentNumber") String documentNumber, @Param("currencys") List<String> currencys,
+            @Param("transactionNumbers") List<String> transactionNumbers, @Param("transactionTypes") List<TransactionType> transactionTypes, @Param("documentNumbers") List<String> documentNumbers, @Param("currencys") List<String> currencys,
             @Param("minFcy") BigDecimal minFcy, @Param("maxFcy") BigDecimal maxFcy, @Param("minLcy") BigDecimal minLcy, @Param("maxLcy") BigDecimal maxLcy,
-            @Param("vatCodes") List<String> vatCodes, @Param("counterPartyId") String counterPartyId, @Param("counterPartyName") String counterPartyName,
+            @Param("vatCodes") List<String> vatCodes, @Param("counterPartyIds") List<String> counterPartyIds, @Param("counterPartyNames") List<String> counterPartyNames,
             @Param("counterPartyTypes") List<Counterparty.Type> counterPartyTypes, @Param("eventCodes") List<String> eventCodes, @Param("reconciled") Boolean reconciled,
             @Param("parentCostcenters") List<String> parentCostcenters, @Param("parentProjects") List<String> parentProjects,
             @Param("accountCodesDebit") List<String> accountCodesDebit, @Param("accountCodesCredit") List<String> accountCodesCredit, Pageable pageable);

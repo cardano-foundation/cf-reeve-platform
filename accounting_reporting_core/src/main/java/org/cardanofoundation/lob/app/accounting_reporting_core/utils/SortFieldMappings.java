@@ -65,7 +65,14 @@ public class SortFieldMappings {
                         Map.entry("accountEventName", "accountEvent.name"),
                         Map.entry("documentNum", "document.num"),
                         Map.entry("documentCurrencyCustomerCode", "document.currency.customerCode"),
-                        Map.entry("vatRate", "document.vat.rate")
+                        Map.entry("vatRate", "document.vat.rate"),
+                        Map.entry("blockChainHash", "transaction.ledgerDispatchReceipt.primaryBlockchainHash"),
+                        Map.entry("vatCustomerCode", "document.vat.customerCode"),
+                        Map.entry("parentCostCenterCustomerCode", "mappedCostCenter.parentCustomerCode"),
+                        Map.entry("parentProjectCustomerCode", "mappedProject.parentCustomerCode"),
+                        Map.entry("counterpartyCustomerCode", "document.counterparty.customerCode"),
+                        Map.entry("counterpartyName", "document.counterparty.name"),
+                        Map.entry("counterpartyType", "document.counterparty.type")
                 );
 
         public Either<Problem, Pageable> convertPageable(Pageable page,
