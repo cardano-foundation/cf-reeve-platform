@@ -1,5 +1,10 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.config;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +23,7 @@ import org.cardanofoundation.signify.core.States;
     "lob.blockchain-publisher.keri.enabled",
     "lob.blockchain-publisher.enabled"
 }, havingValue = "true", matchIfMissing = false)
+@Slf4j
 public class KeriConfig {
 
     @Bean
@@ -50,6 +56,9 @@ public class KeriConfig {
         EventResult endRole = client.identifiers().addEndRole(identifierName, role, client.getAgent().getPre(), null);
         client.operations().wait(Operation.fromObject(endRole.op()));
     }
+    LinkedHashMap<String, Object> response = (LinkedHashMap<String, Object>)client.oobis().get(prefix, role);
+    List<String> oobis = (List<String>) response.get("oobis");
+    log.info("Created identifier oobis: {}", oobis);
     return IdentifierConfig.builder()
         .prefix(prefix)
         .name(identifierName)
