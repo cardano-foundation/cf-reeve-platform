@@ -28,7 +28,7 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                 AND (CAST(:endDate AS date) IS NULL OR tr.entryDate <= :endDate OR rv.transactionEntryDate <= :endDate)
                 AND (:source IS NULL OR ( :source = 'ERP' AND tr.reconcilation.source = 'OK' ) OR ( :source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK') )
                 AND (:transactionTypes IS NULL OR tr.transactionType IN :transactionTypes OR rv.transactionType IN :transactionTypes)
-                AND (:transactionId IS NULL OR LOWER(tr.id) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')) OR LOWER(rv.transactionId) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')))
+                AND (:transactionId IS NULL OR LOWER(tr.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')) OR LOWER(rv.transactionInternalNumber) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')))
                 """)
         Page<TransactionWithViolationDto> findAllReconciliationSpecial(
                         @Param("rejectionCodes") Set<ReconcilationRejectionCode> rejectionCodes,
