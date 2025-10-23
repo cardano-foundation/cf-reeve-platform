@@ -57,7 +57,7 @@ public class BlockchainTransactionsDispatcher {
 
     @Transactional
     public void dispatchTransactions() {
-        log.info("Dispatching txs to the cardano blockchain...");
+        log.debug("Dispatching txs to the cardano blockchain...");
 
         for (Organisation organisation : organisationPublicApi.listAll()) {
             String organisationId = organisation.getId();
@@ -68,8 +68,8 @@ public class BlockchainTransactionsDispatcher {
             toUnlock.removeAll(transactionToDispatch);
             transactionEntityRepositoryGateway.unlockTransactions(toUnlock);
             int dispatchTxCount = transactionToDispatch.size();
-            log.info("Dispatching txs for organisationId:{}, tx count:{}", organisationId, dispatchTxCount);
             if (dispatchTxCount > 0) {
+                log.info("Dispatching txs for organisationId:{}, tx count:{}", organisationId, dispatchTxCount);
                 dispatchTransactionsBatch(organisationId, transactionToDispatch);
             }
         }
