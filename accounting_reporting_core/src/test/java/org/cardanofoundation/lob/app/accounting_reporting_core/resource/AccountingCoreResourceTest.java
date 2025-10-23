@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
@@ -41,6 +42,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemsProcessRejectView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -54,6 +56,8 @@ class AccountingCoreResourceTest {
     private OrganisationPublicApi organisationPublicApi;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private SortFieldMappings sortFieldMappings;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
@@ -61,7 +65,7 @@ class AccountingCoreResourceTest {
 
     @BeforeEach
     void setUp() {
-        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi, keycloakSecurityHelper);
+        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi, keycloakSecurityHelper, sortFieldMappings);
     }
 
     @Test
@@ -154,9 +158,9 @@ class AccountingCoreResourceTest {
     void listAllBatches_test() {
         BatchSearchRequest body = mock(BatchSearchRequest.class);
         BatchsDetailView batchsDetailView = mock(BatchsDetailView.class);
-        Sort sort = Sort.unsorted(); // Default
-        when(accountingCorePresentationViewService.listAllBatch(body, sort)).thenReturn(Either.right(batchsDetailView));
         Pageable pageable = Pageable.ofSize(10).withPage(0);
+        when(sortFieldMappings.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));
+        when(accountingCorePresentationViewService.listAllBatch(body, pageable)).thenReturn(Either.right(batchsDetailView));
 
         ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
