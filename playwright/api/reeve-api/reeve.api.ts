@@ -79,8 +79,8 @@ export function reeveApi(request: APIRequestContext) {
             {
                 organisationId: organizationId,
                 extractorType: 'CSV',
-                dateFrom: getDateInThePast(6, "-"),
-                dateTo: getDateInThePast(2, "-"),
+                dateFrom: getDateInThePast(6, false),
+                dateTo: getDateInThePast(2, false),
                 file: {
                     name: path.basename(transactionFilePath),
                     mimeType: 'text/csv',
@@ -102,8 +102,8 @@ export function reeveApi(request: APIRequestContext) {
             {
                 organisationId: organizationId,
                 extractorType: 'CSV',
-                dateFrom: getDateInThePast(6, "-"),
-                dateTo: getDateInThePast(2, "-"),
+                dateFrom: getDateInThePast(6, false),
+                dateTo: getDateInThePast(2, false),
                 file: {
                     name: path.basename(transactionFilePath),
                     mimeType: 'text/csv',

@@ -43,7 +43,7 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
     const createValidTransactionData = async (transactionDataToImport: TransactionItemCsvDto[]) => {
         // Create a random short hash for transaction Number
         const txNumber = "TEST-"+Math.random().toString(36).substring(2, 2 + 8);
-        const txDate = getDateInThePast(2,"/");
+        const txDate = getDateInThePast(2,true);
         const txType = await getTransactionType();
         const amountForTxItem = (Math.floor(Math.random() * 100000) + 1).toString();
         const documentName = "TEST-"+Math.random().toString(36).substring(2, 2 + 8);

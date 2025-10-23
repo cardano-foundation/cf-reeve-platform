@@ -1,4 +1,4 @@
-# 🧪 Playwright BDD Testing Framework
+# 🧪 Reeve API Automation Framework
 
 This project uses [Playwright](https://playwright.dev/) with BDD-style tests using [playwright-bdd](https://github.com/folke/playwright-bdd).
 
@@ -16,6 +16,20 @@ npx playwright install
 - Install only Playwright-BDD
 ```
 npm i -D playwright-bdd 
+```
+## Env file to run in local
+
+1. Create a `.env` file at the root of the playwright folder.
+2. Use next structure as example.
+3. Ask a team member for the required environment variables & corresponding values for the API, KEYCLOAK and extra application necessary variables.
+
+```
+API_URL= <API env url> 
+LOGIN_URL= <KEYCLOAK url>
+MANAGER_USER= <Manager user name>
+MANAGER_PASSWORD= <Manager user password>
+API_LOG_REQUEST= <Boolean flag to show in logger the request body and params>
+ORGANIZATION_ID= <Organization ID>
 ```
 
 ## ⚙️ Test run in local:
