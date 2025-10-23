@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
 
 import static org.zalando.problem.Status.BAD_REQUEST;
 
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 
@@ -102,11 +103,20 @@ public class SortFieldMappings {
                                                 .ofNullable(fieldMappings.get(order.getProperty()))
                                                 .orElse(order.getProperty());
 
-                                // simple enum detection – you can swap for a static Set
                                 boolean isEnum = false;
                                 try {
-                                        isEnum = classType.getDeclaredField(property).getType()
-                                                        .isEnum();
+                                        String[] parts = property.split("\\.");
+                                        Class<?> currentClass = classType;
+
+                                        for (int i = 0; i < parts.length; i++) {
+                                                Field field = currentClass
+                                                                .getDeclaredField(parts[i]);
+                                                currentClass = field.getType();
+
+                                                if (i == parts.length - 1) {
+                                                        isEnum = currentClass.isEnum();
+                                                }
+                                        }
                                 } catch (NoSuchFieldException ignored) {
                                 }
 
