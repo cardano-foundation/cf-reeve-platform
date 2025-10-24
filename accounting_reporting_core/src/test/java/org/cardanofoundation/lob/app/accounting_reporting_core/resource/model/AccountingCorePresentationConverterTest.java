@@ -15,9 +15,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -307,12 +307,11 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setBatchStatistics(batchStatistics);
 
-        Sort sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
+        Pageable pageable = Pageable.unpaged();
+        Page<TransactionBatchEntity> page = new PageImpl<>(List.of(transactionBatchEntity), pageable, 1);
+        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, pageable)).thenReturn(page);
 
-        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, sort)).thenReturn(Either.right(List.of(transactionBatchEntity)));
-        when(transactionBatchRepositoryGateway.findByFilterCount(batchSearchRequest)).thenReturn(Long.valueOf(1));
-
-        Either<Problem, BatchsDetailView> batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, sort);
+        Either<Problem, BatchsDetailView> batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, pageable);
         List<BatchView> result = batchsDetailView.get().getBatchs();
 
         assertEquals(1, result.size());

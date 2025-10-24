@@ -243,15 +243,10 @@ public class AccountingCorePresentationViewService {
                 }));
     }
 
-    public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Sort sort) {
+    public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Pageable pageable) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
-        Either<Problem, List<TransactionBatchEntity>> transactionBatchEntitiesE =
-                transactionBatchRepositoryGateway.findByFilter(body, sort);
-        if (transactionBatchEntitiesE.isLeft()) {
-            return Either.left(transactionBatchEntitiesE.getLeft());
-        }
-        List<TransactionBatchEntity> transactionBatchEntities =
-                transactionBatchEntitiesE.get();
+        Page<TransactionBatchEntity> transactionBatchEntities =
+                transactionBatchRepositoryGateway.findByFilter(body, pageable);
         List<BatchView> batches =
                 transactionBatchEntities.stream().map(transactionBatchEntity -> {
                     BatchStatisticsView statistic = BatchStatisticsView.from(
@@ -281,7 +276,7 @@ public class AccountingCorePresentationViewService {
                 }).toList();
 
         batchDetailView.setBatchs(batches);
-        batchDetailView.setTotal(transactionBatchRepositoryGateway.findByFilterCount(body));
+        batchDetailView.setTotal(transactionBatchEntities.getTotalElements());
 
         return Either.right(batchDetailView);
     }
