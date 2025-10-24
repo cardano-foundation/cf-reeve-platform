@@ -2,17 +2,19 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import java.util.List;
 import java.util.Optional;
-
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.boot.actuate.health.Status;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.bloxbean.cardano.client.api.model.ProtocolParams;
 import com.bloxbean.cardano.client.api.model.Result;
 import com.bloxbean.cardano.client.backend.api.BackendService;
-
+import jakarta.annotation.PostConstruct;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
@@ -20,14 +22,22 @@ import org.cardanofoundation.signify.app.clienting.SignifyClient;
 @RequiredArgsConstructor
 public class PublisherHealth implements HealthIndicator {
 
+    private final AtomicReference<Health> cachedBlockFrostHealth = new AtomicReference<>(Health.unknown().build());
+
     private final List<BackendService> backendService;
     private final Optional<SignifyClient> signifyClient;
     private final Optional<IdentifierConfig> identifierConfig;
 
+    @PostConstruct
+    public void init() {
+        updateHealth();
+    }
+
     @Override
     public Health health() {
-        if(!checkL1Connection()) {
-            return Health.down().withDetail("message", "Cannot connect to L1 backend").build();
+        Health blockFrostHealth = cachedBlockFrostHealth.get();
+        if(blockFrostHealth.getStatus().equals(Status.DOWN)) {
+            return blockFrostHealth;
         }
         // TODO waiting for signify client to be more stable
         // if(!checkSignifyClient()) {
@@ -61,6 +71,16 @@ public class PublisherHealth implements HealthIndicator {
                 return false;
             }
         });
+    }
+
+    // Runs once per day at 3 AM (you can adjust the cron)
+    @Scheduled(cron = "0 0 3 * * *")
+    public void updateHealth() {
+        if (!checkL1Connection()) {
+            cachedBlockFrostHealth.set(Health.down().withDetail("message", "No healthy L1 connection").build());
+        } else {
+            cachedBlockFrostHealth.set(Health.up().withDetail("message", "All systems operational").build());
+        }
     }
 
 }
