@@ -47,7 +47,6 @@ public class BlockchainReportsDispatcher {
 
     @Transactional
     public void dispatchReports() {
-        log.info("Pooling for blockchain reports to be send to the blockchain...");
 
         for (Organisation organisation : organisationPublicApi.listAll()) {
             String organisationId = organisation.getId();
@@ -55,23 +54,20 @@ public class BlockchainReportsDispatcher {
             Set<ReportEntity> reports = reportEntityRepositoryGateway.findReportsByStatus(organisationId, pullTransactionsBatchSize);
             int reportsCount = reports.size();
 
-            log.info("Dispatching reports for organisationId: {}, report count:{}", organisationId, reportsCount);
-
             if (reportsCount > 0) {
+                log.info("Dispatching reports for organisationId: {}, report count:{}", organisationId, reportsCount);
                 Set<ReportEntity> toDispatch = dispatchingStrategy.apply(organisationId, reports);
 
                 dispatchReports(organisationId, toDispatch);
+            } else {
+                log.debug("No pending reports to dispatch for organisationId: {}", organisationId);
             }
         }
-
-        log.info("Pooling for blockchain reports to be send to the blockchain...done");
     }
 
     @Transactional
     public void dispatchReports(String organisationId,
                                 Set<ReportEntity> reportEntities) {
-        log.info("Dispatching reports for organisation: {}", organisationId);
-
         for (ReportEntity reportEntity : reportEntities) {
             dispatchReport(organisationId, reportEntity);
         }
@@ -80,19 +76,14 @@ public class BlockchainReportsDispatcher {
 
     @Transactional
     public void dispatchReport(String organisationId, ReportEntity reportEntity) {
-        log.info("Dispatching report for organisation: {}", organisationId);
-
         Either<Problem, API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
         if (api3BlockchainTransactionE.isEmpty()) {
-
             reportEntity.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
                     .publishRetry(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
                     .publishStatusErrorReason(Objects.requireNonNull(api3BlockchainTransactionE.getLeft().getDetail()))
                     .publishStatus(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) >= 5L ? BlockchainPublishStatus.ERROR : BlockchainPublishStatus.STORED)
                     .build()));
             ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(organisationId, Set.of(reportEntity));
-
-            log.info("No more reports to dispatch for organisationId, success or error?, organisationId: {}", organisationId);
         }
     }
 

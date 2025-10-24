@@ -118,9 +118,10 @@ public class LedgerService {
         for (Organisation organisation : organisationPublicApi.listAll()) {
             Set<TransactionEntity> dispatchTransactions = accountingCoreTransactionRepository.findDispatchableTransactions(organisation.getId(), Limit.of(limit));
             Set<ReportEntity> dispatchReports = reportRepository.findDispatchableReports(organisation.getId(), Limit.of(limit));
-
-            log.info("dispatchPending transactions and reports, organisationId: {}, total tx count: {}", organisation.getId(), dispatchTransactions.size());
-
+            if(dispatchTransactions.isEmpty() && dispatchReports.isEmpty()) {
+                log.debug("No pending transactions or reports to dispatch for organisationId: {}", organisation.getId());
+                continue;
+            }
             dispatchPendingTransactions(organisation.getId(), dispatchTransactions);
             dispatchReports(organisation.getId(), dispatchReports);
         }
@@ -129,12 +130,7 @@ public class LedgerService {
     @Transactional(readOnly = true)
     public void dispatchPendingTransactions(String organisationId,
                                             Set<TransactionEntity> transactions) {
-        log.info("dispatchTransactionToBlockchainPublisher, total tx count: {}", transactions.size());
-
-        if (transactions.isEmpty()) {
-            log.info("dispatchPendingTransactions, no transactions to dispatch.");
-            return;
-        }
+        log.info("dispatchTransactionToBlockchainPublisher, total tx count: {} for org: {}", transactions.size(), organisationId);
 
         Set<Transaction> canonicalTxs = transactionConverter.convertFromDb(transactions);
         Set<Transaction> piiFilteredOutTransactions = piiDataFilteringService.apply(canonicalTxs);
@@ -155,11 +151,6 @@ public class LedgerService {
     public void dispatchReports(String organisationId,
                                 Set<ReportEntity> reportEntities) {
         log.info("dispatchReports, total reports count: {}", reportEntities.size());
-
-        if (reportEntities.isEmpty()) {
-            log.info("dispatchReports, no reports to dispatch.");
-            return;
-        }
 
         Set<Report> canonicalReports = reportConverter.convertFromDbToCanonicalForm(reportEntities);
         for (Partitions.Partition<Report> partition : Partitions.partition(canonicalReports, dispatchBatchSize)) {

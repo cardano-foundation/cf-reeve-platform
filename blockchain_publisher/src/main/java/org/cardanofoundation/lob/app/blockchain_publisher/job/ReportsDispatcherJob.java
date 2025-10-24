@@ -28,11 +28,11 @@ public class ReportsDispatcherJob {
             fixedDelayString = "${lob.blockchain_publisher.dispatcher.report.fixed_delay:PT10S}",
             initialDelayString = "${lob.blockchain_publisher.dispatcher.report.initial_delay:PT1M}")
     public void execute() {
-        log.info("Pooling for report blockchain transactions to be send to the blockchain...");
+        log.debug("Pooling for report blockchain transactions to be send to the blockchain...");
 
         blockchainReportsDispatcher.dispatchReports();
 
-        log.info("Pooling for report blockchain transactions to be send to the blockchain...done");
+        log.debug("Pooling for report blockchain transactions to be send to the blockchain...done");
     }
 
 }
