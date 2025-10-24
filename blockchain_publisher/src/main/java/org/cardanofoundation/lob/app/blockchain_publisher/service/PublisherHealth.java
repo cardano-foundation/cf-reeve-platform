@@ -76,7 +76,6 @@ public class PublisherHealth implements HealthIndicator {
         });
     }
 
-    // Runs once per day at 3 AM (you can adjust the cron)
     @Scheduled(cron = "0 0 3 * * *")
     public void updateHealth() {
         if (!checkL1Connection()) {
