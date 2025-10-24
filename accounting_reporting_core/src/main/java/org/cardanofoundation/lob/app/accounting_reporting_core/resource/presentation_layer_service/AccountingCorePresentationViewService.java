@@ -77,8 +77,9 @@ public class AccountingCorePresentationViewService {
     private static final Map<String, String> RV_FIELD_MAP =
             Map.of("id", "transactionId",
                     "internalNumber", "transactionInternalNumber",
+                    "internalTransactionNumber", "transactionInternalNumber",
                     "entryDate", "transactionEntryDate",
-                    "transactionType", "transactionType",
+                    "function('enum_to_text', transactionType)", "transactionType",
                     "totalAmountLcy", "amountLcySum"
             );
 
@@ -96,20 +97,11 @@ public class AccountingCorePresentationViewService {
         pageable.getSort().forEach(order -> {
             String field = order.getProperty();
 
-            if (field.contains("function('enum_to_text', ")) {
-                field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
-                Sort newSort = JpaSort.unsafe(order.getDirection(), field);
-                newOrders.add(newSort.iterator().next());
-            } else {
-                newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
-            }
-
-
             // if field has an rv mapping → also add rv.<mappedField>
             if (RV_FIELD_MAP.containsKey(field) && mapRv) {
                 String rvField = RV_FIELD_MAP.get(field);
                 if (field.contains("function('enum_to_text', ")) {
-                    rvField = field.replace("function('enum_to_text', tr.", "function('enum_to_text', rv.");
+                    rvField = field.replace("function('enum_to_text', ", "function('enum_to_text', rv.");
                     Sort newSort = JpaSort.unsafe(order.getDirection(),
                             rvField);
                     newOrders.add(newSort.iterator().next());
@@ -118,6 +110,15 @@ public class AccountingCorePresentationViewService {
                             "rv." + rvField));
                 }
             }
+
+            if (field.contains("function('enum_to_text', ")) {
+                field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
+                Sort newSort = JpaSort.unsafe(order.getDirection(), field);
+                newOrders.add(newSort.iterator().next());
+            } else {
+                newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
+            }
+
         });
 
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
@@ -152,8 +153,6 @@ public class AccountingCorePresentationViewService {
             count = allReconciliationSpecial.getTotalElements();
             transactions = allReconciliationSpecial.stream()
                     .map(this::getReconciliationTransactionsSelector)
-                    .sorted(Comparator.comparing(
-                            TransactionReconciliationTransactionsView::getId))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
         } else {
             pageable = expandSorts(pageable, false);
@@ -202,7 +201,7 @@ public class AccountingCorePresentationViewService {
                                                             List<TransactionProcessingStatus> txStatus, Pageable page,
                                                             BatchFilterRequest batchFilterRequest) {
         Either<Problem, Pageable> pageableEither =
-                        sortFieldMappings.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
+                sortFieldMappings.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return Either.left(pageableEither.getLeft());
         }
@@ -789,12 +788,12 @@ public class AccountingCorePresentationViewService {
                                         .build())
                                 .toList());
                 case RECONCILIATION_SOURCES -> filterOptionsListMap.put(filterOption,
-                                        Arrays.stream(ReconciliationFilterSource.values())
-                                                .map(type -> FilteringOptionsListResponse
-                                                        .builder()
-                                                        .name(type.name())
-                                                        .build())
-                                                .toList());
+                        Arrays.stream(ReconciliationFilterSource.values())
+                                .map(type -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(type.name())
+                                        .build())
+                                .toList());
 
 
             }
