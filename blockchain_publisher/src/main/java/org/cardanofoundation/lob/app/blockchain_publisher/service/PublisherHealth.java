@@ -3,6 +3,9 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+
+import jakarta.annotation.PostConstruct;
+
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.actuate.health.Health;
@@ -14,7 +17,7 @@ import org.springframework.stereotype.Component;
 import com.bloxbean.cardano.client.api.model.ProtocolParams;
 import com.bloxbean.cardano.client.api.model.Result;
 import com.bloxbean.cardano.client.backend.api.BackendService;
-import jakarta.annotation.PostConstruct;
+
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
