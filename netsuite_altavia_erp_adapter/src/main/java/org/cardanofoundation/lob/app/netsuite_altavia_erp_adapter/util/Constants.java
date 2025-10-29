@@ -16,4 +16,5 @@ public class Constants {
     public static final String NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE = "technicalErrorMessage";
     public static final String NETSUITE_BAG_RECONCILATION_ID = "reconcilationId";
     public static final String IGNORING_EVENT_FOR_EXTRACTOR_TYPE_LOG = "Ignoring event for extractor type: {}";
+    public static final String NETSUITE_BAG_DEBIT_CREDIT_ACCOUNT = "netsuiteErrorDetail";
 }
