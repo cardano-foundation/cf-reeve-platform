@@ -150,19 +150,18 @@ public class TransactionConverter {
     }
 
 
-
     private Optional<Project> convertProject(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project> projectM) {
         return projectM.map(p -> Project.builder()
-                        .customerCode(p.getCustomerCode())
-                        .name(p.getName().orElse(null))
-                        .build());
+                .customerCode(p.getCustomerCode())
+                .name(p.getName().orElse(null))
+                .build());
     }
 
     private Optional<CostCenter> convertCostCenter(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CostCenter> costCenter) {
         return costCenter.map(cc -> CostCenter.builder()
-                        .customerCode(cc.getCustomerCode())
-                        .name(cc.getName().orElse(null))
-                        .build());
+                .customerCode(cc.getCustomerCode())
+                .name(cc.getName().orElse(null))
+                .build());
     }
 
     private Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document> convertToDbDetached(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document> docM) {
@@ -240,8 +239,8 @@ public class TransactionConverter {
 
                         .fxRate(txItemEntity.getFxRate())
 
-                        .amountFcy(txItemEntity.getAmountFcy())
-                        .amountLcy(txItemEntity.getAmountLcy())
+                        .amountFcy(txItemEntity.getOperationType().equals(OperationType.DEBIT) ? txItemEntity.getAmountFcy() : txItemEntity.getAmountFcy().negate())
+                        .amountLcy(txItemEntity.getOperationType().equals(OperationType.DEBIT) ? txItemEntity.getAmountLcy() : txItemEntity.getAmountLcy().negate())
 
                         .build())
                 .collect(Collectors.toSet());
