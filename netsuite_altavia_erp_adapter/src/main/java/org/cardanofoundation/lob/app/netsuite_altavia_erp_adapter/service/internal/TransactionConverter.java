@@ -117,9 +117,19 @@ public class TransactionConverter {
             if (txLine.amountDebit() != null && txLine.amountCredit() != null || txLine.amountDebitForeignCurrency() != null && txLine.amountCreditForeignCurrency() != null) {
                 // Error when both amounts are non-zero
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", txId);
+
+
                 Map<String, Object> bag = Map.of(
-                        Constants.NETSUITE_BAG_DEBIT_CREDIT_ACCOUNT, "Both debit and credit amounts are non-zero for transaction: {$txId}"
+                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, Map.of(
+                                "error", Map.of(
+                                        "code", "NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE",
+                                        "Message", "Both amounts are non-zero"
+                                )
+                        ),
+                        "mesasage", "Both debit and credit amounts are non-zero for transaction: {}",
+                        Constants.NETSUITE_BAG_ORGANISATION_ID, organisationId
                 );
+
                 return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", bag));
             } else if (txLine.amountDebit() != null || txLine.amountDebitForeignCurrency() != null) {
                 operationType = OperationType.DEBIT;
