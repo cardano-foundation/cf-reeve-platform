@@ -118,9 +118,15 @@ public class TransactionConverter {
                 // Error when both amounts are non-zero
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", txId);
 
-                Exception excep = new Exception("Both debit and credit amounts are non-zero for transaction: {$txId}");
+
                 Map<String, Object> bag = Map.of(
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, excep,
+                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, Map.of(
+                                "error", Map.of(
+                                        "code", "NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE",
+                                        "Message", "Both amounts are non-zero"
+                                )
+                        ),
+                        "mesasage", "Both debit and credit amounts are non-zero for transaction: {}",
                         Constants.NETSUITE_BAG_ORGANISATION_ID, organisationId
                 );
 
