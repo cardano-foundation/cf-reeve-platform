@@ -55,6 +55,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportReprocessRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseStatisticView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
@@ -378,20 +379,23 @@ public class ReportService {
         return Either.right(result);
     }
 
-    public Either<Problem, ReportResponseView> findAllByOrgId(String organisationId, ReportType reportType, String currencyCode, IntervalType intervalType, Short year, Short period, LedgerDispatchStatus status, String txHash, Pageable pageable) {
+    public Either<Problem, ReportResponseView> findAllByOrgId(String organisationId, List<ReportType> reportType, List<String> currencyCode, List<IntervalType> intervalType, List<Short> year, List<Short> period, LedgerDispatchStatus status, String txHash,Boolean readyToPublish,Boolean ledgerDispatchApproved, Pageable pageable) {
         return jpaSortFieldValidator.validateEntity(ReportEntity.class, pageable, REPORT_MAPPINGS).fold(
                 problem -> Either.left(problem),
                 adjustedPageable -> {
+                    ReportResponseStatisticView statisticView = reportRepository.findStatistics(organisationId);
                     Page<ReportEntity> allByOrganisationId = reportRepository.findAllByOrganisationId(organisationId,
-                            reportType != null ? reportType.name() : null,
+                            reportType,
                             currencyCode,
-                            intervalType != null ? intervalType.name() : null,
+                            intervalType,
                             year,
                             period,
                             status != null ? status.name() : null,
                             txHash,
+                            readyToPublish,
+                            ledgerDispatchApproved,
                             adjustedPageable);
-                    return Either.right(ReportResponseView.createSuccess(allByOrganisationId.stream().map(ReportView::fromEntity).toList(), allByOrganisationId.getTotalElements()));
+                    return Either.right(ReportResponseView.createSuccess(allByOrganisationId.stream().map(ReportView::fromEntity).toList(), statisticView));
                 }
         );
     }
