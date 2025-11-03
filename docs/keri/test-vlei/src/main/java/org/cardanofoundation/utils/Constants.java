@@ -27,8 +27,5 @@ public class Constants {
 
     // Shared instances
     public static final ObjectMapper objectMapper = new ObjectMapper();
-    public static final List<String> witnessIds =
-            List.of("BBilc4-L3tFUnfM_wJr4S4OJanAv_VmF_dJNN6vkf2Ha",
-                    "BLskRTInXnMxWaGqcpSyMgo0nYbalW99cGZESrz3zapM",
-                    "BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX");
+    public static final List<String> witnessIds = List.of();
 }
