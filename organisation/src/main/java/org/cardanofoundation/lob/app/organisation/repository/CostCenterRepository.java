@@ -16,8 +16,8 @@ public interface CostCenterRepository extends JpaRepository<CostCenter, CostCent
     @Query("""
             SELECT t FROM CostCenter t LEFT JOIN FETCH t.parent
             WHERE t.id.organisationId = :organisationId
-            AND (:customerCode IS NULL OR t.id.customerCode LIKE %:customerCode%)
-            AND (:name IS NULL OR t.name LIKE %:name%)
+            AND (:customerCode IS NULL OR LOWER(t.id.customerCode) LIKE LOWER(CONCAT('%', CAST(:customerCode AS string), '%')))
+            AND (:name IS NULL OR LOWER(t.name) LIKE LOWER(CONCAT('%', CAST(:name AS string), '%')))
             AND (:parentCustomerCodes IS NULL OR t.parentCustomerCode IN :parentCustomerCodes)
             AND (:active IS NULL OR t.active = :active)
             """)

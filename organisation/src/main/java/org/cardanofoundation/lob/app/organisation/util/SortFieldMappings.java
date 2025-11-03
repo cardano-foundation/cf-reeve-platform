@@ -9,7 +9,15 @@ public class SortFieldMappings {
     }
 
     public static final Map<String, String> CHART_OF_ACCOUNT_MAPPINGS = Map.of(
-            "customerCode", "id.customerCode"
+            "customerCode", "id.customerCode",
+            "currency", "currencyId",
+            "type", "subType.type.name"
+    );
+
+    public static final Map<String, String> REFERENCE_CODE_MAPPINGS = Map.of(
+                "referenceCode", "id.referenceCode",
+                "description", "name",
+                "active", "isActive"
     );
 
     public static final Map<String, String> COST_CENTER_MAPPINGS = Map.of(

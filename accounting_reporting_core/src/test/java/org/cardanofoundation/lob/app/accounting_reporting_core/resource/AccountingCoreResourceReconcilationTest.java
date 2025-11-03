@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -26,12 +27,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconcileResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceReconcilationTest {
@@ -40,6 +43,8 @@ class AccountingCoreResourceReconcilationTest {
     private AccountingCorePresentationViewService accountingCorePresentationService;
     @Mock
     private AccountingCoreService accountingCoreService;
+    @Mock
+    private SortFieldMappings sortFieldMappings;
 
     @InjectMocks
     private AccountingCoreResourceReconciliation accountingCoreResourceReconciliation;
@@ -88,7 +93,7 @@ class AccountingCoreResourceReconcilationTest {
         ReconciliationResponseView responseView = new ReconciliationResponseView(5L, Optional.of(LocalDate.now()), Optional.of(LocalDate.now()), Optional.of(LocalDate.now()), null, null);
         when(accountingCorePresentationService.allReconciliationTransaction(any(ReconciliationFilterRequest.class), any(Pageable.class)))
                 .thenReturn(responseView);
-        when(accountingCorePresentationService.convertPageable(any(Pageable.class), any())).thenReturn(Either.right(Pageable.unpaged()));
+        when(sortFieldMappings.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
 
         ReconciliationFilterRequest request = mock(ReconciliationFilterRequest.class);
         ResponseEntity<?> response = accountingCoreResourceReconciliation.reconcileStart(request, Pageable.unpaged());

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -69,10 +70,10 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconiciliationTransaction_successfulUnprocessed() {
-        when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
-                eq(null), eq(Optional.empty()), eq(Pageable.unpaged()))).thenReturn(Page.empty());
+                eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Page.empty());
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
 
@@ -93,7 +94,7 @@ class AccountingCorePresentationViewServiceTest {
         Assertions.assertEquals(Optional.empty(), responseView.getLastReconciledDate());
 
 
-        verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
+        verify(reconcilationRepository).findCalcReconciliationStatistic();
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository, transactionRepositoryGateway);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway);
@@ -101,7 +102,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconiciliationTransaction_successfulUnReconciled() {
-        when(accountingCoreTransactionRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -110,7 +111,7 @@ class AccountingCorePresentationViewServiceTest {
 
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
-        verify(accountingCoreTransactionRepository).findCalcReconciliationStatistic();
+        verify(reconcilationRepository).findCalcReconciliationStatistic();
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
@@ -154,7 +155,7 @@ class AccountingCorePresentationViewServiceTest {
         when(transactionItemRepository.getAllDocumentNumbers()).thenReturn(List.of("Doc12"));
 
 
-        when(transactionItemRepository.getAllCounterParty()).thenReturn(List.of(
+        when(transactionItemRepository.getAllCounterParty("org123")).thenReturn(List.of(
                 Map.of("CustCode001","Customer code 1"),
                 Map.of("CustCode002","Customer code 2"),
                 Map.of("CustCode003","Customer code 3")
@@ -174,7 +175,7 @@ class AccountingCorePresentationViewServiceTest {
         verify(transactionBatchRepositoryGateway).findBatchUsersList("org123");
         verifyNoMoreInteractions(transactionBatchRepositoryGateway);
         verify(transactionItemRepository).getAllDocumentNumbers();
-        verify(transactionItemRepository).getAllCounterParty();
+        verify(transactionItemRepository, times(2)).getAllCounterParty("org123");
         verifyNoMoreInteractions(transactionItemRepository);
         verifyNoMoreInteractions(organisationPublicApiIF);
 

@@ -15,9 +15,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -46,6 +46,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
@@ -68,6 +69,8 @@ class AccountingCorePresentationConverterTest {
     private CostCenterRepository costCenterRepository;
     @Mock
     private ProjectRepository projectRepository;
+    @Mock
+    private SortFieldMappings sortFieldMappings;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationConverter;
@@ -205,6 +208,7 @@ class AccountingCorePresentationConverterTest {
     void testBatchDetail() {
 
         org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation organisation = mock(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.class);
+        when(sortFieldMappings.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
         when(organisation.getId()).thenReturn("123");
         TransactionItemEntity transactionItem = new TransactionItemEntity();
         transactionItem.setId("txItemId");
@@ -303,12 +307,11 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setFilteringParameters(filteringParameters);
         transactionBatchEntity.setBatchStatistics(batchStatistics);
 
-        Sort sort = Sort.by(Sort.Direction.ASC, "IMPORTED_BY");
+        Pageable pageable = Pageable.unpaged();
+        Page<TransactionBatchEntity> page = new PageImpl<>(List.of(transactionBatchEntity), pageable, 1);
+        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, pageable)).thenReturn(page);
 
-        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, sort)).thenReturn(Either.right(List.of(transactionBatchEntity)));
-        when(transactionBatchRepositoryGateway.findByFilterCount(batchSearchRequest)).thenReturn(Long.valueOf(1));
-
-        Either<Problem, BatchsDetailView> batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, sort);
+        Either<Problem, BatchsDetailView> batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, pageable);
         List<BatchView> result = batchsDetailView.get().getBatchs();
 
         assertEquals(1, result.size());

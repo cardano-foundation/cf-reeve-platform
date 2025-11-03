@@ -44,6 +44,7 @@ import org.zalando.problem.ThrowableProblem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
@@ -51,6 +52,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -67,6 +69,7 @@ public class AccountingCoreResource {
     private final ObjectMapper objectMapper;
     private final OrganisationPublicApi organisationPublicApi;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final SortFieldMappings sortFieldMappings;
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Transaction list", responses = {
@@ -305,8 +308,13 @@ public class AccountingCoreResource {
 
         body.setLimit(pageable.getPageSize());
         body.setPage(pageable.getPageNumber());
-
-        Either<Problem, BatchsDetailView> batchesE = accountingCorePresentationService.listAllBatch(body, pageable.getSort());
+        Either<Problem, Pageable> convertPageable = sortFieldMappings.convertPageable(pageable, Map.of(), TransactionBatchEntity.class);
+        if( convertPageable.isLeft()) {
+            Problem problem = convertPageable.getLeft();
+            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
+                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+        }
+        Either<Problem, BatchsDetailView> batchesE = accountingCorePresentationService.listAllBatch(body, convertPageable.get());
         if( batchesE.isLeft()) {
             Problem problem = batchesE.getLeft();
             return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
