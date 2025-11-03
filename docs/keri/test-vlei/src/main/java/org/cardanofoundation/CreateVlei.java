@@ -39,6 +39,7 @@ import org.cardanofoundation.signify.app.credentialing.registries.CreateRegistry
 import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult;
 import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.Serder;
+import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 import org.cardanofoundation.signify.cesr.util.Utils;
 import org.cardanofoundation.signify.core.States;
 import org.cardanofoundation.signify.core.States.HabState;
@@ -77,7 +78,42 @@ public class CreateVlei {
             Optional<Object> credential = reeve.client().credentials().get(credentialChain.get(2).id(), true);
             System.out.println("Reeve Credential (raw): " + credential);
             String credentialCesr = (String) credential.orElseThrow();
-
+            List<Map<String, Object>> cesrData = parseCESRData(credentialCesr);
+            System.out.println("Reeve Credential CESR Data: " + cesrData);
+            List<Map<String, Object>> allVcpEvents = new ArrayList<>();
+            List<String> allVcpAttachments = new ArrayList<>();
+            List<Map<String, Object>> allIssEvents = new ArrayList<>();
+            List<String> allIssAttachments = new ArrayList<>();
+            List<Map<String, Object>> allAcdcEvents = new ArrayList<>();
+            for (Map<String, Object> eventData : cesrData) {
+                Map<String, Object> event = (Map<String, Object>) eventData.get("event");
+                Object eventTypeObj = event.get("t");
+                if (eventTypeObj != null) {
+                    String eventType = eventTypeObj.toString();
+                    switch (eventType) {
+                        case "vcp":
+                            allVcpEvents.add(event);
+                            allVcpAttachments.add((String) eventData.get("atc"));
+                            break;
+                        case "iss":
+                            allIssEvents.add(event);
+                            allIssAttachments.add((String) eventData.get("atc"));
+                            break;
+                    }
+                } else {
+                    // Check if this is an ACDC (credential data) without "t" field
+                    if (event.containsKey("s") && event.containsKey("a")
+                            && event.containsKey("i")) {
+                        Object schemaObj = event.get("s");
+                        if (schemaObj != null) {
+                            allAcdcEvents.add(event);
+                        }
+                    }
+                }
+            }
+            System.out.println("All VCP Events: " + allVcpEvents);
+            // TODO Check which events to add here
+            // CESRStreamUtil.makeCESRStream(allAcdcEvents, allIssAttachments);
             CredentialSerializationData decentralizationInfo = new CredentialSerializationData(credentialCesr, reeve.aid().prefix(), Constants.REEVE_SCHEMA_SAID);
             String credentialSerializationData = objectMapper.writeValueAsString(decentralizationInfo);
             Files.writeString(Path.of(fileName), credentialSerializationData);
@@ -111,7 +147,7 @@ public class CreateVlei {
     private static ParentCredentialInfo getParentCredentialInfo(String credentialId,
             SignifyClient client) throws Exception {
         LinkedHashMap<String, Object> credential =
-                (LinkedHashMap<String, Object>)((Optional<Object>) client.credentials().get(credentialId)).get();
+                (LinkedHashMap<String, Object>)((Optional<Object>) client.credentials().get(credentialId, false)).get();
         LinkedHashMap<String, Object> sadBody =
                 (LinkedHashMap<String, Object>) credential.get("sad");
 
@@ -703,8 +739,8 @@ public class CreateVlei {
     @SuppressWarnings("unchecked")
     private static CredentialComponents getCredentialComponents(SignifyClient client,
             String credentialId) throws Exception {
-        Object credential = client.credentials().get(credentialId);
-        LinkedHashMap<String, Object> credentialMap = ((Optional<LinkedHashMap<String, Object>>) credential).orElseThrow();
+        Object credential = client.credentials().get(credentialId, false).get();
+        LinkedHashMap<String, Object> credentialMap = (LinkedHashMap<String, Object>) credential;
 
         Map<String, Object> sad = (Map<String, Object>) credentialMap.get("sad");
         Map<String, Object> anc = (Map<String, Object>) credentialMap.get("anc");
