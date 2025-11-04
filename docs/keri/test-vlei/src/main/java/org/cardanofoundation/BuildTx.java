@@ -12,6 +12,7 @@ import com.bloxbean.cardano.client.api.UtxoSupplier;
 import com.bloxbean.cardano.client.api.model.Amount;
 import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
+import com.bloxbean.cardano.client.backend.blockfrost.common.Constants;
 import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService;
 import com.bloxbean.cardano.client.common.model.Network;
 import com.bloxbean.cardano.client.common.model.Networks;
@@ -62,6 +63,7 @@ public class BuildTx {
         MetadataMap metadataMappingMap = MetadataBuilder.createMap();
         MetadataList list = MetadataBuilder.createList();
         metadataMappingMap.put("l", list.add("1447"));
+        metadataMappingMap.put("LEI", org.cardanofoundation.utils.Constants.CFLEI);
         metadataMap.put("m", metadataMappingMap);
         
         Metadata metadata = MetadataBuilder.createMetadata();

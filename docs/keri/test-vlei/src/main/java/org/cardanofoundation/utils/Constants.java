@@ -22,7 +22,7 @@ public class Constants {
 
     // Test data
     public static final String provenantLEI = "5493001KJTIIGC8Y1R17";
-    public static final String CFLEI = "123456789ABCDEF12345"; // dummy LEI for CF
+    public static final String CFLEI = "50670047U83746F70E20"; // dummy LEI for CF
     public static final String REEVE_LEI = "987654321FEDCBA98765"; // dummy LEI for Reeve
 
     // Shared instances
