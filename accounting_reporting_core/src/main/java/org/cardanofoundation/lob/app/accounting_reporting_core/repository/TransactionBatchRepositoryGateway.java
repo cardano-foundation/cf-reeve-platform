@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,11 @@ public class TransactionBatchRepositoryGateway {
     }
 
     public Page<TransactionBatchEntity> findByFilter(BatchSearchRequest body, Pageable pageable) {
+        // Apply default sort if no sort is provided
+        Pageable pageableWithSort = pageable.getSort().isSorted() ? pageable // Use the provided
+                                                                             // sort
+                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                        Sort.by(Sort.Direction.DESC, "createdAt")); // Use default sort
         return transactionBatchRepository.findByFilter(body.getOrganisationId(),
                 Optional.ofNullable(body.getBatchStatistics().isEmpty() ? null : body.getBatchStatistics()).map(bs -> bs.stream().map(Enum::name).collect(java.util.stream.Collectors.toSet())).orElse(null),
                 Optional.ofNullable(body.getTxStatus().isEmpty() ? null
@@ -48,7 +54,7 @@ public class TransactionBatchRepositoryGateway {
                 Optional.ofNullable(body.getTo()).map(t -> t.atStartOfDay()).orElse(LocalDateTime.now()),
                 body.getCreatedBy(),
                 body.getBatchId(),
-                pageable);
+                pageableWithSort);
     }
 
     public Set<TransactionEntity> findAllTransactionsByBatchId(String batchId) {

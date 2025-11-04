@@ -102,7 +102,6 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
                 AND (:createdBy IS NULL OR tb.createdBy IN :createdBy)
                 AND (CAST(:dateFrom AS LocalDateTime) IS NULL OR tb.createdAt >= :dateFrom)
                 AND (CAST(:dateTo AS LocalDateTime) IS NULL OR tb.createdAt <= :dateTo)
-                ORDER BY tb.createdAt DESC
         """)
         Page<TransactionBatchEntity> findByFilter(@Param("organisationId") String organisationId,
                         @Param("batchStatistics") Set<String> batchStatistics,
