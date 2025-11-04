@@ -53,7 +53,7 @@ public class BuildTx {
         }
 
         MetadataMap metadataMap = MetadataBuilder.createMap();
-        metadataMap.put("type", "AUTH_BEGIN");
+        metadataMap.put("t", "AUTH_BEGIN");
         metadataMap.put("i", data.aidOfSigner());
         metadataMap.put("s", data.saidOfLeafCredentialSchema());
         
