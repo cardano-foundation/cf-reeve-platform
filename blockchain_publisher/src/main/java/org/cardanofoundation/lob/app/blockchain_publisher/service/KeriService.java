@@ -52,7 +52,7 @@ public class KeriService {
             metadataMap.put("s", ked.get("s").toString());
             metadataMap.put("i", identifierConfig.getPrefix());
             metadataMap.put("d", diger.getQb64());
-            metadataMap.put("type", "KERI");
+            metadataMap.put("t", "ATTEST");
             return metadataMap;
 
         } catch (DigestException | LibsodiumException | InterruptedException | IOException
