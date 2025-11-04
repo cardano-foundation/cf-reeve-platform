@@ -130,8 +130,8 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
 
     @Query("""
             SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseStatisticView (
+                CAST(COUNT(DISTINCT CASE WHEN r.isReadyToPublish = true AND r.ledgerDispatchApproved = false THEN r.id END) AS java.lang.Long),
                 CAST(COUNT(DISTINCT CASE WHEN r.isReadyToPublish = false THEN r.id END) AS java.lang.Long),
-                CAST(COUNT(DISTINCT CASE WHEN r.isReadyToPublish = true THEN r.id END) AS java.lang.Long),
                 CAST(COUNT(DISTINCT CASE WHEN r.ledgerDispatchApproved = true THEN r.id END) AS java.lang.Long),
                 CAST(COUNT(r.id) AS java.lang.Long)
              )
