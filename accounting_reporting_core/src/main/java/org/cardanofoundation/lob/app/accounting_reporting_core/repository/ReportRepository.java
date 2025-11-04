@@ -12,8 +12,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseStatisticView;
 
 public interface ReportRepository extends JpaRepository<ReportEntity, String> {
 
@@ -42,20 +44,27 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
             LEFT JOIN accounting_reporting_core.report.ReportEntity r2 on r.idControl = r2.idControl and r.ver < r2.ver
              WHERE r.organisation.id = :organisationId
              AND r2.idControl IS NULL
-            AND (:reportType IS NULL OR CAST(r.type AS string) = :reportType)
-            AND (:intervalType IS NULL OR  CAST(r.intervalType AS string) = :intervalType)
+            AND (:reportType IS NULL OR r.type IN :reportType)
+            AND (:intervalType IS NULL OR r.intervalType IN :intervalType)
             AND (:ledgerStatus IS NULL OR CAST(r.ledgerDispatchStatus AS string) = :ledgerStatus)
-            AND (:currencyCode IS NULL OR r.organisation.currencyId = :currencyCode)
-            AND (:year IS NULL OR r.year = :year)
-            AND (:period IS NULL OR r.period = :period)
+            AND (:currencyCode IS NULL OR r.organisation.currencyId IN :currencyCode)
+            AND (:year IS NULL OR r.year IN :year)
+            AND (:period IS NULL OR r.period IN :period)
+            AND (:readyToPublish IS NULL OR r.isReadyToPublish = :readyToPublish)
+            AND (:ledgerDispatchApproved IS NULL OR r.ledgerDispatchApproved = :ledgerDispatchApproved)
             AND (:txHash IS NULL OR LOWER(r.ledgerDispatchReceipt.primaryBlockchainHash) LIKE LOWER(CONCAT('%', CAST(:txHash AS string), '%')))
             """)
     Page<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId,
-            @Param("reportType") String reportType, @Param("currencyCode") String currencyCode,
-            @Param("intervalType") String intervalType, @Param("year") Short year,
-            @Param("period") Short period,
-            @Param("ledgerStatus") String ledgerDispatchStatus,
-            @Param("txHash") String txHash, Pageable pageable);
+                                               @Param("reportType") List<ReportType> reportType,
+                                               @Param("currencyCode") List<String> currencyCode,
+                                               @Param("intervalType") List<IntervalType> intervalType,
+                                               @Param("year") List<Short> year,
+                                               @Param("period") List<Short> period,
+                                               @Param("ledgerStatus") String ledgerDispatchStatus,
+                                               @Param("txHash") String txHash,
+                                               @Param("readyToPublish") Boolean readyToPublish,
+                                               @Param("ledgerDispatchApproved") Boolean ledgerDispatchApproved,
+                                               Pageable pageable);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
@@ -118,4 +127,19 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
     Set<ReportEntity> findNotPublishedByOrganisationIdAndContainingDate(
             @Param("organisationId") String organisationId, @Param("year") int year,
             @Param("quarter") int quarter, @Param("month") int month);
+
+    @Query("""
+            SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseStatisticView (
+                CAST(COUNT(DISTINCT CASE WHEN r.isReadyToPublish = false THEN r.id END) AS java.lang.Long),
+                CAST(COUNT(DISTINCT CASE WHEN r.isReadyToPublish = true THEN r.id END) AS java.lang.Long),
+                CAST(COUNT(DISTINCT CASE WHEN r.ledgerDispatchApproved = true THEN r.id END) AS java.lang.Long),
+                CAST(COUNT(r.id) AS java.lang.Long)
+             )
+                FROM accounting_reporting_core.report.ReportEntity r
+                WHERE
+                r.organisation.id = :organisationId
+
+            """)
+    ReportResponseStatisticView findStatistics(
+            @Param("organisationId") String organisationId);
 }
