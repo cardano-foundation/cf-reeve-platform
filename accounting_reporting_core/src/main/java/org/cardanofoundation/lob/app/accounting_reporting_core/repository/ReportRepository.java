@@ -33,17 +33,21 @@ public interface ReportRepository extends JpaRepository<ReportEntity, String> {
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
-            LEFT JOIN accounting_reporting_core.report.ReportEntity r2 on r.idControl = r2.idControl and r.ver < r2.ver
             WHERE r.organisation.id = :organisationId
-            AND r2.idControl IS NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM accounting_reporting_core.report.ReportEntity r2
+                WHERE r2.idControl = r.idControl AND r2.ver > r.ver
+            )
             ORDER BY r.createdAt ASC, r.reportId ASC""")
     Set<ReportEntity> findAllByOrganisationId(@Param("organisationId") String organisationId);
 
     @Query("""
             SELECT r FROM accounting_reporting_core.report.ReportEntity r
-            LEFT JOIN accounting_reporting_core.report.ReportEntity r2 on r.idControl = r2.idControl and r.ver < r2.ver
-             WHERE r.organisation.id = :organisationId
-             AND r2.idControl IS NULL
+            WHERE r.organisation.id = :organisationId
+            AND NOT EXISTS (
+                SELECT 1 FROM accounting_reporting_core.report.ReportEntity r2
+                WHERE r2.idControl = r.idControl AND r2.ver > r.ver
+            )
             AND (:reportType IS NULL OR r.type IN :reportType)
             AND (:intervalType IS NULL OR r.intervalType IN :intervalType)
             AND (:ledgerStatus IS NULL OR CAST(r.ledgerDispatchStatus AS string) = :ledgerStatus)
