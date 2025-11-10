@@ -1,3 +1,5 @@
+val openCsvVersion: String by project
+
 dependencies {
     implementation("org.jmolecules:jmolecules-events")
     implementation("org.jmolecules:jmolecules-ddd")
@@ -8,6 +10,7 @@ dependencies {
     implementation(project(":organisation"))
     implementation(project(":support"))
 
+    implementation("com.opencsv:opencsv:$openCsvVersion")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa")
     testImplementation("org.springframework.boot:spring-boot-starter-validation")
 }

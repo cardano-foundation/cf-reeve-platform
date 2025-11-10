@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
@@ -87,7 +86,7 @@ public class AccountingCoreService {
                     .withStatus(BAD_REQUEST)
                     .build());
         }
-        Either<Problem, byte[]> bytesE = readFileBytes(file);
+        Either<Problem, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
         if (bytesE.isLeft()) {
             return Either.left(bytesE.getLeft());
         }
@@ -103,32 +102,6 @@ public class AccountingCoreService {
         applicationEventPublisher.publishEvent(event);
 
         return Either.right(null); // all fine
-    }
-
-    private Either<Problem, byte[]> readFileBytes(Optional<MultipartFile> file) {
-        byte[] fileBytes;
-        try {
-            if(file.isPresent() && file.map(f -> !f.isEmpty()).orElse(false)) {
-                fileBytes = file.get().getBytes();
-                if (!antiVirusScanner.isFileSafe(fileBytes)) {
-                    return Either.left(Problem.builder()
-                            .withTitle("FILE_VIRUS_DETECTED")
-                            .withDetail("The uploaded file contains a virus and cannot be processed.")
-                            .withStatus(BAD_REQUEST)
-                            .build());
-                } else {
-                    return Either.right(fileBytes);
-                }
-            } else {
-                return Either.right(null);
-            }
-        } catch (IOException e) {
-            return Either.left(Problem.builder()
-                    .withTitle("FILE_READ_ERROR")
-                    .withDetail("Error reading file")
-                    .withStatus(BAD_REQUEST)
-                    .build());
-        }
     }
 
     public Either<List<Problem>, Void> validateIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
@@ -147,7 +120,7 @@ public class AccountingCoreService {
                     .withStatus(BAD_REQUEST)
                     .build()));
         }
-        Either<Problem, byte[]> bytesE = readFileBytes(file);
+        Either<Problem, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
         if (bytesE.isLeft()) {
             return Either.left(List.of(bytesE.getLeft()));
         }
@@ -198,7 +171,7 @@ public class AccountingCoreService {
         if (dateRangeCheckE.isLeft()) {
             return dateRangeCheckE;
         }
-        Either<Problem, byte[]> bytesE = readFileBytes(file);
+        Either<Problem, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
         if (bytesE.isLeft()) {
             return Either.left(bytesE.getLeft());
         }
