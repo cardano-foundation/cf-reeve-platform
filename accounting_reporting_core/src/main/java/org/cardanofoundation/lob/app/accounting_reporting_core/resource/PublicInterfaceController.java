@@ -57,6 +57,7 @@ public class PublicInterfaceController {
     )
     @Tag(name = "Public", description = "Public search for reporting")
     @PostMapping(value = "/reports", produces = "application/json")
+    @Deprecated
     public ResponseEntity<ReportResponseView> reportSearchPublicInterface(@Valid @RequestBody PublicReportSearchRequest reportSearchRequest) {
 
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(reportSearchRequest.getOrganisationId());
@@ -90,6 +91,7 @@ public class PublicInterfaceController {
                     })
             }
     )
+    @Deprecated
     public ResponseEntity<ExtractionTransactionView> transactionSearchPublicInterface(@Valid @RequestBody PublicInterfaceTransactionsRequest transactionsRequest,
                                                                                       @RequestParam(name = "page", defaultValue = "0") int page,
                                                                                       @RequestParam(name = "limit", defaultValue = "100") int limit) {
