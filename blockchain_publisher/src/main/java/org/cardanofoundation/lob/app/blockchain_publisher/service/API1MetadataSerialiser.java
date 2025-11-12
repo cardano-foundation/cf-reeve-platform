@@ -153,6 +153,10 @@ public class API1MetadataSerialiser {
 
         metadataMap.put("id", transactionItemEntity.getId());
         metadataMap.put("amount", BigDecimals.normaliseString(transactionItemEntity.getAmountFcy()));
+        if(transactionItemEntity.getAmountLcy() != null){
+            metadataMap.put("amount_lcy", BigDecimals.normaliseString(transactionItemEntity.getAmountLcy()));
+        }
+
 
         transactionItemEntity.getAccountEvent().ifPresent(accountEvent -> metadataMap.put("event", serialise(accountEvent)));
         transactionItemEntity.getProject().ifPresent(project -> metadataMap.put("project", serialise(project)));
