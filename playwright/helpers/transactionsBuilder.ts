@@ -14,12 +14,20 @@ import {
     ChartOfAccountsDto,
     DebitAndCreditAccounts
 } from "../api/dtos/chartOfAccountsDto";
+import {TransactionPendingStatus} from "./transaction-pending-status";
 
-export async function transactionsBuilder(request: APIRequestContext, authToken: string){
+export async function transactionsBuilder(request: APIRequestContext, authToken: string) {
     const createCSVTransactionReadyToApprove = async (transactionDataToImport: TransactionItemCsvDto[]) => {
         const columns = await getTransactionCSVHeaders();
         const rows = await createValidTransactionData(transactionDataToImport)
-       return  await saveCSV(columns, rows,  "transaction.csv");
+        const fileName = "Approve-" + Math.random().toString(36).substring(2, 2 + 8) + ".csv";
+        return await saveCSV(columns, rows, fileName);
+    }
+    const createCSVTransactionPending = async (transactionDataToImport: TransactionItemCsvDto[], pendingReason: string) => {
+        const columns = await getTransactionCSVHeaders();
+        const rows = await createPendingTransactionData(transactionDataToImport, pendingReason);
+        const fileName = "Pending-" + Math.random().toString(36).substring(2, 2 + 8) + ".csv";
+        return await saveCSV(columns, rows, fileName)
     }
     const getTransactionCSVHeaders = async () => {
         try {
@@ -27,8 +35,8 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
             return headers
                 .split(',')
                 .map(header => header.trim())
-        }catch (error) {
-            log.error("Error trying to read file: ",error);
+        } catch (error) {
+            log.error("Error trying to read file: ", error);
         }
     }
 
@@ -41,18 +49,14 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
      * creditTxItem accounts are requested through API in base of organization event codes
      */
     const createValidTransactionData = async (transactionDataToImport: TransactionItemCsvDto[]) => {
-        // Create a random short hash for transaction Number
-        const txNumber = "TEST-"+Math.random().toString(36).substring(2, 2 + 8);
-        const txDate = getDateInThePast(2,true);
-        const txType = await getTransactionType();
+        const transactionCommonData = await getTransactionCommonData()
         const amountForTxItem = (Math.floor(Math.random() * 100000) + 1).toString();
-        const documentName = "TEST-"+Math.random().toString(36).substring(2, 2 + 8);
         const eventCodes = await getEventCodes();
         const debitAndCreditAccounts = await getDebitAndCreditAccounts(eventCodes);
-        const debitTxItem = await createTransactionItem(txNumber, txDate, txType, amountForTxItem,
-            true, documentName, debitAndCreditAccounts);
-        const creditTxItem = await createTransactionItem(txNumber, txDate, txType, amountForTxItem,
-            false, documentName,debitAndCreditAccounts);
+        const debitTxItem = await createTransactionItem(transactionCommonData, amountForTxItem,
+            true, debitAndCreditAccounts);
+        const creditTxItem = await createTransactionItem(transactionCommonData, amountForTxItem,
+            false, debitAndCreditAccounts);
         transactionDataToImport.push(debitTxItem);
         transactionDataToImport.push(creditTxItem);
         const rows: string[][] = [];
@@ -60,13 +64,54 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
         rows.push(Object.values(creditTxItem))
         return rows
     }
+    const createPendingTransactionData = async (transactionDataToImport: TransactionItemCsvDto[], pendingReason: string) => {
+        const transactionCommonData = await getTransactionCommonData()
+        const amountForTxItem = (Math.floor(Math.random() * 100000) + 1).toString();
+        const eventCodes = await getEventCodes();
+        const debitAndCreditAccounts = await getDebitAndCreditAccounts(eventCodes);
+        const debitTxItem = await createTransactionItem(transactionCommonData, amountForTxItem,
+            true, debitAndCreditAccounts)
+        await setPendingReason(debitTxItem, pendingReason);
+        const creditTxItem = await createTransactionItem(transactionCommonData, amountForTxItem,
+            false, debitAndCreditAccounts);
+        transactionDataToImport.push(debitTxItem);
+        transactionDataToImport.push(creditTxItem);
+        const rows: string[][] = [];
+        rows.push(Object.values(debitTxItem));
+        rows.push(Object.values(creditTxItem))
+        return rows
+    }
+    const getTransactionCommonData = async () => {
+        const txNumber = "TEST-" + Math.random().toString(36).substring(2, 2 + 8);
+        const txDate = getDateInThePast(2, true);
+        const txType = await getTransactionType();
+        const documentName = "TEST-" + Math.random().toString(36).substring(2, 2 + 8);
+        const transactionItemCommonData: TransactionItemCsvDto = {
+            TxNumber: txNumber,
+            TxDate: txDate,
+            TxType: txType,
+            DocumentName: documentName
+        }
+        return transactionItemCommonData
+    }
+    const setPendingReason = async (transactionItem: TransactionItemCsvDto, pendingReason: string) => {
+        if(pendingReason == TransactionPendingStatus.COST_CENTER_DATA_NOT_FOUND){
+            transactionItem.TxCostCenter = Math.random().toString(36).substring(2, 2 + 8);
+        }
+        if(pendingReason == TransactionPendingStatus.VAT_DATA_NOT_FOUND){
+            transactionItem.VatCode = Math.random().toString(36).substring(2, 2 + 8);
+        }
+        if(pendingReason == TransactionPendingStatus.CHART_OF_ACCOUNT_NOT_FOUND){
+            transactionItem.DebitCode = Math.random().toString(36).substring(2, 2 + 8);
+        }
+    }
 
     const getTransactionType = async () => {
         const transactionTypeResponse = await (await reeveService(request))
             .getTransactionTypes(authToken);
         expect(transactionTypeResponse.status()).toEqual(HttpStatusCodes.success);
         const transactionTypes: TransactionTypeDto[] = await (transactionTypeResponse.json());
-        const randomTxType = Math.floor(Math.random() * (transactionTypes.length -1));
+        const randomTxType = Math.floor(Math.random() * (transactionTypes.length - 1));
         return (transactionTypes[randomTxType].id)
     }
 
@@ -93,24 +138,24 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
         let accountsMatch: boolean = false;
         let debitAccounts: AccountCodeAndNamePair[] | null;
         let creditAccounts: AccountCodeAndNamePair[] | null;
-        while (accountsMatch == false){
-            if(eventCodes[index].debitReferenceCode != eventCodes[index].creditReferenceCode ){
+        while (accountsMatch == false) {
+            if (eventCodes[index].debitReferenceCode != eventCodes[index].creditReferenceCode) {
                 debitAccounts = chartOfAccounts.filter(chartOfAccount =>
                     chartOfAccount.referenceCode === eventCodes[index].debitReferenceCode)
                     .map(chartOfAccount => ({
                         accountCode: chartOfAccount.accountCode,
                         accountName: chartOfAccount.accountName
                     }));
-                if(debitAccounts.length>=1){
+                if (debitAccounts.length >= 1) {
                     creditAccounts = chartOfAccounts.filter(chartOfAccount =>
                         chartOfAccount.referenceCode === eventCodes[index].creditReferenceCode
-                    && chartOfAccount.accountCode !== debitAccounts[0].accountCode)
+                        && chartOfAccount.accountCode !== debitAccounts[0].accountCode)
                         .map(chartOfAccount => ({
                             accountCode: chartOfAccount.accountCode,
                             accountName: chartOfAccount.accountName
                         }));
                 }
-                if(creditAccounts!=null) {
+                if (creditAccounts != null) {
                     accountsMatch = true;
                 }
             }
@@ -127,7 +172,7 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
         const chartOfAccountsResponse = await (await reeveService(request)).getChartOfAccounts(authToken);
         expect(chartOfAccountsResponse.status()).toEqual(HttpStatusCodes.success);
         const chartOfAccounts: AccountRefCodePair[] = (await (chartOfAccountsResponse).json())
-            .map( chartOfAccount => ({
+            .map(chartOfAccount => ({
                 accountCode: chartOfAccount.customerCode,
                 referenceCode: chartOfAccount.eventRefCode,
                 accountName: chartOfAccount.name
@@ -135,37 +180,36 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
         return chartOfAccounts
     }
 
-    const createTransactionItem = async (txNumber: string, txDate:string, txType: string, amount:string,
-                                         isDebit: boolean, documentName: string,
-                                         debitAndCreditAccounts: DebitAndCreditAccounts) => {
+    const createTransactionItem = async (transactionItemCommonData: TransactionItemCsvDto, amount: string,
+                                         isDebit: boolean, debitAndCreditAccounts: DebitAndCreditAccounts) => {
         let randomIndexDebit = Math.floor(Math.random() * debitAndCreditAccounts.debitAccounts.length)
         let randomIndexCredit = Math.floor(Math.random() * debitAndCreditAccounts.creditAccounts.length)
         const transactionItem: TransactionItemCsvDto = {
-            TxNumber: txNumber,
-            TxDate: txDate,
-            TxType: txType,
+            TxNumber: transactionItemCommonData.TxNumber,
+            TxDate: transactionItemCommonData.TxDate,
+            TxType: transactionItemCommonData.TxType,
             FxRate: "1",
-            AmountLcyDebit:"",
-            AmountLcyCredit:"",
-            AmountFcyDebit:"",
-            AmountFcyCredit:"",
-            DebitCode:"",
-            DebitName:"",
-            CreditCode:"",
-            CreditName:"",
-            ProjectCode:"",
-            DocumentName:documentName,
-            TxCurrency:"CHF",
-            VatRate:"",
-            VatCode:"",
-            TxCostCenter:"",
-            CounterParty:"",
-            CounterpartyName:"",
+            AmountLcyDebit: "",
+            AmountLcyCredit: "",
+            AmountFcyDebit: "",
+            AmountFcyCredit: "",
+            DebitCode: "",
+            DebitName: "",
+            CreditCode: "",
+            CreditName: "",
+            ProjectCode: "",
+            DocumentName: transactionItemCommonData.DocumentName,
+            TxCurrency: "CHF",
+            VatRate: "",
+            VatCode: "",
+            TxCostCenter: "",
+            CounterParty: "",
+            CounterpartyName: "",
         }
-        if(isDebit){
-            transactionItem.AmountLcyDebit= amount;
+        if (isDebit) {
+            transactionItem.AmountLcyDebit = amount;
             transactionItem.AmountFcyDebit = amount;
-        }else {
+        } else {
             transactionItem.AmountLcyCredit = amount;
             transactionItem.AmountFcyCredit = amount;
         }
@@ -177,7 +221,8 @@ export async function transactionsBuilder(request: APIRequestContext, authToken:
     }
 
     return {
-        createReadyToApproveTransaction: createCSVTransactionReadyToApprove
+        createReadyToApproveTransaction: createCSVTransactionReadyToApprove,
+        createCSVTransactionPending
     }
 
 }

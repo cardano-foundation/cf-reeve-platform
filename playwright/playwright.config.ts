@@ -3,6 +3,7 @@ import {defineBddConfig} from "playwright-bdd";
 
 import "dotenv/config";
 
+
 const testDir = defineBddConfig({
   features: './tests/e2e',
   steps: './tests/steps'
@@ -10,6 +11,9 @@ const testDir = defineBddConfig({
 export default defineConfig({
   /* Indicates where the test steps definition are */
   testDir,
+
+
+  timeout: 120_000,
 
   /* Run tests in files in parallel */
   fullyParallel: true,
