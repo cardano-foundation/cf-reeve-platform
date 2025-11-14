@@ -588,7 +588,7 @@ public class AccountingCorePresentationViewService {
                 (Integer) ((Long) result[6]).intValue(),
                  (Long) result[7],
                 (Integer) (((Long) result[5]).intValue()
-                        + ((Long) result[6]).intValue()) 
+                        + ((Long) result[6]).intValue())
                         + ((Integer) ((Long) result[7]).intValue()));
     }
 
