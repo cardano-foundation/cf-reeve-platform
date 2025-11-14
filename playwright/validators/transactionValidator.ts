@@ -2,10 +2,11 @@ import {TransactionItemCsvDto} from "../api/dtos/transactionItemCsvDto";
 import {BatchResponse, TransactionItem} from "../api/dtos/batchDto";
 import {expect} from "@playwright/test";
 import {log} from "../utils/logger";
+import {BatchesStatusCodes} from "../api/api-helpers/batches-status-codes";
 
 export async function transactionValidator() {
-    const validateSingleReadyToApproveTx = async (transactionCsvData: TransactionItemCsvDto[],
-                                            importedBatchDetails: BatchResponse) => {
+    const validateImportedTxWithStatus = async (transactionCsvData: TransactionItemCsvDto[],
+                                            importedBatchDetails: BatchResponse, transactionStatus: string) => {
         const debitCsvItem: TransactionItemCsvDto = await extractCsvTxItem(transactionCsvData, true);
         const creditCsvItem: TransactionItemCsvDto = await extractCsvTxItem(transactionCsvData, false);
         const txItems = importedBatchDetails.transactions[0].items
@@ -13,9 +14,14 @@ export async function transactionValidator() {
             tx.accountDebitCode ==  debitCsvItem.DebitCode)
         const txCreditItem = txItems.find(tx =>
         tx.accountCreditCode == creditCsvItem.CreditCode)
-
-        expect(importedBatchDetails.batchStatistics.approve, "Imported batch should have transaction in ready to approve status ")
-            .toEqual(importedBatchDetails.totalTransactionsCount)
+        if(transactionStatus == BatchesStatusCodes.APPROVE){
+            expect(importedBatchDetails.batchStatistics.approve, "Imported batch should have transaction in ready to approve status ")
+                .toEqual(importedBatchDetails.totalTransactionsCount)
+        }
+        if(transactionStatus == BatchesStatusCodes.PENDING){
+            expect(importedBatchDetails.batchStatistics.pending, "Imported batch should have transaction in pending status ")
+                .toEqual(importedBatchDetails.totalTransactionsCount)
+        }
         expect(importedBatchDetails.transactions[0].items.length, "The sent transaction items are not the same imported in the system ")
             .toEqual(transactionCsvData.length)
         expect(importedBatchDetails.transactions[0].internalTransactionNumber, "The transaction number is not the same that was sent")
@@ -40,6 +46,10 @@ export async function transactionValidator() {
                 .toEqual(parseFloat(txCsvItem.AmountLcyCredit))
         }
     }
+    const validatePendingCondition = async (importedBatchDetails: BatchResponse, expectedReason: string) => {
+        expect(importedBatchDetails.transactions[0].violations[0].code, "The expected pending reason is wrong")
+            .toEqual(expectedReason)
+    }
     const extractCsvTxItem = async (transactionCsvData: TransactionItemCsvDto[], isDebit: boolean) => {
         return transactionCsvData.find(tx => {
             let amount: number
@@ -52,6 +62,7 @@ export async function transactionValidator() {
         })
     }
     return {
-        validateSingleReadyToApproveTx
+        validateImportedTxWithStatus,
+        validatePendingCondition
     }
 }

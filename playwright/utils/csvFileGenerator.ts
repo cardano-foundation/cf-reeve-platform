@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import {unlink} from "node:fs/promises";
 
 /**
  * Create CSV data
@@ -44,4 +45,14 @@ export async function saveCSV(
 
     //return file
     return fullPath;
+}
+
+export async function deleteFile(fullPath: string): Promise<void> {
+    try {
+        await unlink(fullPath);
+        console.log(`✓ File successfully deleted`);
+    } catch (error) {
+        console.error(`✗ Error trying to delete:`, error);
+        throw error;
+    }
 }
