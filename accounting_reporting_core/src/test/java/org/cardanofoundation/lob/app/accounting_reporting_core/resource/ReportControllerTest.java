@@ -1,7 +1,11 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
+import static org.mockito.Mockito.when;
+
 import java.util.List;
+
 import org.springframework.http.ResponseEntity;
+
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -9,9 +13,11 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
@@ -20,7 +26,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ReportControllerTest {

@@ -1,18 +1,26 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.util.List;
 import java.util.Optional;
+
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
+
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportCsvLine;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
@@ -20,13 +28,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ReportViewServiceTest {
-    
+
     @Mock
     private ReportService reportService;
     @Mock
@@ -39,13 +44,13 @@ class ReportViewServiceTest {
     private OrganisationPublicApiIF organisationPublicApiIF;
     @InjectMocks
     private ReportViewService reportViewService;
-    
+
 
 
     @Test
     void reportCreateCsv_orgNotFound() {
         CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
-        
+
         when(request.getOrganisationId()).thenReturn("org123");
         when(organisationPublicApiIF.findByOrganisationId("org123")).thenReturn(Optional.empty());
 
