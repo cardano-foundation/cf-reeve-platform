@@ -1,9 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
-import static org.mockito.Mockito.when;
-
+import java.util.List;
 import org.springframework.http.ResponseEntity;
-
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -11,18 +9,18 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
-
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ReportControllerTest {
@@ -41,12 +39,12 @@ class ReportControllerTest {
     void testReportCreate_problem() {
         ReportGenerateRequest reportGenerateRequest = Mockito.mock(ReportGenerateRequest.class);
 
-        Mockito.when(reportService.reportGenerate(reportGenerateRequest)).thenReturn(Either.left(Problem.builder()
-                .withTitle("REPORT_SETUP_NOT_FOUND")
-                .withStatus(Status.BAD_REQUEST)
-                .build()));
+        Mockito.when(reportService.reportGenerate(reportGenerateRequest))
+                .thenReturn(Either.left(Problem.builder().withTitle("REPORT_SETUP_NOT_FOUND")
+                        .withStatus(Status.BAD_REQUEST).build()));
 
-        ResponseEntity<ReportResponseView> reportResponseViewResponseEntity = reportController.reportGenerate(reportGenerateRequest);
+        ResponseEntity<ReportResponseView> reportResponseViewResponseEntity =
+                reportController.reportGenerate(reportGenerateRequest);
 
         Assertions.assertTrue(reportResponseViewResponseEntity.getStatusCode().is4xxClientError());
     }
@@ -56,11 +54,53 @@ class ReportControllerTest {
         ReportGenerateRequest reportGenerateRequest = Mockito.mock(ReportGenerateRequest.class);
         ReportEntity reportEntity = Mockito.mock(ReportEntity.class);
 
-        when(reportService.reportGenerate(reportGenerateRequest)).thenReturn(Either.right(reportEntity));
+        when(reportService.reportGenerate(reportGenerateRequest))
+                .thenReturn(Either.right(reportEntity));
         when(reportEntity.getOrganisation()).thenReturn(Mockito.mock(Organisation.class));
-        ResponseEntity<ReportResponseView> reportResponseViewResponseEntity = reportController.reportGenerate(reportGenerateRequest);
+        ResponseEntity<ReportResponseView> reportResponseViewResponseEntity =
+                reportController.reportGenerate(reportGenerateRequest);
 
         assert reportResponseViewResponseEntity.getStatusCode().is2xxSuccessful();
+    }
+
+    @Test
+    void reportCreateTest_error() {
+        CreateCsvReportRequest request = Mockito.mock(CreateCsvReportRequest.class);
+        when(reportViewService.reportCreateCsv(request, true))
+                .thenReturn(Either.left(Problem.builder().withTitle("ORGANISATION_NOT_FOUND")
+                        .withStatus(Status.BAD_REQUEST).build()));
+        ResponseEntity<List<ReportResponseView>> response = reportController.reportCreateCsv(request);
+        Assertions.assertTrue(response.getStatusCode().is4xxClientError());
+    }
+
+    @Test
+    void reportCreateTest_success() {
+        CreateCsvReportRequest request = Mockito.mock(CreateCsvReportRequest.class);
+        when(reportViewService.reportCreateCsv(request, true))
+                .thenReturn(Either.right(List.of()));
+        ResponseEntity<List<ReportResponseView>> response =
+                reportController.reportCreateCsv(request);
+        Assertions.assertTrue(response.getStatusCode().is2xxSuccessful());
+    }
+
+    @Test
+    void reportValidateTest_error() {
+        CreateCsvReportRequest request = Mockito.mock(CreateCsvReportRequest.class);
+        when(reportViewService.reportCreateCsv(request, false))
+                .thenReturn(Either.left(Problem.builder().withTitle("ORGANISATION_NOT_FOUND")
+                        .withStatus(Status.BAD_REQUEST).build()));
+        ResponseEntity<List<ReportResponseView>> response =
+                reportController.reportValidateCsv(request);
+        Assertions.assertTrue(response.getStatusCode().is4xxClientError());
+    }
+
+    @Test
+    void reportValidateTest_success() {
+        CreateCsvReportRequest request = Mockito.mock(CreateCsvReportRequest.class);
+        when(reportViewService.reportCreateCsv(request, false)).thenReturn(Either.right(List.of()));
+        ResponseEntity<List<ReportResponseView>> response =
+                reportController.reportValidateCsv(request);
+        Assertions.assertTrue(response.getStatusCode().is2xxSuccessful());
     }
 
 }
