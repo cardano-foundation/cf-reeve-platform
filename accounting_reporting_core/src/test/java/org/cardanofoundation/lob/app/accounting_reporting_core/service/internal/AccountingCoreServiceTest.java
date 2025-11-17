@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.assistance.AccountingPeriodCalculator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,6 +59,8 @@ class AccountingCoreServiceTest {
 
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private AntiVirusScanner antiVirusScanner;
 
     @InjectMocks
     private AccountingCoreService accountingCoreService;
@@ -105,6 +108,7 @@ class AccountingCoreServiceTest {
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
         when(file.getBytes()).thenThrow(new IOException());
         when(file.isEmpty()).thenReturn(false);
+        when(antiVirusScanner.readFileBytes(any())).thenReturn(Either.right(file.getBytes()));
 
         UserExtractionParameters userParams = UserExtractionParameters.builder()
                 .organisationId("org-123")

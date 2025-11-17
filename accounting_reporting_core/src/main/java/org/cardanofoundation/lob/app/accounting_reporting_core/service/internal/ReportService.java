@@ -1136,7 +1136,7 @@ public class ReportService {
                     Either<Problem, ReportEntity> storeReport = storeReport(ReportType.valueOf(reportCsvLine.getReport()),
                             reportEntityE.get(),
                             IntervalType.valueOf(reportCsvLine.getIntervalType()),
-                            Short.parseShort(reportCsvLine.getYear()),
+                            reportCsvLine.getYear(),
                             Short.valueOf(reportCsvLine.getPeriod()));
                     if(storeReport.isLeft()) {
                         results.add(Either.left(storeReport.getLeft()));
@@ -1149,7 +1149,7 @@ public class ReportService {
                             .organisation(Organisation.builder().id(organisationId).build())
                             .type(ReportType.valueOf(reportCsvLine.getReport()))
                             .intervalType(IntervalType.valueOf(reportCsvLine.getIntervalType()))
-                            .year(Short.parseShort(reportCsvLine.getYear()))
+                            .year(reportCsvLine.getYear())
                             .period(Short.valueOf(reportCsvLine.getPeriod()))
                             .incomeStatementReportData(reportEntityE.get().getIncomeStatementData().orElse(null))
                             .balanceSheetReportData(reportEntityE.get().getBalanceSheetData().orElse(null))
