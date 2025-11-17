@@ -48,6 +48,17 @@ export interface TransactionItem {
     counterpartyName: string;
 }
 
+export interface Violation {
+    severity: string;
+    source: string;
+    transactionItemId: string;
+    code: string;
+    bag: {
+        customerCode: string;
+        transactionNumber: string;
+    };
+}
+
 export interface Transaction {
     id: string;
     internalTransactionNumber: string;
@@ -68,7 +79,7 @@ export interface Transaction {
     reconciliationRejectionCode: string[];
     itemCount: number;
     items: TransactionItem[];
-    violations: any[];
+    violations: Violation[];
 }
 
 export interface BatchResponse {

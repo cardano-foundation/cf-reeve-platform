@@ -577,15 +577,19 @@ public class AccountingCorePresentationViewService {
             Object transactionsStatistic) {
 
         Object[] result = (Object[]) transactionsStatistic;
+        // TODO we need to find a better solution than handling these object arrays
         return new TransactionReconciliationStatisticView(
                 (Integer) ((Long) result[0]).intValue(),
                 (Integer) ((Long) result[1]).intValue(),
                 (Integer) ((Long) result[2]).intValue(),
                 (Integer) ((Long) result[3]).intValue(),
-                (Integer) ((Long) result[4]).intValue(), (Long) result[5],
-                (Integer) ((Long) result[6]).intValue(), (Long) result[7],
+                (Integer) ((Long) result[4]).intValue(),
+                (Long) result[5],
+                (Integer) ((Long) result[6]).intValue(),
+                 (Long) result[7],
                 (Integer) (((Long) result[5]).intValue()
-                        + ((Long) result[6]).intValue()));
+                        + ((Long) result[6]).intValue())
+                        + ((Integer) ((Long) result[7]).intValue()));
     }
 
     private Set<TransactionItemView> getTransactionItemView(TransactionEntity transaction) {

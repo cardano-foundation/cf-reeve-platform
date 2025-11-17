@@ -88,7 +88,7 @@ class AccountingCorePresentationViewServiceTest {
         Assertions.assertEquals(5L, responseView.getStatistic().getOK());
         Assertions.assertEquals(6, responseView.getStatistic().getNOK());
         Assertions.assertEquals(7L, responseView.getStatistic().getNEVER());
-        Assertions.assertEquals(11, responseView.getStatistic().getTOTAL()); // Array index 5 + Array index 6
+        Assertions.assertEquals(18, responseView.getStatistic().getTOTAL()); // Array index 5 + Array index 6
         Assertions.assertEquals(Optional.empty(), responseView.getLastDateFrom());
         Assertions.assertEquals(Optional.empty(), responseView.getLastDateTo());
         Assertions.assertEquals(Optional.empty(), responseView.getLastReconciledDate());
