@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import java.math.BigDecimal;
@@ -19,7 +20,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Currency;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.LedgerDispatchReceipt;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
@@ -70,46 +77,6 @@ class ExtractionItemServiceTest {
         ExtractionTransactionView result = extractionItemService.findTransactionItems(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
         assertInstanceOf(ExtractionTransactionView.class, result);
         assertEquals(1L, result.getTotal());
-        verifyNoMoreInteractions(transactionItemExtractionRepository);
-
-    }
-
-    @Test
-    void findByItemAccountDateTest() {
-        val document = Document.builder()
-                .currency(Currency.builder()
-                        .customerCode("EUR")
-                        .build())
-                .build();
-        val tx = new TransactionEntity();
-        tx.setId("TxId1");
-        tx.setInternalTransactionNumber("1");
-        tx.setOrganisation(Organisation.builder().id("orgId1").build());
-        tx.setTransactionType(TransactionType.FxRevaluation);
-        tx.setLedgerDispatchReceipt(new LedgerDispatchReceipt());
-
-
-        val item1 = new TransactionItemEntity();
-        item1.setId("item1");
-        item1.setDocument(Optional.of(document));
-        item1.setAmountFcy(BigDecimal.valueOf(1));
-        item1.setAmountLcy(BigDecimal.valueOf(1));
-        item1.setCostCenter(Optional.ofNullable(CostCenter.builder().customerCode("10201").build()));
-        tx.setItems(Set.of(item1));
-
-        item1.setTransaction(tx);
-
-        Mockito.when(transactionItemExtractionRepository.findByItemAccountDateAggregated(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt())).thenReturn(List.of(item1));
-        Mockito.when(transactionItemExtractionRepository.countItemsByAccountDateAggregated(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(1L);
-
-        Mockito.when(organisationPublicApi.findProject(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
-        Mockito.when(organisationPublicApi.findCostCenter(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
-
-        ExtractionTransactionView result = extractionItemService.findTransactionItemsPublic(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.eq(0), Mockito.eq(10));
-        assertInstanceOf(ExtractionTransactionView.class, result);
-        assertEquals(1L, result.getTotal());
-        assertEquals("item1", result.getTransactions().getFirst().getId());
-        assertEquals("TxId1", result.getTransactions().getFirst().getTransactionID());
         verifyNoMoreInteractions(transactionItemExtractionRepository);
 
     }

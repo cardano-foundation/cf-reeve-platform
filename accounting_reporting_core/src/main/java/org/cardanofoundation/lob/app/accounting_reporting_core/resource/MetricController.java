@@ -40,12 +40,14 @@ public class MetricController {
 
     @Tag(name = "Metrics", description = "Available Metrics")
     @GetMapping(value = "/availableMetrics", produces = "application/json")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<MetricView> availableDashboards() {
         return ResponseEntity.ok(new MetricView(metricService.getAvailableMetrics()));
     }
 
     @Tag(name = "Metrics", description = "Get Data from Metrics")
     @PostMapping(value = "/data", produces = "application/json")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<MetricDataResponse> getDashboardData(@RequestBody GetMetricDataRequest getMetricDataRequest) {
         return ResponseEntity.ok(new MetricDataResponse(metricService.getData(
                 getMetricDataRequest.getMetricView().getMetrics(),
@@ -68,6 +70,7 @@ public class MetricController {
 
     @Tag(name = "Dashboards", description = "Get Dashboards")
     @GetMapping(value = "/dashboards/{organisationID}", produces = "application/json")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<DashboardView>> getDashboards(@PathVariable("organisationID") String organisationID) {
         return ResponseEntity.ok(metricService.getAllDashboards(organisationID));
     }
