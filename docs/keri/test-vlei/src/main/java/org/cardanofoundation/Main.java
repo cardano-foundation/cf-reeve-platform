@@ -5,7 +5,6 @@ public class Main {
     public static void main(String[] args) throws Exception {
         CreateVlei.createVlei("credential-data.json");
         BuildTx.buildAndPublishTx("credential-data.json");
-        // BuildTx.buildAndPublishTx("summit-credential.json");
     }
     
 }

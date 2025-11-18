@@ -7,12 +7,20 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.Month;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -21,7 +29,12 @@ import java.util.Set;
 import lombok.val;
 
 import io.vavr.control.Either;
-import org.mockito.*;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
 import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Assertions;
@@ -32,6 +45,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Opera
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportCsvLine;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.BalanceSheetData;
@@ -41,8 +55,13 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Report
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.csv.CsvReportMapper;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.*;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
 
@@ -58,6 +77,8 @@ class ReportServiceTest {
     private ChartOfAccountRepository chartOfAccountRepository;
     @Mock
     private TransactionItemRepository transactionItemRepository;
+    @Mock
+    private CsvReportMapper csvReportMapper;
 
     @Spy
     private Clock clock = Clock.systemUTC();
@@ -1651,6 +1672,65 @@ class ReportServiceTest {
         Assertions.assertTrue(balanceSheetData.getCapital().isPresent());
         Assertions.assertEquals(Optional.of(BigDecimal.TEN), balanceSheetData.getCapital().get().getProfitForTheYear());
 
+    }
+
+
+    @Test
+    void storeCsvReports_mappingError() {
+        ReportCsvLine csvLine = mock(ReportCsvLine.class);
+        when(csvLine.getReport()).thenReturn("report");
+        when(csvLine.getIntervalType()).thenReturn("QUARTER");
+        when(csvLine.getYear()).thenReturn((short)1);
+        when(csvLine.getPeriod()).thenReturn("1");
+        when(csvReportMapper.mapCsvLinesToReportEntity(List.of(csvLine), "org123")).thenReturn(Either.left(Problem.builder().build()));
+
+        List<ReportCsvLine> reports = new ArrayList<>();
+        reports.add(csvLine);
+        List<Either<Problem, ReportEntity>> response = reportService.storeCsvReports(reports, "org123", false);
+        assertEquals(1, response.size());
+        assertTrue(response.getFirst().isLeft());
+    }
+
+    @Test
+    void storeCsvReports_successNoStore() {
+            ReportCsvLine csvLine = mock(ReportCsvLine.class);
+            CreateReportView createReportView = mock(CreateReportView.class);
+            when(csvLine.getReport()).thenReturn("BALANCE_SHEET");
+            when(csvLine.getIntervalType()).thenReturn("QUARTER");
+            when(csvLine.getYear()).thenReturn((short) 1);
+            when(csvLine.getPeriod()).thenReturn("1");
+            when(csvReportMapper.mapCsvLinesToReportEntity(List.of(csvLine), "org123"))
+                            .thenReturn(Either.right(createReportView));
+            when(createReportView.getBalanceSheetData()).thenReturn(Optional.empty());
+            when(createReportView.getIncomeStatementData()).thenReturn(Optional.empty());
+
+            List<ReportCsvLine> reports = new ArrayList<>();
+            reports.add(csvLine);
+            List<Either<Problem, ReportEntity>> response =
+                            reportService.storeCsvReports(reports, "org123", false);
+            assertEquals(1, response.size());
+            assertTrue(response.getFirst().isRight());
+    }
+
+    @Test
+    void storeCsvReports_cantStore() {
+            ReportCsvLine csvLine = mock(ReportCsvLine.class);
+            CreateReportView createReportView = mock(CreateReportView.class);
+            when(csvLine.getReport()).thenReturn("BALANCE_SHEET");
+            when(csvLine.getIntervalType()).thenReturn("QUARTER");
+            when(csvLine.getYear()).thenReturn((short) 1);
+            when(csvLine.getPeriod()).thenReturn("1");
+            when(csvReportMapper.mapCsvLinesToReportEntity(List.of(csvLine), "org123"))
+                            .thenReturn(Either.right(createReportView));
+            when(createReportView.getBalanceSheetData()).thenReturn(Optional.empty());
+            when(createReportView.getIncomeStatementData()).thenReturn(Optional.empty());
+
+            List<ReportCsvLine> reports = new ArrayList<>();
+            reports.add(csvLine);
+            List<Either<Problem, ReportEntity>> response =
+                            reportService.storeCsvReports(reports, "org123", true);
+            assertEquals(1, response.size());
+            assertTrue(response.getFirst().isLeft());
     }
 
 }
