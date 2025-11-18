@@ -43,6 +43,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxIte
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportCsvLine;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
@@ -58,6 +59,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Cr
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseStatisticView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.csv.CsvReportMapper;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
@@ -86,6 +88,7 @@ public class ReportService {
     private final ReportTypeRepository reportTypeRepository;
     private final TransactionItemRepository transactionItemRepository;
     private final SortFieldMappings sortFieldMappings;
+    private final CsvReportMapper csvReportMapper;
 
     @Transactional
     public Either<Problem, ReportEntity> approveReportForLedgerDispatch(String reportId) {
@@ -318,8 +321,6 @@ public class ReportService {
 
         Either<Problem, ReportEntity> reportEntityE = exist(organisationId, reportType, intervalType, year, period);
         ReportEntity reportEntity = reportEntityE.fold(problem -> {
-            // question: is it safe to assume that problem will always be because it already exists?
-
             return newReport();
         }, success -> {
             if (Boolean.TRUE.equals(success.getLedgerDispatchApproved())) {
@@ -377,6 +378,10 @@ public class ReportService {
         log.info(reportType.name() + "::Report saved successfully: {}", result.getReportId());
 
         return Either.right(result);
+    }
+
+    public void saveReportEntity(ReportEntity reportEntity) {
+        reportRepository.save(reportEntity);
     }
 
     public Either<Problem, ReportResponseView> findAllByOrgId(String organisationId, List<ReportType> reportType, List<String> currencyCode, List<IntervalType> intervalType, List<Short> year, List<Short> period, LedgerDispatchStatus status, String txHash,Boolean readyToPublish,Boolean ledgerDispatchApproved, Pageable pageable) {
@@ -1106,5 +1111,52 @@ public class ReportService {
             reportEntity.setPublishError(PublishError.valueOf(isReportReadyToPublish.getLeft().getTitle()));
         }
         return Either.right(reportRepository.save(reportEntity));
+    }
+
+    public List<Either<Problem,ReportEntity>> storeCsvReports(List<ReportCsvLine> reportCsvLines, String organisationId, boolean store) {
+
+        List<Either<Problem, ReportEntity>> results = new ArrayList<>();
+
+        while(!reportCsvLines.isEmpty()) {
+            ReportCsvLine reportCsvLine = reportCsvLines.getFirst();
+            List<ReportCsvLine> filteredLines = reportCsvLines.stream().filter(r ->
+                        r.getReport().equals(reportCsvLine.getReport())
+                        && r.getIntervalType().equals(reportCsvLine.getIntervalType())
+                        && r.getYear().equals(reportCsvLine.getYear())
+                        && r.getPeriod().equals(reportCsvLine.getPeriod())
+                    ).toList();
+            reportCsvLines.removeAll(filteredLines);
+
+            Either<Problem, CreateReportView> reportEntityE = csvReportMapper.mapCsvLinesToReportEntity(filteredLines,
+                    organisationId);
+            if(reportEntityE.isLeft()) {
+                results.add(Either.left(reportEntityE.getLeft()));
+            } else {
+                if(store) {
+                    Either<Problem, ReportEntity> storeReport = storeReport(ReportType.valueOf(reportCsvLine.getReport()),
+                            reportEntityE.get(),
+                            IntervalType.valueOf(reportCsvLine.getIntervalType()),
+                            reportCsvLine.getYear(),
+                            Short.valueOf(reportCsvLine.getPeriod()));
+                    if(storeReport.isLeft()) {
+                        results.add(Either.left(storeReport.getLeft()));
+                    } else {
+                        results.add(Either.right(storeReport.get()));
+                    }
+                } else {
+
+                    results.add(Either.right(ReportEntity.builder()
+                            .organisation(Organisation.builder().id(organisationId).build())
+                            .type(ReportType.valueOf(reportCsvLine.getReport()))
+                            .intervalType(IntervalType.valueOf(reportCsvLine.getIntervalType()))
+                            .year(reportCsvLine.getYear())
+                            .period(Short.valueOf(reportCsvLine.getPeriod()))
+                            .incomeStatementReportData(reportEntityE.get().getIncomeStatementData().orElse(null))
+                            .balanceSheetReportData(reportEntityE.get().getBalanceSheetData().orElse(null))
+                            .build()));
+                }
+            }
+        }
+        return results;
     }
 }

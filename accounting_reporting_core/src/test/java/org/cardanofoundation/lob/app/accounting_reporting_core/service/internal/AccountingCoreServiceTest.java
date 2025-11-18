@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.assistance.AccountingPeriodCalculator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,6 +59,8 @@ class AccountingCoreServiceTest {
 
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private AntiVirusScanner antiVirusScanner;
 
     @InjectMocks
     private AccountingCoreService accountingCoreService;
@@ -103,8 +106,7 @@ class AccountingCoreServiceTest {
         when(mockList.size()).thenReturn(600);
         when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
-        when(file.getBytes()).thenThrow(new IOException());
-        when(file.isEmpty()).thenReturn(false);
+        when(antiVirusScanner.readFileBytes(any())).thenReturn(Either.left(Problem.builder().withTitle("FILE_READ_ERROR").build()));
 
         UserExtractionParameters userParams = UserExtractionParameters.builder()
                 .organisationId("org-123")
@@ -122,11 +124,9 @@ class AccountingCoreServiceTest {
         Organisation organisation = mock(Organisation.class);
         MultipartFile file = mock(MultipartFile.class);
 
-
         when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
-        when(file.getBytes()).thenThrow(new IOException());
-        when(file.isEmpty()).thenReturn(false);
+        when(antiVirusScanner.readFileBytes(any())).thenReturn(Either.left(Problem.builder().withTitle("FILE_READ_ERROR").build()));
 
         Either<Problem, Void> voids = accountingCoreService.scheduleReconcilation("org-123", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31), ExtractorType.NETSUITE, Optional.of(file), null);
         assertThat(voids.isLeft()).isTrue();
@@ -138,6 +138,7 @@ class AccountingCoreServiceTest {
         // Given
         given(organisationPublicApi.findByOrganisationId(eq("org-123"))).willReturn(Optional.of(mock(Organisation.class)));
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
+        given(antiVirusScanner.readFileBytes(any())).willReturn(Either.right(new byte[0]));
 
         // When
         Either<Problem, Void> result = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, Optional.empty(), null);
@@ -222,6 +223,8 @@ class AccountingCoreServiceTest {
 
         given(organisationPublicApi.findByOrganisationId(eq(organisationId))).willReturn(Optional.of(mock(Organisation.class)));
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
+        given(antiVirusScanner.readFileBytes(any())).willReturn(Either.right(new byte[0]));
+
         // When
         Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, Optional.empty(), null);
 
