@@ -2,8 +2,10 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import java.util.List;
 import java.util.Optional;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,7 +17,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
 import io.swagger.v3.oas.annotations.tags.Tag;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.metric.GetMetricDataRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.metric.SaveDashboardRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.metric.UpdateDashboardRequest;
@@ -31,8 +35,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 @Slf4j
 @ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
 /**
- * For now this controller + the services behind it will be set to internal only. It is now duplicated code to the indexer. 
- * This will be removed once we have a proper dashboard metric builder in the indexer. 
+ * For now this controller + the services behind it will be set to internal only. It is now duplicated code to the indexer.
+ * This will be removed once we have a proper dashboard metric builder in the indexer.
  */
 public class MetricController {
 
