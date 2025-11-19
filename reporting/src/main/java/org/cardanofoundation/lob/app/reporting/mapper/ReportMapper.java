@@ -15,6 +15,7 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateFieldRepository;
 
@@ -30,6 +31,10 @@ public class ReportMapper {
         report.setReportTemplate(template);
         report.setOrganisationId(dto.getOrganisationId());
         report.setName(dto.getName());
+
+        if (dto.getDataMode() != null) {
+            report.setDataMode(DataMode.valueOf(dto.getDataMode()));
+        }
 
         if (dto.getIntervalType() != null) {
             report.setIntervalType(IntervalType.valueOf(dto.getIntervalType()));
@@ -92,6 +97,7 @@ public class ReportMapper {
             .period(entity.getPeriod())
             .year(entity.getYear())
             .ver(entity.getVer())
+            .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
             .isReadyToPublish(entity.isReadyToPublish())
             .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
             .fields(topLevelFields)

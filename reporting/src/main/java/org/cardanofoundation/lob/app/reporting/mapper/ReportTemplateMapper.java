@@ -29,8 +29,7 @@ public class ReportTemplateMapper {
         template.setOrganisationId(dto.getOrganisationId());
         template.setName(dto.getName());
         template.setDescription(dto.getDescription());
-        template.setCurrencyId(dto.getCurrencyId());
-
+        template.setReportTemplateType(dto.getReportTemplateType());
         if (dto.getFields() != null) {
             List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
                 .map(columnDto -> toColumnEntity(columnDto, template, null))
@@ -66,7 +65,7 @@ public class ReportTemplateMapper {
             .organisationId(entity.getOrganisationId())
             .name(entity.getName())
             .description(entity.getDescription())
-            .currencyId(entity.getCurrencyId())
+            .reportTemplateType(entity.getReportTemplateType())
             .ver(entity.getVer())
             .columns(topLevelColumns)
             .build();

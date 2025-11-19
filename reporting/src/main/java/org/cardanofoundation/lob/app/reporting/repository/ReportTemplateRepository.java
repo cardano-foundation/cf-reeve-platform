@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 
 @Repository
-public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEntity, Long> {
+public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEntity, String> {
 
     List<ReportTemplateEntity> findByOrganisationId(String organisationId);
 

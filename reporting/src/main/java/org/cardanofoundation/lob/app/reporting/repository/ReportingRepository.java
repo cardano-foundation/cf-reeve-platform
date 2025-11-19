@@ -12,13 +12,13 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 
 @Repository
-public interface ReportingRepository extends JpaRepository<ReportEntity, Long> {
+public interface ReportingRepository extends JpaRepository<ReportEntity, String> {
 
     List<ReportEntity> findByOrganisationId(String organisationId);
 
-    List<ReportEntity> findByReportTemplateId(Long reportTemplateId);
+    List<ReportEntity> findByReportTemplateId(String reportTemplateId);
 
-    Optional<ReportEntity> findByOrganisationIdAndId(String organisationId, Long id);
+    Optional<ReportEntity> findByOrganisationIdAndId(String organisationId, String id);
 
     @Query("SELECT r FROM ReportEntity r WHERE r.organisationId = :organisationId " +
            "AND r.reportTemplate.id = :reportTemplateId " +
@@ -28,7 +28,7 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, Long> {
            "ORDER BY r.ver DESC LIMIT 1")
     Optional<ReportEntity> findLatestByTemplateAndPeriod(
             @Param("organisationId") String organisationId,
-            @Param("reportTemplateId") Long reportTemplateId,
+            @Param("reportTemplateId") String reportTemplateId,
             @Param("intervalType") IntervalType intervalType,
             @Param("year") short year,
             @Param("period") short period

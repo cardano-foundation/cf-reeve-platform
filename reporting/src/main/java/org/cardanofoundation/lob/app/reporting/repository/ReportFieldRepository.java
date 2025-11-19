@@ -10,9 +10,9 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 @Repository
 public interface ReportFieldRepository extends JpaRepository<ReportFieldEntity, Long> {
 
-    List<ReportFieldEntity> findByReportId(Long reportId);
+    List<ReportFieldEntity> findByReportId(String reportId);
 
-    List<ReportFieldEntity> findByReportIdAndParentFieldIsNull(Long reportId);
+    List<ReportFieldEntity> findByReportIdAndParentFieldIsNull(String reportId);
 
     List<ReportFieldEntity> findByFieldTemplateId(Long fieldTemplateId);
 }

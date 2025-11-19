@@ -2,8 +2,6 @@ package org.cardanofoundation.lob.app.reporting.dto;
 
 import jakarta.validation.constraints.NotNull;
 
-import javax.annotation.Nullable;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Request to generate a report with automatic field calculation (data mode is always GENERATED)")
 public class ReportGenerateRequest {
 
     @NotNull
@@ -22,8 +21,8 @@ public class ReportGenerateRequest {
     private String organisationId;
 
     @NotNull
-    @Schema(description = "Report template ID", example = "1", required = true)
-    private Long reportTemplateId;
+    @Schema(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2", required = true)
+    private String reportTemplateId;
 
     @NotNull
     @Schema(description = "Interval type for the report", example = "MONTHLY", allowableValues = {"MONTHLY", "QUARTERLY", "YEARLY"}, required = true)
@@ -33,7 +32,6 @@ public class ReportGenerateRequest {
     @Schema(description = "Year for the report", example = "2024", required = true)
     private Short year;
 
-    @Nullable
-    @Schema(description = "Period (e.g., month or quarter number). Required for MONTHLY and QUARTERLY intervals", example = "3")
+    @Schema(description = "Period number (1-12 for MONTHLY, 1-4 for QUARTERLY, null for YEARLY)", example = "3", nullable = true)
     private Short period;
 }

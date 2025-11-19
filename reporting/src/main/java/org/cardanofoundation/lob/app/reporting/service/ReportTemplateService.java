@@ -81,7 +81,7 @@ public class ReportTemplateService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReportTemplateResponseDto> findById(Long id) {
+    public Optional<ReportTemplateResponseDto> findById(String id) {
         return reportTemplateRepository.findById(id)
             .map(reportTemplateMapper::toResponseDto);
     }
@@ -100,7 +100,7 @@ public class ReportTemplateService {
             .toList();
     }
 
-    public Either<Problem, Void> delete(Long id) {
+    public Either<Problem, Void> delete(String id) {
         log.info("Deleting report template id: {}", id);
 
         Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(id);

@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.reporting.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,14 +28,18 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepos
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.dto.events.ReportPublishEvent;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
+import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 
 @Service
 @RequiredArgsConstructor
@@ -46,24 +52,132 @@ public class ReportingService {
     private final ReportMapper reportMapper;
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final TransactionItemRepository transactionItemRepository;
+    private final AuthenticationUserService authenticationUserService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
-    public Either<Problem, ReportResponseDto> create(ReportDto dto, boolean storeReport) {
+    public Either<Problem, ReportResponseDto> create(ReportDto dto) {
         log.info("Creating report: {}", dto.getName());
 
-        // Validate report template exists
-        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(dto.getReportTemplateId());
+        // Validate dataMode is provided and valid
+        DataMode dataMode = validateAndParseDataMode(dto.getDataMode());
+        if (dataMode == null) {
+            return Either.left(buildDataModeError(dto.getDataMode()));
+        }
+
+        // Validate report template exists and organization matches
+        Either<Problem, ReportTemplateEntity> templateResult = validateTemplate(dto.getReportTemplateId(), dto.getOrganisationId());
+        if (templateResult.isLeft()) {
+            return Either.left(templateResult.getLeft());
+        }
+        ReportTemplateEntity template = templateResult.get();
+
+        // Handle field generation based on data mode
+        Either<Problem, List<ReportFieldDto>> fieldsResult = generateOrValidateFields(dto, dataMode, template);
+        if (fieldsResult.isLeft()) {
+            return Either.left(fieldsResult.getLeft());
+        }
+        List<ReportFieldDto> fields = fieldsResult.get();
+
+        // Update dto with generated or validated fields
+        ReportDto reportDtoWithFields = buildReportDtoWithFields(dto, fields);
+
+        // Check if a report already exists for the same template, interval, year, and period
+        ReportEntity existingReport = findExistingReport(dto);
+
+        ReportEntity entity = reportMapper.toEntity(reportDtoWithFields, existingReport, template);
+
+        // Handle versioning: if overwriting a published report, increment version
+        handleVersioning(entity, dto, existingReport);
+
+        // TODO Check if ready to publish
+        entity.setReadyToPublish(true);
+
+        entity = reportRepository.save(entity);
+        return Either.right(reportMapper.toResponseDto(entity));
+    }
+
+    public Either<Problem, ReportResponseDto> generate(ReportGenerateRequest request) {
+        log.info("Generating report preview for template: {}, org: {}, interval: {}, year: {}, period: {}",
+                request.getReportTemplateId(), request.getOrganisationId(),
+                request.getIntervalType(), request.getYear(), request.getPeriod());
+
+        // Validate report template exists and organization matches
+        Either<Problem, ReportTemplateEntity> templateResult = validateTemplate(request.getReportTemplateId(), request.getOrganisationId());
+        if (templateResult.isLeft()) {
+            return Either.left(templateResult.getLeft());
+        }
+        ReportTemplateEntity template = templateResult.get();
+
+        // Calculate date range and generate fields
+        IntervalType intervalType = IntervalType.valueOf(request.getIntervalType());
+        Short periodValue = request.getPeriod();
+        short period = (periodValue != null) ? periodValue.shortValue() : (short) 1;
+        LocalDate startDate = getReportStartDate(intervalType, period, request.getYear());
+        LocalDate endDate = getReportEndDate(intervalType, startDate);
+
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getColumns(), startDate, endDate);
+
+        // Generate report name
+        String reportName = generateReportName(template.getName(), request.getIntervalType(), request.getYear(), request.getPeriod());
+
+        // Create report DTO for preview (not saved)
+        ReportDto reportDto = ReportDto.builder()
+                .organisationId(request.getOrganisationId())
+                .reportTemplateId(request.getReportTemplateId())
+                .name(reportName)
+                .intervalType(request.getIntervalType())
+                .year(request.getYear())
+                .period(request.getPeriod())
+                .dataMode("GENERATED")
+                .fields(fields)
+                .build();
+
+        // Map to entity without saving to get the response structure
+        ReportEntity previewEntity = reportMapper.toEntity(reportDto, null, template);
+        previewEntity.setReadyToPublish(true);
+
+        // Return the preview without saving
+        return Either.right(reportMapper.toResponseDto(previewEntity));
+    }
+
+    private DataMode validateAndParseDataMode(String dataModeStr) {
+        if (dataModeStr == null || dataModeStr.isBlank()) {
+            return null;
+        }
+        try {
+            return DataMode.valueOf(dataModeStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private Problem buildDataModeError(String dataModeStr) {
+        if (dataModeStr == null || dataModeStr.isBlank()) {
+            return Problem.builder()
+                .withTitle("Data Mode Required")
+                .withDetail("Data mode must be specified (GENERATED or USER)")
+                .withStatus(Status.BAD_REQUEST)
+                .build();
+        }
+        return Problem.builder()
+            .withTitle("Invalid Data Mode")
+            .withDetail("Data mode must be either GENERATED or USER")
+            .withStatus(Status.BAD_REQUEST)
+            .build();
+    }
+
+    private Either<Problem, ReportTemplateEntity> validateTemplate(String templateId, String organisationId) {
+        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(templateId);
         if (templateOpt.isEmpty()) {
             return Either.left(Problem.builder()
                 .withTitle("Report Template Not Found")
-                .withDetail("Report template with ID " + dto.getReportTemplateId() + " does not exist")
+                .withDetail("Report template with ID " + templateId + " does not exist")
                 .withStatus(Status.NOT_FOUND)
                 .build());
         }
 
         ReportTemplateEntity template = templateOpt.get();
-
-        // Validate organisation matches
-        if (!template.getOrganisationId().equals(dto.getOrganisationId())) {
+        if (!template.getOrganisationId().equals(organisationId)) {
             return Either.left(Problem.builder()
                 .withTitle("Organisation Mismatch")
                 .withDetail("Report template belongs to a different organisation")
@@ -71,62 +185,123 @@ public class ReportingService {
                 .build());
         }
 
+        return Either.right(template);
+    }
+
+    private Either<Problem, List<ReportFieldDto>> generateOrValidateFields(ReportDto dto, DataMode dataMode, ReportTemplateEntity template) {
+        if (dataMode == DataMode.GENERATED) {
+            return generateFieldsForReport(dto, template);
+        } else {
+            return validateUserFields(dto.getFields(), template);
+        }
+    }
+
+    private Either<Problem, List<ReportFieldDto>> generateFieldsForReport(ReportDto dto, ReportTemplateEntity template) {
+        if (dto.getIntervalType() == null || dto.getYear() == null) {
+            return Either.left(Problem.builder()
+                .withTitle("Missing Required Fields")
+                .withDetail("intervalType and year are required for GENERATED reports")
+                .withStatus(Status.BAD_REQUEST)
+                .build());
+        }
+
+        IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
+        Short periodValue = dto.getPeriod();
+        short period = (periodValue != null) ? periodValue.shortValue() : (short) 1;
+        LocalDate startDate = getReportStartDate(intervalType, period, dto.getYear());
+        LocalDate endDate = getReportEndDate(intervalType, startDate);
+
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getColumns(), startDate, endDate);
+        return Either.right(fields);
+    }
+
+    private Either<Problem, List<ReportFieldDto>> validateUserFields(List<ReportFieldDto> fields, ReportTemplateEntity template) {
+        if (fields == null || fields.isEmpty()) {
+            return Either.left(Problem.builder()
+                .withTitle("Missing Fields for User Report")
+                .withDetail("USER reports must have fields specified.")
+                .withStatus(Status.BAD_REQUEST)
+                .build());
+        }
+
         // Validate template fields exist
-        Either<Problem, Void> fieldValidation = validateTemplateFields(dto.getFields(), template);
+        Either<Problem, Void> fieldValidation = validateTemplateFields(fields, template);
         if (fieldValidation.isLeft()) {
             return Either.left(fieldValidation.getLeft());
         }
 
-        // Check if a report already exists for the same template, interval, year, and period
-        ReportEntity existingReport = null;
-        if (dto.getIntervalType() != null && dto.getYear() != null && dto.getPeriod() != null) {
-            IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
-            Optional<ReportEntity> existingReportOpt = reportRepository.findLatestByTemplateAndPeriod(
-                    dto.getOrganisationId(),
-                    dto.getReportTemplateId(),
-                    intervalType,
-                    dto.getYear(),
-                    dto.getPeriod()
-            );
+        return Either.right(fields);
+    }
 
-            if (existingReportOpt.isPresent()) {
-                existingReport = existingReportOpt.get();
+    private ReportDto buildReportDtoWithFields(ReportDto dto, List<ReportFieldDto> fields) {
+        return ReportDto.builder()
+            .organisationId(dto.getOrganisationId())
+            .reportTemplateId(dto.getReportTemplateId())
+            .name(dto.getName())
+            .intervalType(dto.getIntervalType())
+            .period(dto.getPeriod())
+            .year(dto.getYear())
+            .dataMode(dto.getDataMode())
+            .fields(fields)
+            .build();
+    }
 
-                // If the existing report is already published, create a new version
-                if (existingReport.isLedgerDispatchApproved()) {
-                    log.info("Existing report is published, creating new version {} -> {}",
-                            existingReport.getVer(), existingReport.getVer() + 1);
-                    existingReport = null; // Will create new entity with incremented version
-                } else {
-                    log.info("Overwriting existing unpublished report with ID: {}", existingReport.getId());
-                }
-            }
+    private ReportEntity findExistingReport(ReportDto dto) {
+        if (dto.getIntervalType() == null || dto.getYear() == null || dto.getPeriod() == null) {
+            return null;
         }
 
-        ReportEntity entity = reportMapper.toEntity(dto, existingReport, template);
+        IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
+        Optional<ReportEntity> existingReportOpt = reportRepository.findLatestByTemplateAndPeriod(
+                dto.getOrganisationId(),
+                dto.getReportTemplateId(),
+                intervalType,
+                dto.getYear(),
+                dto.getPeriod()
+        );
 
-        // Handle versioning: if overwriting a published report, increment version
-        if (existingReport == null && dto.getIntervalType() != null && dto.getYear() != null && dto.getPeriod() != null) {
-            IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
-            Optional<ReportEntity> latestPublishedOpt = reportRepository.findLatestByTemplateAndPeriod(
-                    dto.getOrganisationId(),
-                    dto.getReportTemplateId(),
-                    intervalType,
-                    dto.getYear(),
-                    dto.getPeriod()
-            );
-
-            if (latestPublishedOpt.isPresent() && latestPublishedOpt.get().isLedgerDispatchApproved()) {
-                entity.setVer(latestPublishedOpt.get().getVer() + 1);
-            }
+        if (existingReportOpt.isEmpty()) {
+            return null;
         }
-        // TODO Check if ready to publish
-        entity.setReadyToPublish(true);
 
-        if (storeReport) {
-            entity = reportRepository.save(entity);
+        ReportEntity existingReport = existingReportOpt.get();
+
+        // If the existing report is already published, create a new version
+        if (existingReport.isLedgerDispatchApproved()) {
+            log.info("Existing report is published, creating new version {} -> {}",
+                    existingReport.getVer(), existingReport.getVer() + 1);
+            return null; // Will create new entity with incremented version
         }
-        return Either.right(reportMapper.toResponseDto(entity));
+
+        log.info("Overwriting existing unpublished report with ID: {}", existingReport.getId());
+        return existingReport;
+    }
+
+    private void handleVersioning(ReportEntity entity, ReportDto dto, ReportEntity existingReport) {
+        if (existingReport != null || dto.getIntervalType() == null || dto.getYear() == null || dto.getPeriod() == null) {
+            return;
+        }
+
+        IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
+        Optional<ReportEntity> latestPublishedOpt = reportRepository.findLatestByTemplateAndPeriod(
+                dto.getOrganisationId(),
+                dto.getReportTemplateId(),
+                intervalType,
+                dto.getYear(),
+                dto.getPeriod()
+        );
+
+        if (latestPublishedOpt.isPresent() && latestPublishedOpt.get().isLedgerDispatchApproved()) {
+            entity.setVer(latestPublishedOpt.get().getVer() + 1);
+        }
+    }
+
+    private String generateReportName(String templateName, String intervalType, Short year, Short period) {
+        return String.format("%s - %s %d%s",
+                templateName,
+                intervalType,
+                year,
+                period != null ? " Period " + period : "");
     }
 
     private Either<Problem, Void> validateTemplateFields(List<ReportFieldDto> columns, ReportTemplateEntity template) {
@@ -175,13 +350,13 @@ public class ReportingService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReportResponseDto> findById(Long id) {
+    public Optional<ReportResponseDto> findById(String id) {
         return reportRepository.findById(id)
             .map(reportMapper::toResponseDto);
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReportResponseDto> findByOrganisationIdAndId(String organisationId, Long id) {
+    public Optional<ReportResponseDto> findByOrganisationIdAndId(String organisationId, String id) {
         return reportRepository.findByOrganisationIdAndId(organisationId, id)
             .map(reportMapper::toResponseDto);
     }
@@ -194,7 +369,7 @@ public class ReportingService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReportResponseDto> findByReportTemplateId(Long reportTemplateId) {
+    public List<ReportResponseDto> findByReportTemplateId(String reportTemplateId) {
         return reportRepository.findByReportTemplateId(reportTemplateId).stream()
             .map(reportMapper::toResponseDto)
             .toList();
@@ -207,7 +382,7 @@ public class ReportingService {
             .toList();
     }
 
-    public Either<Problem, Void> delete(Long id) {
+    public Either<Problem, Void> delete(String id) {
         log.info("Deleting report id: {}", id);
 
         Optional<ReportEntity> reportOpt = reportRepository.findById(id);
@@ -232,61 +407,6 @@ public class ReportingService {
 
         reportRepository.deleteById(id);
         return Either.right(null);
-    }
-
-    public Either<Problem, ReportResponseDto> generate(ReportGenerateRequest request) {
-        log.info("Generating report for template: {}, org: {}, interval: {}, year: {}, period: {}",
-                request.getReportTemplateId(), request.getOrganisationId(),
-                request.getIntervalType(), request.getYear(), request.getPeriod());
-
-        // Validate report template exists
-        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(request.getReportTemplateId());
-        if (templateOpt.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("Report Template Not Found")
-                    .withDetail("Report template with ID " + request.getReportTemplateId() + " does not exist")
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
-        }
-
-        ReportTemplateEntity template = templateOpt.get();
-
-        // Validate organisation matches
-        if (!template.getOrganisationId().equals(request.getOrganisationId())) {
-            return Either.left(Problem.builder()
-                    .withTitle("Organisation Mismatch")
-                    .withDetail("Report template belongs to a different organisation")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
-        }
-
-        // Calculate date range based on interval type
-        IntervalType intervalType = IntervalType.valueOf(request.getIntervalType());
-        Short periodValue = request.getPeriod();
-        short period = (periodValue != null) ? periodValue.shortValue() : (short) 1;
-        LocalDate startDate = getReportStartDate(intervalType, period, request.getYear());
-        LocalDate endDate = getReportEndDate(intervalType, startDate);
-
-        // Generate report name
-        String reportName = String.format("%s - %s %d%s",
-                template.getName(),
-                request.getIntervalType(),
-                request.getYear(),
-                request.getPeriod() != null ? " Period " + request.getPeriod() : "");
-
-        // Create report DTO with template structure and filled values
-        ReportDto reportDto = ReportDto.builder()
-                .organisationId(request.getOrganisationId())
-                .reportTemplateId(request.getReportTemplateId())
-                .name(reportName)
-                .intervalType(request.getIntervalType())
-                .year(request.getYear())
-                .period(request.getPeriod())
-                .fields(fillFieldsFromTemplate(template.getColumns(), startDate, endDate))
-                .build();
-
-        // Create the report - this will handle versioning and overwriting logic
-        return create(reportDto, true);
     }
 
     private List<ReportFieldDto> fillFieldsFromTemplate(List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate) {
@@ -450,5 +570,40 @@ public class ReportingService {
             case QUARTERLY -> startDate.plusMonths(3).minusDays(1);
             case YEARLY -> startDate.plusYears(1).minusDays(1);
         };
+    }
+
+    public Either<Problem, ReportResponseDto> publish(ReportPublishRequest request) {
+        Optional<ReportEntity> reportO = reportRepository.findByOrganisationIdAndId(request.getOrganisationId(), request.getReportId());
+        if(reportO.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Report Not Found")
+                    .withDetail("Report with ID " + request.getReportId() + " does not exist")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+        ReportEntity report = reportO.get();
+        if(!report.isReadyToPublish()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Report Not Ready to Publish")
+                    .withDetail("Report with ID " + request.getReportId() + " is not ready to be published")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        if(report.isLedgerDispatchApproved()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Report Already Published")
+                    .withDetail("Report with ID " + request.getReportId() + " has already been published")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        report.setLedgerDispatchApproved(true);
+        report.setLedgerDispatchDate(LocalDateTime.now());
+        report.setPublishedBy(authenticationUserService.getCurrentUser());
+        report = reportRepository.save(report);
+
+        applicationEventPublisher.publishEvent(ReportPublishEvent.fromEntity(report));
+
+        return Either.right(reportMapper.toResponseDto(report));
+
     }
 }

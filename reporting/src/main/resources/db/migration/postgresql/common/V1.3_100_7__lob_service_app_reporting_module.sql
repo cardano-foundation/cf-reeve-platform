@@ -2,11 +2,11 @@
 
 -- Report Template Table
 CREATE TABLE IF NOT EXISTS report_template (
-    id BIGSERIAL NOT NULL,
+    id VARCHAR(64) NOT NULL,
     organisation_id VARCHAR(64) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    currency_id VARCHAR(255),
+    report_template_type VARCHAR(255),
     ver BIGINT NOT NULL DEFAULT 1,
     
     created_by VARCHAR(255),
@@ -22,14 +22,14 @@ CREATE INDEX idx_report_template_organisation_name ON report_template(organisati
 
 -- Report Template Audit Table
 CREATE TABLE IF NOT EXISTS report_template_aud (
-    id BIGINT NOT NULL,
+    id VARCHAR(64) NOT NULL,
     rev INTEGER NOT NULL,
     revtype SMALLINT,
     
     organisation_id VARCHAR(64),
     name VARCHAR(255),
     description TEXT,
-    currency_id VARCHAR(255),
+    report_template_type VARCHAR(255),
     ver BIGINT NOT NULL DEFAULT 1,
     
     created_by VARCHAR(255),
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS report_template_aud (
 -- Report Template field Table
 CREATE TABLE IF NOT EXISTS report_template_field (
     id BIGSERIAL NOT NULL,
-    report_template_id BIGINT NOT NULL,
+    report_template_id VARCHAR(64) NOT NULL,
     parent_field_id BIGINT,
     name VARCHAR(255) NOT NULL,
     accumulated BOOLEAN NOT NULL DEFAULT FALSE,
@@ -104,14 +104,15 @@ CREATE INDEX idx_reporting_field_subtype_mapping_subtype_id ON reporting_field_s
 
 -- Report Table
 CREATE TABLE IF NOT EXISTS report (
-    id BIGSERIAL NOT NULL,
-    report_template_id BIGINT NOT NULL,
+    id VARCHAR(64) NOT NULL,
+    report_template_id VARCHAR(64) NOT NULL,
     ver BIGINT NOT NULL DEFAULT 1,
     organisation_id VARCHAR(64) NOT NULL,
     name VARCHAR(255) NOT NULL,
     interval_type VARCHAR(255),
     period SMALLINT,
     year SMALLINT,
+    data_mode VARCHAR(20),
     is_ready_to_publish BOOLEAN NOT NULL DEFAULT FALSE,
     publish_error VARCHAR(255),
     ledger_dispatch_approved BOOLEAN NOT NULL DEFAULT FALSE,
@@ -130,25 +131,29 @@ CREATE TABLE IF NOT EXISTS report (
         REFERENCES report_template(id)
 );
 
+COMMENT ON COLUMN report.data_mode IS 'Indicates whether the report is GENERATED (automatically generated) or USER (user-provided fields)';
+
 CREATE INDEX idx_report_template_id ON report(report_template_id);
 CREATE INDEX idx_report_organisation_id ON report(organisation_id);
 CREATE INDEX idx_report_organisation_year ON report(organisation_id, year);
 CREATE INDEX idx_report_organisation_interval ON report(organisation_id, interval_type);
 CREATE INDEX idx_report_ledger_dispatch_status ON report(ledger_dispatch_status);
+CREATE INDEX idx_report_data_mode ON report(data_mode);
 
 -- Report Audit Table
 CREATE TABLE IF NOT EXISTS report_aud (
-    id BIGINT NOT NULL,
+    id VARCHAR(64) NOT NULL,
     rev INTEGER NOT NULL,
     revtype SMALLINT,
     
-    report_template_id BIGINT,
+    report_template_id VARCHAR(64),
     ver BIGINT,
     organisation_id VARCHAR(64),
     name VARCHAR(255),
     interval_type VARCHAR(255),
     period SMALLINT,
     year SMALLINT,
+    data_mode VARCHAR(20),
     is_ready_to_publish BOOLEAN,
     publish_error VARCHAR(255),
     ledger_dispatch_approved BOOLEAN,
@@ -168,7 +173,7 @@ CREATE TABLE IF NOT EXISTS report_aud (
 -- Report field Table
 CREATE TABLE IF NOT EXISTS report_field (
     id BIGSERIAL NOT NULL,
-    report_id BIGINT NOT NULL,
+    report_id VARCHAR(64) NOT NULL,
     field_template_id BIGINT,
     parent_field_id BIGINT,
     value DECIMAL(19, 4),
@@ -197,7 +202,7 @@ CREATE TABLE IF NOT EXISTS report_field_aud (
     rev INTEGER NOT NULL,
     revtype SMALLINT,
     
-    report_id BIGINT,
+    report_id VARCHAR(64),
     field_template_id BIGINT,
     parent_field_id BIGINT,
     value DECIMAL(19, 4),

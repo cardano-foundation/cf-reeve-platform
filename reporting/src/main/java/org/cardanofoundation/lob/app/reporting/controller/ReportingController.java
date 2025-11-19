@@ -32,6 +32,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -48,7 +49,7 @@ public class ReportingController {
 
     @Operation(
         summary = "Create a new report",
-        description = "Creates a new report instance based on a template with column values",
+        description = "Creates and saves a new report. If dataMode is GENERATED, fields are auto-calculated. If dataMode is USER, fields must be provided in the request.",
         responses = {
             @ApiResponse(
                 responseCode = "201",
@@ -58,7 +59,7 @@ public class ReportingController {
                     schema = @Schema(implementation = ReportResponseDto.class)
                 )
             ),
-            @ApiResponse(responseCode = "400", description = "Invalid input data"),
+            @ApiResponse(responseCode = "400", description = "Invalid input data or missing required fields"),
             @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
             @ApiResponse(responseCode = "404", description = "Report template not found")
         }
@@ -67,7 +68,7 @@ public class ReportingController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> create(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Report data including template ID and column values",
+            description = "Report data. For GENERATED dataMode, fields are auto-calculated. For USER dataMode, provide fields manually.",
             required = true
         ) ReportDto report
     ) {
@@ -79,7 +80,7 @@ public class ReportingController {
                 .body("User does not have access to this organisation");
         }
 
-        Either<Problem, ReportResponseDto> result = reportService.create(report, true);
+        Either<Problem, ReportResponseDto> result = reportService.create(report);
 
         if (result.isLeft()) {
             Problem problem = result.getLeft();
@@ -110,7 +111,7 @@ public class ReportingController {
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> findById(
-        @PathVariable @Parameter(description = "Report ID", example = "1") Long id,
+        @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
         @RequestParam(value = "organisationId", required = false)
         @Parameter(
             description = "Organisation ID for ownership validation",
@@ -174,7 +175,7 @@ public class ReportingController {
             example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
         ) String organisationId,
         @RequestParam(value = "reportTemplateId", required = false)
-        @Parameter(description = "Filter by report template ID", example = "1") Long reportTemplateId,
+        @Parameter(description = "Filter by report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String reportTemplateId,
         @RequestParam(value = "year", required = false)
         @Parameter(description = "Filter by year", example = "2024") Short year,
         @RequestParam(value = "intervalType", required = false)
@@ -215,7 +216,7 @@ public class ReportingController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> delete(
-        @PathVariable @Parameter(description = "Report ID", example = "1") Long id
+        @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id
     ) {
         log.info("DELETE /api/reports/{}", id);
 
@@ -242,12 +243,12 @@ public class ReportingController {
     }
 
     @Operation(
-        summary = "Generate report from template",
-        description = "Generates a new report based on a template with empty column values to be filled",
+        summary = "Generate report preview from template",
+        description = "Generates a report preview with automatically calculated field values. The report is NOT saved - use the create endpoint to save it.",
         responses = {
             @ApiResponse(
                 responseCode = "201",
-                description = "Report generated successfully",
+                description = "Report preview generated successfully (not saved)",
                 content = @Content(
                     mediaType = MediaType.APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ReportResponseDto.class)
@@ -262,7 +263,7 @@ public class ReportingController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> generate(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Request containing template ID, organisation ID, interval type, year and period",
+            description = "Request containing template ID, organisation ID, interval type, year and period. Fields will be auto-generated.",
             required = true
         ) ReportGenerateRequest request
     ) {
@@ -288,4 +289,41 @@ public class ReportingController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
     }
 
+    @Operation(summary = "Publish a specific report",
+            description = "Marking a report for publishing makes it read-only and available for stakeholders. This action cannot be undone.",
+            responses = {
+                    @ApiResponse(responseCode = "201",
+                            description = "Report marked for publishing successfully",
+                            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ReportResponseDto.class))),
+                    @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
+                    @ApiResponse(responseCode = "403",
+                            description = "User does not have access to this organisation"),
+                    @ApiResponse(responseCode = "404", description = "Report not found")})
+    @PostMapping(value = "/publish/{id}", produces = MediaType.APPLICATION_JSON_VALUE,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    public ResponseEntity<?> publish(
+            @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Request containing report id and organisation ID",
+                    required = true) ReportPublishRequest request) {
+        log.info(
+                "POST /api/reports/publish/{} - Org: {}",
+                request.getReportId(), request.getOrganisationId());
+
+        // Check organisation access
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("User does not have access to this organisation");
+        }
+
+        Either<Problem, ReportResponseDto> result = reportService.publish(request);
+
+        if (result.isLeft()) {
+            Problem problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
+    }
 }

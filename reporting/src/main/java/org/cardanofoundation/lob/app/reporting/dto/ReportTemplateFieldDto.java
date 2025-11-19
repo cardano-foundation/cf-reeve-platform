@@ -7,19 +7,36 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Report template field definition")
 public class ReportTemplateFieldDto {
 
+    @Schema(description = "Field ID", example = "101", nullable = true)
     private Long id;
+
+    @Schema(description = "Field name", example = "Total Revenue", required = true)
     private String fieldName;
+
+    @Schema(description = "Whether values should be accumulated", example = "false", defaultValue = "false")
     private boolean accumulated;
+
+    @Schema(description = "Whether values should be accumulated yearly", example = "false", defaultValue = "false")
     private boolean accumulatedYearly;
+
+    @Schema(description = "Whether values from previous year should be accumulated", example = "false", defaultValue = "false")
     private boolean accumulatedPreviousYear;
+
+    @Schema(description = "Whether the value should be negated (for expenses)", example = "false", defaultValue = "false")
     private boolean negated;
+
+    @Schema(description = "List of chart of account subtype IDs to map to this field", example = "[1, 2, 3]", nullable = true)
     private List<Long> mappingSubTypeIds;
 
+    @Schema(description = "Child fields forming a hierarchical structure", nullable = true)
     private List<ReportTemplateFieldDto> childFields;
 }

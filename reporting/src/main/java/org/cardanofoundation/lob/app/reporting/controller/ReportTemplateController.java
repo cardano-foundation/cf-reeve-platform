@@ -90,7 +90,7 @@ public class ReportTemplateController {
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> findById(
-            @PathVariable @Parameter(description = "Report template ID", example = "1") Long id) {
+            @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
         log.info("GET /api/report-templates/{}", id);
         return reportTemplateService.findById(id)
             .map(template -> {
@@ -144,7 +144,7 @@ public class ReportTemplateController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> delete(
-            @PathVariable @Parameter(description = "Report template ID", example = "1") Long id) {
+            @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
         log.info("DELETE /api/report-templates/{}", id);
 
         // First, get the template to check organisation access
