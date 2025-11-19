@@ -20,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -29,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Report
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.LedgerService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionBatchService;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @Service
 @Slf4j

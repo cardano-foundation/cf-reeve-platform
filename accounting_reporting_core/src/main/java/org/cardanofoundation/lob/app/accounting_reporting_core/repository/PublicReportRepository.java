@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.FINALIZED;
+import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.FINALIZED;
 
 import java.util.HashSet;
 import java.util.Set;

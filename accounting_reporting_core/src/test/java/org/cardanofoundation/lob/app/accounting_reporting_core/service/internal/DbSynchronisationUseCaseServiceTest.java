@@ -1,9 +1,14 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.DISPATCHED;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.NOT_DISPATCHED;
+import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.DISPATCHED;
+import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.NOT_DISPATCHED;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.time.YearMonth;
 import java.util.LinkedHashSet;

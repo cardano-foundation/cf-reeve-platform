@@ -38,7 +38,6 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
@@ -62,6 +61,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Re
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.csv.CsvReportMapper;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;

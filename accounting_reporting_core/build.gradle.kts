@@ -7,6 +7,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
 
     implementation(project(":blockchain_reader"))
+    implementation(project(":blockchain_common"))
     implementation(project(":organisation"))
     implementation(project(":support"))
 

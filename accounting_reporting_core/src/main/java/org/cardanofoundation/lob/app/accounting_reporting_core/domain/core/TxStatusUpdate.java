@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor

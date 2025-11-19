@@ -97,6 +97,10 @@ subprojects {
         withSourcesJar()
     }
 
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
+    }
+
     configurations {
         compileOnly {
             extendsFrom(configurations.annotationProcessor.get())

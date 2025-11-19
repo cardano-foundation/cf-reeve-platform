@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.accounting_reporting_core.domain.core;
+package org.cardanofoundation.lob.app.blockchain_common.domain;
 
 import java.util.Set;
 

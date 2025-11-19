@@ -17,10 +17,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @Slf4j
 @RequiredArgsConstructor

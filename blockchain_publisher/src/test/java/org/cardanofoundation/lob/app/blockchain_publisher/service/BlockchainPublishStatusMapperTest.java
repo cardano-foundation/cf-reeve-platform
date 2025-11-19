@@ -11,8 +11,8 @@ import lombok.val;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_common.domain.FinalityScore;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 
 public class BlockchainPublishStatusMapperTest {

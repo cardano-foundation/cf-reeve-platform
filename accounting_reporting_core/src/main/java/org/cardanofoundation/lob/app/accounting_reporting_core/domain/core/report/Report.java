@@ -5,10 +5,15 @@ import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 import java.time.LocalDate;
 import java.util.Optional;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @AllArgsConstructor
 @Getter
