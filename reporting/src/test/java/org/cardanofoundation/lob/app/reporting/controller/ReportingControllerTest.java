@@ -1,0 +1,330 @@
+package org.cardanofoundation.lob.app.reporting.controller;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import io.vavr.control.Either;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.service.ReportingService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+
+@ExtendWith(MockitoExtension.class)
+class ReportingControllerTest {
+
+    @Mock
+    private ReportingService reportService;
+
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+
+    @InjectMocks
+    private ReportingController reportingController;
+
+    private ReportDto reportDto;
+    private ReportResponseDto reportResponseDto;
+    private ReportGenerateRequest generateRequest;
+
+    @BeforeEach
+    void setUp() {
+        reportDto = new ReportDto();
+        reportDto.setName("Test Report");
+        reportDto.setOrganisationId("org123");
+        reportDto.setReportTemplateId(1L);
+        reportDto.setFields(new ArrayList<>());
+
+        reportResponseDto = new ReportResponseDto();
+        reportResponseDto.setId(1L);
+        reportResponseDto.setName("Test Report");
+        reportResponseDto.setOrganisationId("org123");
+
+        generateRequest = new ReportGenerateRequest();
+        generateRequest.setReportTemplateId(1L);
+        generateRequest.setOrganisationId("org123");
+        generateRequest.setIntervalType("MONTHLY");
+        generateRequest.setYear((short) 2024);
+        generateRequest.setPeriod((short) 1);
+    }
+
+    @Test
+    void create_Success() {
+        // Given
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.create(any(ReportDto.class), eq(true)))
+                .thenReturn(Either.right(reportResponseDto));
+
+        // When
+        ResponseEntity<?> response = reportingController.create(reportDto);
+
+        // Then
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(reportResponseDto, response.getBody());
+        verify(reportService).create(any(ReportDto.class), eq(true));
+    }
+
+    @Test
+    void create_NoOrganisationAccess() {
+        // Given
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        // When
+        ResponseEntity<?> response = reportingController.create(reportDto);
+
+        // Then
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verify(reportService, never()).create(any(), anyBoolean());
+    }
+
+    @Test
+    void create_ServiceError() {
+        // Given
+        Problem problem = Problem.builder()
+                .withTitle("Template Not Found")
+                .withStatus(Status.NOT_FOUND)
+                .build();
+
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.create(any(ReportDto.class), eq(true)))
+                .thenReturn(Either.left(problem));
+
+        // When
+        ResponseEntity<?> response = reportingController.create(reportDto);
+
+        // Then
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertEquals(problem, response.getBody());
+    }
+
+    @Test
+    void findById_Success() {
+        // Given
+        reportResponseDto.setOrganisationId("org123");
+        when(reportService.findById(1L)).thenReturn(Optional.of(reportResponseDto));
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+
+        // When
+        ResponseEntity<?> response = reportingController.findById(1L, null);
+
+        // Then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(reportResponseDto, response.getBody());
+    }
+
+    @Test
+    void findById_NotFound() {
+        // Given
+        when(reportService.findById(1L)).thenReturn(Optional.empty());
+
+        // When
+        ResponseEntity<?> response = reportingController.findById(1L, null);
+
+        // Then
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    }
+
+    @Test
+    void findById_NoOrganisationAccess() {
+        // Given
+        reportResponseDto.setOrganisationId("org123");
+        when(reportService.findById(1L)).thenReturn(Optional.of(reportResponseDto));
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        // When
+        ResponseEntity<?> response = reportingController.findById(1L, null);
+
+        // Then
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+    }
+
+    @Test
+    void findById_WithOrganisationIdParameter_Success() {
+        // Given
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.findByOrganisationIdAndId("org123", 1L))
+                .thenReturn(Optional.of(reportResponseDto));
+
+        // When
+        ResponseEntity<?> response = reportingController.findById(1L, "org123");
+
+        // Then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(reportResponseDto, response.getBody());
+    }
+
+    @Test
+    void findAll_Success() {
+        // Given
+        List<ReportResponseDto> reports = List.of(reportResponseDto);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.findByOrganisationId("org123")).thenReturn(reports);
+
+        // When
+        ResponseEntity<?> response = reportingController.findAll("org123", null, null, null);
+
+        // Then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(reports, response.getBody());
+    }
+
+    @Test
+    void findAll_NoOrganisationAccess() {
+        // Given
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        // When
+        ResponseEntity<?> response = reportingController.findAll("org123", null, null, null);
+
+        // Then
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verify(reportService, never()).findByOrganisationId(any());
+    }
+
+    @Test
+    void findAll_ByTemplateId() {
+        // Given
+        List<ReportResponseDto> reports = List.of(reportResponseDto);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.findByReportTemplateId(1L)).thenReturn(reports);
+
+        // When
+        ResponseEntity<?> response = reportingController.findAll("org123", 1L, null, null);
+
+        // Then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(reports, response.getBody());
+    }
+
+    @Test
+    void delete_Success() {
+        // Given
+        reportResponseDto.setOrganisationId("org123");
+        when(reportService.findById(1L)).thenReturn(Optional.of(reportResponseDto));
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.delete(1L)).thenReturn(Either.right(null));
+
+        // When
+        ResponseEntity<?> response = reportingController.delete(1L);
+
+        // Then
+        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        verify(reportService).delete(1L);
+    }
+
+    @Test
+    void delete_ReportNotFound() {
+        // Given
+        when(reportService.findById(1L)).thenReturn(Optional.empty());
+
+        // When
+        ResponseEntity<?> response = reportingController.delete(1L);
+
+        // Then
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        verify(reportService, never()).delete(anyLong());
+    }
+
+    @Test
+    void delete_NoOrganisationAccess() {
+        // Given
+        reportResponseDto.setOrganisationId("org123");
+        when(reportService.findById(1L)).thenReturn(Optional.of(reportResponseDto));
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        // When
+        ResponseEntity<?> response = reportingController.delete(1L);
+
+        // Then
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verify(reportService, never()).delete(anyLong());
+    }
+
+    @Test
+    void delete_CannotDeletePublishedReport() {
+        // Given
+        Problem problem = Problem.builder()
+                .withTitle("Report Already Published")
+                .withStatus(Status.BAD_REQUEST)
+                .build();
+
+        reportResponseDto.setOrganisationId("org123");
+        when(reportService.findById(1L)).thenReturn(Optional.of(reportResponseDto));
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.delete(1L)).thenReturn(Either.left(problem));
+
+        // When
+        ResponseEntity<?> response = reportingController.delete(1L);
+
+        // Then
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(problem, response.getBody());
+    }
+
+    @Test
+    void generate_Success() {
+        // Given
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.generate(any(ReportGenerateRequest.class)))
+                .thenReturn(Either.right(reportResponseDto));
+
+        // When
+        ResponseEntity<?> response = reportingController.generate(generateRequest);
+
+        // Then
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(reportResponseDto, response.getBody());
+        verify(reportService).generate(any(ReportGenerateRequest.class));
+    }
+
+    @Test
+    void generate_NoOrganisationAccess() {
+        // Given
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        // When
+        ResponseEntity<?> response = reportingController.generate(generateRequest);
+
+        // Then
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verify(reportService, never()).generate(any());
+    }
+
+    @Test
+    void generate_ServiceError() {
+        // Given
+        Problem problem = Problem.builder()
+                .withTitle("Template Not Found")
+                .withStatus(Status.NOT_FOUND)
+                .build();
+
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.generate(any(ReportGenerateRequest.class)))
+                .thenReturn(Either.left(problem));
+
+        // When
+        ResponseEntity<?> response = reportingController.generate(generateRequest);
+
+        // Then
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertEquals(problem, response.getBody());
+    }
+}
