@@ -36,6 +36,9 @@ public class ReportTemplateEntity extends CommonEntity {
     private String description;
     private String currencyId;
 
+    @Builder.Default
+    private long ver = 1;
+
     @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ReportTemplateFieldEntity> columns = new ArrayList<>();

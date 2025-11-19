@@ -23,5 +23,7 @@ public class ReportTemplateResponseDto {
 
     private String currencyId;
 
+    private Long ver;
+
     private List<ReportTemplateFieldDto> columns;
 }

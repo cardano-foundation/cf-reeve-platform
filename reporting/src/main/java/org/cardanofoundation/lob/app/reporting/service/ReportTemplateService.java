@@ -23,6 +23,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
+import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +34,7 @@ public class ReportTemplateService {
     private final ReportTemplateRepository reportTemplateRepository;
     private final ReportTemplateMapper reportTemplateMapper;
     private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
+    private final ReportingRepository reportingRepository;
 
     public Either<Problem, ReportTemplateResponseDto> create(ReportTemplateDto dto) {
         log.info("Creating report template: {}", dto.getName());
@@ -43,8 +45,38 @@ public class ReportTemplateService {
             return Either.left(subtypeValidation.getLeft());
         }
 
-        ReportTemplateEntity entity = reportTemplateMapper.toEntity(dto, null);
-        ReportTemplateEntity saved = reportTemplateRepository.save(entity);
+        // Check if a template with the same name already exists for this organisation
+        Optional<ReportTemplateEntity> existingTemplateOpt =
+                reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
+
+        ReportTemplateEntity templateToSave;
+
+        if (existingTemplateOpt.isPresent()) {
+            ReportTemplateEntity existing = existingTemplateOpt.get();
+
+            // Check if there are any reports using this template
+            List<org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity> existingReports =
+                    reportingRepository.findByReportTemplateId(existing.getId());
+
+            if (!existingReports.isEmpty()) {
+                // Reports exist - create a new version
+                log.info("Template '{}' has {} existing reports, creating new version {} -> {}",
+                        dto.getName(), existingReports.size(), existing.getVer(), existing.getVer() + 1);
+
+                templateToSave = reportTemplateMapper.toEntity(dto, null);
+                templateToSave.setVer(existing.getVer() + 1);
+            } else {
+                // No reports exist - update existing template in place
+                log.info("Template '{}' has no existing reports, updating in place", dto.getName());
+                templateToSave = reportTemplateMapper.toEntity(dto, existing);
+            }
+        } else {
+            // New template - create with version 1
+            log.info("Creating new template: {}", dto.getName());
+            templateToSave = reportTemplateMapper.toEntity(dto, null);
+        }
+
+        ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
@@ -68,35 +100,33 @@ public class ReportTemplateService {
             .toList();
     }
 
-    public Either<Problem, ReportTemplateResponseDto> update(Long id, ReportTemplateDto dto) {
-        log.info("Updating report template id: {}", id);
-
-        // Validate subtypes exist
-        Either<Problem, Void> subtypeValidation = validateSubTypes(dto.getFields());
-        if (subtypeValidation.isLeft()) {
-            return Either.left(subtypeValidation.getLeft());
-        }
-
-        Optional<ReportTemplateEntity> existingOpt = reportTemplateRepository.findById(id);
-        if (existingOpt.isEmpty()) {
-            return Either.left(Problem.builder()
-                .withTitle("Report Template Not Found")
-                .withDetail("Report template with ID " + id + " does not exist")
-                .withStatus(Status.NOT_FOUND)
-                .build());
-        }
-
-        ReportTemplateEntity existing = existingOpt.get();
-
-        // Map DTO to existing entity
-        ReportTemplateEntity updated = reportTemplateMapper.toEntity(dto, existing);
-        ReportTemplateEntity saved = reportTemplateRepository.save(updated);
-        return Either.right(reportTemplateMapper.toResponseDto(saved));
-    }
-
-    public void delete(Long id) {
+    public Either<Problem, Void> delete(Long id) {
         log.info("Deleting report template id: {}", id);
+
+        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(id);
+        if (templateOpt.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Report Template Not Found")
+                    .withDetail("Report template with ID " + id + " does not exist")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        // Check if there are any reports using this template
+        List<org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity> existingReports =
+                reportingRepository.findByReportTemplateId(id);
+
+        if (!existingReports.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Template Has Associated Reports")
+                    .withDetail("Cannot delete template with ID " + id + " because it has " +
+                               existingReports.size() + " associated report(s)")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+
         reportTemplateRepository.deleteById(id);
+        return Either.right(null);
     }
 
     @Transactional(readOnly = true)

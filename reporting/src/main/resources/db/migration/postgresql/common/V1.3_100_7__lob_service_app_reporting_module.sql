@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS report_template (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     currency_id VARCHAR(255),
+    ver BIGINT NOT NULL DEFAULT 1,
     
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS report_template_aud (
     name VARCHAR(255),
     description TEXT,
     currency_id VARCHAR(255),
+    ver BIGINT NOT NULL DEFAULT 1,
     
     created_by VARCHAR(255),
     updated_by VARCHAR(255),

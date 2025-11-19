@@ -1,25 +1,21 @@
 package org.cardanofoundation.lob.app.reporting.controller;
 
 import java.util.List;
-
 import jakarta.validation.Valid;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -29,11 +25,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
-
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
 @RequestMapping("/api/v1/reporting/reports")
@@ -43,6 +39,7 @@ import org.cardanofoundation.lob.app.reporting.service.ReportingService;
 public class ReportingController {
 
     private final ReportingService reportService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(
         summary = "Create a new report",
@@ -57,10 +54,12 @@ public class ReportingController {
                 )
             ),
             @ApiResponse(responseCode = "400", description = "Invalid input data"),
+            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
             @ApiResponse(responseCode = "404", description = "Report template not found")
         }
     )
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> create(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Report data including template ID and column values",
@@ -68,6 +67,13 @@ public class ReportingController {
         ) ReportDto report
     ) {
         log.info("POST /api/reports - Creating report: {}", report.getName());
+
+        // Check organisation access
+        if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body("User does not have access to this organisation");
+        }
+
         Either<Problem, ReportResponseDto> result = reportService.create(report, true);
 
         if (result.isLeft()) {
@@ -92,11 +98,13 @@ public class ReportingController {
                     schema = @Schema(implementation = ReportResponseDto.class)
                 )
             ),
+            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
             @ApiResponse(responseCode = "404", description = "Report not found")
         }
     )
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ReportResponseDto> findById(
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> findById(
         @PathVariable @Parameter(description = "Report ID", example = "1") Long id,
         @RequestParam(value = "organisationId", required = false)
         @Parameter(
@@ -105,13 +113,35 @@ public class ReportingController {
         ) String organisationId
     ) {
         log.info("GET /api/reports/{} - organisationId: {}", id, organisationId);
+
+        // If organisationId is provided, check access
+        if (organisationId != null && !keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body("User does not have access to this organisation");
+        }
+
         if (organisationId != null) {
             return reportService.findByOrganisationIdAndId(organisationId, id)
-                .map(ResponseEntity::ok)
+                .map(report -> {
+                    // Verify access to the report's organisation
+                    if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .<ReportResponseDto>body(null);
+                    }
+                    return ResponseEntity.ok(report);
+                })
                 .orElse(ResponseEntity.notFound().build());
         }
+
         return reportService.findById(id)
-            .map(ResponseEntity::ok)
+            .map(report -> {
+                // Verify access to the report's organisation
+                if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .<ReportResponseDto>body(null);
+                }
+                return ResponseEntity.ok(report);
+            })
             .orElse(ResponseEntity.notFound().build());
     }
 
@@ -126,11 +156,13 @@ public class ReportingController {
                     mediaType = MediaType.APPLICATION_JSON_VALUE,
                     array = @ArraySchema(schema = @Schema(implementation = ReportResponseDto.class))
                 )
-            )
+            ),
+            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation")
         }
     )
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<ReportResponseDto>> findAll(
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> findAll(
         @RequestParam(value = "organisationId", required = true)
         @Parameter(
             description = "Filter by organisation ID",
@@ -146,6 +178,12 @@ public class ReportingController {
         log.info("GET /api/reports - organisationId: {}, templateId: {}, year: {}, intervalType: {}",
             organisationId, reportTemplateId, year, intervalType);
 
+        // Check organisation access
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body("User does not have access to this organisation");
+        }
+
         List<ReportResponseDto> reports;
 
         if (reportTemplateId != null) {
@@ -160,57 +198,42 @@ public class ReportingController {
     }
 
     @Operation(
-        summary = "Update a report",
-        description = "Updates an existing report and all its column values (full replacement)",
-        responses = {
-            @ApiResponse(
-                responseCode = "200",
-                description = "Report updated successfully",
-                content = @Content(
-                    mediaType = MediaType.APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ReportResponseDto.class)
-                )
-            ),
-            @ApiResponse(responseCode = "404", description = "Report not found"),
-            @ApiResponse(responseCode = "400", description = "Invalid input data")
-        }
-    )
-    @PutMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> update(
-        @PathVariable @Parameter(description = "Report ID", example = "1") Long id,
-        @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Updated report data",
-            required = true
-        ) ReportDto report
-    ) {
-        log.info("PUT /api/reports/{}", id);
-        Either<Problem, ReportResponseDto> result = reportService.update(id, report);
-
-        if (result.isLeft()) {
-            Problem problem = result.getLeft();
-            return ResponseEntity
-                .status(problem.getStatus().getStatusCode())
-                .body(problem);
-        }
-
-        return ResponseEntity.ok(result.get());
-    }
-
-    @Operation(
         summary = "Delete a report",
         description = "Deletes a report and all its associated column values",
         responses = {
             @ApiResponse(responseCode = "204", description = "Report deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Report is already published and cannot be deleted"),
+            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
             @ApiResponse(responseCode = "404", description = "Report not found")
         }
     )
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<?> delete(
         @PathVariable @Parameter(description = "Report ID", example = "1") Long id
     ) {
         log.info("DELETE /api/reports/{}", id);
-        reportService.delete(id);
-        return ResponseEntity.noContent().build();
+
+        // First, get the report to check organisation access
+        return reportService.findById(id)
+            .map(report -> {
+                // Check organisation access
+                if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("User does not have access to this organisation");
+                }
+
+                // Proceed with deletion
+                Either<Problem, Void> result = reportService.delete(id);
+
+                if (result.isLeft()) {
+                    Problem problem = result.getLeft();
+                    return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+                }
+
+                return ResponseEntity.noContent().build();
+            })
+            .orElse(ResponseEntity.notFound().build());
     }
 
     @Operation(
@@ -226,10 +249,12 @@ public class ReportingController {
                 )
             ),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
+            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
             @ApiResponse(responseCode = "404", description = "Report template not found")
         }
     )
     @PostMapping(value = "/generate", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> generate(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Request containing template ID, organisation ID, interval type, year and period",
@@ -239,6 +264,12 @@ public class ReportingController {
         log.info("POST /api/reports/generate - Template: {}, Org: {}, Year: {}, Interval: {}, Period: {}",
             request.getReportTemplateId(), request.getOrganisationId(), request.getYear(),
             request.getIntervalType(), request.getPeriod());
+
+        // Check organisation access
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body("User does not have access to this organisation");
+        }
 
         Either<Problem, ReportResponseDto> result = reportService.generate(request);
 

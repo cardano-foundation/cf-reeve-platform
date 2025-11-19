@@ -67,6 +67,7 @@ public class ReportTemplateMapper {
             .name(entity.getName())
             .description(entity.getDescription())
             .currencyId(entity.getCurrencyId())
+            .ver(entity.getVer())
             .columns(topLevelColumns)
             .build();
     }

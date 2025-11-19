@@ -8,17 +8,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
-
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
@@ -77,7 +73,52 @@ public class ReportingService {
             return Either.left(fieldValidation.getLeft());
         }
 
-        ReportEntity entity = reportMapper.toEntity(dto, null, template);
+        // Check if a report already exists for the same template, interval, year, and period
+        ReportEntity existingReport = null;
+        if (dto.getIntervalType() != null && dto.getYear() != null && dto.getPeriod() != null) {
+            IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
+            Optional<ReportEntity> existingReportOpt = reportRepository.findLatestByTemplateAndPeriod(
+                    dto.getOrganisationId(),
+                    dto.getReportTemplateId(),
+                    intervalType,
+                    dto.getYear(),
+                    dto.getPeriod()
+            );
+
+            if (existingReportOpt.isPresent()) {
+                existingReport = existingReportOpt.get();
+
+                // If the existing report is already published, create a new version
+                if (existingReport.isLedgerDispatchApproved()) {
+                    log.info("Existing report is published, creating new version {} -> {}",
+                            existingReport.getVer(), existingReport.getVer() + 1);
+                    existingReport = null; // Will create new entity with incremented version
+                } else {
+                    log.info("Overwriting existing unpublished report with ID: {}", existingReport.getId());
+                }
+            }
+        }
+
+        ReportEntity entity = reportMapper.toEntity(dto, existingReport, template);
+
+        // Handle versioning: if overwriting a published report, increment version
+        if (existingReport == null && dto.getIntervalType() != null && dto.getYear() != null && dto.getPeriod() != null) {
+            IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
+            Optional<ReportEntity> latestPublishedOpt = reportRepository.findLatestByTemplateAndPeriod(
+                    dto.getOrganisationId(),
+                    dto.getReportTemplateId(),
+                    intervalType,
+                    dto.getYear(),
+                    dto.getPeriod()
+            );
+
+            if (latestPublishedOpt.isPresent() && latestPublishedOpt.get().isLedgerDispatchApproved()) {
+                entity.setVer(latestPublishedOpt.get().getVer() + 1);
+            }
+        }
+        // TODO Check if ready to publish
+        entity.setReadyToPublish(true);
+
         if (storeReport) {
             entity = reportRepository.save(entity);
         }
@@ -162,11 +203,11 @@ public class ReportingService {
             .toList();
     }
 
-    public Either<Problem, ReportResponseDto> update(Long id, ReportDto dto) {
-        log.info("Updating report id: {}", id);
+    public Either<Problem, Void> delete(Long id) {
+        log.info("Deleting report id: {}", id);
 
-        Optional<ReportEntity> existingOpt = reportRepository.findById(id);
-        if (existingOpt.isEmpty()) {
+        Optional<ReportEntity> reportOpt = reportRepository.findById(id);
+        if (reportOpt.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("Report Not Found")
                     .withDetail("Report with ID " + id + " does not exist")
@@ -174,32 +215,19 @@ public class ReportingService {
                     .build());
         }
 
-        ReportEntity existing = existingOpt.get();
+        ReportEntity report = reportOpt.get();
 
-        // Fetch template if changed
-        ReportTemplateEntity template = existing.getReportTemplate();
-        if (dto.getReportTemplateId() != null &&
-            !dto.getReportTemplateId().equals(template.getId())) {
-            Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(dto.getReportTemplateId());
-            if (templateOpt.isEmpty()) {
-                return Either.left(Problem.builder()
-                        .withTitle("Report Template Not Found")
-                        .withDetail("Report template with ID " + dto.getReportTemplateId() + " does not exist")
-                        .withStatus(Status.NOT_FOUND)
-                        .build());
-            }
-            template = templateOpt.get();
+        // Check if report is already published
+        if (report.isLedgerDispatchApproved()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Report Already Published")
+                    .withDetail("Cannot delete report with ID " + id + " because it has already been published")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
         }
 
-        // Map DTO to existing entity
-        ReportEntity updated = reportMapper.toEntity(dto, existing, template);
-        ReportEntity saved = reportRepository.save(updated);
-        return Either.right(reportMapper.toResponseDto(saved));
-    }
-
-    public void delete(Long id) {
-        log.info("Deleting report id: {}", id);
         reportRepository.deleteById(id);
+        return Either.right(null);
     }
 
     public Either<Problem, ReportResponseDto> generate(ReportGenerateRequest request) {
@@ -253,8 +281,8 @@ public class ReportingService {
                 .fields(fillFieldsFromTemplate(template.getColumns(), startDate, endDate))
                 .build();
 
-        // Create the report using existing create method, but without storing it yet
-        return create(reportDto, false);
+        // Create the report - this will handle versioning and overwriting logic
+        return create(reportDto, true);
     }
 
     private List<ReportFieldDto> fillFieldsFromTemplate(List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate) {
