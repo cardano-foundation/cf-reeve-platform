@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
@@ -17,7 +18,7 @@ import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 @RequiredArgsConstructor
 @Getter
 @Setter
-public class ReportPublishEvent {
+public class PublishReportEvent {
 
     private String id;
     private String organisationId;
@@ -28,10 +29,11 @@ public class ReportPublishEvent {
     private short period;
     private short year;
     private DataMode dataMode;
+    private LedgerDispatchStatus dispatchStatus;
     private Map<String, Object> reportData;
 
-    public static ReportPublishEvent fromEntity(ReportEntity reportEntity) {
-        ReportPublishEvent event = new ReportPublishEvent();
+    public static PublishReportEvent fromEntity(ReportEntity reportEntity) {
+        PublishReportEvent event = new PublishReportEvent();
         event.setId(reportEntity.getId());
         event.setOrganisationId(reportEntity.getOrganisationId());
         event.setReportTemplateType(reportEntity.getReportTemplate().getReportTemplateType());
@@ -42,6 +44,7 @@ public class ReportPublishEvent {
         event.setYear(reportEntity.getYear());
         event.setDataMode(reportEntity.getDataMode());
         event.setReportData(extractReportData(reportEntity.getFields(), new HashMap<>()));
+        event.setDispatchStatus(reportEntity.getLedgerDispatchStatus());
 
         return event;
     }

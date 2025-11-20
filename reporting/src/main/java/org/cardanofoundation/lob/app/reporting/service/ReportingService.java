@@ -30,7 +30,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
-import org.cardanofoundation.lob.app.reporting.dto.events.ReportPublishEvent;
+import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
@@ -189,7 +189,7 @@ public class ReportingService {
     }
 
     private Either<Problem, List<ReportFieldDto>> generateOrValidateFields(ReportDto dto, DataMode dataMode, ReportTemplateEntity template) {
-        if (dataMode == DataMode.GENERATED) {
+        if (dataMode == DataMode.SYSTEM) {
             return generateFieldsForReport(dto, template);
         } else {
             return validateUserFields(dto.getFields(), template);
@@ -555,20 +555,20 @@ public class ReportingService {
 
     private LocalDate getReportStartDate(IntervalType intervalType, short period, short year) {
         return switch (intervalType) {
-            case MONTHLY -> LocalDate.of(year, period, 1);
-            case QUARTERLY -> {
+            case MONTH -> LocalDate.of(year, period, 1);
+            case QUARTER -> {
                 int month = (period - 1) * 3 + 1; // Convert quarter to starting month
                 yield LocalDate.of(year, month, 1);
             }
-            case YEARLY -> LocalDate.of(year, 1, 1);
+            case YEAR -> LocalDate.of(year, 1, 1);
         };
     }
 
     private LocalDate getReportEndDate(IntervalType intervalType, LocalDate startDate) {
         return switch (intervalType) {
-            case MONTHLY -> startDate.plusMonths(1).minusDays(1);
-            case QUARTERLY -> startDate.plusMonths(3).minusDays(1);
-            case YEARLY -> startDate.plusYears(1).minusDays(1);
+            case MONTH -> startDate.plusMonths(1).minusDays(1);
+            case QUARTER -> startDate.plusMonths(3).minusDays(1);
+            case YEAR -> startDate.plusYears(1).minusDays(1);
         };
     }
 
@@ -601,7 +601,7 @@ public class ReportingService {
         report.setPublishedBy(authenticationUserService.getCurrentUser());
         report = reportRepository.save(report);
 
-        applicationEventPublisher.publishEvent(ReportPublishEvent.fromEntity(report));
+        applicationEventPublisher.publishEvent(PublishReportEvent.fromEntity(report));
 
         return Either.right(reportMapper.toResponseDto(report));
 

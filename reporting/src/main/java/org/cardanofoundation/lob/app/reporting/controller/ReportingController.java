@@ -300,7 +300,7 @@ public class ReportingController {
                     @ApiResponse(responseCode = "403",
                             description = "User does not have access to this organisation"),
                     @ApiResponse(responseCode = "404", description = "Report not found")})
-    @PostMapping(value = "/publish/{id}", produces = MediaType.APPLICATION_JSON_VALUE,
+    @PostMapping(value = "/publish", produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
     public ResponseEntity<?> publish(
@@ -308,8 +308,8 @@ public class ReportingController {
                     description = "Request containing report id and organisation ID",
                     required = true) ReportPublishRequest request) {
         log.info(
-                "POST /api/reports/publish/{} - Org: {}",
-                request.getReportId(), request.getOrganisationId());
+                "POST /api/reports/publish - Org: {}, Report ID: {}",
+                request.getOrganisationId(), request.getReportId());
 
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {

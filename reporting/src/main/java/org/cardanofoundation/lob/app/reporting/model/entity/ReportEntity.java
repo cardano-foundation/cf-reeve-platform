@@ -59,10 +59,6 @@ public class ReportEntity extends CommonEntity {
     @Enumerated(STRING)
     private DataMode dataMode;
 
-    @Builder.Default
-    private boolean isReadyToPublish = false;
-    @Enumerated(STRING)
-    private PublishError publishError;
 
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
@@ -73,6 +69,12 @@ public class ReportEntity extends CommonEntity {
     @Builder.Default
     @Enumerated(STRING)
     private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;
+    private String blockchainType;
+    private String blockchainHash;
+    @Builder.Default
+    private boolean isReadyToPublish = false;
+    @Enumerated(STRING)
+    private PublishError publishError;
     private String ledgerDispatchStatusErrorReason;
     private LocalDateTime ledgerDispatchDate;
     private String publishedBy;
@@ -80,9 +82,10 @@ public class ReportEntity extends CommonEntity {
     @PrePersist
     private void generateId() {
         if (this.id == null) {
-            String hashInput = String.format("%s:%s:%s:%s:%s:%s",
+            String hashInput = String.format("%s:%s:%s:%s:%s:%s:%s",
                 organisationId,
                 reportTemplate != null ? reportTemplate.getId() : "",
+                name,
                 intervalType,
                 period,
                 year,

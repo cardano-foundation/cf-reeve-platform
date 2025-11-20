@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.annotation.PostConstruct;
 
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
+import org.apache.commons.lang3.tuple.Pair;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
@@ -93,7 +95,9 @@ public class WatchDogService {
             log.info("Status updated for report: {}", report.getId());
         });
         // notify accounting core about updated report
-        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(org.getId(), reportEntities);
+        // collect to set of pairs of reportId and l1SubmissionData
+        Set<Pair<String, L1SubmissionData>> reports = reportEntities.stream().filter(r -> r.getL1SubmissionData().isPresent()).map(report -> Pair.of(report.getId(), report.getL1SubmissionData().get())).collect(Collectors.toSet());
+        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(org.getId(), reports);
 
     }
 

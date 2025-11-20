@@ -113,10 +113,12 @@ CREATE TABLE IF NOT EXISTS report (
     period SMALLINT,
     year SMALLINT,
     data_mode VARCHAR(20),
-    is_ready_to_publish BOOLEAN NOT NULL DEFAULT FALSE,
-    publish_error VARCHAR(255),
     ledger_dispatch_approved BOOLEAN NOT NULL DEFAULT FALSE,
     ledger_dispatch_status VARCHAR(255) NOT NULL DEFAULT 'NOT_DISPATCHED',
+    blockchain_type VARCHAR(50),
+    blockchain_hash VARCHAR(128),
+    is_ready_to_publish BOOLEAN NOT NULL DEFAULT FALSE,
+    publish_error VARCHAR(255),
     ledger_dispatch_status_error_reason TEXT,
     ledger_dispatch_date TIMESTAMP WITHOUT TIME ZONE,
     published_by VARCHAR(255),
@@ -132,6 +134,8 @@ CREATE TABLE IF NOT EXISTS report (
 );
 
 COMMENT ON COLUMN report.data_mode IS 'Indicates whether the report is GENERATED (automatically generated) or USER (user-provided fields)';
+COMMENT ON COLUMN report.blockchain_type IS 'Type of blockchain where the report was published (e.g., CARDANO_L1)';
+COMMENT ON COLUMN report.blockchain_hash IS 'Transaction hash on the blockchain where the report was published';
 
 CREATE INDEX idx_report_template_id ON report(report_template_id);
 CREATE INDEX idx_report_organisation_id ON report(organisation_id);
@@ -158,6 +162,8 @@ CREATE TABLE IF NOT EXISTS report_aud (
     publish_error VARCHAR(255),
     ledger_dispatch_approved BOOLEAN,
     ledger_dispatch_status VARCHAR(255),
+    blockchain_type VARCHAR(50),
+    blockchain_hash VARCHAR(128),
     ledger_dispatch_status_error_reason TEXT,
     ledger_dispatch_date TIMESTAMP WITHOUT TIME ZONE,
     published_by VARCHAR(255),

@@ -1,9 +1,15 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,7 +148,7 @@ class ReportingServiceTest {
 
         when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
         when(reportRepository.findLatestByTemplateAndPeriod(
-                eq("org123"), eq(1L), eq(IntervalType.MONTHLY), eq((short) 2024), eq((short) 1)))
+                eq("org123"), eq(1L), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
                 .thenReturn(Optional.of(existingReport));
         when(reportMapper.toEntity(any(ReportDto.class), eq(existingReport), eq(templateEntity)))
                 .thenReturn(existingReport);
@@ -169,7 +175,7 @@ class ReportingServiceTest {
 
         when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
         when(reportRepository.findLatestByTemplateAndPeriod(
-                eq("org123"), eq(1L), eq(IntervalType.MONTHLY), eq((short) 2024), eq((short) 1)))
+                eq("org123"), eq(1L), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
                 .thenReturn(Optional.of(publishedReport));
         when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity)))
                 .thenReturn(newReport);

@@ -1,5 +1,6 @@
 dependencies {
     implementation(project(":accounting_reporting_core"))
+    implementation(project(":reporting"))
     implementation(project(":organisation"))
     implementation(project(":support"))
     implementation(project(":blockchain_common"))
