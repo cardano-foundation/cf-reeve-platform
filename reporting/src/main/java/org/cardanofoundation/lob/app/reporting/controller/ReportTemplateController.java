@@ -46,7 +46,7 @@ public class ReportTemplateController {
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(summary = "Create a new report template",
-            description = "Creates a new report template with hierarchical column structure for an organisation",
+            description = "Creates a new report template with hierarchical column structure for an organisation. Returns 409 if template already exists.",
             responses = {
                     @ApiResponse(responseCode = "201",
                             description = "Report template created successfully",
@@ -54,7 +54,8 @@ public class ReportTemplateController {
                                     schema = @Schema(
                                             implementation = ReportTemplateResponseDto.class))),
                     @ApiResponse(responseCode = "400", description = "Invalid input data"),
-                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation")})
+                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+                    @ApiResponse(responseCode = "409", description = "Template already exists - use PUT to update")})
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
@@ -76,6 +77,45 @@ public class ReportTemplateController {
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
+    }
+
+    @Operation(summary = "Update an existing report template",
+            description = "Updates an existing report template. If the template has associated published reports, a new version will be created. Otherwise, the existing template will be updated in place.",
+            responses = {
+                    @ApiResponse(responseCode = "200",
+                            description = "Report template updated successfully",
+                            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(
+                                            implementation = ReportTemplateResponseDto.class))),
+                    @ApiResponse(responseCode = "400", description = "Invalid input data"),
+                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+                    @ApiResponse(responseCode = "404", description = "Template not found - use POST to create")})
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Report template data to update",
+            required = true,
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = ReportTemplateDto.class)))
+    @org.springframework.web.bind.annotation.PutMapping(produces = MediaType.APPLICATION_JSON_VALUE,
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<?> update(
+            @Valid @RequestBody(required = true) ReportTemplateDto template) {
+        log.info("PUT /api/report-templates - Updating template: {}", template.getName());
+
+        // Check organisation access
+        if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body("User does not have access to this organisation");
+        }
+
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(template);
+
+        if (result.isLeft()) {
+            Problem problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+        }
+
+        return ResponseEntity.ok(result.get());
     }
 
     @Operation(summary = "Get report template by ID",

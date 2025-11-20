@@ -33,7 +33,7 @@ class API3MetadataSerialiserTest {
 
     @BeforeEach
     void setUp() {
-        serialiser = new API3MetadataSerialiser(FIXED_CLOCK);
+        serialiser = new API3MetadataSerialiser(null, FIXED_CLOCK);
     }
 
     @Test

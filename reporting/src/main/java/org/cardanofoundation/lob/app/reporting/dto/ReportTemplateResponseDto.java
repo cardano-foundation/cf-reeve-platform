@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
@@ -37,5 +38,6 @@ public class ReportTemplateResponseDto {
     private Long ver;
 
     @Schema(description = "List of template field definitions")
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ReportTemplateFieldDto> columns;
 }

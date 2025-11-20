@@ -228,6 +228,8 @@ subprojects {
                     "**/entity/**, " +
                     "**/config/**, " +
                     "**/domain/**, " +
+                    "**/dto/**, " +
+                    "**/enums/**, " +
                     "**/repository/**, " +
                     "**/spring_web/**," +
                     "**/spring_audit/**")

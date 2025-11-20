@@ -286,7 +286,7 @@ public class ReportingController {
                 .body(problem);
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
+        return ResponseEntity.status(HttpStatus.OK).body(result.get());
     }
 
     @Operation(summary = "Publish a specific report",

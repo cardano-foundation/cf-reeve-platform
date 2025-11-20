@@ -4,14 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,6 +57,12 @@ class ReportingServiceTest {
     @Mock
     private TransactionItemRepository transactionItemRepository;
 
+    @Mock
+    private org.cardanofoundation.lob.app.support.security.AuthenticationUserService authenticationUserService;
+
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+
     @InjectMocks
     private ReportingService reportingService;
 
@@ -69,39 +77,46 @@ class ReportingServiceTest {
         reportDto = new ReportDto();
         reportDto.setName("Test Report");
         reportDto.setOrganisationId("org123");
-        reportDto.setReportTemplateId(1L);
-        reportDto.setIntervalType("MONTHLY");
+        reportDto.setReportTemplateId("abc");
+        reportDto.setIntervalType("MONTH");
         reportDto.setYear((short) 2024);
         reportDto.setPeriod((short) 1);
+        reportDto.setDataMode("SYSTEM");
         reportDto.setFields(new ArrayList<>());
 
         templateEntity = new ReportTemplateEntity();
-        templateEntity.setId(1L);
+        templateEntity.setId("abc");
         templateEntity.setOrganisationId("org123");
         templateEntity.setName("Test Template");
         templateEntity.setColumns(new ArrayList<>());
 
         reportEntity = new ReportEntity();
-        reportEntity.setId(1L);
+        reportEntity.setId("abc");
         reportEntity.setName("Test Report");
         reportEntity.setOrganisationId("org123");
         reportEntity.setVer(1L);
 
         reportResponseDto = new ReportResponseDto();
-        reportResponseDto.setId(1L);
+        reportResponseDto.setId("abc");
         reportResponseDto.setName("Test Report");
     }
 
     @Test
     void create_Success() {
         // Given
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
-        when(reportMapper.toEntity(any(ReportDto.class), any(), eq(templateEntity))).thenReturn(reportEntity);
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                any(), any(), any())).thenReturn(new ArrayList<>());
+        when(reportRepository.findLatestByTemplateAndPeriod(
+                eq("org123"), eq("abc"), any(IntervalType.class), eq((short) 2024), eq((short) 1)))
+                .thenReturn(Optional.empty());
+        when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
         when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto, true);
+        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
 
         // Then
         assertTrue(result.isRight());
@@ -112,10 +127,10 @@ class ReportingServiceTest {
     @Test
     void create_TemplateNotFound() {
         // Given
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto, true);
+        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -127,10 +142,10 @@ class ReportingServiceTest {
     void create_OrganisationMismatch() {
         // Given
         templateEntity.setOrganisationId("different-org");
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto, true);
+        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -142,13 +157,16 @@ class ReportingServiceTest {
     void create_OverwriteUnpublishedReport() {
         // Given
         ReportEntity existingReport = new ReportEntity();
-        existingReport.setId(99L);
+        existingReport.setId("99");
         existingReport.setLedgerDispatchApproved(false);
         existingReport.setVer(1L);
 
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                any(), any(), any())).thenReturn(new ArrayList<>());
         when(reportRepository.findLatestByTemplateAndPeriod(
-                eq("org123"), eq(1L), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
+                eq("org123"), eq("abc"), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
                 .thenReturn(Optional.of(existingReport));
         when(reportMapper.toEntity(any(ReportDto.class), eq(existingReport), eq(templateEntity)))
                 .thenReturn(existingReport);
@@ -156,7 +174,7 @@ class ReportingServiceTest {
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto, true);
+        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
 
         // Then
         assertTrue(result.isRight());
@@ -167,15 +185,18 @@ class ReportingServiceTest {
     void create_CreateNewVersionWhenPublished() {
         // Given
         ReportEntity publishedReport = new ReportEntity();
-        publishedReport.setId(99L);
+        publishedReport.setId("99");
         publishedReport.setLedgerDispatchApproved(true);
         publishedReport.setVer(1L);
 
         ReportEntity newReport = new ReportEntity();
 
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                any(), any(), any())).thenReturn(new ArrayList<>());
         when(reportRepository.findLatestByTemplateAndPeriod(
-                eq("org123"), eq(1L), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
+                eq("org123"), eq("abc"), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
                 .thenReturn(Optional.of(publishedReport));
         when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity)))
                 .thenReturn(newReport);
@@ -183,7 +204,7 @@ class ReportingServiceTest {
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto, true);
+        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
 
         // Then
         assertTrue(result.isRight());
@@ -195,59 +216,59 @@ class ReportingServiceTest {
     void delete_Success() {
         // Given
         ReportEntity report = new ReportEntity();
-        report.setId(1L);
+        report.setId("abc");
         report.setLedgerDispatchApproved(false);
 
-        when(reportRepository.findById(1L)).thenReturn(Optional.of(report));
+        when(reportRepository.findById("abc")).thenReturn(Optional.of(report));
 
         // When
-        Either<Problem, Void> result = reportingService.delete(1L);
+        Either<Problem, Void> result = reportingService.delete("abc");
 
         // Then
         assertTrue(result.isRight());
-        verify(reportRepository).deleteById(1L);
+        verify(reportRepository).deleteById("abc");
     }
 
     @Test
     void delete_ReportNotFound() {
         // Given
-        when(reportRepository.findById(1L)).thenReturn(Optional.empty());
+        when(reportRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Either<Problem, Void> result = reportingService.delete(1L);
+        Either<Problem, Void> result = reportingService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());
         assertEquals("Report Not Found", result.getLeft().getTitle());
-        verify(reportRepository, never()).deleteById(anyLong());
+        verify(reportRepository, never()).deleteById(anyString());
     }
 
     @Test
     void delete_PublishedReportCannotBeDeleted() {
         // Given
         ReportEntity publishedReport = new ReportEntity();
-        publishedReport.setId(1L);
+        publishedReport.setId("abc");
         publishedReport.setLedgerDispatchApproved(true);
 
-        when(reportRepository.findById(1L)).thenReturn(Optional.of(publishedReport));
+        when(reportRepository.findById("abc")).thenReturn(Optional.of(publishedReport));
 
         // When
-        Either<Problem, Void> result = reportingService.delete(1L);
+        Either<Problem, Void> result = reportingService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());
         assertEquals("Report Already Published", result.getLeft().getTitle());
-        verify(reportRepository, never()).deleteById(anyLong());
+        verify(reportRepository, never()).deleteById(anyString());
     }
 
     @Test
     void findById_Success() {
         // Given
-        when(reportRepository.findById(1L)).thenReturn(Optional.of(reportEntity));
+        when(reportRepository.findById("abc")).thenReturn(Optional.of(reportEntity));
         when(reportMapper.toResponseDto(reportEntity)).thenReturn(reportResponseDto);
 
         // When
-        Optional<ReportResponseDto> result = reportingService.findById(1L);
+        Optional<ReportResponseDto> result = reportingService.findById("abc");
 
         // Then
         assertTrue(result.isPresent());
@@ -257,10 +278,10 @@ class ReportingServiceTest {
     @Test
     void findById_NotFound() {
         // Given
-        when(reportRepository.findById(1L)).thenReturn(Optional.empty());
+        when(reportRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Optional<ReportResponseDto> result = reportingService.findById(1L);
+        Optional<ReportResponseDto> result = reportingService.findById("abc");
 
         // Then
         assertFalse(result.isPresent());
@@ -285,11 +306,11 @@ class ReportingServiceTest {
     void findByReportTemplateId_Success() {
         // Given
         List<ReportEntity> reports = List.of(reportEntity);
-        when(reportRepository.findByReportTemplateId(1L)).thenReturn(reports);
+        when(reportRepository.findByReportTemplateId("abc")).thenReturn(reports);
         when(reportMapper.toResponseDto(reportEntity)).thenReturn(reportResponseDto);
 
         // When
-        List<ReportResponseDto> result = reportingService.findByReportTemplateId(1L);
+        List<ReportResponseDto> result = reportingService.findByReportTemplateId("abc");
 
         // Then
         assertEquals(1, result.size());
@@ -300,15 +321,14 @@ class ReportingServiceTest {
     void generate_Success() {
         // Given
         ReportGenerateRequest request = new ReportGenerateRequest();
-        request.setReportTemplateId(1L);
+        request.setReportTemplateId("abc");
         request.setOrganisationId("org123");
-        request.setIntervalType("MONTHLY");
+        request.setIntervalType("MONTH");
         request.setYear((short) 2024);
         request.setPeriod((short) 1);
 
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
-        when(reportMapper.toEntity(any(ReportDto.class), any(), eq(templateEntity))).thenReturn(reportEntity);
-        when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
 
         // When
@@ -317,16 +337,17 @@ class ReportingServiceTest {
         // Then
         assertTrue(result.isRight());
         assertEquals("Test Report", result.get().getName());
+        verify(reportRepository, never()).save(any());
     }
 
     @Test
     void generate_TemplateNotFound() {
         // Given
         ReportGenerateRequest request = new ReportGenerateRequest();
-        request.setReportTemplateId(1L);
+        request.setReportTemplateId("abc");
         request.setOrganisationId("org123");
 
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
         Either<Problem, ReportResponseDto> result = reportingService.generate(request);

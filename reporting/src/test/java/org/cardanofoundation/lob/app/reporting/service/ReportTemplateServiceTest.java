@@ -1,10 +1,15 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,14 +65,14 @@ class ReportTemplateServiceTest {
         templateDto.setFields(new ArrayList<>());
 
         templateEntity = new ReportTemplateEntity();
-        templateEntity.setId(1L);
+        templateEntity.setId("abc");
         templateEntity.setOrganisationId("org123");
         templateEntity.setName("Test Template");
         templateEntity.setVer(1L);
         templateEntity.setColumns(new ArrayList<>());
 
         templateResponseDto = new ReportTemplateResponseDto();
-        templateResponseDto.setId(1L);
+        templateResponseDto.setId("abc");
         templateResponseDto.setName("Test Template");
     }
 
@@ -90,21 +95,40 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void create_UpdateExistingTemplateWithoutReports() {
+    void create_TemplateAlreadyExists_ReturnsConflict() {
         // Given
         ReportTemplateEntity existing = new ReportTemplateEntity();
-        existing.setId(1L);
+        existing.setId("abc");
         existing.setVer(1L);
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
                 .thenReturn(Optional.of(existing));
-        when(reportingRepository.findByReportTemplateId(1L)).thenReturn(new ArrayList<>());
+
+        // When
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("Template Already Exists", result.getLeft().getTitle());
+        verify(reportTemplateRepository, never()).save(any());
+    }
+
+    @Test
+    void update_ExistingTemplateWithoutReports_UpdatesInPlace() {
+        // Given
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setVer(1L);
+
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
+                .thenReturn(Optional.of(existing));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
         when(reportTemplateMapper.toEntity(eq(templateDto), eq(existing))).thenReturn(existing);
         when(reportTemplateRepository.save(any(ReportTemplateEntity.class))).thenReturn(existing);
         when(reportTemplateMapper.toResponseDto(existing)).thenReturn(templateResponseDto);
 
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         // Then
         assertTrue(result.isRight());
@@ -113,26 +137,26 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void create_CreateNewVersionWhenReportsExist() {
+    void update_CreateNewVersionWhenReportsExist() {
         // Given
         ReportTemplateEntity existing = new ReportTemplateEntity();
-        existing.setId(1L);
+        existing.setId("abc");
         existing.setVer(1L);
 
         ReportEntity report = new ReportEntity();
-        report.setId(1L);
+        report.setId("abc");
 
         ReportTemplateEntity newVersion = new ReportTemplateEntity();
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
                 .thenReturn(Optional.of(existing));
-        when(reportingRepository.findByReportTemplateId(1L)).thenReturn(List.of(report));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(report));
         when(reportTemplateMapper.toEntity(eq(templateDto), isNull())).thenReturn(newVersion);
         when(reportTemplateRepository.save(any(ReportTemplateEntity.class))).thenReturn(newVersion);
         when(reportTemplateMapper.toResponseDto(newVersion)).thenReturn(templateResponseDto);
 
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         // Then
         assertTrue(result.isRight());
@@ -141,60 +165,74 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void delete_Success() {
+    void update_TemplateNotFound_ReturnsNotFound() {
         // Given
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
-        when(reportingRepository.findByReportTemplateId(1L)).thenReturn(new ArrayList<>());
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
+                .thenReturn(Optional.empty());
 
         // When
-        Either<Problem, Void> result = reportTemplateService.delete(1L);
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("Template Not Found", result.getLeft().getTitle());
+        verify(reportTemplateRepository, never()).save(any());
+    }
+
+    @Test
+    void delete_Success() {
+        // Given
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
+
+        // When
+        Either<Problem, Void> result = reportTemplateService.delete("abc");
 
         // Then
         assertTrue(result.isRight());
-        verify(reportTemplateRepository).deleteById(1L);
+        verify(reportTemplateRepository).deleteById("abc");
     }
 
     @Test
     void delete_TemplateNotFound() {
         // Given
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Either<Problem, Void> result = reportTemplateService.delete(1L);
+        Either<Problem, Void> result = reportTemplateService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());
         assertEquals("Report Template Not Found", result.getLeft().getTitle());
-        verify(reportTemplateRepository, never()).deleteById(anyLong());
+        verify(reportTemplateRepository, never()).deleteById(anyString());
     }
 
     @Test
     void delete_TemplateHasAssociatedReports() {
         // Given
         ReportEntity report = new ReportEntity();
-        report.setId(1L);
+        report.setId("abc");
 
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
-        when(reportingRepository.findByReportTemplateId(1L)).thenReturn(List.of(report));
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(report));
 
         // When
-        Either<Problem, Void> result = reportTemplateService.delete(1L);
+        Either<Problem, Void> result = reportTemplateService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());
         assertEquals("Template Has Associated Reports", result.getLeft().getTitle());
-        verify(reportTemplateRepository, never()).deleteById(anyLong());
+        verify(reportTemplateRepository, never()).deleteById(anyString());
     }
 
     @Test
     void findById_Success() {
         // Given
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
         when(reportTemplateMapper.toResponseDto(templateEntity)).thenReturn(templateResponseDto);
 
         // When
-        Optional<ReportTemplateResponseDto> result = reportTemplateService.findById(1L);
-
+        Optional<ReportTemplateResponseDto> result = reportTemplateService.findById("abc");
         // Then
         assertTrue(result.isPresent());
         assertEquals("Test Template", result.get().getName());
@@ -203,10 +241,10 @@ class ReportTemplateServiceTest {
     @Test
     void findById_NotFound() {
         // Given
-        when(reportTemplateRepository.findById(1L)).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Optional<ReportTemplateResponseDto> result = reportTemplateService.findById(1L);
+        Optional<ReportTemplateResponseDto> result = reportTemplateService.findById("abc");
 
         // Then
         assertFalse(result.isPresent());

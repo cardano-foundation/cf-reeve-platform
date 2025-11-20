@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Data
@@ -19,7 +20,7 @@ public class ReportTemplateFieldDto {
     @Schema(description = "Field ID", example = "101", nullable = true)
     private Long id;
 
-    @Schema(description = "Field name", example = "Total Revenue", required = true)
+    @Schema(description = "Field name", example = "Total Revenue")
     private String fieldName;
 
     @Schema(description = "Whether values should be accumulated", example = "false", defaultValue = "false")
@@ -35,8 +36,10 @@ public class ReportTemplateFieldDto {
     private boolean negated;
 
     @Schema(description = "List of chart of account subtype IDs to map to this field", example = "[1, 2, 3]", nullable = true)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<Long> mappingSubTypeIds;
 
     @Schema(description = "Child fields forming a hierarchical structure", nullable = true)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ReportTemplateFieldDto> childFields;
 }
