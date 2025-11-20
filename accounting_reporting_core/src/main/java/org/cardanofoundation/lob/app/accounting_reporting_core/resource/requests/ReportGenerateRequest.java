@@ -29,11 +29,11 @@ public class ReportGenerateRequest extends BaseRequest {
     private IntervalType intervalType;
 
     @Schema(example = "2023")
-    private short year;
+    private Short year;
 
     @Schema(example = "3")
     @Nullable
-    private short period;
+    private Short period;
 
     @Schema(example = "false", description = "If true, the report will be generated in preview mode, it will take all valid transactions into account and not only the finalized ones.")
     @Builder.Default
