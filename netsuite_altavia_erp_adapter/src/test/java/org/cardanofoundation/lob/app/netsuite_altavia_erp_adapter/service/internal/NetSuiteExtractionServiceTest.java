@@ -76,16 +76,13 @@ class NetSuiteExtractionServiceTest {
                 .withTitle("testTitle")
                 .withDetail("testDetail")
                 .build()));
-        when(netSuiteClient.getBaseUrl()).thenReturn("testBaseUrl");
 
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
         // verifying that the event was published
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchFailedEvent.class));
         verify(netSuiteClient).retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class));
-        verify(netSuiteClient).getBaseUrl();
         verifyNoMoreInteractions(applicationEventPublisher, netSuiteClient);
-
     }
 
     @Test
