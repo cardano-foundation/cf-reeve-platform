@@ -6,12 +6,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -346,16 +341,37 @@ public class NetSuiteExtractionService {
         }
     }
 
-    private Map<String, Object> getBag(Problem transactions, String code) {
-        Map<String, String> error = Map.of(
-                "code", code,
-                "message", transactions.getDetail()
-        );
-        Map<String, Object> bag = Map.of(
-                "detail", transactions.getDetail(),
-                "message", transactions.getTitle(),
-                "error", error
-        );
-        return Map.of("technicalErrorMessage", bag);
+    private Map<String, Object> getBag(Problem problem, String code) {
+        try {
+            if (problem == null) {
+                return Map.of();
+            }
+
+            Map<String, Object> error = new HashMap<>();
+            if (code != null && !code.isEmpty()) {
+                error.put("code", code);
+            }
+            if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
+                error.put("message", problem.getDetail());
+            }
+
+            // Only add error map if it's not empty
+            Map<String, Object> bag = new HashMap<>();
+            if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
+                bag.put("detail", problem.getDetail());
+            }
+            if (problem.getTitle() != null && !problem.getTitle().isEmpty()) {
+                bag.put("message", problem.getTitle());
+            }
+            if (!error.isEmpty()) {
+                bag.put("error", error);
+            }
+
+            // Only include technicalErrorMessage if bag is not empty
+            return bag.isEmpty() ? Map.of() : Map.of("technicalErrorMessage", bag);
+        } catch (Exception e) {
+            log.error("Error creating error bag", e);
+            return Map.of();
+        }
     }
 }
