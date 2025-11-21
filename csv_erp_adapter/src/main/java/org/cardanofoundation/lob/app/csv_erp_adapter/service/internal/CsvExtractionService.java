@@ -9,7 +9,6 @@ import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +43,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reco
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
+import org.cardanofoundation.lob.app.accounting_reporting_core.util.ErrorUtils;
 import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.ExtractionData;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
@@ -422,36 +422,6 @@ public class CsvExtractionService {
     }
 
     private Map<String, Object> getBag(Problem problem, String code) {
-        try {
-            if (problem == null) {
-                return Map.of();
-            }
-
-            Map<String, Object> error = new HashMap<>();
-            if (code != null && !code.isEmpty()) {
-                error.put("code", code);
-            }
-            if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
-                error.put("message", problem.getDetail());
-            }
-
-            // Only add error map if it's not empty
-            Map<String, Object> bag = new HashMap<>();
-            if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
-                bag.put("detail", problem.getDetail());
-            }
-            if (problem.getTitle() != null && !problem.getTitle().isEmpty()) {
-                bag.put("message", problem.getTitle());
-            }
-            if (!error.isEmpty()) {
-                bag.put("error", error);
-            }
-
-            // Only include technicalErrorMessage if bag is not empty
-            return bag.isEmpty() ? Map.of() : Map.of("technicalErrorMessage", bag);
-        } catch (Exception e) {
-            log.error("Error creating error bag", e);
-            return Map.of();
-        }
+        return ErrorUtils.getBag(problem, code);
     }
 }

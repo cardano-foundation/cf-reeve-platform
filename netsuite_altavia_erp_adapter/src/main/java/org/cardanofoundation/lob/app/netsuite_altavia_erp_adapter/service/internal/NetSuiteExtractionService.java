@@ -28,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
+import org.cardanofoundation.lob.app.accounting_reporting_core.util.ErrorUtils;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
@@ -342,36 +343,6 @@ public class NetSuiteExtractionService {
     }
 
     private Map<String, Object> getBag(Problem problem, String code) {
-        try {
-            if (problem == null) {
-                return Map.of();
-            }
-
-            Map<String, Object> error = new HashMap<>();
-            if (code != null && !code.isEmpty()) {
-                error.put("code", code);
-            }
-            if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
-                error.put("message", problem.getDetail());
-            }
-
-            // Only add error map if it's not empty
-            Map<String, Object> bag = new HashMap<>();
-            if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
-                bag.put("detail", problem.getDetail());
-            }
-            if (problem.getTitle() != null && !problem.getTitle().isEmpty()) {
-                bag.put("message", problem.getTitle());
-            }
-            if (!error.isEmpty()) {
-                bag.put("error", error);
-            }
-
-            // Only include technicalErrorMessage if bag is not empty
-            return bag.isEmpty() ? Map.of() : Map.of("technicalErrorMessage", bag);
-        } catch (Exception e) {
-            log.error("Error creating error bag", e);
-            return Map.of();
-        }
-    }
+    return ErrorUtils.getBag(problem, code);
+}
 }
