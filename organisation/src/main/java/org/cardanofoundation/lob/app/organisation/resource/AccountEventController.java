@@ -1,12 +1,15 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
+import java.util.Objects;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -46,8 +49,17 @@ public class AccountEventController {
             ),
     })
     @GetMapping(value = "/{orgId}/event-codes", produces = "application/json")
-    public ResponseEntity<List<AccountEventView>> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
-        return ResponseEntity.ok().body(eventCodeService.getAllAccountEvent(orgId));
+    public ResponseEntity<?> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                               @RequestParam(value = "customerCode", required = false) String customerCode,
+                                               @RequestParam(value = "name", required = false) String name,
+                                               @RequestParam(value = "creditRefCodes", required = false) List<String> creditRefCodes,
+                                               @RequestParam(value = "debitRefCodes", required = false) List<String> debitRefCodes,
+                                               @RequestParam(value = "active", required = false) Boolean active,
+                                               @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable
+    ) {
+        return eventCodeService.getAllAccountEvent(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, pageable).fold(
+                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                ResponseEntity::ok);
 
     }
 
@@ -77,7 +89,7 @@ public class AccountEventController {
     @PostMapping(value = "/{orgId}/event-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertReferenceCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                      @RequestParam(value = "file")  MultipartFile file) {
+                                                      @RequestParam(value = "file") MultipartFile file) {
 
         Either<List<Problem>, List<AccountEventView>> eventCodeE = eventCodeService.insertAccountEventByCsv(orgId, file);
         if (eventCodeE.isLeft()) {
@@ -86,6 +98,7 @@ public class AccountEventController {
         }
         return ResponseEntity.ok(eventCodeE.get());
     }
+
     @Operation(description = "Reference Code update", responses = {
             @ApiResponse(content =
                     {@Content(mediaType = "application/json", schema = @Schema(implementation = AccountEventView.class))}

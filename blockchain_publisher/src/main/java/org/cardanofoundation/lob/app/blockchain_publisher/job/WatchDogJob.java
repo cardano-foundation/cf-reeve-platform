@@ -33,7 +33,7 @@ public class WatchDogJob {
             initialDelayString = "${lob.blockchain_publisher.watchdog.transaction.initial_delay:PT1M}"
     )
     public void executeTransactionStatusCheck() {
-        log.info("Inspecting all organisations for on chain transaction status changes...");
+        log.debug("Inspecting all organisations for on chain transaction status changes...");
 
         watchDogService.checkTransactionStatusForOrganisations(txStatusInspectionLimitPerOrgPullSize);
     }
@@ -43,7 +43,7 @@ public class WatchDogJob {
             initialDelayString = "${lob.blockchain_publisher.watchdog.report.initial_delay:PT1M}"
     )
     public void executeReportStatusCheck() {
-        log.info("Inspecting all organisations for on chain report status changes...");
+        log.debug("Inspecting all organisations for on chain report status changes...");
 
         watchDogService.checkReportStatusForOrganisations(txStatusInspectionLimitPerOrgPullSize);
     }

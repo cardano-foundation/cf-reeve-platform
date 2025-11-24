@@ -14,7 +14,9 @@ public enum BlockchainPublishStatus {
 
     ROLLBACKED, // signal to resubmit the transaction since it disappeared from on chain
 
-    FINALIZED; // finalised on blockchain(s) - tx hash (12 hours)
+    FINALIZED, // finalised on blockchain(s) - tx hash (12 hours)
+
+    ERROR;
 
     public static Set<BlockchainPublishStatus> toDispatchStatuses() {
         return Set.of(STORED, ROLLBACKED);

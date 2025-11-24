@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
@@ -14,7 +15,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 
 @Getter
@@ -34,7 +35,9 @@ public class TransactionView {
 
     private TransactionStatus status = TransactionStatus.OK;
 
-    private LedgerDispatchStatusView statistic = LedgerDispatchStatusView.PENDING;
+    private Optional<TransactionProcessingStatus> statistic = Optional.of(TransactionProcessingStatus.PENDING);
+
+    private String ledgerDispatchStatusErrorReason;
 
     private TxValidationStatus validationStatus = TxValidationStatus.VALIDATED;
 
@@ -58,6 +61,8 @@ public class TransactionView {
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime reconciliationDate;
+
+    private int itemCount;
 
     private Set<TransactionItemView> items = new LinkedHashSet<>();
 

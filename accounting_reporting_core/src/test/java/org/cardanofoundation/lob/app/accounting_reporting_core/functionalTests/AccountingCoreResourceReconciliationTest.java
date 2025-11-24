@@ -45,7 +45,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
                 .body("statistic.ok", equalTo(0))
                 .body("statistic.nok", equalTo(0))
                 .body("statistic.never", equalTo(6))
-                .body("statistic.total", equalTo(0))
+                .body("statistic.total", equalTo(6))
         ;
     }
 

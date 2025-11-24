@@ -1,0 +1,8 @@
+CREATE OR REPLACE FUNCTION enum_to_text(anyenum) 
+RETURNS text
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    SELECT $1::text;
+$$;

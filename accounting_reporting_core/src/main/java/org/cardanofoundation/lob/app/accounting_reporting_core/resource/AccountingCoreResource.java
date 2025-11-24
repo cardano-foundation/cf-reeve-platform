@@ -4,8 +4,10 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
+import static org.zalando.problem.Status.UNAUTHORIZED;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -15,8 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,16 +37,25 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+import org.zalando.problem.StatusType;
 import org.zalando.problem.ThrowableProblem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilterOptionsResponse;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -57,6 +68,8 @@ public class AccountingCoreResource {
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final ObjectMapper objectMapper;
     private final OrganisationPublicApi organisationPublicApi;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final SortFieldMappings sortFieldMappings;
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Transaction list", responses = {
@@ -69,6 +82,38 @@ public class AccountingCoreResource {
     public ResponseEntity<List<TransactionView>> listAllAction(@Valid @RequestBody SearchRequest body) {
         List<TransactionView> transactions = accountingCorePresentationService.allTransactions(body);
         return ResponseEntity.ok().body(transactions);
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @Operation(description = "List all Document Numbers in transactions", responses = {
+            @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = String.class)))}
+            )
+    })
+    @GetMapping(value = "/filter-options/{orgId}", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<FilterOptionsResponse> getFilterOptions(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                  @Valid @RequestParam(name = "filterOptions") List<FilterOptions> filterOptionsList)  {
+        if(!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(UNAUTHORIZED.getStatusCode()).body(FilterOptionsResponse.builder()
+                            .error(Problem.builder()
+                                    .withTitle("NO_ACCESS_TO_ORG")
+                                    .withDetail("The user doesn't have access to this org")
+                                    .withStatus(UNAUTHORIZED).build())
+                    .build());
+        }
+        Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(orgId);
+
+        if (orgM.isEmpty()) {
+            ThrowableProblem issue = Problem.builder()
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
+                    .withStatus(NOT_FOUND)
+                    .build();
+            return ResponseEntity.status(NOT_FOUND.getStatusCode()).body(FilterOptionsResponse.builder()
+                    .error(issue).build());
+        }
+        Map<FilterOptions, List<FilteringOptionsListResponse>> filterOptionsFound = accountingCorePresentationService.getFilterOptions(filterOptionsList, orgId);
+        return ResponseEntity.ok(FilterOptionsResponse.builder().filterOptions(filterOptionsFound).build());
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
@@ -159,12 +204,12 @@ public class AccountingCoreResource {
 
         if (orgM.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Unable to find Organisation by Id: %s".formatted(body.getOrganisationId()))
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(body.getOrganisationId()))
                     .withStatus(NOT_FOUND)
                     .build();
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+            return ResponseEntity.status(Objects.requireNonNull(issue.getStatus()).getStatusCode()).body(issue);
         }
 
         Organisation org = orgM.orElseThrow();
@@ -174,7 +219,7 @@ public class AccountingCoreResource {
         return extractionResultE.fold(
                 problem -> {
                     return ResponseEntity
-                            .status(problem.getStatus().getStatusCode())
+                            .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
                             .body(problem);
                 },
                 success -> {
@@ -193,8 +238,7 @@ public class AccountingCoreResource {
     }
 
 
-
-        @Tag(name = "Transactions", description = "Transactions Approval API")
+    @Tag(name = "Transactions", description = "Transactions Approval API")
     @PostMapping(value = "/transactions/approve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @Operation(description = "Approve one or more transactions",
             responses = {
@@ -258,19 +302,29 @@ public class AccountingCoreResource {
             }
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<BatchsDetailView> listAllBatches(@Valid @RequestBody BatchSearchRequest body,
-                                                           @RequestParam(name = "page", defaultValue = "0") int page,
-                                                           @RequestParam(name = "limit", defaultValue = "10") int limit) {
-        body.setLimit(limit);
-        body.setPage(page);
+    public ResponseEntity<?> listAllBatches(@Valid @RequestBody BatchSearchRequest body,
+                                            @PageableDefault(page = 0, size = 10) Pageable pageable) {
 
-        BatchsDetailView batchs = accountingCorePresentationService.listAllBatch(body);
 
-        return ResponseEntity.ok().body(batchs);
+        body.setLimit(pageable.getPageSize());
+        body.setPage(pageable.getPageNumber());
+        Either<Problem, Pageable> convertPageable = sortFieldMappings.convertPageable(pageable, Map.of(), TransactionBatchEntity.class);
+        if( convertPageable.isLeft()) {
+            Problem problem = convertPageable.getLeft();
+            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
+                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+        }
+        Either<Problem, BatchsDetailView> batchesE = accountingCorePresentationService.listAllBatch(body, convertPageable.get());
+        if( batchesE.isLeft()) {
+            Problem problem = batchesE.getLeft();
+            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
+                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+        }
+        return ResponseEntity.ok().body(batchesE.get());
     }
 
     @Tag(name = "Batches", description = "Batches API")
-    @GetMapping(value = "/batches/reprocess/{batchId}",  produces = APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/batches/reprocess/{batchId}", produces = APPLICATION_JSON_VALUE)
     @Operation(description = "Batch reprocess",
             responses = {
                     @ApiResponse(content = {
@@ -293,39 +347,48 @@ public class AccountingCoreResource {
     @GetMapping(value = "/batches/{batchId}", produces = APPLICATION_JSON_VALUE)
     @Operation(
             description = "Returns the details of a batch, including a pageable list of transactions. " +
-                    "Optionally, transactions can be filtered by their processing status.",
-            parameters = {
-                    @Parameter(name = "page", description = "Page number (zero-based). Default is null, returning all transactions.", example = "0"),
-                    @Parameter(name = "size", description = "Page size (number of elements per page). Default is null, returning all transactions.", example = "10"),
-                    @Parameter(name = "txStatus", description = "Filter transactions by their processing statuses. Accepts multiple statuses.",
-                            array = @ArraySchema(schema = @Schema(implementation = TransactionProcessingStatus.class)))
-            },
-            responses = {
-                    @ApiResponse(content = {
-                            @Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = BatchView.class))
-                    }),
-                    @ApiResponse(
-                            responseCode = "404",
-                            description = "Error: response status is 404",
-                            content = @Content(mediaType = APPLICATION_JSON_VALUE,
-                                    schema = @Schema(example = "{\"title\": \"BATCH_NOT_FOUND\",\"status\": 404,\"detail\": \"Batch with id: {batchId} could not be found\"}")
-                            )
-                    )
-            }
+                    "Optionally, transactions can be filtered by their processing status."
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
-                                           @RequestParam(name = "page", required = false) Optional<Integer> page,
-                                           @RequestParam(name = "size", required = false) Optional<Integer> size,
-                                           @RequestParam(name = "txStatus", required = false) List <TransactionProcessingStatus> txStatus) {
-        Pageable pageable;
-        if(page.isEmpty() || size.isEmpty()) {
+                                           @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
+                                           Pageable pageable) {
+        return batchesDetail(batchId, txStatus, new BatchFilterRequest(), pageable);
+    }
+
+    @Tag(name = "Batches", description = "Batches API")
+    @PostMapping(value = "/batches/{batchId}", produces = APPLICATION_JSON_VALUE)
+    @Operation(
+            description = "Returns the details of a batch, including a pageable list of transactions. " +
+                    "Optionally, transactions can be filtered by their processing status."
+    )
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
+                                           @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
+                                           @RequestBody BatchFilterRequest batchFilterRequest,
+                                           Pageable pageable) {
+        if (Optional.ofNullable(pageable).isEmpty()) {
             pageable = Pageable.unpaged();
-        } else {
-            pageable = PageRequest.of(page.get(), size.get());
         }
-        Optional<BatchView> txBatchM = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable);
-        if (txBatchM.isEmpty()) {
+        if(Optional.ofNullable(batchFilterRequest.getDateFrom()).isPresent() && Optional.ofNullable(batchFilterRequest.getDateTo()).isPresent() && batchFilterRequest.getDateFrom().isAfter(batchFilterRequest.getDateTo())) {
+            ThrowableProblem issue = Problem.builder()
+                    .withTitle("INVALID_DATE_RANGE")
+                    .withDetail("The 'dateFrom' must be before 'dateTo'")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build();
+
+            return ResponseEntity
+                    .status(Objects.requireNonNull(issue.getStatus()).getStatusCode())
+                    .body(issue);
+        }
+        Either<Problem, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable, batchFilterRequest);
+        if (txBatchEO.isLeft()) {
+            Problem problem = txBatchEO.getLeft();
+            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
+                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+        }
+        Optional<BatchView> txBatchO = txBatchEO.get();
+        if (txBatchO.isEmpty()) {
             ThrowableProblem issue = Problem.builder()
                     .withTitle("BATCH_NOT_FOUND")
                     .withDetail("Batch with id: {%s} could not be found".formatted(batchId))
@@ -339,7 +402,7 @@ public class AccountingCoreResource {
 
         return ResponseEntity
                 .ok()
-                .body(txBatchM.orElseThrow());
+                .body(txBatchO.orElseThrow());
     }
 
 }

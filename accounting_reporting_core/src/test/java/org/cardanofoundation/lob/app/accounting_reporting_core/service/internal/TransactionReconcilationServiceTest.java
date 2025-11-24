@@ -136,11 +136,11 @@ class TransactionReconcilationServiceTest {
 
         val txEntity1 = new TransactionEntity();
         txEntity1.setId("tx1");
-        txEntity1.setTransactionInternalNumber("internal1");
+        txEntity1.setInternalTransactionNumber("internal1");
 
         val txEntity2 = new TransactionEntity();
         txEntity2.setId("tx2");
-        txEntity2.setTransactionInternalNumber("internal2");
+        txEntity2.setInternalTransactionNumber("internal2");
 
         val detachedChunkTxs = Set.of(txEntity1, txEntity2);
         val txIds = Set.of("tx1", "tx2");

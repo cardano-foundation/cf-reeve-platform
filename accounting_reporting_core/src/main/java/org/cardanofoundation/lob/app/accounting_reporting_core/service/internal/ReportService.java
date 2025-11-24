@@ -7,6 +7,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode.USER;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.BALANCE_SHEET;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType.INCOME_STATEMENT;
+import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.REPORT_MAPPINGS;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -28,6 +29,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +43,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxIte
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportCsvLine;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
@@ -52,7 +56,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportReprocessRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseStatisticView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.csv.CsvReportMapper;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
@@ -78,6 +87,8 @@ public class ReportService {
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final ReportTypeRepository reportTypeRepository;
     private final TransactionItemRepository transactionItemRepository;
+    private final SortFieldMappings sortFieldMappings;
+    private final CsvReportMapper csvReportMapper;
 
     @Transactional
     public Either<Problem, ReportEntity> approveReportForLedgerDispatch(String reportId) {
@@ -310,8 +321,6 @@ public class ReportService {
 
         Either<Problem, ReportEntity> reportEntityE = exist(organisationId, reportType, intervalType, year, period);
         ReportEntity reportEntity = reportEntityE.fold(problem -> {
-            // question: is it safe to assume that problem will always be because it already exists?
-
             return newReport();
         }, success -> {
             if (Boolean.TRUE.equals(success.getLedgerDispatchApproved())) {
@@ -371,8 +380,29 @@ public class ReportService {
         return Either.right(result);
     }
 
-    public Set<ReportEntity> findAllByOrgId(String organisationId) {
-        return reportRepository.findAllByOrganisationId(organisationId);
+    public void saveReportEntity(ReportEntity reportEntity) {
+        reportRepository.save(reportEntity);
+    }
+
+    public Either<Problem, ReportResponseView> findAllByOrgId(String organisationId, List<ReportType> reportType, List<String> currencyCode, List<IntervalType> intervalType, List<Short> year, List<Short> period, LedgerDispatchStatus status, String txHash,Boolean readyToPublish,Boolean ledgerDispatchApproved, Pageable pageable) {
+        return sortFieldMappings.convertPageable(pageable, REPORT_MAPPINGS, ReportEntity.class).fold(
+                problem -> Either.left(problem),
+                adjustedPageable -> {
+                    ReportResponseStatisticView statisticView = reportRepository.findStatistics(organisationId);
+                    Page<ReportEntity> allByOrganisationId = reportRepository.findAllByOrganisationId(organisationId,
+                            reportType,
+                            currencyCode,
+                            intervalType,
+                            year,
+                            period,
+                            status != null ? status.name() : null,
+                            txHash,
+                            readyToPublish,
+                            ledgerDispatchApproved,
+                            adjustedPageable);
+                    return Either.right(ReportResponseView.createSuccess(allByOrganisationId.stream().map(ReportView::fromEntity).toList(), statisticView));
+                }
+        );
     }
 
     public Set<ReportEntity> findAllByTypeAndPeriod(String organistionId, ReportType reportType, IntervalType intervalType, short year, short period) {
@@ -599,7 +629,7 @@ public class ReportService {
             }
         }
         // validate against generated report
-        ReportGenerateRequest reportGenerateRequest = new ReportGenerateRequest(reportEntity.getType(), reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod().orElse((short) 1));
+        ReportGenerateRequest reportGenerateRequest = new ReportGenerateRequest(reportEntity.getType(), reportEntity.getIntervalType(), reportEntity.getYear(), reportEntity.getPeriod().orElse((short) 1), false);
         reportGenerateRequest.setOrganisationId(reportEntity.getOrganisation().getId());
         Either<Problem, ReportEntity> generatedReportE = reportGenerate(reportGenerateRequest);
         if (generatedReportE.isRight()) {
@@ -609,7 +639,7 @@ public class ReportService {
             } else if (reportEntity.getType() == INCOME_STATEMENT) {
                 generatedReportsMatch = IncomeStatementMatcher.matches(generatedReportE.get().getIncomeStatementReportData(), reportEntity.getIncomeStatementReportData());
             }
-            if(!generatedReportsMatch) {
+            if (!generatedReportsMatch) {
                 return Either.left(Problem.builder()
                         .withTitle(Constants.REPORT_DATA_MISMATCH)
                         .withDetail(Constants.REPORT_DATA_DOES_NOT_MATCH_GENERATED_REPORT)
@@ -725,12 +755,13 @@ public class ReportService {
         switch (reportGenerateRequest.getReportType()) {
             case BALANCE_SHEET -> {
                 BalanceSheetData balanceSheetData = new BalanceSheetData();
-                fillReportData(balanceSheetData, reportTypeEntity, startDate, endDate);
+                fillReportData(balanceSheetData, reportTypeEntity, startDate, endDate,
+                        reportGenerateRequest.isPreview());
                 reportEntity.setBalanceSheetReportData(Optional.of(balanceSheetData));
             }
             case INCOME_STATEMENT -> {
                 IncomeStatementData incomeStatementData = new IncomeStatementData();
-                fillReportData(incomeStatementData, reportTypeEntity, startDate, endDate);
+                fillReportData(incomeStatementData, reportTypeEntity, startDate, endDate, reportGenerateRequest.isPreview());
                 reportEntity.setIncomeStatementReportData(Optional.of(incomeStatementData));
             }
             default -> {
@@ -746,11 +777,11 @@ public class ReportService {
         return Either.right(reportEntity);
     }
 
-    private void fillReportData(Object reportData, ReportTypeEntity reportTypeEntity, LocalDate startDate, LocalDate endDate) {
+    private void fillReportData(Object reportData, ReportTypeEntity reportTypeEntity, LocalDate startDate, LocalDate endDate, boolean preview) {
         // if we can solve it differently it would be better
         Set<ReportTypeFieldEntity> topLevelFields = reportTypeEntity.getFields().stream().filter(field -> field.getParent() == null).collect(Collectors.toSet());
         topLevelFields.forEach(reportTypeFieldEntity -> {
-            fillObjectRecursively(reportData, reportTypeFieldEntity, startDate, endDate);
+            fillObjectRecursively(reportData, reportTypeFieldEntity, startDate, endDate, preview);
         });
     }
 
@@ -760,7 +791,7 @@ public class ReportService {
      * If the field has no child fields, it will calculate the total amount based on the mapping types and set the value in the report data object.
      * NOTE: Currently it is only possible to have a value at the bottom level (No children) of the report data object.
      */
-    private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate) {
+    private void fillObjectRecursively(Object reportData, ReportTypeFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview) {
         if (field.getChildFields().isEmpty()) {
             if (field.getMappingTypes().isEmpty() && field.getMappingReportTypes().isEmpty()) {
                 log.debug("Field %s has no mapping type, skipping...".formatted(field.getName()));
@@ -784,7 +815,7 @@ public class ReportService {
                 endDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
             }
 
-            totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate);
+            totalAmount = addValuesFromTransactionItems(field, endDate, totalAmount, startSearchDate, preview);
             totalAmount = addValuesFromReportFields(field, endDate, totalAmount, startSearchDate);
             if (field.isNegate()) {
                 totalAmount = totalAmount.negate();
@@ -795,7 +826,7 @@ public class ReportService {
             LocalDate finalEndDate = endDate;
             field.getChildFields().forEach(subField -> {
                 Object subFieldObject = getOrCreateNestedObject(reportData, field.getName());
-                fillObjectRecursively(subFieldObject, subField, startDate, finalEndDate);
+                fillObjectRecursively(subFieldObject, subField, startDate, finalEndDate, preview);
             });
         }
     }
@@ -872,7 +903,7 @@ public class ReportService {
      * Then it will find all transaction items that are related to these ChartOfAccounts and fall within the specified date range.
      * Sum them up and return these.
      */
-    private BigDecimal addValuesFromTransactionItems(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate) {
+    private BigDecimal addValuesFromTransactionItems(ReportTypeFieldEntity field, LocalDate endDate, BigDecimal totalAmount, Optional<LocalDate> startSearchDate, boolean preview) {
         // Finding all ChartOfAccounts that are mapped to the specific field via the subtypes from the chartOfAccount
         Set<ChartOfAccount> allByOrganisationIdSubTypeIds = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(field.getMappingTypes().stream().map(ChartOfAccountSubType::getId).toList());
 
@@ -889,9 +920,23 @@ public class ReportService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
 
         // Finding all transaction items that are related to these ChartOfAccounts and fall within the specified date range
-        List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
-                allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
-                startSearchDate.orElse(LocalDate.EPOCH), endDate);
+        List<TransactionItemEntity> transactionItemsByAccountCodeAndDateRange;
+        if(preview) {
+            transactionItemsByAccountCodeAndDateRange =
+                    transactionItemRepository
+                            .findPreviewTransactionItemsByAccountCodeAndDateRange(
+                                    allByOrganisationIdSubTypeIds.stream()
+                                            .map(organisationChartOfAccount -> Objects
+                                                    .requireNonNull(
+                                                            organisationChartOfAccount.getId())
+                                                    .getCustomerCode())
+                                            .toList(),
+                                    startSearchDate.orElse(LocalDate.EPOCH), endDate);
+        } else {
+            transactionItemsByAccountCodeAndDateRange = transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                    allByOrganisationIdSubTypeIds.stream().map(organisationChartOfAccount -> Objects.requireNonNull(organisationChartOfAccount.getId()).getCustomerCode()).toList(),
+                    startSearchDate.orElse(LocalDate.EPOCH), endDate);
+        }
         Map<String, ChartOfAccount> selfMap = allByOrganisationIdSubTypeIds.stream().collect(Collectors.toMap(o -> o.getId().getCustomerCode(), organisationChartOfAccount -> organisationChartOfAccount));
 
         // Summing up the amounts
@@ -1066,5 +1111,52 @@ public class ReportService {
             reportEntity.setPublishError(PublishError.valueOf(isReportReadyToPublish.getLeft().getTitle()));
         }
         return Either.right(reportRepository.save(reportEntity));
+    }
+
+    public List<Either<Problem,ReportEntity>> storeCsvReports(List<ReportCsvLine> reportCsvLines, String organisationId, boolean store) {
+
+        List<Either<Problem, ReportEntity>> results = new ArrayList<>();
+
+        while(!reportCsvLines.isEmpty()) {
+            ReportCsvLine reportCsvLine = reportCsvLines.getFirst();
+            List<ReportCsvLine> filteredLines = reportCsvLines.stream().filter(r ->
+                        r.getReport().equals(reportCsvLine.getReport())
+                        && r.getIntervalType().equals(reportCsvLine.getIntervalType())
+                        && r.getYear().equals(reportCsvLine.getYear())
+                        && r.getPeriod().equals(reportCsvLine.getPeriod())
+                    ).toList();
+            reportCsvLines.removeAll(filteredLines);
+
+            Either<Problem, CreateReportView> reportEntityE = csvReportMapper.mapCsvLinesToReportEntity(filteredLines,
+                    organisationId);
+            if(reportEntityE.isLeft()) {
+                results.add(Either.left(reportEntityE.getLeft()));
+            } else {
+                if(store) {
+                    Either<Problem, ReportEntity> storeReport = storeReport(ReportType.valueOf(reportCsvLine.getReport()),
+                            reportEntityE.get(),
+                            IntervalType.valueOf(reportCsvLine.getIntervalType()),
+                            reportCsvLine.getYear(),
+                            Short.valueOf(reportCsvLine.getPeriod()));
+                    if(storeReport.isLeft()) {
+                        results.add(Either.left(storeReport.getLeft()));
+                    } else {
+                        results.add(Either.right(storeReport.get()));
+                    }
+                } else {
+
+                    results.add(Either.right(ReportEntity.builder()
+                            .organisation(Organisation.builder().id(organisationId).build())
+                            .type(ReportType.valueOf(reportCsvLine.getReport()))
+                            .intervalType(IntervalType.valueOf(reportCsvLine.getIntervalType()))
+                            .year(reportCsvLine.getYear())
+                            .period(Short.valueOf(reportCsvLine.getPeriod()))
+                            .incomeStatementReportData(reportEntityE.get().getIncomeStatementData().orElse(null))
+                            .balanceSheetReportData(reportEntityE.get().getBalanceSheetData().orElse(null))
+                            .build()));
+                }
+            }
+        }
+        return results;
     }
 }

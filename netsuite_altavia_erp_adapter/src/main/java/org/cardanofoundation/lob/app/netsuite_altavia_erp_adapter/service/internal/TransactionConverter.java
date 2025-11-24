@@ -26,6 +26,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Curre
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.FinancialPeriodSource;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
+import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.Constants;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreString;
 import org.cardanofoundation.lob.app.support.calc.MoreBigDecimal;
 import org.cardanofoundation.lob.app.support.collections.Optionals;
@@ -116,7 +117,20 @@ public class TransactionConverter {
             if (txLine.amountDebit() != null && txLine.amountCredit() != null || txLine.amountDebitForeignCurrency() != null && txLine.amountCreditForeignCurrency() != null) {
                 // Error when both amounts are non-zero
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", txId);
-                return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", Map.of()));
+
+
+                Map<String, Object> bag = Map.of(
+                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, Map.of(
+                                "error", Map.of(
+                                        "code", "NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE",
+                                        "Message", "Both amounts are non-zero"
+                                )
+                        ),
+                        "mesasage", "Both debit and credit amounts are non-zero for transaction: {}",
+                        Constants.NETSUITE_BAG_ORGANISATION_ID, organisationId
+                );
+
+                return Either.left(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_VALIDATION_ERROR", bag));
             } else if (txLine.amountDebit() != null || txLine.amountDebitForeignCurrency() != null) {
                 operationType = OperationType.DEBIT;
                 amountLcy = MoreBigDecimal.zeroForNull(txLine.amountDebit());

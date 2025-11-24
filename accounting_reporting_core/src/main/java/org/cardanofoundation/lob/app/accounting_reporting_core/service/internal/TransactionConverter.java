@@ -19,6 +19,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Cur
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 
 @Service("accounting_reporting_core.TransactionConverter")
 @Slf4j
@@ -27,6 +28,7 @@ public class TransactionConverter {
 
     private final CoreCurrencyService coreCurrencyService;
     private final OrganisationConverter organisationConverter;
+    private final OrganisationPublicApiIF organisationPublicApiIF;
 
     public FilteringParameters convertToDbDetached(SystemExtractionParameters systemExtractionParameters,
                                                    UserExtractionParameters userExtractionParameters) {
@@ -130,7 +132,7 @@ public class TransactionConverter {
         TransactionEntity txEntity = new TransactionEntity();
         txEntity.setId(transaction.getId());
         txEntity.setBatchId(transaction.getBatchId());
-        txEntity.setTransactionInternalNumber(transaction.getInternalTransactionNumber());
+        txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber());
         txEntity.setTransactionType(transaction.getTransactionType());
         txEntity.setEntryDate(transaction.getEntryDate());
         txEntity.setOrganisation(organisationConverter.convert(transaction.getOrganisation()));
@@ -144,22 +146,22 @@ public class TransactionConverter {
 
         txEntity.setViolations(violations);
         txEntity.setItems(txItems);
-
         return txEntity;
     }
 
+
     private Optional<Project> convertProject(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project> projectM) {
         return projectM.map(p -> Project.builder()
-                        .customerCode(p.getCustomerCode())
-                        .name(p.getName().orElse(null))
-                        .build());
+                .customerCode(p.getCustomerCode())
+                .name(p.getName().orElse(null))
+                .build());
     }
 
     private Optional<CostCenter> convertCostCenter(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CostCenter> costCenter) {
         return costCenter.map(cc -> CostCenter.builder()
-                        .customerCode(cc.getCustomerCode())
-                        .name(cc.getName().orElse(null))
-                        .build());
+                .customerCode(cc.getCustomerCode())
+                .name(cc.getName().orElse(null))
+                .build());
     }
 
     private Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document> convertToDbDetached(Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document> docM) {
@@ -237,8 +239,8 @@ public class TransactionConverter {
 
                         .fxRate(txItemEntity.getFxRate())
 
-                        .amountFcy(txItemEntity.getAmountFcy())
-                        .amountLcy(txItemEntity.getAmountLcy())
+                        .amountFcy(txItemEntity.getOperationType().equals(OperationType.DEBIT) ? txItemEntity.getAmountFcy() : txItemEntity.getAmountFcy().negate())
+                        .amountLcy(txItemEntity.getOperationType().equals(OperationType.DEBIT) ? txItemEntity.getAmountLcy() : txItemEntity.getAmountLcy().negate())
 
                         .build())
                 .collect(Collectors.toSet());
@@ -258,7 +260,7 @@ public class TransactionConverter {
                 .entryDate(transactionEntity.getEntryDate())
                 .txValidationStatus(transactionEntity.getAutomatedValidationStatus())
                 .transactionType(transactionEntity.getTransactionType())
-                .internalTransactionNumber(transactionEntity.getTransactionInternalNumber())
+                .internalTransactionNumber(transactionEntity.getInternalTransactionNumber())
 
                 .transactionApproved(transactionEntity.getTransactionApproved())
                 .ledgerDispatchStatus(transactionEntity.getLedgerDispatchStatus())
@@ -302,7 +304,7 @@ public class TransactionConverter {
         attached.setAutomatedValidationStatus(detached.getAutomatedValidationStatus());
         attached.setLedgerDispatchStatus(detached.getLedgerDispatchStatus());
         attached.setAccountingPeriod(detached.getAccountingPeriod());
-        attached.setTransactionInternalNumber(detached.getTransactionInternalNumber());
+        attached.setInternalTransactionNumber(detached.getInternalTransactionNumber());
 
         attached.getViolations().clear();
         attached.getViolations().addAll(detached.getViolations());

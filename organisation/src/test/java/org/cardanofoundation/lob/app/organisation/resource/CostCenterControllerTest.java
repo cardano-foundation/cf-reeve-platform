@@ -7,8 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
-import java.util.Set;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
 
@@ -39,10 +38,10 @@ class CostCenterControllerTest {
     @Test
     void getAllCostCenter() {
         // Mock the service call
-        when(costCenterService.getAllCostCenter("org123")).thenReturn(Set.of(mock(CostCenter.class)));
+        when(costCenterService.getAllCostCenter("org123", null, null, null, true, Pageable.unpaged())).thenReturn(Either.right(List.of(mock(CostCenterView.class))));
 
         // Call the controller method
-        ResponseEntity<Set<CostCenterView>> response = costCenterController.getAllCostCenters("org123");
+        ResponseEntity<List<CostCenterView>> response = (ResponseEntity<List<CostCenterView>>) costCenterController.getAllCostCenters("org123", null, null, null, true, Pageable.unpaged());
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());

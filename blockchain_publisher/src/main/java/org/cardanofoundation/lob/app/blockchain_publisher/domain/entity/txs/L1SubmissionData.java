@@ -36,6 +36,11 @@ public class L1SubmissionData {
     private Long creationSlot;
 
     @Nullable
+    private String publishStatusErrorReason;
+
+    private Long publishRetry = 0L;
+
+    @Nullable
     @Enumerated(STRING)
     @JdbcType(PostgreSQLEnumJdbcType.class)
     private BlockchainPublishStatus publishStatus;
@@ -63,6 +68,10 @@ public class L1SubmissionData {
 
     public Optional<BlockchainPublishStatus> getPublishStatus() {
         return Optional.ofNullable(publishStatus);
+    }
+
+    public Optional<String> getPublishStatusErrorReason() {
+        return Optional.ofNullable(publishStatusErrorReason);
     }
 
     public void setFinalityScore(FinalityScore assuranceLevel) {

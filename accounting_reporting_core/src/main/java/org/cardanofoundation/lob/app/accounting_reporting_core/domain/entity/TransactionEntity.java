@@ -7,11 +7,13 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
@@ -40,7 +42,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @NoArgsConstructor
 @AllArgsConstructor
 @Audited
-@EntityListeners({ OverallStatusTransactionEntityListener.class, AuditingEntityListener.class })
+@EntityListeners({OverallStatusTransactionEntityListener.class, AuditingEntityListener.class})
 @Builder
 public class TransactionEntity extends CommonEntity implements Persistable<String> {
 
@@ -54,15 +56,15 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @LOBVersionSourceRelevant
     @Getter
     @Setter
-    private String transactionInternalNumber;
+    private String internalTransactionNumber;
 
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "accounting_core_transaction_batch_assoc",
+    @JoinTable(name = "accounting_core_transaction_batch_assoc",
             joinColumns = @JoinColumn(name = "transaction_id"),
             inverseJoinColumns = @JoinColumn(name = "transaction_batch_id"))
     @NotNull
     @Getter
+    @Builder.Default
     private Set<TransactionBatchEntity> batches = new LinkedHashSet<>();
 
     @Column(name = "batch_id", nullable = false)
@@ -106,14 +108,20 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @JdbcType(PostgreSQLEnumJdbcType.class)
     @Getter
     @Setter
-    // https://www.baeldung.com/java-enums-jpa-postgresql
+    @Builder.Default
     private LedgerDispatchStatus ledgerDispatchStatus = NOT_DISPATCHED;
+
+    @Getter
+    @Setter
+    @Column(name = "ledger_dispatch_status_error_reason")
+    private String ledgerDispatchStatusErrorReason;
 
     @Embedded
     @AttributeOverrides({
-            @AttributeOverride(name = "primaryBlockchainType", column = @Column(name = "primary_blockchain_type")),
-            @AttributeOverride(name = "primaryBlockchainHash", column = @Column(name = "primary_blockchain_hash"))
-    })
+            @AttributeOverride(name = "primaryBlockchainType",
+                    column = @Column(name = "primary_blockchain_type")),
+            @AttributeOverride(name = "primaryBlockchainHash",
+                    column = @Column(name = "primary_blockchain_hash"))})
     @Setter
     @Nullable
     private LedgerDispatchReceipt ledgerDispatchReceipt;
@@ -122,10 +130,12 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @AttributeOverrides({
             @AttributeOverride(name = "id", column = @Column(name = "organisation_id")),
             @AttributeOverride(name = "name", column = @Column(name = "organisation_name")),
-            @AttributeOverride(name = "countryCode", column = @Column(name = "organisation_country_code")),
-            @AttributeOverride(name = "taxIdNumber", column = @Column(name = "organisation_tax_id_number")),
-            @AttributeOverride(name = "currencyId", column = @Column(name = "organisation_currency_id"))
-    })
+            @AttributeOverride(name = "countryCode",
+                    column = @Column(name = "organisation_country_code")),
+            @AttributeOverride(name = "taxIdNumber",
+                    column = @Column(name = "organisation_tax_id_number")),
+            @AttributeOverride(name = "currencyId",
+                    column = @Column(name = "organisation_currency_id"))})
     @Getter
     @Setter
     private Organisation organisation;
@@ -135,22 +145,38 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @JdbcType(PostgreSQLEnumJdbcType.class)
     @Getter
     @Setter
+    @Builder.Default
     private TxValidationStatus automatedValidationStatus = TxValidationStatus.VALIDATED;
+
+    @Column(name = "total_amount_lcy")
+    @Getter
+    @Setter
+    private BigDecimal totalAmountLcy = BigDecimal.ZERO;
 
     @Column(name = "transaction_approved", nullable = false)
     @Getter
     @Setter
     @DiffIgnore
+    @Builder.Default
     private Boolean transactionApproved = false;
 
     @Column(name = "ledger_dispatch_approved", nullable = false)
     @Getter
     @Setter
     @DiffIgnore
+    @Builder.Default
     private Boolean ledgerDispatchApproved = false;
 
-    @OneToMany(mappedBy = "transaction", orphanRemoval = true, fetch = EAGER, cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "transaction", orphanRemoval = true, fetch = EAGER,
+            cascade = CascadeType.ALL)
+    @Builder.Default
     private Set<TransactionItemEntity> items = new LinkedHashSet<>();
+
+    @Column(name = "item_count", nullable = false)
+    @Getter
+    @Setter
+    @Builder.Default
+    private int itemCount = 0;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reconcilation_id")
@@ -171,29 +197,34 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @Embedded
     @AttributeOverrides({
-        @AttributeOverride(name = "source", column = @Column(name = "reconcilation_source")),
-        @AttributeOverride(name = "sink", column = @Column(name = "reconcilation_sink")),
-        @AttributeOverride(name = "finalStatus", column = @Column(name = "reconcilation_final_status"))
-    })
+            @AttributeOverride(name = "source", column = @Column(name = "reconcilation_source")),
+            @AttributeOverride(name = "sink", column = @Column(name = "reconcilation_sink")),
+            @AttributeOverride(name = "finalStatus",
+                    column = @Column(name = "reconcilation_final_status"))})
     @Nullable
     @DiffIgnore
     private Reconcilation reconcilation;
 
     @ElementCollection(fetch = EAGER)
-    @CollectionTable(name = "accounting_core_transaction_violation", joinColumns = @JoinColumn(name = "transaction_id"))
+    @CollectionTable(name = "accounting_core_transaction_violation",
+            joinColumns = @JoinColumn(name = "transaction_id"))
     @Audited
     @AttributeOverrides({
             @AttributeOverride(name = "code", column = @Column(name = "code", nullable = false)),
             @AttributeOverride(name = "subCode", column = @Column(name = "sub_code")),
             @AttributeOverride(name = "type", column = @Column(name = "type", nullable = false)),
             @AttributeOverride(name = "txItemId", column = @Column(name = "tx_item_id")),
-            @AttributeOverride(name = "source", column = @Column(name = "source", nullable = false, columnDefinition = "accounting_core_source_type")),
-            @AttributeOverride(name = "processorModule", column = @Column(name = "processor_module", nullable = false)),
-            @AttributeOverride(name = "bag", column = @Column(name = "detail_bag", nullable = false))
-    })
+            @AttributeOverride(name = "source",
+                    column = @Column(name = "source", nullable = false,
+                            columnDefinition = "accounting_core_source_type")),
+            @AttributeOverride(name = "processorModule",
+                    column = @Column(name = "processor_module", nullable = false)),
+            @AttributeOverride(name = "bag",
+                    column = @Column(name = "detail_bag", nullable = false))})
     @DiffIgnore
     @Getter
     @Setter
+    @Builder.Default
     private Set<TransactionViolation> violations = new LinkedHashSet<>();
 
     public Optional<TransactionProcessingStatus> getProcessingStatus() {
@@ -202,6 +233,44 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @PrePersist
     @PreUpdate
+    public void preUpdate() {
+        updateItemCount();
+        updateTotalAmountLcy();
+        updateProcessingStatus();
+    }
+
+    public void updateItemCount() {
+        this.itemCount = (int) items.stream().filter(item -> item.getStatus().isOK()).count();
+    }
+
+    public void updateTotalAmountLcy() {
+        this.totalAmountLcy = getAmountLcyTotalForAllDebitItems();
+    }
+
+    public BigDecimal getAmountLcyTotalForAllDebitItems() {
+        Set<TransactionItemEntity> items = this.getItems();
+
+        if (this.getTransactionType().equals(TransactionType.Journal)) {
+            items = this.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(Collectors.toSet());
+        }
+
+        if (this.getTransactionType().equals(TransactionType.FxRevaluation)) {
+            BigDecimal totalCredit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            BigDecimal totalDebit = items.stream()
+                    .filter(item -> item.getOperationType().equals(OperationType.DEBIT))
+                    .map(TransactionItemEntity::getAmountLcy)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add); // Use ZERO as identity for sum
+
+            return totalCredit.subtract(totalDebit).abs();
+        }
+        return items.stream().map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add).abs();
+    }
+
     public void updateProcessingStatus() {
         recalcValidationStatus();
         if (getAutomatedValidationStatus() == FAILED) {
@@ -210,7 +279,9 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
                 return;
             }
             if (hasAnyRejection()) {
-                if (getItems().stream().anyMatch(transactionItemEntity -> transactionItemEntity.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == ERP))) {
+                if (getItems().stream().anyMatch(transactionItemEntity -> transactionItemEntity
+                        .getRejection().stream().anyMatch(
+                                rejection -> rejection.getRejectionReason().getSource() == ERP))) {
                     this.setProcessingStatus(TransactionProcessingStatus.INVALID);
                     return;
                 }
@@ -222,7 +293,9 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
         }
 
         if (hasAnyRejection()) {
-            if (getItems().stream().anyMatch(transactionItemEntity -> transactionItemEntity.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == ERP))) {
+            if (getItems().stream().anyMatch(
+                    transactionItemEntity -> transactionItemEntity.getRejection().stream().anyMatch(
+                            rejection -> rejection.getRejectionReason().getSource() == ERP))) {
                 this.setProcessingStatus(TransactionProcessingStatus.INVALID);
                 return;
             }
@@ -273,7 +346,8 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     public void clearAllItemsRejectionsSource(Source source) {
         for (TransactionItemEntity txItem : items) {
-            if (txItem.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == source)) {
+            if (txItem.getRejection().stream()
+                    .anyMatch(rejection -> rejection.getRejectionReason().getSource() == source)) {
                 txItem.setRejection(Optional.empty());
             }
 
@@ -286,7 +360,8 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     public boolean hasAnyRejection(Source source) {
         for (TransactionItemEntity txItem : items) {
-            if (txItem.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == source)) {
+            if (txItem.getRejection().stream()
+                    .anyMatch(rejection -> rejection.getRejectionReason().getSource() == source)) {
                 return true;
             }
 
@@ -303,6 +378,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     /**
      * Use only in super exceptional and rare cases(!), typically only from unit tests(!)
+     *
      * @return all items including ERASED tx items
      */
     public Set<TransactionItemEntity> getAllItems() {
@@ -311,15 +387,15 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     public void setItems(Set<TransactionItemEntity> items) {
         if (items.stream().anyMatch(item -> item.getStatus().isErased())) {
-            throw new IllegalArgumentException("Cannot set items with ERASED status, please use setAllItems method");
+            throw new IllegalArgumentException(
+                    "Cannot set items with ERASED status, please use setAllItems method");
         }
 
         this.items = items;
     }
 
     public Set<TransactionItemEntity> getItems() {
-        return items.stream()
-                .filter(item -> item.getStatus().isOK()).collect(toSet());
+        return items.stream().filter(item -> item.getStatus().isOK()).collect(toSet());
     }
 
     public boolean hasAnyItemsErased() {
@@ -347,8 +423,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     }
 
     public boolean isDispatchable() {
-        return overallStatus == TransactionStatus.OK
-                && ledgerDispatchStatus == NOT_DISPATCHED;
+        return overallStatus == TransactionStatus.OK && ledgerDispatchStatus == NOT_DISPATCHED;
     }
 
     public Optional<Reconcilation> getReconcilation() {
@@ -381,8 +456,10 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         TransactionEntity that = (TransactionEntity) o;
 
         return Objects.equal(id, that.id);
@@ -400,7 +477,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @Override
     public String toString() {
-        return "TransactionEntity{id='%s, transactionInternalNumber='%s, batchId='%s'}".formatted(
-                id, transactionInternalNumber, batchId);
+        return "TransactionEntity{id='%s, transactionInternalNumber='%s, batchId='%s'}"
+                .formatted(id, internalTransactionNumber, batchId);
     }
 }

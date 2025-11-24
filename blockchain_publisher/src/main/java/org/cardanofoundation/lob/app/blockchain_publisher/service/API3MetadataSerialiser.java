@@ -10,8 +10,11 @@ import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Service;
 
+import co.nstant.in.cbor.CborException;
+import com.bloxbean.cardano.client.crypto.bip39.Sha256Hash;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
+import com.bloxbean.cardano.client.util.HexUtil;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.BalanceSheetData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.IncomeStatementData;
@@ -23,8 +26,36 @@ import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 @RequiredArgsConstructor
 public class API3MetadataSerialiser {
 
-    public static final String VERSION = "1.1";
+    public static final String VERSION = "1.2";
     private final Clock clock;
+
+    public MetadataMap serializeToKeriMap(ReportEntity reportEntity) {
+        MetadataMap globalMetadataMap = MetadataBuilder.createMap();
+        globalMetadataMap.put("org", serialiseOrganisation(reportEntity.getOrganisation()));
+        globalMetadataMap.put("subType", reportEntity.getType().name());
+        globalMetadataMap.put("interval", reportEntity.getIntervalType().name());
+        globalMetadataMap.put("year", reportEntity.getYear().toString());
+        globalMetadataMap.put("mode", reportEntity.getMode().name());
+        globalMetadataMap.put("ver", BigInteger.valueOf(reportEntity.getVer()));
+
+        MetadataMap dataMap;
+        switch (reportEntity.getType()) {
+            case BALANCE_SHEET -> dataMap = serialiseBalanceSheetData(
+                    reportEntity.getBalanceSheetReportData().orElseThrow());
+            case INCOME_STATEMENT -> dataMap = serialiseIncomeStatementData(
+                    reportEntity.getIncomeStatementReportData().orElseThrow());
+            default -> throw new IllegalArgumentException(
+                    "Unsupported report type: %s".formatted(reportEntity.getType()));
+        }
+        try {
+            // Convert the hash to a hex String and put into globalDataMap
+            globalMetadataMap.put("dataHash", HexUtil.encodeHexString(Sha256Hash.hash(
+                    dataMap.toJson().getBytes())));
+        } catch (CborException e) {
+            throw new IllegalArgumentException("Failed to calculate data hash", e);
+        }
+        return globalMetadataMap;
+    }
 
     public MetadataMap serialiseToMetadataMap(ReportEntity reportEntity,
                                               long creationSlot) {

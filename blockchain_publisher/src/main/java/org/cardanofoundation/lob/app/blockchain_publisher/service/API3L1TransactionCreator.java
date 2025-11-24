@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -49,6 +50,9 @@ public class API3L1TransactionCreator {
 
     private final int metadataLabel;
     private final boolean debugStoreOutputTx;
+    private final boolean keriEnabled;
+    private final Optional<KeriService> keriService;
+    private final int keriMetadataLabel;
 
     private String runId;
 
@@ -74,6 +78,7 @@ public class API3L1TransactionCreator {
             MetadataMap metadataMap =
                     api3MetadataSerialiser.serialiseToMetadataMap(reportEntity, creationSlot);
 
+
             Map data = metadataMap.getMap();
             byte[] bytes = CborSerializationUtil.serialize(data);
 
@@ -84,12 +89,18 @@ public class API3L1TransactionCreator {
             CBORMetadataMap cborMetadataMap = new CBORMetadataMap(data);
 
             metadata.put(metadataLabel, cborMetadataMap);
-
+            if (keriEnabled) {
+                metadata.put(
+                        keriMetadataLabel,
+                        keriService.orElseThrow(
+                                () -> new IllegalStateException("KeriService not available"))
+                                .interactWithIdentifier(cborMetadataMap)); // using the complete data for KERI
+            }
             boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
 
             if (!isValid) {
                 return Either.left(Problem.builder()
-                        .withTitle("INVALID_TRANSACTION_METADATA")
+                        .withTitle("INVALID_REPORT_METADATA")
                         .withDetail("Metadata is not valid according to the transaction schema, we will not create a transaction!")
                         .withStatus(INTERNAL_SERVER_ERROR)
                         .build()
@@ -109,7 +120,7 @@ public class API3L1TransactionCreator {
             log.error("Error serialising metadata to cbor", e);
             return Either.left(Problem.builder()
                     .withTitle("ERROR_SERIALISING_METADATA")
-                    .withDetail("Error serialising metadata to cbor")
+                    .withDetail(e.getMessage())
                     .withStatus(INTERNAL_SERVER_ERROR)
                     .build()
             );

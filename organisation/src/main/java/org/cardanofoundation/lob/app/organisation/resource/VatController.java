@@ -4,6 +4,7 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -11,6 +12,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -47,8 +50,17 @@ public class VatController {
             ),
     })
     @GetMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<VatView>> getVatCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
-        return ResponseEntity.ok().body(vatService.findAllByOrganisationId(orgId));
+    public ResponseEntity<?> getVatCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                     @RequestParam(value = "customerCode", required = false) String customerCode,
+                                                     @RequestParam(value = "minRate", required = false) Double minRate,
+                                                     @RequestParam(value = "maxRate", required = false) Double maxRate,
+                                                     @RequestParam(value = "description", required = false) String description,
+                                                     @RequestParam(value = "countryCodes", required = false) List<String> countryCodes,
+                                                     @RequestParam(value = "active", required = false) Boolean active,
+                                                     @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        return vatService.findAllByOrganisationId(orgId, customerCode, minRate, maxRate, description, countryCodes, active, pageable).fold(
+                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                ResponseEntity::ok);
 
     }
 

@@ -25,11 +25,11 @@ public class DispatcherJob {
             fixedDelayString = "${lob.blockchain.dispatcher.fixed_delay:PT1M}",
             initialDelayString = "${lob.blockchain.dispatcher.initial_delay:PT10S}")
     public void execute() {
-        log.info("Executing TransactionDispatcherJob...");
+        log.debug("Executing TransactionDispatcherJob...");
 
         ledgerService.dispatchPending(dispatchPendingPullLimit);
 
-        log.info("Finished executing TransactionDispatcherJob.");
+        log.debug("Finished executing TransactionDispatcherJob.");
     }
 
 }

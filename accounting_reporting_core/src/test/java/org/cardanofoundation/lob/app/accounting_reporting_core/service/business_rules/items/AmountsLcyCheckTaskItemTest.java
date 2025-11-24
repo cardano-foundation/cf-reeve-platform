@@ -40,7 +40,7 @@ class AmountsLcyCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setTransactionInternalNumber("1");
+        tx.setInternalTransactionNumber("1");
         tx.setOrganisation(Organisation.builder().id(orgId).build());
         tx.setItems(Set.of(txItem1));
 
@@ -62,7 +62,7 @@ class AmountsLcyCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setTransactionInternalNumber("2");
+        tx.setInternalTransactionNumber("2");
         tx.setOrganisation(Organisation.builder().id("1").build());
         tx.setItems(Set.of(txItem1));
 
@@ -83,7 +83,7 @@ class AmountsLcyCheckTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setTransactionInternalNumber("3");
+        tx.setInternalTransactionNumber("3");
         tx.setOrganisation(Organisation.builder().id("1").build());
         tx.setItems(Set.of(txItem1));
 

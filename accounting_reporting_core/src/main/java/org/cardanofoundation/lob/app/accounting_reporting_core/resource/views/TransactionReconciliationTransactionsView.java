@@ -17,7 +17,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 
 
@@ -38,7 +38,7 @@ public class TransactionReconciliationTransactionsView {
 
     private Optional<TransactionStatus> status = Optional.empty();
 
-    private Optional<LedgerDispatchStatusView> statistic = Optional.of(LedgerDispatchStatusView.PENDING);
+    private Optional<TransactionProcessingStatus> statistic = Optional.of(TransactionProcessingStatus.PENDING);
 
     private Optional<TxValidationStatus> validationStatus = Optional.of(TxValidationStatus.VALIDATED);
 

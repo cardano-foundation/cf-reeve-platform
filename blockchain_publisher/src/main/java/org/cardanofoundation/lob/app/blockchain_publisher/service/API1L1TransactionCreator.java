@@ -91,7 +91,7 @@ public class API1L1TransactionCreator {
 
             return Either.left(Problem.builder()
                     .withTitle("ERROR_CREATING_TRANSACTION")
-                    .withDetail("Exception encountered: %s".formatted(e.getMessage()))
+                    .withDetail("%s".formatted(e.getMessage()))
                     .withStatus(INTERNAL_SERVER_ERROR)
                     .build());
         }
@@ -242,7 +242,7 @@ public class API1L1TransactionCreator {
             log.error("Error serialising metadata to cbor", e);
             return Either.left(Problem.builder()
                     .withTitle("ERROR_SERIALISING_METADATA")
-                    .withDetail("Error serialising metadata to cbor")
+                    .withDetail(e.getMessage())
                     .withStatus(INTERNAL_SERVER_ERROR)
                     .build()
             );

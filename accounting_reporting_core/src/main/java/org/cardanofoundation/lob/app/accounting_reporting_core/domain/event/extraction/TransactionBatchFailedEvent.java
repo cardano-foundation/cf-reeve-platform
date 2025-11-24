@@ -9,6 +9,7 @@ import lombok.*;
 
 import org.jmolecules.event.annotation.DomainEvent;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
@@ -36,6 +37,9 @@ public class TransactionBatchFailedEvent {
 
     @NotNull
     private FatalError error;
+
+    @Builder.Default
+    private ExtractorType extractorType = ExtractorType.NETSUITE;
 
     @NotNull
     private UserExtractionParameters userExtractionParameters;

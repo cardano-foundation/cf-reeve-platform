@@ -1,0 +1,7 @@
+Report,Period,Year,Interval Type,Field,Amount
+INCOME_STATEMENT,1,2024,QUARTER,Other Income,100000.1
+INCOME_STATEMENT,1,2024,QUARTER,Build Of Long Term Provision,40000
+INCOME_STATEMENT,1,2024,QUARTER,External Services,60000
+INCOME_STATEMENT,1,2024,QUARTER,Personnel Expenses,20000
+INCOME_STATEMENT,1,2024,QUARTER,Depreciation And Impairment Losses On Tangible Assets,40000
+BALANCE_SHEET,1,2024,QUARTER,Tangible Assets,500000

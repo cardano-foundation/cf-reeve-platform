@@ -89,7 +89,7 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
                 .bag(Map.of(
                         "accountCode", accountCode,
                         "type", type.name(),
-                        "transactionNumber", tx.getTransactionInternalNumber()
+                        "transactionNumber", tx.getInternalTransactionNumber()
                 ))
                 .build();
 
@@ -107,7 +107,7 @@ public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
                 .processorModule(this.getClass().getSimpleName())
                 .bag(Map.of(
                         "eventCode", eventCode,
-                        "transactionNumber", tx.getTransactionInternalNumber()
+                        "transactionNumber", tx.getInternalTransactionNumber()
                 ))
                 .build();
 

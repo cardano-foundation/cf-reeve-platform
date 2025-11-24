@@ -3,17 +3,22 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -23,18 +28,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.SearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionItemsRejectionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionsRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilterOptionsResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchReprocessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemsProcessRejectView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceTest {
@@ -43,6 +54,10 @@ class AccountingCoreResourceTest {
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
     @Mock
     private OrganisationPublicApi organisationPublicApi;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private SortFieldMappings sortFieldMappings;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
@@ -50,7 +65,7 @@ class AccountingCoreResourceTest {
 
     @BeforeEach
     void setUp() {
-        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi);
+        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi, keycloakSecurityHelper, sortFieldMappings);
     }
 
     @Test
@@ -143,10 +158,11 @@ class AccountingCoreResourceTest {
     void listAllBatches_test() {
         BatchSearchRequest body = mock(BatchSearchRequest.class);
         BatchsDetailView batchsDetailView = mock(BatchsDetailView.class);
+        Pageable pageable = Pageable.ofSize(10).withPage(0);
+        when(sortFieldMappings.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));
+        when(accountingCorePresentationViewService.listAllBatch(body, pageable)).thenReturn(Either.right(batchsDetailView));
 
-        when(accountingCorePresentationViewService.listAllBatch(body)).thenReturn(batchsDetailView);
-
-        ResponseEntity<BatchsDetailView> listResponseEntity = accountingCoreResource.listAllBatches(body, 0, 0);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
     }
@@ -164,9 +180,10 @@ class AccountingCoreResourceTest {
 
     @Test
     void batchesDetailTest_error() {
-        when(accountingCorePresentationViewService.batchDetail("123", List.of(), Pageable.unpaged())).thenReturn(Optional.empty());
+        Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.empty()));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", Optional.empty(), Optional.empty(), List.of());
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
@@ -174,10 +191,40 @@ class AccountingCoreResourceTest {
     @Test
     void batchesDetailTest_success() {
         BatchView mock = mock(BatchView.class);
-        when(accountingCorePresentationViewService.batchDetail("123", List.of(), Pageable.unpaged())).thenReturn(Optional.of(mock));
+        Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.of(mock)));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", Optional.empty(), Optional.empty(), List.of());
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void filterOptions_unauthorized() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<FilterOptionsResponse> response = accountingCoreResource.getFilterOptions("org123", List.of());
+        assertTrue(response.getStatusCode().is4xxClientError());
+        assertNotNull(response.getBody());
+    }
+
+    @Test
+    void filterOptions_orgNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.empty());
+
+        ResponseEntity<FilterOptionsResponse> response = accountingCoreResource.getFilterOptions("org123", List.of());
+        assertTrue(response.getStatusCode().is4xxClientError());
+        assertNotNull(response.getBody());
+    }
+
+    @Test void filterOptions_success() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(accountingCorePresentationViewService.getFilterOptions(List.of(), "org123")).thenReturn(mock(Map.class));
+
+        ResponseEntity<FilterOptionsResponse> response = accountingCoreResource.getFilterOptions("org123", List.of());
+        assertTrue(response.getStatusCode().is2xxSuccessful());
+        assertNotNull(response.getBody());
     }
 }

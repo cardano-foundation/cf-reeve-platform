@@ -32,6 +32,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.PublicReportSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -76,7 +77,7 @@ public class PublicInterfaceController {
                         reportSearchRequest.getIntervalType(),
                         reportSearchRequest.getYear(),
                         reportSearchRequest.getPeriod()
-                ).stream().map(reportViewService::responseView).toList())
+                ).stream().map(ReportView::fromEntity).toList())
         );
     }
 

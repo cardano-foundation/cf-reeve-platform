@@ -43,7 +43,7 @@ public class TransactionEntityRepositoryGateway {
         return transactionEntityRepository.findById(txId);
     }
 
-    public Set<TransactionEntity> findAndLockTransactionsReadyToBeDispatched(String organisationId, int pullTransactionsBatchSize) {
+    public Set<TransactionEntity> findTransactionsReadyToBeDispatched(String organisationId, int pullTransactionsBatchSize) {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
         Limit limit = Limit.of(pullTransactionsBatchSize);
 
@@ -55,9 +55,7 @@ public class TransactionEntityRepositoryGateway {
         if (transactionsByStatus.isEmpty()) {
             return transactionsByStatus;
         }
-        // This logic could be moved to the repository, but for now it is easier to test it here
-        transactionsByStatus.forEach(tx -> tx.setLockedAt(LocalDateTime.now(clock)));
-        transactionEntityRepository.saveAll(transactionsByStatus);
+
         return transactionsByStatus;
     }
 
@@ -109,6 +107,12 @@ public class TransactionEntityRepositoryGateway {
     public void unlockTransactions(Set<TransactionEntity> transactionsBatch) {
         transactionsBatch.forEach(transactionEntity ->
                 transactionEntity.setLockedAt(null));
+        transactionEntityRepository.saveAll(transactionsBatch);
+    }
+
+    public void lockTransactions(Set<TransactionEntity> transactionsBatch) {
+        transactionsBatch.forEach(transactionEntity ->
+                transactionEntity.setLockedAt(LocalDateTime.now(clock)));
         transactionEntityRepository.saveAll(transactionsBatch);
     }
 }

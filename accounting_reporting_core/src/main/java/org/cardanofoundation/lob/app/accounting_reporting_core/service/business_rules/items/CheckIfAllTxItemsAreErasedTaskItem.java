@@ -40,7 +40,7 @@ public class CheckIfAllTxItemsAreErasedTaskItem implements PipelineTaskItem {
     }
 
     private Map<String, Object> createViolationBag(TransactionEntity tx) {
-        return Map.of("transactionNumber", tx.getTransactionInternalNumber());
+        return Map.of("transactionNumber", tx.getInternalTransactionNumber());
     }
 
 }

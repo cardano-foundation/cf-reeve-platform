@@ -45,7 +45,7 @@ public class CostCenterConversionTaskItem implements PipelineTaskItem {
                         .bag(
                                 Map.of(
                                         "customerCode", customerCode,
-                                        "transactionNumber", tx.getTransactionInternalNumber()
+                                        "transactionNumber", tx.getInternalTransactionNumber()
                                 )
                         )
                         .build();

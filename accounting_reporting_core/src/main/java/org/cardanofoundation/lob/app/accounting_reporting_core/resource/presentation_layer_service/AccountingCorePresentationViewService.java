@@ -2,10 +2,8 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.present
 
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView.*;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -15,32 +13,43 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationViolation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
-import org.cardanofoundation.lob.app.organisation.repository.ProjectMappingRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
+import org.cardanofoundation.lob.app.support.javers.BagParser;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -52,207 +61,320 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 // presentation layer service
 public class AccountingCorePresentationViewService {
 
+    private final ValidateIngestionResponseWaiter validateIngestionResponseWaiter;
+
     private final TransactionRepositoryGateway transactionRepositoryGateway;
     private final AccountingCoreService accountingCoreService;
     private final TransactionBatchRepositoryGateway transactionBatchRepositoryGateway;
     private final TransactionReconcilationRepository transactionReconcilationRepository;
     private final CostCenterRepository costCenterRepository;
-    private final ProjectMappingRepository projectMappingRepository;
-    private final OrganisationPublicApiIF organisationPublicApiIF;
-
-    /**
-     * TODO: waiting for refactoring the layer to remove this
-     */
+    private final ProjectRepository projectRepository;
+    private final TransactionItemRepository transactionItemRepository;
+    private final ReconcilationRepository reconcilationRepository;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
+    private final SortFieldMappings sortFieldMappings;
 
-    public ReconciliationResponseView allReconciliationTransaction(ReconciliationFilterRequest body) {
-        Object transactionsStatistic = accountingCoreTransactionRepository.findCalcReconciliationStatistic();
-        Optional<ReconcilationEntity> latestReconcilation = transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
+    private static final Map<String, String> RV_FIELD_MAP =
+            Map.of("id", "transactionId",
+                    "internalNumber", "transactionInternalNumber",
+                    "internalTransactionNumber", "transactionInternalNumber",
+                    "entryDate", "transactionEntryDate",
+                    "function('enum_to_text', transactionType)", "transactionType",
+                    "totalAmountLcy", "amountLcySum"
+            );
+
+    // This function is to add dynamically sort for violations, since we are
+    // querying two types at the same time for performance.
+    // This function adds rv.<field> for each shared field in the sort if there is a
+    // tr.<field>
+    public Pageable expandSorts(Pageable pageable, boolean mapRv) {
+        if (pageable == null || pageable.getSort().isUnsorted()) {
+            return pageable;
+        }
+
+        List<Sort.Order> newOrders = new ArrayList<>();
+
+        pageable.getSort().forEach(order -> {
+            String field = order.getProperty();
+
+            // if field has an rv mapping → also add rv.<mappedField>
+            if (RV_FIELD_MAP.containsKey(field) && mapRv) {
+                String rvField = RV_FIELD_MAP.get(field);
+                if (field.contains("function('enum_to_text', ")) {
+                    rvField = field.replace("function('enum_to_text', ", "function('enum_to_text', rv.");
+                    Sort newSort = JpaSort.unsafe(order.getDirection(),
+                            rvField);
+                    newOrders.add(newSort.iterator().next());
+                } else {
+                    newOrders.add(new Sort.Order(order.getDirection(),
+                            "rv." + rvField));
+                }
+            }
+
+            if (field.contains("function('enum_to_text', ")) {
+                field = field.replace("function('enum_to_text', ", "function('enum_to_text', tr.");
+                Sort newSort = JpaSort.unsafe(order.getDirection(), field);
+                newOrders.add(newSort.iterator().next());
+            } else {
+                newOrders.add(new Sort.Order(order.getDirection(), "tr." + field));
+            }
+
+        });
+
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(newOrders));
+    }
+
+    public ReconciliationResponseView allReconciliationTransaction(
+            ReconciliationFilterRequest body, Pageable pageable) {
+        Object transactionsStatistic = reconcilationRepository
+                .findCalcReconciliationStatistic();
+        Optional<ReconcilationEntity> latestReconcilation =
+                transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
         Set<TransactionReconciliationTransactionsView> transactions;
         long count;
+        Set<ReconcilationRejectionCode> rejectionCodes = body
+                .getReconciliationRejectionCode().stream()
+                .map(ReconciliationRejectionCodeRequest::toReconcilationRejectionCode)
+                .collect(Collectors.toSet());
         if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
-            Set<Object> txDuplicated = new HashSet<>();
-            transactions = accountingCoreTransactionRepository.findAllReconciliationSpecial(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getLimit(), body.getPage()).stream()
-                    .filter(o -> {
-                        if (o[0] instanceof TransactionEntity transactionEntity && !txDuplicated.contains((transactionEntity).getId())) {
-                            txDuplicated.add((transactionEntity).getId());
-                            return true;
-                        }
-
-                        if (o[1] instanceof ReconcilationViolation reconcilationViolation && !txDuplicated.contains((reconcilationViolation).getTransactionId())) {
-                            txDuplicated.add((reconcilationViolation).getTransactionId());
-                            return true;
-                        }
-
-                        return false;
-                    })
+            pageable = expandSorts(pageable, true);
+            Page<TransactionWithViolationDto> allReconciliationSpecial =
+                    reconcilationRepository.findAllReconciliationSpecial(
+                            rejectionCodes.isEmpty() ? null
+                                    : rejectionCodes,
+                            body.getDateFrom().orElse(null),
+                            body.getDateTo().orElse(null),
+                            body.getSource().map(t -> t.name())
+                                    .orElse(null),
+                            body.getTransactionTypes().isEmpty() ? null
+                                    : body.getTransactionTypes(),
+                            body.getTransactionId(), pageable);
+            count = allReconciliationSpecial.getTotalElements();
+            transactions = allReconciliationSpecial.stream()
                     .map(this::getReconciliationTransactionsSelector)
-                    .sorted(Comparator.comparing(TransactionReconciliationTransactionsView::getId))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            count = accountingCoreTransactionRepository.findAllReconciliationSpecialCount(body.getReconciliationRejectionCode(), body.getDateFrom(), body.getDateTo(), body.getLimit(), body.getPage()).size();
         } else {
-            transactions = accountingCoreTransactionRepository.findAllReconciliation(body.getFilter(), body.getSource(), body.getLimit(), body.getPage()).stream()
+            pageable = expandSorts(pageable, false);
+            Page<TransactionEntity> pagedTransactions = reconcilationRepository
+                    .findAllReconcilation(body.getFilter().name(),
+                            body.getDateFrom().orElse(null),
+                            body.getDateTo().orElse(null),
+                            body.getTransactionTypes().isEmpty() ? null
+                                    : body.getTransactionTypes(),
+                            body.getTransactionId(), body.getSource().map(t -> t.name()).orElse(null),
+                            pageable);
+            count = pagedTransactions.getTotalElements();
+            transactions = pagedTransactions.stream()
                     .map(this::getTransactionReconciliationView)
                     .collect(toSet());
-            count = accountingCoreTransactionRepository.findAllReconciliationCount(body.getFilter(), body.getSource(), body.getLimit(), body.getPage()).size();
         }
-        return new ReconciliationResponseView(
-                count,
+        return new ReconciliationResponseView(count,
                 latestReconcilation.flatMap(ReconcilationEntity::getFrom),
                 latestReconcilation.flatMap(ReconcilationEntity::getTo),
-                latestReconcilation.map(reconcilationEntity -> reconcilationEntity.getUpdatedAt().toLocalDate()),
+                latestReconcilation.map(reconcilationEntity -> reconcilationEntity
+                        .getUpdatedAt().toLocalDate()),
                 getTransactionReconciliationStatistic(transactionsStatistic),
-                transactions
-        );
+                transactions);
     }
 
     public List<TransactionView> allTransactions(SearchRequest body) {
         List<TransactionEntity> transactions = transactionRepositoryGateway.findAllByStatus(
-                body.getOrganisationId(),
-                body.getStatus(),
+                body.getOrganisationId(), body.getStatus(),
                 body.getTransactionType(),
                 PageRequest.of(body.getPage(), body.getSize()));
 
-        return transactions.stream()
-                .map(this::getTransactionView)
-                .sorted(Comparator.comparing(TransactionView::getAmountTotalLcy).reversed())
+        return transactions.stream().map(this::getTransactionView).sorted(
+                        Comparator.comparing(TransactionView::getAmountTotalLcy).reversed())
                 .toList();
     }
 
     public Optional<TransactionView> transactionDetailSpecific(String transactionId) {
-        Optional<TransactionEntity> transactionEntity = transactionRepositoryGateway.findById(transactionId);
+        Optional<TransactionEntity> transactionEntity =
+                transactionRepositoryGateway.findById(transactionId);
 
         return transactionEntity.map(this::getTransactionView);
     }
 
-    public Optional<BatchView> batchDetail(String batchId, List<TransactionProcessingStatus> txStatus, Pageable page) {
-        return transactionBatchRepositoryGateway.findById(batchId).map(transactionBatchEntity -> {
-                    Set<TransactionView> transactions = this.getTransaction(transactionBatchEntity, txStatus, page);
 
-                    BatchStatisticsView statistic = BatchStatisticsView.from(batchId, transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
-                    FilteringParametersView filteringParameters = this.getFilteringParameters(transactionBatchEntity.getFilteringParameters());
+    public Either<Problem, Optional<BatchView>> batchDetail(String batchId,
+                                                            List<TransactionProcessingStatus> txStatus, Pageable page,
+                                                            BatchFilterRequest batchFilterRequest) {
+        Either<Problem, Pageable> pageableEither =
+                sortFieldMappings.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
+        if (pageableEither.isLeft()) {
+            return Either.left(pageableEither.getLeft());
+        }
+        Pageable finalPage = pageableEither.get();
+        return Either.right(transactionBatchRepositoryGateway.findById(batchId)
+                .map(transactionBatchEntity -> {
+                    Page<TransactionEntity> transactions = this.getTransaction(
+                            transactionBatchEntity, txStatus, finalPage,
+                            batchFilterRequest);
 
-                    return new BatchView(
+                    BatchStatisticsView statistic = BatchStatisticsView.from(
+                            batchId,
+                            transactionBatchEntity.getBatchStatistics()
+                                    .orElse(new BatchStatistics()));
+                    FilteringParametersView filteringParameters =
+                            this.getFilteringParameters(
+                                    transactionBatchEntity
+                                            .getFilteringParameters());
+
+                    return new BatchView(transactionBatchEntity.getId(),
+                            transactionBatchEntity.getCreatedAt()
+                                    .toString(),
+                            transactionBatchEntity.getUpdatedAt()
+                                    .toString(),
+                            transactionBatchEntity.getCreatedBy(),
+                            transactionBatchEntity.getUpdatedBy(),
+                            transactionBatchEntity.getOrganisationId(),
+                            transactionBatchEntity.getStatus(),
+                            statistic, filteringParameters,
+                            transactions.stream().map(
+                                            this::getTransactionView)
+                                    .toList(),
+                            convertBagToJson(transactionBatchEntity.getDetails()
+                                    .orElse(Details.builder()
+                                            .build()))
+                                    .getBag(),
+                            transactions.getTotalElements());
+                }));
+    }
+
+    public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Pageable pageable) {
+        BatchsDetailView batchDetailView = new BatchsDetailView();
+        Page<TransactionBatchEntity> transactionBatchEntities =
+                transactionBatchRepositoryGateway.findByFilter(body, pageable);
+        List<BatchView> batches =
+                transactionBatchEntities.stream().map(transactionBatchEntity -> {
+                    BatchStatisticsView statistic = BatchStatisticsView.from(
                             transactionBatchEntity.getId(),
-                            transactionBatchEntity.getCreatedAt().toString(),
-                            transactionBatchEntity.getUpdatedAt().toString(),
+                            transactionBatchEntity.getBatchStatistics()
+                                    .orElse(new BatchStatistics()));
+                    return new BatchView(transactionBatchEntity.getId(),
+                            transactionBatchEntity.getCreatedAt()
+                                    .toString(),
+                            transactionBatchEntity.getUpdatedAt()
+                                    .toString(),
                             transactionBatchEntity.getCreatedBy(),
                             transactionBatchEntity.getUpdatedBy(),
                             transactionBatchEntity.getOrganisationId(),
                             transactionBatchEntity.getStatus(),
                             statistic,
-                            filteringParameters,
-                            transactions,
-                            transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
+                            this.getFilteringParameters(
+                                    transactionBatchEntity
+                                            .getFilteringParameters()),
+                            List.of(),
+                            convertBagToJson(transactionBatchEntity.getDetails()
+                                    .orElse(Details.builder()
+                                            .build()))
+                                    .getBag(),
+                            null // transactions are not loaded here
                     );
-                }
-        );
-    }
-
-    public BatchsDetailView listAllBatch(BatchSearchRequest body) {
-        BatchsDetailView batchDetailView = new BatchsDetailView();
-        List<TransactionBatchEntity> transactionBatchEntities = transactionBatchRepositoryGateway.findByFilter(body);
-        List<BatchView> batches = transactionBatchEntities
-                .stream()
-                .map(
-                        transactionBatchEntity -> {
-                            BatchStatisticsView statistic = BatchStatisticsView.from(transactionBatchEntity.getId(), transactionBatchEntity.getBatchStatistics().orElse(new BatchStatistics()));
-                            return new BatchView(
-                                    transactionBatchEntity.getId(),
-                                    transactionBatchEntity.getCreatedAt().toString(),
-                                    transactionBatchEntity.getUpdatedAt().toString(),
-                                    transactionBatchEntity.getCreatedBy(),
-                                    transactionBatchEntity.getUpdatedBy(),
-                                    transactionBatchEntity.getOrganisationId(),
-                                    transactionBatchEntity.getStatus(),
-                                    statistic,
-                                    this.getFilteringParameters(transactionBatchEntity.getFilteringParameters()),
-                                    Set.of(),
-                                    transactionBatchEntity.getDetails().orElse(Details.builder().build()).getBag()
-
-                            );
-                        }
-                ).toList();
+                }).toList();
 
         batchDetailView.setBatchs(batches);
-        batchDetailView.setTotal(transactionBatchRepositoryGateway.findByFilterCount(body));
+        batchDetailView.setTotal(transactionBatchEntities.getTotalElements());
 
-        return batchDetailView;
+        return Either.right(batchDetailView);
     }
 
     @Transactional
     public Either<Problem, Void> extractionTrigger(ExtractionRequest body) {
         UserExtractionParameters fp = getUserExtractionParameters(body);
 
-        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
+        return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(),
+                Optional.ofNullable(body.getFile()), body.getParameters());
     }
 
     private UserExtractionParameters getUserExtractionParameters(ExtractionRequest body) {
-        ArrayList<String> transactionNumbers = new ArrayList<>(body.getTransactionNumbers());
+        ArrayList<String> transactionNumbers =
+                new ArrayList<>(body.getTransactionNumbers());
         transactionNumbers.removeIf(String::isEmpty);
 
         return UserExtractionParameters.builder()
-                .from(body.getDateFrom().isEmpty() ? LocalDate.EPOCH : LocalDate.parse(body.getDateFrom()))
-                .to(body.getDateTo().isEmpty() ? LocalDate.now() : LocalDate.parse(body.getDateTo()))
+                .from(body.getDateFrom().isEmpty() ? LocalDate.EPOCH
+                        : LocalDate.parse(body.getDateFrom()))
+                .to(body.getDateTo().isEmpty() ? LocalDate.now()
+                        : LocalDate.parse(body.getDateTo()))
                 .organisationId(body.getOrganisationId())
                 .transactionTypes(body.getTransactionType())
-                .transactionNumbers(transactionNumbers)
-                .build();
+                .transactionNumbers(transactionNumbers).build();
     }
 
     public Either<List<Problem>, Void> extractionValidation(ExtractionRequest body) {
-        UserExtractionParameters userExtractionParameters = getUserExtractionParameters(body);
-        return accountingCoreService.validateIngestion(userExtractionParameters, body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters());
+        UserExtractionParameters userExtractionParameters =
+                getUserExtractionParameters(body);
+        return accountingCoreService.validateIngestion(userExtractionParameters,
+                body.getExtractorType(), Optional.ofNullable(body.getFile()),
+                body.getParameters());
     }
 
     @Transactional
-    public List<TransactionProcessView> approveTransactions(TransactionsRequest transactionsRequest) {
+    public List<TransactionProcessView> approveTransactions(
+            TransactionsRequest transactionsRequest) {
         return transactionRepositoryGateway.approveTransactions(transactionsRequest)
                 .stream()
                 .map(txEntityE -> txEntityE.fold(
-                        txProblem -> TransactionProcessView.createFail(txProblem.getId(), txProblem.getProblem()),
-                        success -> TransactionProcessView.createSuccess(success.getId())
-                ))
+                        txProblem -> TransactionProcessView.createFail(
+                                txProblem.getId(),
+                                txProblem.getProblem()),
+                        success -> TransactionProcessView
+                                .createSuccess(success.getId())))
                 .toList();
     }
 
     @Transactional
-    public List<TransactionProcessView> approveTransactionsPublish(TransactionsRequest transactionsRequest) {
+    public List<TransactionProcessView> approveTransactionsPublish(
+            TransactionsRequest transactionsRequest) {
         return transactionRepositoryGateway.approveTransactionsDispatch(transactionsRequest)
                 .stream()
                 .map(txEntityE -> txEntityE.fold(
-                        txProblem -> TransactionProcessView.createFail(txProblem.getId(), txProblem.getProblem()),
-                        success -> TransactionProcessView.createSuccess(success.getId())
-                ))
+                        txProblem -> TransactionProcessView.createFail(
+                                txProblem.getId(),
+                                txProblem.getProblem()),
+                        success -> TransactionProcessView
+                                .createSuccess(success.getId())))
                 .toList();
     }
 
     @Transactional
-    public TransactionItemsProcessRejectView rejectTransactionItems(TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
-        Optional<TransactionEntity> txM = transactionRepositoryGateway.findById(transactionItemsRejectionRequest.getTransactionId());
+    public TransactionItemsProcessRejectView rejectTransactionItems(
+            TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
+        Optional<TransactionEntity> txM = transactionRepositoryGateway
+                .findById(transactionItemsRejectionRequest.getTransactionId());
         if (txM.isEmpty()) {
-            Either<IdentifiableProblem, TransactionEntity> errorE = transactionNotFoundResponse(transactionItemsRejectionRequest.getTransactionId());
-            return TransactionItemsProcessRejectView.createFail(transactionItemsRejectionRequest.getTransactionId(), errorE.getLeft().getProblem());
+            Either<IdentifiableProblem, TransactionEntity> errorE =
+                    transactionNotFoundResponse(transactionItemsRejectionRequest
+                            .getTransactionId());
+            return TransactionItemsProcessRejectView.createFail(
+                    transactionItemsRejectionRequest.getTransactionId(),
+                    errorE.getLeft().getProblem());
 
         }
         TransactionEntity tx = txM.orElseThrow();
-        Set<TransactionItemsProcessView> items = transactionRepositoryGateway.rejectTransactionItems(tx, transactionItemsRejectionRequest.getTransactionItemsRejections())
+        Set<TransactionItemsProcessView> items = transactionRepositoryGateway
+                .rejectTransactionItems(tx,
+                        transactionItemsRejectionRequest
+                                .getTransactionItemsRejections())
                 .stream()
-                .map(txItemEntityE -> txItemEntityE.fold(txProblem -> TransactionItemsProcessView.createFail(txProblem.getId(), txProblem.getProblem())
-                        , success -> TransactionItemsProcessView.createSuccess(success.getId())
-                ))
+                .map(txItemEntityE -> txItemEntityE.fold(
+                        txProblem -> TransactionItemsProcessView.createFail(
+                                txProblem.getId(),
+                                txProblem.getProblem()),
+                        success -> TransactionItemsProcessView
+                                .createSuccess(success.getId())))
                 .collect(toSet());
 
-        return TransactionItemsProcessRejectView.createSuccess(
-                tx.getId(),
-                this.getTransactionDispatchStatus(tx),
-                items
-        );
+        return TransactionItemsProcessRejectView.createSuccess(tx.getId(),
+                tx.getProcessingStatus(), items);
     }
 
     @Transactional
     public BatchReprocessView scheduleReIngestionForFailed(String batchId) {
-        Either<Problem, Void> txM = accountingCoreService.scheduleReIngestionForFailed(batchId);
+        Either<Problem, Void> txM =
+                accountingCoreService.scheduleReIngestionForFailed(batchId);
 
         if (txM.isEmpty()) {
             return BatchReprocessView.createFail(batchId, txM.getLeft());
@@ -262,103 +384,132 @@ public class AccountingCorePresentationViewService {
         return BatchReprocessView.createSuccess(batchId);
     }
 
-    private FilteringParametersView getFilteringParameters(FilteringParameters filteringParameters) {
-        return new FilteringParametersView(
-                filteringParameters.getTransactionTypes(),
-                filteringParameters.getFrom(),
-                filteringParameters.getTo(),
+    private FilteringParametersView getFilteringParameters(
+            FilteringParameters filteringParameters) {
+        return new FilteringParametersView(filteringParameters.getTransactionTypes(),
+                filteringParameters.getFrom(), filteringParameters.getTo(),
                 filteringParameters.getAccountingPeriodFrom(),
                 filteringParameters.getAccountingPeriodTo(),
-                filteringParameters.getTransactionNumbers()
-        );
+                filteringParameters.getTransactionNumbers());
     }
 
-    private Set<TransactionView> getTransaction(TransactionBatchEntity transactionBatchEntity, List<TransactionProcessingStatus> status, Pageable pageable) {
-        return accountingCoreTransactionRepository.findAllByBatchId(transactionBatchEntity.getId(), status, pageable).stream()
-                .map(this::getTransactionView)
-                .sorted(Comparator.comparing(TransactionView::getAmountTotalLcy).reversed())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+    private Page<TransactionEntity> getTransaction(
+            TransactionBatchEntity transactionBatchEntity,
+            List<TransactionProcessingStatus> status, Pageable pageable,
+            BatchFilterRequest batchFilterRequest) {
+        return accountingCoreTransactionRepository.findAllByBatchId(
+                transactionBatchEntity.getId(), status,
+                batchFilterRequest.getInternalTransactionNumber(),
+                batchFilterRequest.getTransactionTypes(),
+                batchFilterRequest.getDocumentNumbers(),
+                batchFilterRequest.getDocumentNumber(),
+                batchFilterRequest.getCurrencyCustomerCodes(),
+                batchFilterRequest.getMinFCY(), batchFilterRequest.getMaxFCY(),
+                batchFilterRequest.getMinLCY(), batchFilterRequest.getMaxLCY(),
+                batchFilterRequest.getMinTotalLcy(),
+                batchFilterRequest.getMaxTotalLcy(),
+                Optional.ofNullable(batchFilterRequest.getDateFrom())
+                        .orElse(LocalDate.of(1970, 1, 1)).atStartOfDay(),
+                Optional.ofNullable(batchFilterRequest.getDateTo())
+                        .orElse(LocalDate.now()).atStartOfDay(),
+                batchFilterRequest.getVatCustomerCodes(),
+                batchFilterRequest.getParentCostCenterCustomerCodes(),
+                batchFilterRequest.getCostCenterCustomerCodes(),
+                batchFilterRequest.getCounterPartyCustomerCodes(),
+                batchFilterRequest.getCounterPartyTypes(),
+                batchFilterRequest.getDebitAccountCodes(),
+                batchFilterRequest.getCreditAccountCodes(),
+                batchFilterRequest.getEventCodes(),
+                batchFilterRequest.getProjectCustomerCodes(),
+                batchFilterRequest.getParentProjectCustomerCodes(), pageable);
     }
 
-    private TransactionReconciliationTransactionsView getTransactionReconciliationView(TransactionEntity transactionEntity) {
-        return new TransactionReconciliationTransactionsView(
-                transactionEntity.getId(),
-                transactionEntity.getTransactionInternalNumber(),
+    private TransactionReconciliationTransactionsView getTransactionReconciliationView(
+            TransactionEntity transactionEntity) {
+        DataSourceView dataSourceView = DataSourceView.UNKNOWN;
+        try {
+            dataSourceView = DataSourceView
+                    .valueOf(transactionEntity.getExtractorType());
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid extractorType '{}' for transaction {}",
+                    transactionEntity.getExtractorType(),
+                    transactionEntity.getId(), e);
+        }
+        return new TransactionReconciliationTransactionsView(transactionEntity.getId(),
+                transactionEntity.getInternalTransactionNumber(),
                 transactionEntity.getEntryDate(),
-                transactionEntity.getTransactionType(),
-                DataSourceView.NETSUITE,
+                transactionEntity.getTransactionType(), dataSourceView,
                 Optional.of(transactionEntity.getOverallStatus()),
-                Optional.of(getTransactionDispatchStatus(transactionEntity)),
+                transactionEntity.getProcessingStatus(),
                 Optional.of(transactionEntity.getAutomatedValidationStatus()),
                 transactionEntity.getTransactionApproved(),
                 transactionEntity.getLedgerDispatchApproved(),
-                getAmountLcyTotalForAllDebitItems(transactionEntity),
-                false,
-                transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getSource().map(TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
+                transactionEntity.getTotalAmountLcy(), false, // TODO Hard coded
+                // value?
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getSource().map(
+                                        TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
                         .orElse(TransactionReconciliationTransactionsView.ReconciliationCodeView.NEVER),
-                transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getSink().map(TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getSink().map(
+                                        TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
                         .orElse(TransactionReconciliationTransactionsView.ReconciliationCodeView.NEVER),
-                transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getFinalStatus().map(TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getFinalStatus().map(
+                                        TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
                         .orElse(TransactionReconciliationTransactionsView.ReconciliationCodeView.NEVER),
 
-                transactionEntity.getLastReconcilation().map(reconcilationEntity -> reconcilationEntity.getViolations().stream()
-                                .filter(reconcilationViolation -> reconcilationViolation.getTransactionId().equals(transactionEntity.getId()))
-                                .map(reconcilationViolation -> ReconciliationRejectionCodeRequest.of(reconcilationViolation.getRejectionCode(), transactionEntity.getLedgerDispatchApproved()))
+                transactionEntity.getLastReconcilation()
+                        .map(reconcilationEntity -> reconcilationEntity
+                                .getViolations().stream()
+                                .filter(reconcilationViolation -> reconcilationViolation
+                                        .getTransactionId()
+                                        .equals(transactionEntity
+                                                .getId()))
+                                .map(reconcilationViolation -> ReconciliationRejectionCodeRequest
+                                        .of(reconcilationViolation
+                                                        .getRejectionCode(),
+                                                transactionEntity
+                                                        .getLedgerDispatchApproved()))
                                 .collect(toSet()))
                         .orElse(new LinkedHashSet<>()),
-                transactionEntity.getLastReconcilation().map(CommonEntity::getCreatedAt).orElse(null),
+                transactionEntity.getLastReconcilation()
+                        .map(CommonEntity::getCreatedAt).orElse(null),
                 getTransactionItemView(transactionEntity),
                 getViolations(transactionEntity)
 
         );
     }
 
-    private TransactionReconciliationTransactionsView getTransactionReconciliationViolationView(ReconcilationViolation reconcilationViolation) {
+    private TransactionReconciliationTransactionsView getTransactionReconciliationViolationView(
+            ReconcilationViolation reconcilationViolation) {
         return new TransactionReconciliationTransactionsView(
                 reconcilationViolation.getTransactionId(),
                 reconcilationViolation.getTransactionInternalNumber(),
                 reconcilationViolation.getTransactionEntryDate(),
                 reconcilationViolation.getTransactionType(),
-                DataSourceView.NETSUITE,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                reconcilationViolation.getAmountLcySum(),
-                false,
+                DataSourceView.NETSUITE, Optional.empty(), Optional.empty(),
+                Optional.empty(), false, false,
+                reconcilationViolation.getAmountLcySum(), false,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
-                Set.of(ReconciliationRejectionCodeRequest.of(reconcilationViolation.getRejectionCode(), false)),
-                null,
-                new LinkedHashSet<>(),
-                new LinkedHashSet<>()
+                Set.of(ReconciliationRejectionCodeRequest.of(
+                        reconcilationViolation.getRejectionCode(), false)),
+                null, new LinkedHashSet<>(), new LinkedHashSet<>()
 
         );
     }
 
     private TransactionReconciliationTransactionsView getTransactionReconciliationViolationView() {
-        return new TransactionReconciliationTransactionsView(
-                "",
-                "",
-                LocalDate.now(),
-                TransactionType.CardCharge,
-                DataSourceView.NETSUITE,
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                BigDecimal.valueOf(123),
-                false,
+        return new TransactionReconciliationTransactionsView("", "", LocalDate.now(),
+                TransactionType.CardCharge, DataSourceView.NETSUITE,
+                Optional.empty(), Optional.empty(), Optional.empty(), false, false,
+                BigDecimal.valueOf(123), false,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
-                new LinkedHashSet<>(),
-                null,
-                null,
-                null
+                new LinkedHashSet<>(), null, null, null
 
         );
     }
@@ -366,87 +517,67 @@ public class AccountingCorePresentationViewService {
     private TransactionView getTransactionView(TransactionEntity transactionEntity) {
         DataSourceView dataSourceView = DataSourceView.UNKNOWN;
         try {
-            dataSourceView = DataSourceView.valueOf(transactionEntity.getExtractorType());
+            dataSourceView = DataSourceView
+                    .valueOf(transactionEntity.getExtractorType());
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid extractorType '{}' for transaction {}", transactionEntity.getExtractorType(), transactionEntity.getId(), e);
+            log.warn("Invalid extractorType '{}' for transaction {}",
+                    transactionEntity.getExtractorType(),
+                    transactionEntity.getId(), e);
         }
-        return new TransactionView(
-                transactionEntity.getId(),
-                transactionEntity.getTransactionInternalNumber(),
+        return new TransactionView(transactionEntity.getId(),
+                transactionEntity.getInternalTransactionNumber(),
                 transactionEntity.getEntryDate(),
-                transactionEntity.getTransactionType(),
-                dataSourceView,
+                transactionEntity.getTransactionType(), dataSourceView,
                 transactionEntity.getOverallStatus(),
-                getTransactionDispatchStatus(transactionEntity),
+                transactionEntity.getProcessingStatus(),
+                transactionEntity.getLedgerDispatchStatusErrorReason(),
                 transactionEntity.getAutomatedValidationStatus(),
                 transactionEntity.getLedgerDispatchStatus(),
                 transactionEntity.getTransactionApproved(),
                 transactionEntity.getLedgerDispatchApproved(),
-                getAmountLcyTotalForAllDebitItems(transactionEntity),
+                transactionEntity.getTotalAmountLcy(),
                 transactionEntity.hasAnyRejection(),
-                transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getSource().map(TransactionView.ReconciliationCodeView::of))
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getSource().map(
+                                        TransactionView.ReconciliationCodeView::of))
                         .orElse(TransactionView.ReconciliationCodeView.NEVER),
-                transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getSink().map(TransactionView.ReconciliationCodeView::of))
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getSink().map(
+                                        TransactionView.ReconciliationCodeView::of))
                         .orElse(TransactionView.ReconciliationCodeView.NEVER),
-                transactionEntity.getReconcilation().flatMap(reconcilation -> reconcilation.getFinalStatus().map(TransactionView.ReconciliationCodeView::of))
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getFinalStatus().map(
+                                        TransactionView.ReconciliationCodeView::of))
                         .orElse(TransactionView.ReconciliationCodeView.NEVER),
 
-                transactionEntity.getLastReconcilation().map(reconcilationEntity -> reconcilationEntity.getViolations().stream()
-                                .filter(reconcilationViolation -> reconcilationViolation.getTransactionId().equals(transactionEntity.getId()))
-                                .map(reconcilationViolation -> ReconciliationRejectionCodeRequest.of(reconcilationViolation.getRejectionCode(), transactionEntity.getLedgerDispatchApproved()))
+                transactionEntity.getLastReconcilation()
+                        .map(reconcilationEntity -> reconcilationEntity
+                                .getViolations().stream()
+                                .filter(reconcilationViolation -> reconcilationViolation
+                                        .getTransactionId()
+                                        .equals(transactionEntity
+                                                .getId()))
+                                .map(reconcilationViolation -> ReconciliationRejectionCodeRequest
+                                        .of(reconcilationViolation
+                                                        .getRejectionCode(),
+                                                transactionEntity
+                                                        .getLedgerDispatchApproved()))
                                 .collect(toSet()))
                         .orElse(new LinkedHashSet<>()),
-                transactionEntity.getLastReconcilation().map(CommonEntity::getCreatedAt).orElse(null),
+                transactionEntity.getLastReconcilation()
+                        .map(CommonEntity::getCreatedAt).orElse(null),
+                transactionEntity.getItemCount(),
                 getTransactionItemView(transactionEntity),
                 getViolations(transactionEntity)
 
         );
     }
 
-
-    public LedgerDispatchStatusView getTransactionDispatchStatus(TransactionEntity transactionEntity) {
-        if (FAILED == transactionEntity.getAutomatedValidationStatus()) {
-            if (transactionEntity.getViolations().stream().anyMatch(v -> v.getSource() == ERP)) {
-                return INVALID;
-            }
-            if (transactionEntity.hasAnyRejection()) {
-                if (transactionEntity.getItems().stream().anyMatch(transactionItemEntity -> transactionItemEntity.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == ERP))) {
-                    return INVALID;
-                }
-                return PENDING;
-            }
-            return PENDING;
-        }
-
-        if (transactionEntity.hasAnyRejection()) {
-            if (transactionEntity.getItems().stream().anyMatch(transactionItemEntity -> transactionItemEntity.getRejection().stream().anyMatch(rejection -> rejection.getRejectionReason().getSource() == ERP))) {
-                return INVALID;
-            }
-            return PENDING;
-        }
-
-        switch (transactionEntity.getLedgerDispatchStatus()) {
-            case NOT_DISPATCHED, MARK_DISPATCH -> {
-                if (Boolean.TRUE.equals(transactionEntity.getLedgerDispatchApproved())) {
-                    return PUBLISHED;
-                }
-
-                if (Boolean.TRUE.equals(transactionEntity.getTransactionApproved())) {
-                    return PUBLISH;
-                }
-            }
-
-            case DISPATCHED, COMPLETED, FINALIZED -> {
-                return PUBLISHED;
-            }
-        }
-
-        return APPROVE;
-    }
-
-    private TransactionReconciliationStatisticView getTransactionReconciliationStatistic(Object transactionsStatistic) {
+    private TransactionReconciliationStatisticView getTransactionReconciliationStatistic(
+            Object transactionsStatistic) {
 
         Object[] result = (Object[]) transactionsStatistic;
+        // TODO we need to find a better solution than handling these object arrays
         return new TransactionReconciliationStatisticView(
                 (Integer) ((Long) result[0]).intValue(),
                 (Integer) ((Long) result[1]).intValue(),
@@ -455,9 +586,10 @@ public class AccountingCorePresentationViewService {
                 (Integer) ((Long) result[4]).intValue(),
                 (Long) result[5],
                 (Integer) ((Long) result[6]).intValue(),
-                (Long) result[7],
-                (Integer) (((Long) result[5]).intValue() + ((Long) result[6]).intValue())
-        );
+                 (Long) result[7],
+                (Integer) (((Long) result[5]).intValue()
+                        + ((Long) result[6]).intValue())
+                        + ((Integer) ((Long) result[7]).intValue()));
     }
 
     private Set<TransactionItemView> getTransactionItemView(TransactionEntity transaction) {
@@ -465,100 +597,217 @@ public class AccountingCorePresentationViewService {
             Optional<CostCenter> itemCostCenter = Optional.empty();
             Optional<Project> itemProject = Optional.empty();
             if (transaction.getOrganisation() != null) {
-                itemCostCenter = costCenterRepository.findById(new CostCenter.Id(transaction.getOrganisation().getId(), item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse("")));
-                itemProject = projectMappingRepository.findById(new Project.Id(transaction.getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse("")));
+                itemCostCenter = costCenterRepository.findById(new CostCenter.Id(
+                        transaction.getOrganisation().getId(),
+                        item.getCostCenter().map(
+                                        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode)
+                                .orElse("")));
+                itemProject = projectRepository.findById(new Project.Id(
+                        transaction.getOrganisation().getId(),
+                        item.getProject().map(
+                                        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode)
+                                .orElse("")));
             }
-            return new TransactionItemView(
-                    item.getId(),
+            return new TransactionItemView(item.getId(),
                     item.getAccountDebit().map(Account::getCode).orElse(""),
                     item.getAccountDebit().flatMap(Account::getName).orElse(""),
-                    item.getAccountDebit().flatMap(Account::getRefCode).orElse(""),
+                    item.getAccountDebit().flatMap(Account::getRefCode)
+                            .orElse(""),
                     item.getAccountCredit().map(Account::getCode).orElse(""),
-                    item.getAccountCredit().flatMap(Account::getName).orElse(""),
-                    item.getAccountCredit().flatMap(Account::getRefCode).orElse(""),
-                    item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountFcy().negate() : item.getAmountFcy(),
-                    item.getOperationType().equals(OperationType.CREDIT) ? item.getAmountLcy().negate() : item.getAmountLcy(),
+                    item.getAccountCredit().flatMap(Account::getName)
+                            .orElse(""),
+                    item.getAccountCredit().flatMap(Account::getRefCode)
+                            .orElse(""),
+                    item.getOperationType().equals(OperationType.CREDIT)
+                            ? item.getAmountFcy().negate()
+                            : item.getAmountFcy(),
+                    item.getOperationType().equals(OperationType.CREDIT)
+                            ? item.getAmountLcy().negate()
+                            : item.getAmountLcy(),
                     item.getFxRate(),
-                    item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
-                    item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getName).orElse(""),
-                    itemCostCenter.map(costCenter -> costCenter.getParentCustomerCode()).orElse(""),
-                    itemCostCenter.map(costCenter -> costCenter.getParent().map(CostCenter::getName).orElse("")).orElse(""),
-                    item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
-                    item.getProject().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getName).orElse(""),
+                    item.getCostCenter().map(
+                                    org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode)
+                            .orElse(""),
+                    item.getCostCenter().flatMap(
+                                    org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getName)
+                            .orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter
+                            .getParentCustomerCode()).orElse(""),
+                    itemCostCenter.map(costCenter -> costCenter.getParent()
+                                    .map(CostCenter::getName).orElse(""))
+                            .orElse(""),
+                    item.getProject().map(
+                                    org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode)
+                            .orElse(""),
+                    item.getProject().flatMap(
+                                    org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getName)
+                            .orElse(""),
                     itemProject.map(Project::getParentCustomerCode).orElse(""),
-                    itemProject.map(project -> project.getParent().map(Project::getName).orElse("")).orElse(""),
-                    item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
-                    item.getAccountEvent().map(AccountEvent::getName).orElse(""),
+                    itemProject.map(project -> project.getParent()
+                                    .map(Project::getName).orElse(""))
+                            .orElse(""),
+                    item.getAccountEvent().map(AccountEvent::getCode)
+                            .orElse(""),
+                    item.getAccountEvent().map(AccountEvent::getName)
+                            .orElse(""),
                     item.getDocument().map(Document::getNum).orElse(""),
-                    item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
-                    item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
-                    item.getDocument().flatMap(document -> document.getVat().flatMap(Vat::getRate)).orElse(ZERO),
-                    item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
-                    item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).get().toString() : "",
-                    item.getDocument().flatMap(document -> document.getCounterparty().flatMap(Counterparty::getName)).orElse(""),
-                    item.getRejection().map(Rejection::getRejectionReason).orElse(null)
-            );
+                    item.getDocument()
+                            .map(document -> document.getCurrency()
+                                    .getCustomerCode())
+                            .orElse(""),
+                    item.getDocument()
+                            .flatMap(document -> document.getVat()
+                                    .map(Vat::getCustomerCode))
+                            .orElse(""),
+                    item.getDocument()
+                            .flatMap(document -> document.getVat()
+                                    .flatMap(Vat::getRate))
+                            .orElse(ZERO),
+                    item.getDocument().flatMap(d -> d.getCounterparty()
+                                    .map(Counterparty::getCustomerCode))
+                            .orElse(""),
+                    item.getDocument()
+                            .flatMap(d -> d.getCounterparty()
+                                    .map(Counterparty::getType))
+                            .isPresent() ? item.getDocument().flatMap(d -> d.getCounterparty().map(Counterparty::getType)).get().toString() : "",
+                    item.getDocument().flatMap(document -> document
+                            .getCounterparty()
+                            .flatMap(Counterparty::getName)).orElse(""),
+                    item.getRejection().map(Rejection::getRejectionReason)
+                            .orElse(null));
         }).collect(toSet());
     }
 
     private Set<ViolationView> getViolations(TransactionEntity transaction) {
-        return transaction.getViolations().stream().map(violation -> new ViolationView(
-                violation.getSeverity(),
-                violation.getSource(),
-                violation.getTxItemId(),
-                violation.getCode(),
-                violation.getBag()
-        )).collect(toSet());
+        return transaction.getViolations().stream()
+                .map(violation -> new ViolationView(violation.getSeverity(),
+                        violation.getSource(), violation.getTxItemId(),
+                        violation.getCode(), violation.getBag()))
+                .collect(toSet());
     }
 
-    private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(Object[] violations) {
-        for (Object o : violations) {
-            if (Objects.isNull(o)) {
-                continue;
-            }
-            if (o instanceof TransactionEntity transactionEntity && transactionEntity.getLastReconcilation().isPresent()) {
-                return getTransactionReconciliationView(transactionEntity);
-            }
-            if (o instanceof ReconcilationViolation reconcilationViolation) {
-                return getTransactionReconciliationViolationView(reconcilationViolation);
-            }
+    private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(
+            TransactionWithViolationDto violations) {
+        // All of the needed data is within the Transaction. The violation is just a
+        // fallback, if the transaction doesn't exist in Reeve
+        if (Optional.ofNullable(violations.tx()).isPresent()) {
+            return getTransactionReconciliationView(violations.tx());
+        }
+        if (Optional.ofNullable(violations.violation()).isPresent()) {
+            return getTransactionReconciliationViolationView(violations.violation());
         }
         return getTransactionReconciliationViolationView();
     }
 
-    public BigDecimal getAmountLcyTotalForAllDebitItems(TransactionEntity tx) {
-        Set<TransactionItemEntity> items = tx.getItems();
+    public Map<FilterOptions, List<FilteringOptionsListResponse>> getFilterOptions(
+            List<FilterOptions> filterOptions, String orgId) {
+        Map<FilterOptions, List<FilteringOptionsListResponse>> filterOptionsListMap =
+                new EnumMap<>(FilterOptions.class);
+        for (FilterOptions filterOption : filterOptions) {
+            switch (filterOption) {
 
-        if (tx.getTransactionType().equals(TransactionType.Journal)) {
-            // The Dummy account is a finance trick organisations can use. If they don't use it we fall back to the old behaviour and sum all debit items
-            // We check if in the tx items is anything with the dummy account and if yes we only sum those
-            // If no dummy account is set or no item with the dummy account is found we sum all debit items
-            Optional<String> dummyAccount = organisationPublicApiIF.findByOrganisationId(tx.getOrganisation().getId()).orElse(new org.cardanofoundation.lob.app.organisation.domain.entity.Organisation()).getDummyAccount();
-            Set<TransactionItemEntity> itemsWithDummy = tx.getItems().stream().filter(txItems -> txItems.getAccountDebit().isPresent() && txItems.getAccountDebit().get().getCode().equals(dummyAccount.orElse(""))).collect(toSet());
-            if(!itemsWithDummy.isEmpty()){
-                items = itemsWithDummy;
-            } else {
-                items = tx.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(toSet());
+                case USERS -> filterOptionsListMap.put(filterOption,
+                        transactionBatchRepositoryGateway
+                                .findBatchUsersList(orgId).stream()
+                                .map(user -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(user)
+                                        .description(user)
+                                        .build())
+                                .toList());
+
+                case DOCUMENT_NUMBERS -> filterOptionsListMap.put(filterOption,
+                        transactionItemRepository.getAllDocumentNumbers()
+                                .stream()
+                                .map(document -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(document)
+                                        .description(document)
+                                        .build())
+                                .toList());
+
+                case TRANSACTION_NUMBERS -> filterOptionsListMap.put(filterOption,
+                        accountingCoreTransactionRepository
+                                .findAllTransactionNumbers(orgId)
+                                .stream()
+                                .map(transactionNumber -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(transactionNumber)
+                                        .description(transactionNumber)
+                                        .build())
+                                .toList());
+
+                case TRANSACTION_TYPES -> filterOptionsListMap.put(filterOption,
+                        Arrays.stream(TransactionType.values()).map(
+                                        type -> FilteringOptionsListResponse
+                                                .builder()
+                                                .name(type.name())
+                                                .description(type
+                                                        .name())
+                                                .build())
+                                .toList());
+
+                case COUNTER_PARTY_NAMES -> filterOptionsListMap.put(filterOption,
+                        transactionItemRepository.getAllCounterParty(orgId)
+                                .stream()
+                                .map(document -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(document
+                                                .get("name"))
+                                        .description(document
+                                                .get("name"))
+                                        .build())
+                                .toList());
+
+                case COUNTER_PARTY -> filterOptionsListMap.put(filterOption,
+                        transactionItemRepository.getAllCounterParty(orgId)
+                                .stream()
+                                .map(document -> FilteringOptionsListResponse
+                                        .builder()
+                                        .customerCode(document
+                                                .get("customerCode"))
+                                        .description(document
+                                                .get("name"))
+                                        .build())
+                                .toList());
+
+                case COUNTER_PARTY_TYPE -> filterOptionsListMap.put(filterOption,
+                        Arrays.stream(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty.Type
+                                        .values())
+                                .map(type -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(type.name())
+                                        .description(type
+                                                .name())
+                                        .build())
+                                .toList());
+
+                case RECONCILIATION_REJECTION_CODES -> filterOptionsListMap.put(filterOption,
+                        Arrays.stream(ReconciliationRejectionCodeRequest.values())
+                                .map(type -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(type.name())
+                                        .description(type
+                                                .name())
+                                        .build())
+                                .toList());
+                case RECONCILIATION_SOURCES -> filterOptionsListMap.put(filterOption,
+                        Arrays.stream(ReconciliationFilterSource.values())
+                                .map(type -> FilteringOptionsListResponse
+                                        .builder()
+                                        .name(type.name())
+                                        .build())
+                                .toList());
+
+
             }
         }
-
-        if (tx.getTransactionType().equals(TransactionType.FxRevaluation)) {
-            BigDecimal totalCredit = items.stream()
-                    .filter(item -> item.getOperationType().equals(OperationType.CREDIT))
-                    .map(TransactionItemEntity::getAmountLcy)
-                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
-
-            BigDecimal totalDebit = items.stream()
-                    .filter(item -> item.getOperationType().equals(OperationType.DEBIT))
-                    .map(TransactionItemEntity::getAmountLcy)
-                    .reduce(ZERO, BigDecimal::add); // Use ZERO as identity for sum
-
-            return totalCredit.subtract(totalDebit).abs();
-        }
-
-        return items.stream()
-                .map(TransactionItemEntity::getAmountLcy)
-                .reduce(ZERO, BigDecimal::add).abs();
+        return filterOptionsListMap;
     }
 
+    private Details convertBagToJson(Details details) {
+        details.setBag(BagParser.parse(details.getBag()));
+        return details;
+
+    }
 }

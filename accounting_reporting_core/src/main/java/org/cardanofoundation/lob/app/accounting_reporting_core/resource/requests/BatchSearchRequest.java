@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 
 import javax.annotation.Nullable;
@@ -39,7 +40,15 @@ public class BatchSearchRequest extends BaseRequest {
 
     @Schema(example = "2024-12-31")
     @Nullable
-    private LocalDate To;
+    private LocalDate to;
+
+    @ArraySchema(arraySchema = @Schema(example = "[\"Alice\",\"Bob\"]", implementation = String.class))
+    @Nullable
+    private List<String> createdBy;
+
+    @Schema(example = "763d9944314012fffdf3d19aa924f750576f467aaf2bbd217f74dd549308597a")
+    @Nullable
+    private String batchId;
 
     @JsonIgnore
     private Integer limit;

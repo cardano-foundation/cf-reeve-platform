@@ -17,6 +17,8 @@ public class ReportStatusUpdate {
 
     private LedgerDispatchStatus status;
 
+    private String ledgerDispatchStatusErrorReason;
+
     private Set<BlockchainReceipt> blockchainReceipts = Set.of();
 
 }

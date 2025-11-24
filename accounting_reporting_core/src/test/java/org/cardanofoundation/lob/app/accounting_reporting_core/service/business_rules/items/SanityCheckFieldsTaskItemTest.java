@@ -45,7 +45,7 @@ class SanityCheckFieldsTaskItemTest {
     void testTransactionPassesSanityCheck() {
         TransactionEntity tx = mock(TransactionEntity.class);
         when(validator.validate(tx)).thenReturn(Collections.emptySet());
-        when(tx.getTransactionInternalNumber()).thenReturn("1");
+        when(tx.getInternalTransactionNumber()).thenReturn("1");
 
         taskItem.run(tx);
 
@@ -62,7 +62,7 @@ class SanityCheckFieldsTaskItemTest {
 
         TransactionEntity transaction = new TransactionEntity();
         transaction.setOrganisation(organisation);
-        transaction.setTransactionInternalNumber("1");
+        transaction.setInternalTransactionNumber("1");
 
         Set<ConstraintViolation<TransactionEntity>> violations = new HashSet<>();
         ConstraintViolation<TransactionEntity> violation = mock(ConstraintViolation.class);
@@ -80,7 +80,7 @@ class SanityCheckFieldsTaskItemTest {
     @Test
     void testRun_internalNumberMustBePresent() {
         TransactionEntity tx = new TransactionEntity();
-        tx.setTransactionInternalNumber("");
+        tx.setInternalTransactionNumber("");
         tx.setEntryDate(LocalDate.now());
         when(validator.validate(tx)).thenReturn(Collections.emptySet());
 
@@ -95,7 +95,7 @@ class SanityCheckFieldsTaskItemTest {
     @Test
     void testRun_documentNameMustBeSet() {
         TransactionEntity tx = new TransactionEntity();
-        tx.setTransactionInternalNumber("1");
+        tx.setInternalTransactionNumber("1");
         tx.setEntryDate(LocalDate.now());
         TransactionItemEntity itemEntity = mock(TransactionItemEntity.class);
         Document document = mock(Document.class);
@@ -117,7 +117,7 @@ class SanityCheckFieldsTaskItemTest {
     @Test
     void testRun_entryDateMustBePresent() {
         TransactionEntity tx = new TransactionEntity();
-        tx.setTransactionInternalNumber("1");
+        tx.setInternalTransactionNumber("1");
 
         when(validator.validate(tx)).thenReturn(Collections.emptySet());
 

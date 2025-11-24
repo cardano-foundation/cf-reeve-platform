@@ -11,7 +11,7 @@ import lombok.Setter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.zalando.problem.Problem;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.LedgerDispatchStatusView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 
 @Getter
 @Setter
@@ -22,18 +22,18 @@ public class TransactionItemsProcessRejectView {
 
     private boolean success;
 
-    private Optional<LedgerDispatchStatusView> statistic;
+    private Optional<TransactionProcessingStatus> statistic;
 
     @JsonProperty("items")
     private Set<TransactionItemsProcessView> transactionItemsProcessViewSet = new LinkedHashSet<>();
 
     private Optional<Problem> error;
 
-    public static TransactionItemsProcessRejectView createSuccess(String transactionId, LedgerDispatchStatusView statistic, Set<TransactionItemsProcessView> items) {
+    public static TransactionItemsProcessRejectView createSuccess(String transactionId, Optional<TransactionProcessingStatus> statistic, Set<TransactionItemsProcessView> items) {
         return new TransactionItemsProcessRejectView(
                 transactionId,
                 true,
-                Optional.of(statistic),
+                statistic,
                 items,
                 Optional.empty()
         );

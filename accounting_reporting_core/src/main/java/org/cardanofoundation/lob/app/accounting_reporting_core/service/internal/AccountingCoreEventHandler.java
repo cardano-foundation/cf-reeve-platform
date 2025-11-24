@@ -95,6 +95,7 @@ public class AccountingCoreEventHandler {
                 event.getBatchId(),
                 event.getUserExtractionParameters(),
                 event.getSystemExtractionParameters(),
+                event.getExtractorType(),
                 error
         );
 

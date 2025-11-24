@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,7 +23,10 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.vavr.control.Either;
+import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
@@ -29,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconcileResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -40,6 +46,7 @@ public class AccountingCoreResourceReconciliation {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final AccountingCoreService accountingCoreService;
+    private final SortFieldMappings sortFieldMappings;
 
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @Operation(description = "Start the Reconciliation", responses = {
@@ -69,13 +76,14 @@ public class AccountingCoreResourceReconciliation {
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @PostMapping(value = "/transactions-reconcile", produces = "application/json")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ReconciliationResponseView> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
-                                            @RequestParam(name = "page", defaultValue = "0") int page,
-                                            @RequestParam(name = "limit", defaultValue = "10") int limit) {
-        body.setLimit(limit);
-        body.setPage(page);
-
-        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body);
+    public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
+                                            @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        Either<Problem, Pageable> pageableEither = sortFieldMappings.convertPageable(pageable,
+                        SortFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
+        if (pageableEither.isLeft()) {
+            return ResponseEntity.badRequest().body(pageableEither.getLeft());
+        }
+        ReconciliationResponseView reconciliationResponseView = accountingCorePresentationService.allReconciliationTransaction(body, pageableEither.get());
 
         return ResponseEntity.ok().body(reconciliationResponseView);
     }

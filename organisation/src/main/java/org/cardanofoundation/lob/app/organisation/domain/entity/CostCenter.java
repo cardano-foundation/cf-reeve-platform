@@ -13,6 +13,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 import org.hibernate.envers.NotAudited;
 
@@ -51,6 +52,7 @@ public class CostCenter extends CommonEntity implements Persistable<CostCenter.I
     @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     @JsonManagedReference  // Manages the forward reference in JSON serialization
+    @BatchSize(size = 100)
     private Set<CostCenter> children = new HashSet<>();
 
     @Column(name = "parent_customer_code")

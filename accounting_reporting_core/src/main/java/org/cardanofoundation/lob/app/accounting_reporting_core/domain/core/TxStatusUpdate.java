@@ -17,6 +17,8 @@ public class TxStatusUpdate {
 
     private LedgerDispatchStatus status;
 
+    private String ledgerDispatchStatusErrorReason;
+
     private Set<BlockchainReceipt> blockchainReceipts = Set.of();
 
 }

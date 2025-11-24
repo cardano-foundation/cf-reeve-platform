@@ -1,6 +1,9 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
 
+
 public class Constants {
+
+    public static final String UNABLE_TO_FIND_ORGANISATION_BY_ID_S = "Unable to find Organisation by Id: %s";
 
     private Constants() {
         // Utility class, no instantiation
@@ -37,4 +40,9 @@ public class Constants {
     public static final String REPORT_WITH_ID_S_HAS_ALREADY_BEEN_DISPATCHED = "Report with ID %s has already been dispatched.";
     public static final String REPORT_DATA_MISMATCH = "REPORT_DATA_MISMATCH";
     public static final String REPORT_DATA_DOES_NOT_MATCH_GENERATED_REPORT = "Report data does not match generated report.";
+    public static final String CSV_PARSING_ERROR = "CSV_PARSING_ERROR";
+    public static final String UNSUPPORTED_REPORT_TYPE = "UNSUPPORTED_REPORT_TYPE";
+    public static final String INVALID_INTERVAL_TYPE = "INVALID_INTERVAL_TYPE";
+    public static final String INTERVAL_TYPE_IS_NOT_VALID_EXPECTED_QUARTER_OR_YEAR_BUT_GOT_S = "Interval type is not valid. Expected MONTHLY, QUARTER or YEAR but got %s.";
+    public static final String INTERVAL_TYPE = "intervalType";
 }

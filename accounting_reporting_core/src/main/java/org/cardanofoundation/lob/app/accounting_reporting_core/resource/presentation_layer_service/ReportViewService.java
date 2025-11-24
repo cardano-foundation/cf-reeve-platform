@@ -1,22 +1,36 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service;
 
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.Validator;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportCsvLine;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportPublishRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.CreateReportView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 
 @Service
 @org.jmolecules.ddd.annotation.Service
@@ -25,6 +39,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 @Transactional()
 public class ReportViewService {
     private final ReportService reportService;
+    private final AntiVirusScanner antiVirusScanner;
+    private final CsvParser<ReportCsvLine> csvParser;
+    private final Validator validator;
+    private final OrganisationPublicApiIF organisationPublicApiIF;
 
     @Transactional
     public Either<Problem, ReportEntity> reportPublish(ReportPublishRequest reportPublish) {
@@ -40,74 +58,58 @@ public class ReportViewService {
                 reportSaveRequest.getPeriod());
     }
 
-    public ReportView responseView(ReportEntity reportEntity) {
-        val reportResponseView = new ReportView();
-        reportResponseView.setReportId(reportEntity.getReportId());
-        reportResponseView.setDocumentCurrencyCustomerCode(reportEntity.getOrganisation().getCurrencyId());
-        reportResponseView.setOrganisationId(reportEntity.getOrganisation().getId());
-        reportResponseView.setType(reportEntity.getType());
-        reportResponseView.setPublishDate(reportEntity.getLedgerDispatchDate());
-        reportResponseView.setPublishedBy(reportEntity.getPublishedBy());
-        reportResponseView.setCreatedBy(reportEntity.getCreatedBy());
-        reportResponseView.setCreatedAt(reportEntity.getCreatedAt());
-        reportResponseView.setUpdatedBy(reportEntity.getUpdatedBy());
-        reportResponseView.setUpdatedAt(reportEntity.getUpdatedAt());
-        reportResponseView.setIntervalType(reportEntity.getIntervalType());
-        reportResponseView.setYear(reportEntity.getYear());
-        reportResponseView.setPeriod(reportEntity.getPeriod());
-        reportResponseView.setDate(reportEntity.getDate());
-        reportResponseView.setPublish(reportEntity.getLedgerDispatchApproved());
-
-        if (reportEntity.getLedgerDispatchReceipt().isPresent()) {
-            reportResponseView.setBlockChainHash(reportEntity.getLedgerDispatchReceipt().get().getPrimaryBlockchainHash());
+    /**
+     * Creates reports from a CSV file upload.
+     * The store flag is to control wether the reports will be stored right away or not.
+     * If false can be used as a validation.
+     */
+    public Either<Problem, List<Either<Problem, ReportEntity>>> reportCreateCsv(
+            CreateCsvReportRequest csvReportRequest, boolean store) {
+        Optional<Organisation> organisationO = organisationPublicApiIF.findByOrganisationId(csvReportRequest.getOrganisationId());
+        if(organisationO.isEmpty()) {
+            Problem problem = Problem.builder()
+                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
+                    .withDetail("Organisation with id " + csvReportRequest.getOrganisationId() + " not found.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build();
+            return Either.left(problem);
         }
-        reportResponseView.setCanBePublish(reportEntity.getIsReadyToPublish());
-        reportResponseView.setCanPublishError(reportEntity.getPublishError());
-        reportResponseView.setVer(reportEntity.getVer());
-        //BalanceSheet
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getTangibleAssets()))).ifPresent(bigDecimal -> reportResponseView.setTangibleAssets(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getIntangibleAssets()))).ifPresent(bigDecimal -> reportResponseView.setIntangibleAssets(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getInvestments()))).ifPresent(bigDecimal -> reportResponseView.setInvestments(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getNonCurrentAssets().flatMap(nonCurrentAssets -> nonCurrentAssets.getFinancialAssets()))).ifPresent(bigDecimal -> reportResponseView.setFinancialAssets(bigDecimal.toString()));
+        Either<Problem, byte[]> fileBytes = antiVirusScanner.readFileBytes(Optional.of(csvReportRequest.getFile()));
+        if (fileBytes.isLeft()) {
+            return Either.left(fileBytes.getLeft());
+        }
+        Either<Problem, List<ReportCsvLine>> parsedLines = csvParser.parseCsv(
+                fileBytes.get(), ReportCsvLine.class);
+        if(parsedLines.isLeft()) {
+            return Either.left(parsedLines.getLeft());
+        }
+        // Create a mutable copy of the parsed lines
+        List<ReportCsvLine> reportCsvLines = new ArrayList<>(parsedLines.get());
+        Either<List<Problem>, Void> validationResult = validateReportCsvLine(reportCsvLines);
+        if (validationResult.isLeft()) {
+            return Either.left(validationResult.getLeft().get(0));
+        }
+        List<Either<Problem, ReportEntity>> storeCsvReports = reportService.storeCsvReports(reportCsvLines, csvReportRequest.getOrganisationId(), store);
+        return Either.right(storeCsvReports);
+    }
 
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getCurrentAssets().flatMap(currentAssets -> currentAssets.getPrepaymentsAndOtherShortTermAssets()))).ifPresent(bigDecimal -> reportResponseView.setPrepaymentsAndOtherShortTermAssets(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getCurrentAssets().flatMap(currentAssets -> currentAssets.getOtherReceivables()))).ifPresent(bigDecimal -> reportResponseView.setOtherReceivables(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getCurrentAssets().flatMap(currentAssets -> currentAssets.getCryptoAssets()))).ifPresent(bigDecimal -> reportResponseView.setCryptoAssets(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getAssets().flatMap(assets -> assets.getCurrentAssets().flatMap(currentAssets -> currentAssets.getCashAndCashEquivalents()))).ifPresent(bigDecimal -> reportResponseView.setCashAndCashEquivalents(bigDecimal.toString()));
-
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getNonCurrentLiabilities().flatMap(nonCurrentLiabilities -> nonCurrentLiabilities.getProvisions()))).ifPresent(bigDecimal -> reportResponseView.setProvisions(bigDecimal.toString()));
-
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getCurrentLiabilities().flatMap(currentLiabilities -> currentLiabilities.getTradeAccountsPayables()))).ifPresent(bigDecimal -> reportResponseView.setTradeAccountsPayables(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getCurrentLiabilities().flatMap(currentLiabilities -> currentLiabilities.getOtherShortTermLiabilities()))).ifPresent(bigDecimal -> reportResponseView.setOtherShortTermLiabilities(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getLiabilities().flatMap(liabilities -> liabilities.getCurrentLiabilities().flatMap(currentLiabilities -> currentLiabilities.getAccrualsAndShortTermProvisions()))).ifPresent(bigDecimal -> reportResponseView.setAccrualsAndShortTermProvisions(bigDecimal.toString()));
-
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getCapital().flatMap(capital -> capital.getCapital())).ifPresent(bigDecimal -> reportResponseView.setCapital(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getCapital().flatMap(capital -> capital.getProfitForTheYear())).ifPresent(bigDecimal -> reportResponseView.setProfitForTheYear(bigDecimal.toString()));
-        reportEntity.getBalanceSheetReportData().flatMap(balanceSheetData -> balanceSheetData.getCapital().flatMap(capital -> capital.getResultsCarriedForward())).ifPresent(bigDecimal -> reportResponseView.setResultsCarriedForward(bigDecimal.toString()));
-
-        //IncomeStatement
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getRevenues().flatMap(revenues -> revenues.getOtherIncome())).ifPresent(bigDecimal -> reportResponseView.setOtherIncome(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getRevenues().flatMap(revenues -> revenues.getBuildOfLongTermProvision())).ifPresent(bigDecimal -> reportResponseView.setBuildOfLongTermProvision(bigDecimal.toString()));
-
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getCostOfGoodsAndServices().flatMap(costOfGoodsAndServices -> costOfGoodsAndServices.getExternalServices())).ifPresent(bigDecimal -> reportResponseView.setExternalServices(bigDecimal.toString()));
-
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getOperatingExpenses().flatMap(operatingExpenses -> operatingExpenses.getPersonnelExpenses())).ifPresent(bigDecimal -> reportResponseView.setPersonnelExpenses(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getOperatingExpenses().flatMap(operatingExpenses -> operatingExpenses.getGeneralAndAdministrativeExpenses())).ifPresent(bigDecimal -> reportResponseView.setGeneralAndAdministrativeExpenses(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getOperatingExpenses().flatMap(operatingExpenses -> operatingExpenses.getDepreciationAndImpairmentLossesOnTangibleAssets())).ifPresent(bigDecimal -> reportResponseView.setDepreciationAndImpairmentLossesOnTangibleAssets(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getOperatingExpenses().flatMap(operatingExpenses -> operatingExpenses.getAmortizationOnIntangibleAssets())).ifPresent(bigDecimal -> reportResponseView.setAmortizationOnIntangibleAssets(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getOperatingExpenses().flatMap(operatingExpenses -> operatingExpenses.getRentExpenses())).ifPresent(bigDecimal -> reportResponseView.setRentExpenses(bigDecimal.toString()));
-
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getFinancialIncome().flatMap(financialIncome -> financialIncome.getFinancialRevenues())).ifPresent(bigDecimal -> reportResponseView.setFinancialRevenues(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getFinancialIncome().flatMap(financialIncome -> financialIncome.getFinancialExpenses())).ifPresent(bigDecimal -> reportResponseView.setFinancialExpenses(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getFinancialIncome().flatMap(financialIncome -> financialIncome.getRealisedGainsOnSaleOfCryptocurrencies())).ifPresent(bigDecimal -> reportResponseView.setRealisedGainsOnSaleOfCryptocurrencies(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getFinancialIncome().flatMap(financialIncome -> financialIncome.getStakingRewardsIncome())).ifPresent(bigDecimal -> reportResponseView.setStakingRewardsIncome(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getFinancialIncome().flatMap(financialIncome -> financialIncome.getNetIncomeOptionsSale())).ifPresent(bigDecimal -> reportResponseView.setNetIncomeOptionsSale(bigDecimal.toString()));
-
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getExtraordinaryIncome().flatMap(extraordinaryIncome -> extraordinaryIncome.getExtraordinaryExpenses())).ifPresent(bigDecimal -> reportResponseView.setExtraordinaryExpenses(bigDecimal.toString()));
-
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getTaxExpenses().flatMap(taxExpenses -> taxExpenses.getDirectTaxes())).ifPresent(bigDecimal -> reportResponseView.setDirectTaxes(bigDecimal.toString()));
-        reportEntity.getIncomeStatementReportData().flatMap(incomeStatementData -> incomeStatementData.getProfitForTheYear()).ifPresent(bigDecimal -> reportResponseView.setProfitForTheYear(bigDecimal.toString()));
-
-        return reportResponseView;
+    private Either<List<Problem>, Void> validateReportCsvLine(List<ReportCsvLine> reportCsvLines) {
+        List<Problem> problems = new ArrayList<>();
+        for(ReportCsvLine reportCsvLine : reportCsvLines) {
+            Errors validateObject = validator.validateObject(reportCsvLine);
+            List<ObjectError> allErrors = validateObject.getAllErrors();
+            if (!allErrors.isEmpty()) {
+                Problem error = Problem.builder()
+                        .withTitle(Constants.CSV_PARSING_ERROR)
+                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                problems.add(error);
+            }
+        }
+        if(problems.size() > 0) {
+            return Either.left(problems);
+        }
+        return Either.right(null);
     }
 }

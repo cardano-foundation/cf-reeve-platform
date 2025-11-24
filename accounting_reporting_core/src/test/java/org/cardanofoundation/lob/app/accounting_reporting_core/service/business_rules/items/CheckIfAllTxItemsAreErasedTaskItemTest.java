@@ -28,7 +28,7 @@ class CheckIfAllTxItemsAreErasedTaskItemTest {
     void setUp() {
         taskItem = new CheckIfAllTxItemsAreErasedTaskItem();
         transaction = new TransactionEntity();
-        transaction.setTransactionInternalNumber("TX-123");
+        transaction.setInternalTransactionNumber("TX-123");
     }
 
     @Test

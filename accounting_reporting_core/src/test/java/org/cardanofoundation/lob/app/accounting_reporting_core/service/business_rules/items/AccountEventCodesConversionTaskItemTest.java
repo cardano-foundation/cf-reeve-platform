@@ -76,7 +76,7 @@ class AccountEventCodesConversionTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setTransactionInternalNumber("1");
+        tx.setInternalTransactionNumber("1");
         tx.setOrganisation(Organisation.builder().id(organisationId).build());
         tx.setTransactionType(TransactionType.FxRevaluation);
         tx.setItems(Set.of(txItem));
@@ -110,7 +110,7 @@ class AccountEventCodesConversionTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setTransactionInternalNumber("2");
+        tx.setInternalTransactionNumber("2");
         tx.setOrganisation(Organisation.builder().id(organisationId).build());
         tx.setTransactionType(TransactionType.BillCredit);
         tx.setItems(Set.of(txItem));
@@ -141,7 +141,7 @@ class AccountEventCodesConversionTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setTransactionInternalNumber("3");
+        tx.setInternalTransactionNumber("3");
         tx.setOrganisation(Organisation.builder().id(organisationId).build());
         tx.setTransactionType(TransactionType.FxRevaluation);
         tx.setItems(Set.of(txItem));
@@ -163,7 +163,7 @@ class AccountEventCodesConversionTaskItemTest {
 
         val tx = new TransactionEntity();
         tx.setId(txId);
-        tx.setTransactionInternalNumber("4");
+        tx.setInternalTransactionNumber("4");
         tx.setOrganisation(Organisation.builder().id(organisationId).build());
         tx.setTransactionType(TransactionType.FxRevaluation);
         tx.setItems(Set.of(txItem));

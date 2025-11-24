@@ -35,7 +35,7 @@ public class AmountFcyBalanceZerosOutCheckTaskItem implements PipelineTaskItem {
                     .processorModule(this.getClass().getSimpleName())
                     .bag(
                             Map.of(
-                                    "transactionNumber", tx.getTransactionInternalNumber()
+                                    "transactionNumber", tx.getInternalTransactionNumber()
                             )
                     )
                     .build();

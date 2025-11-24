@@ -37,7 +37,7 @@ public class BlockchainPublishStatusMapperTest {
                         .isEqualTo(LedgerDispatchStatus.MARK_DISPATCH),
 
                 () -> assertThat(mapper.convert(Optional.of(BlockchainPublishStatus.ROLLBACKED), Optional.empty()))
-                        .isEqualTo(LedgerDispatchStatus.MARK_DISPATCH),
+                        .isEqualTo(LedgerDispatchStatus.RETRYING),
 
                 () -> assertThat(mapper.convert(Optional.of(BlockchainPublishStatus.SUBMITTED), Optional.empty()))
                         .isEqualTo(LedgerDispatchStatus.DISPATCHED),
@@ -49,7 +49,10 @@ public class BlockchainPublishStatusMapperTest {
                         .isEqualTo(LedgerDispatchStatus.DISPATCHED),
 
                 () -> assertThat(mapper.convert(Optional.of(BlockchainPublishStatus.FINALIZED), Optional.empty()))
-                        .isEqualTo(LedgerDispatchStatus.FINALIZED)
+                        .isEqualTo(LedgerDispatchStatus.FINALIZED),
+
+                () -> assertThat(mapper.convert(Optional.of(BlockchainPublishStatus.ERROR), Optional.empty()))
+                        .isEqualTo(LedgerDispatchStatus.FAILED)
         );
     }
 
@@ -88,11 +91,12 @@ public class BlockchainPublishStatusMapperTest {
     void testConvertWithOnlyBlockchainPublishStatus() {
         assertAll(
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.STORED)).isEqualTo(LedgerDispatchStatus.MARK_DISPATCH),
-                () -> assertThat(mapper.convert(BlockchainPublishStatus.ROLLBACKED)).isEqualTo(LedgerDispatchStatus.MARK_DISPATCH),
+                () -> assertThat(mapper.convert(BlockchainPublishStatus.ROLLBACKED)).isEqualTo(LedgerDispatchStatus.RETRYING),
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.SUBMITTED)).isEqualTo(LedgerDispatchStatus.DISPATCHED),
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.VISIBLE_ON_CHAIN)).isEqualTo(LedgerDispatchStatus.DISPATCHED),
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.COMPLETED)).isEqualTo(LedgerDispatchStatus.DISPATCHED),
-                () -> assertThat(mapper.convert(BlockchainPublishStatus.FINALIZED)).isEqualTo(LedgerDispatchStatus.FINALIZED)
+                () -> assertThat(mapper.convert(BlockchainPublishStatus.FINALIZED)).isEqualTo(LedgerDispatchStatus.FINALIZED),
+                () -> assertThat(mapper.convert(BlockchainPublishStatus.ERROR)).isEqualTo(LedgerDispatchStatus.FAILED)
         );
     }
 
@@ -117,7 +121,8 @@ public class BlockchainPublishStatusMapperTest {
                 () -> assertThat(mapper.convert(LedgerDispatchStatus.MARK_DISPATCH)).isEqualTo(BlockchainPublishStatus.STORED),
                 () -> assertThat(mapper.convert(LedgerDispatchStatus.DISPATCHED)).isEqualTo(BlockchainPublishStatus.VISIBLE_ON_CHAIN),
                 () -> assertThat(mapper.convert(LedgerDispatchStatus.COMPLETED)).isEqualTo(BlockchainPublishStatus.COMPLETED),
-                () -> assertThat(mapper.convert(LedgerDispatchStatus.FINALIZED)).isEqualTo(BlockchainPublishStatus.FINALIZED)
+                () -> assertThat(mapper.convert(LedgerDispatchStatus.FINALIZED)).isEqualTo(BlockchainPublishStatus.FINALIZED),
+                () -> assertThat(mapper.convert(LedgerDispatchStatus.FAILED)).isEqualTo(BlockchainPublishStatus.ERROR)
         );
     }
 
@@ -131,11 +136,12 @@ public class BlockchainPublishStatusMapperTest {
     void testConvertBlockchainPublishStatusToLedgerDispatchStatus() {
         assertAll(
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.STORED)).isEqualTo(LedgerDispatchStatus.MARK_DISPATCH),
-                () -> assertThat(mapper.convert(BlockchainPublishStatus.ROLLBACKED)).isEqualTo(LedgerDispatchStatus.MARK_DISPATCH),
+                () -> assertThat(mapper.convert(BlockchainPublishStatus.ROLLBACKED)).isEqualTo(LedgerDispatchStatus.RETRYING),
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.SUBMITTED)).isEqualTo(LedgerDispatchStatus.DISPATCHED),
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.VISIBLE_ON_CHAIN)).isEqualTo(LedgerDispatchStatus.DISPATCHED),
                 () -> assertThat(mapper.convert(BlockchainPublishStatus.COMPLETED)).isEqualTo(LedgerDispatchStatus.DISPATCHED),
-                () -> assertThat(mapper.convert(BlockchainPublishStatus.FINALIZED)).isEqualTo(LedgerDispatchStatus.FINALIZED)
+                () -> assertThat(mapper.convert(BlockchainPublishStatus.FINALIZED)).isEqualTo(LedgerDispatchStatus.FINALIZED),
+                () -> assertThat(mapper.convert(BlockchainPublishStatus.ERROR)).isEqualTo(LedgerDispatchStatus.FAILED)
         );
     }
 

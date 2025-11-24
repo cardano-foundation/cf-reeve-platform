@@ -53,7 +53,7 @@ class ERPSourceTransactionVersionCalculatorTest {
         tx.setTransactionType(FxRevaluation);
         tx.setEntryDate(LocalDate.of(2021, 1, 1));
         tx.setOrganisation(org);
-        tx.setTransactionInternalNumber("FxRevaluation-1");
+        tx.setInternalTransactionNumber("FxRevaluation-1");
 
         val txItem1 = new TransactionItemEntity();
         txItem1.setId("1");

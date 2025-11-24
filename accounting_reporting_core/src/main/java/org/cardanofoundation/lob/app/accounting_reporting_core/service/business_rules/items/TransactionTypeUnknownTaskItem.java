@@ -28,7 +28,7 @@ public class TransactionTypeUnknownTaskItem implements PipelineTaskItem {
                     .severity(Violation.Severity.ERROR)
                     .source(Source.ERP)
                     .processorModule(this.getClass().getSimpleName())
-                    .bag(Map.of("transactionNumber", transaction.getTransactionInternalNumber()))
+                    .bag(Map.of("transactionNumber", transaction.getInternalTransactionNumber()))
                     .build();
             transaction.addViolation(unkownViolation);
         }
