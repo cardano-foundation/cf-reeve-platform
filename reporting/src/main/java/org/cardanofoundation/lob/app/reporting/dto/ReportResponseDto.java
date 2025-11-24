@@ -29,7 +29,7 @@ public class ReportResponseDto {
     @Schema(description = "Report name", example = "Q1 2024 Financial Report", required = true)
     private String name;
 
-    @Schema(description = "Interval type", example = "QUARTERLY", allowableValues = {"MONTHLY", "QUARTERLY", "YEARLY"})
+    @Schema(description = "Interval type", example = "QUARTER", allowableValues = {"MONTH", "QUARTER", "YEAR"})
     private String intervalType;
 
     @Schema(description = "Period number", example = "1", nullable = true)
@@ -41,7 +41,7 @@ public class ReportResponseDto {
     @Schema(description = "Version number for optimistic locking", example = "1")
     private Long ver;
 
-    @Schema(description = "Data mode", example = "GENERATED", allowableValues = {"GENERATED", "USER"})
+    @Schema(description = "Data mode", example = "SYSTEM", allowableValues = {"SYSTEM", "USER"})
     private String dataMode;
 
     @Schema(description = "Indicates if the report is ready to be published to blockchain", example = "true")
@@ -49,6 +49,12 @@ public class ReportResponseDto {
 
     @Schema(description = "Publish error if validation failed", example = "MISSING_REQUIRED_FIELDS", nullable = true)
     private String publishError;
+
+    @Schema(description = "Indicates if the report has been published to blockchain", example = "false")
+    private Boolean isPublished;
+
+    @Schema(description = "Blockchain transaction ID if published", example = "4f5e6d7c8b9a0b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6", nullable = true)
+    private String blockchainTxId;
 
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     @Schema(description = "List of report fields with calculated or user-provided values")

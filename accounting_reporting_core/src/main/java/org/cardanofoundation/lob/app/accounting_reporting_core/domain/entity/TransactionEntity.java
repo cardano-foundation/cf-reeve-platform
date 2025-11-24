@@ -179,6 +179,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Column(name = "total_amount_lcy")
     @Getter
     @Setter
+    @Builder.Default
     private BigDecimal totalAmountLcy = BigDecimal.ZERO;
 
     @Column(name = "transaction_approved", nullable = false)
@@ -347,6 +348,8 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
             case DISPATCHED, COMPLETED, FINALIZED -> {
                 this.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
                 return;
+            }
+            case FAILED, RETRYING -> {
             }
         }
         this.setProcessingStatus(TransactionProcessingStatus.APPROVE);

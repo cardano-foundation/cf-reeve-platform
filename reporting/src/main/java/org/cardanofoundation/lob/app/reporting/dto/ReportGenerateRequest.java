@@ -25,13 +25,13 @@ public class ReportGenerateRequest {
     private String reportTemplateId;
 
     @NotNull
-    @Schema(description = "Interval type for the report", example = "MONTHLY", allowableValues = {"MONTHLY", "QUARTERLY", "YEARLY"}, required = true)
+    @Schema(description = "Interval type for the report", example = "MONTH", allowableValues = {"MONTH", "QUARTER", "YEAR"}, required = true)
     private String intervalType;
 
     @NotNull
     @Schema(description = "Year for the report", example = "2024", required = true)
     private Short year;
 
-    @Schema(description = "Period number (1-12 for MONTHLY, 1-4 for QUARTERLY, null for YEARLY)", example = "3", nullable = true)
+    @Schema(description = "Period number (1-12 for MONTH, 1-4 for QUARTER, null for YEAR)", example = "3", nullable = true)
     private Short period;
 }

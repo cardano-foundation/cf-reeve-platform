@@ -99,6 +99,8 @@ public class ReportMapper {
             .ver(entity.getVer())
             .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
             .isReadyToPublish(entity.isReadyToPublish())
+            .isPublished(entity.isLedgerDispatchApproved())
+            .blockchainTxId(entity.getBlockchainHash())
             .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
             .fields(topLevelFields)
             .build();

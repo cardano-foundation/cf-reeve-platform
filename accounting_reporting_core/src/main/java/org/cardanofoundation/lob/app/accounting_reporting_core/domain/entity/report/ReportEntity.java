@@ -73,6 +73,7 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Column(name = "ver", nullable = false)
     @Getter
     @Setter
+    @Builder.Default
     private long ver = 1;
 
     @Override
@@ -209,11 +210,13 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Column(name = "ledger_dispatch_approved", nullable = false)
     @Getter
     @Setter
+    @Builder.Default
     private Boolean ledgerDispatchApproved = false;
 
     @Column(name = "is_ready_to_publish", nullable = false)
     @Getter
     @Setter
+    @Builder.Default
     private Boolean isReadyToPublish = false;
 
     @Column(name = "publish_error")
@@ -229,6 +232,7 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Getter
     @Setter
     // https://www.baeldung.com/java-enums-jpa-postgresql
+    @Builder.Default
     private LedgerDispatchStatus ledgerDispatchStatus = NOT_DISPATCHED;
 
     @Getter
