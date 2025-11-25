@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Field;
 import java.util.Optional;
 
+import co.nstant.in.cbor.model.Map;
 import com.bloxbean.cardano.client.account.Account;
 import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
@@ -38,7 +39,6 @@ public class API3L1TransactionCreaterTest {
     private BlockchainReaderPublicApiIF blockchainReaderPublicApi;
     @Mock
     private MetadataChecker jsonSchemaMetadataChecker;
-    @Mock
     private Account organiserAccount;
     @Mock
     private Optional<KeriService> keriService;
@@ -47,6 +47,7 @@ public class API3L1TransactionCreaterTest {
 
     @BeforeEach
     void setUp() {
+        organiserAccount = new Account();
         api3L1TransactionCreator = new API3L1TransactionCreator(
             backendService,
             api3MetadataSerialiser,
@@ -84,10 +85,25 @@ public class API3L1TransactionCreaterTest {
     }
 
     @Test
-    void pullBlockchainTransaction_errorGettingChainTip() {
+    void pullBlockchainTransaction_serializationError() {
         ReportEntity reportEntity = mock(ReportEntity.class);
         ChainTip chainTip = mock(ChainTip.class);
         MetadataMap metadataMap = mock(MetadataMap.class);
+        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(chainTip));
+        when(chainTip.getAbsoluteSlot()).thenReturn(100L);
+        when(api3MetadataSerialiser.serialiseToMetadataMap(reportEntity, chainTip.getAbsoluteSlot())).thenReturn(metadataMap);
+
+        Either<Problem, API3BlockchainTransaction> response = api3L1TransactionCreator.pullBlockchainTransaction(reportEntity);
+        assertTrue(response.isLeft());
+    }
+
+    @Test
+    void pullBlockchainTransaction_invalidReportMetadata() {
+        ReportEntity reportEntity = mock(ReportEntity.class);
+        ChainTip chainTip = mock(ChainTip.class);
+        MetadataMap metadataMap = mock(MetadataMap.class);
+        Map cborMap = new Map();
+        when(metadataMap.getMap()).thenReturn(cborMap);
         when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(chainTip));
         when(chainTip.getAbsoluteSlot()).thenReturn(100L);
         when(api3MetadataSerialiser.serialiseToMetadataMap(reportEntity, chainTip.getAbsoluteSlot())).thenReturn(metadataMap);
