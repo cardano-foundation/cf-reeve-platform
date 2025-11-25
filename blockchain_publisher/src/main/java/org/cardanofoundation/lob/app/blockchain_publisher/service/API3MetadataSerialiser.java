@@ -34,34 +34,6 @@ public class API3MetadataSerialiser {
     public static final String VERSION = "1.2";
     private final Clock clock;
 
-    public MetadataMap serializeToKeriMap(ReportEntity reportEntity) {
-        MetadataMap globalMetadataMap = MetadataBuilder.createMap();
-        globalMetadataMap.put("org", serialiseOrganisation(reportEntity.getOrganisation()));
-        globalMetadataMap.put("subType", reportEntity.getType().name());
-        globalMetadataMap.put("interval", reportEntity.getIntervalType().name());
-        globalMetadataMap.put("year", reportEntity.getYear().toString());
-        globalMetadataMap.put("mode", reportEntity.getMode().name());
-        globalMetadataMap.put("ver", BigInteger.valueOf(reportEntity.getVer()));
-
-        MetadataMap dataMap;
-        switch (reportEntity.getType()) {
-            case BALANCE_SHEET -> dataMap = serialiseBalanceSheetData(
-                    reportEntity.getBalanceSheetReportData().orElseThrow());
-            case INCOME_STATEMENT -> dataMap = serialiseIncomeStatementData(
-                    reportEntity.getIncomeStatementReportData().orElseThrow());
-            default -> throw new IllegalArgumentException(
-                    "Unsupported report type: %s".formatted(reportEntity.getType()));
-        }
-        try {
-            // Convert the hash to a hex String and put into globalDataMap
-            globalMetadataMap.put("dataHash", HexUtil.encodeHexString(Sha256Hash.hash(
-                    dataMap.toJson().getBytes())));
-        } catch (CborException e) {
-            throw new IllegalArgumentException("Failed to calculate data hash", e);
-        }
-        return globalMetadataMap;
-    }
-
     public MetadataMap serialiseToMetadataMap(ReportV2Entity reportEntity,
                                               long creationSlot) {
         MetadataMap globalMetadataMap = MetadataBuilder.createMap();

@@ -79,13 +79,14 @@ public class BlockchainReportsDispatcher {
     public void dispatchReport(String organisationId, ReportEntity reportEntity) {
         Either<Problem, API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
         if (api3BlockchainTransactionE.isEmpty()) {
-            reportEntity.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+            L1SubmissionData l1SubmissionData = L1SubmissionData.builder()
                     .publishRetry(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
                     .publishStatusErrorReason(Objects.requireNonNull(api3BlockchainTransactionE.getLeft().getDetail()))
                     .publishStatus(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) >= 5L ? BlockchainPublishStatus.ERROR : BlockchainPublishStatus.STORED)
-                    .build()));
+                    .build();
+            reportEntity.setL1SubmissionData(Optional.of(l1SubmissionData));
             reportEntityRepositoryGateway.storeReport(reportEntity);
-            ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(organisationId, Set.of(Pair.of(reportEntity.getId(), reportEntity.getL1SubmissionData().get())));
+            ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(organisationId, Set.of(Pair.of(reportEntity.getId(), l1SubmissionData)));
         }
     }
 

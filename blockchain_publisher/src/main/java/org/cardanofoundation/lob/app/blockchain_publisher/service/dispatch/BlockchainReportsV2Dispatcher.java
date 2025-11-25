@@ -75,14 +75,15 @@ public class BlockchainReportsV2Dispatcher {
     public void dispatchReport(String organisationId, ReportV2Entity reportEntity) {
         Either<Problem, API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
         if (api3BlockchainTransactionE.isEmpty()) {
-            reportEntity.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+            L1SubmissionData l1SubmissionData = L1SubmissionData.builder()
                     .publishRetry(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
                     .publishStatusErrorReason(Objects.requireNonNull(api3BlockchainTransactionE.getLeft().getDetail()))
                     .publishStatus(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) >= 5L ? BlockchainPublishStatus.ERROR : BlockchainPublishStatus.STORED)
-                    .build()));
+                    .build();
+            reportEntity.setL1SubmissionData(Optional.of(l1SubmissionData));
             reportEntityRepositoryGateway.storeReport(reportEntity);
             ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(organisationId, Set.of(
-                    Pair.of(reportEntity.getId(), reportEntity.getL1SubmissionData().get())
+                    Pair.of(reportEntity.getId(), l1SubmissionData)
             ));
         }
     }
@@ -106,7 +107,7 @@ public class BlockchainReportsV2Dispatcher {
             sendTransactionOnChainAndUpdateDb(reportEntity, serialisedTx);
 
             return serialisedTxE;
-        } catch (ApiException | InterruptedException e) {
+        } catch (ApiException e) {
             return Either.left(Problem.builder()
                     .withTitle("ERROR_PUSHING_TRANSACTION")
                     .withDetail("%s".formatted(e.getMessage()))
@@ -117,7 +118,7 @@ public class BlockchainReportsV2Dispatcher {
     }
 
     @Transactional
-    public void sendTransactionOnChainAndUpdateDb(ReportV2Entity report, API3BlockchainTransaction api3BlockchainTransaction) throws ApiException, InterruptedException {
+    public void sendTransactionOnChainAndUpdateDb(ReportV2Entity report, API3BlockchainTransaction api3BlockchainTransaction) throws ApiException {
         byte[] reportTxData = api3BlockchainTransaction.serialisedTxData();
 
         L1Submission l1SubmissionData = transactionSubmissionService.submitTransactionWithPossibleConfirmation(reportTxData, api3BlockchainTransaction.receiverAddress());
