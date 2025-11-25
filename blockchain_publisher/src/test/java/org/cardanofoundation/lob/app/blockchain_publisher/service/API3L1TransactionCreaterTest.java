@@ -1,29 +1,31 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
-import com.bloxbean.cardano.client.account.Account;
-import com.bloxbean.cardano.client.backend.api.BackendService;
-import com.bloxbean.cardano.client.metadata.MetadataMap;
-import io.vavr.control.Either;
-import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
-import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
-import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-
-import java.lang.reflect.Field;
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import java.lang.reflect.Field;
+import java.util.Optional;
+
+import com.bloxbean.cardano.client.account.Account;
+import com.bloxbean.cardano.client.backend.api.BackendService;
+import com.bloxbean.cardano.client.metadata.MetadataMap;
+import io.vavr.control.Either;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.zalando.problem.Problem;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @ExtendWith(MockitoExtension.class)
 public class API3L1TransactionCreaterTest {
@@ -82,7 +84,7 @@ public class API3L1TransactionCreaterTest {
     }
 
     @Test
-    void pullBlockchainTransaction() {
+    void pullBlockchainTransaction_errorGettingChainTip() {
         ReportEntity reportEntity = mock(ReportEntity.class);
         ChainTip chainTip = mock(ChainTip.class);
         MetadataMap metadataMap = mock(MetadataMap.class);

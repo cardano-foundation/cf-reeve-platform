@@ -17,11 +17,6 @@ import lombok.val;
 
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
-import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
-import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -29,8 +24,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.repor
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.BalanceSheetData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.IncomeStatementData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
-import org.mockito.Mock;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
 class API3MetadataSerialiserTest {
 
