@@ -52,7 +52,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 @Slf4j
 @ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true",
                 matchIfMissing = true)
-@PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+@PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAuditorRole())")
 public class ExtractionController {
 
         private final ExtractionItemService extractionItemService;
