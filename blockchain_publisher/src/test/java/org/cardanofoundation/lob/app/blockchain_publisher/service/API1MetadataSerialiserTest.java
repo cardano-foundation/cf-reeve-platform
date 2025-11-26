@@ -56,6 +56,7 @@ class API1MetadataSerialiserTest {
         TransactionItemEntity item1 = new TransactionItemEntity();
         item1.setId("item1");
         item1.setAmountFcy(new BigDecimal("100.00"));
+        item1.setAmountLcy(new BigDecimal("100.00"));
         item1.setFxRate(new BigDecimal("1.0"));
         item1.setDocument(Document.builder()
                 .num("doc1")
@@ -88,6 +89,7 @@ class API1MetadataSerialiserTest {
         TransactionItemEntity item2 = new TransactionItemEntity();
         item2.setId("item2");
         item2.setAmountFcy(new BigDecimal("200.00"));
+        item2.setAmountLcy(new BigDecimal("200.00"));
         item2.setFxRate(new BigDecimal("1.0"));
         item2.setDocument(Document.builder()
                 .num("doc2")
@@ -99,6 +101,7 @@ class API1MetadataSerialiserTest {
         TransactionItemEntity item3 = new TransactionItemEntity();
         item3.setId("item3");
         item3.setAmountFcy(new BigDecimal("300.00"));
+        item3.setAmountLcy(new BigDecimal("300.00"));
         item3.setFxRate(new BigDecimal("1.0"));
         item3.setDocument(Document.builder()
                 .num("doc3")
@@ -160,6 +163,7 @@ class API1MetadataSerialiserTest {
 
             assertThat(itemMap.get("id")).isEqualTo(item.getId());
             assertThat(itemMap.get("amount")).isEqualTo(BigDecimals.normaliseString(item.getAmountFcy()));
+            assertThat(itemMap.get("amount_lcy")).isEqualTo(BigDecimals.normaliseString(item.getAmountLcy()));
             assertThat(itemMap.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(item.getFxRate()));
             assertThat(itemMap.get("document")).isInstanceOf(MetadataMap.class);
         }
@@ -170,6 +174,7 @@ class API1MetadataSerialiserTest {
 
         assertThat(itemMap1.get("id")).isEqualTo("item1");
         assertThat(itemMap1.get("amount")).isEqualTo(BigDecimals.normaliseString(item1.getAmountFcy()));
+        assertThat(itemMap1.get("amount_lcy")).isEqualTo(BigDecimals.normaliseString(item1.getAmountLcy()));
         assertThat(itemMap1.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(item1.getFxRate()));
         assertThat(itemMap1.get("document")).isInstanceOf(MetadataMap.class);
         assertThat(itemMap1.get("project")).isInstanceOf(MetadataMap.class); // only for item 1

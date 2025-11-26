@@ -4,6 +4,7 @@ import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CoreCurrency;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
@@ -66,6 +68,11 @@ public class TransactionConverter {
                     aggregatedItem.setAmountFcy(itemSet.stream()
                             .map(TransactionItemEntity::getAmountFcy)
                             .reduce(ZERO, BigDecimal::add));
+                    aggregatedItem.setAmountLcy(itemSet.stream()
+                            .map(TransactionItemEntity::getAmountLcy)
+                            .filter(Objects::nonNull)
+                            .reduce(BigDecimal::add)
+                            .orElse(null));
                     return aggregatedItem;
                 })
                 .collect(Collectors.toSet());
@@ -123,6 +130,20 @@ public class TransactionConverter {
         txItemEntity.setFxRate(txItem.getFxRate());
 
         txItemEntity.setAmountFcy(txItem.getAmountFcy());
+
+        Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> organisationOptional = organisationPublicApi.findByOrganisationId(parent.getOrganisation().getId());
+        if (organisationOptional.isPresent()) {
+            org.cardanofoundation.lob.app.organisation.domain.entity.Organisation organisation = organisationOptional.get();
+            Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document> documentOpt = txItem.getDocument();
+            if (documentOpt.isPresent()) {
+                org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document document = documentOpt.get();
+                Optional<CoreCurrency> coreCurrencyOpt = document.getCurrency().getCoreCurrency();
+                if (coreCurrencyOpt.isPresent() && !organisation.getCurrencyId().equals(coreCurrencyOpt.get().toExternalId())) {
+                    txItemEntity.setAmountLcy(txItem.getAmountLcy());
+                }
+            }
+        }
+
         if(parent.getTransactionType().equals(TransactionType.FxRevaluation)){
             txItemEntity.setAmountFcy(txItem.getAmountLcy());
         }
