@@ -46,7 +46,6 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org123")
                 .reportTemplateId("template123")
                 .name("Q1 2024 Report")
                 .intervalType("QUARTER")
@@ -55,6 +54,7 @@ class ReportMapperTest {
                 .dataMode("SYSTEM")
                 .fields(List.of())
                 .build();
+        dto.setOrganisationId("org123");
 
         // When
         ReportEntity result = reportMapper.toEntity(dto, null, template);
@@ -90,7 +90,6 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org456")
                 .reportTemplateId("template456")
                 .name("New Name")
                 .intervalType("QUARTER")
@@ -99,7 +98,7 @@ class ReportMapperTest {
                 .dataMode("SYSTEM")
                 .fields(List.of())
                 .build();
-
+        dto.setOrganisationId("org456");
         // When
         ReportEntity result = reportMapper.toEntity(dto, existingReport, template);
 
@@ -131,7 +130,6 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org789")
                 .reportTemplateId("template789")
                 .name("Test Report")
                 .intervalType("YEAR")
@@ -139,6 +137,7 @@ class ReportMapperTest {
                 .dataMode("USER")
                 .fields(List.of(fieldDto))
                 .build();
+        dto.setOrganisationId("org789");
 
         when(reportTemplateFieldRepository.findById(100L)).thenReturn(Optional.of(templateField));
 
@@ -184,7 +183,6 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org999")
                 .name("Nested Report")
                 .intervalType("QUARTER")
                 .period((short) 1)
@@ -192,6 +190,7 @@ class ReportMapperTest {
                 .dataMode("USER")
                 .fields(List.of(parentFieldDto))
                 .build();
+        dto.setOrganisationId("org999");
 
         when(reportTemplateFieldRepository.findById(200L)).thenReturn(Optional.of(parentTemplateField));
         when(reportTemplateFieldRepository.findById(201L)).thenReturn(Optional.of(childTemplateField));
@@ -225,10 +224,10 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org111")
                 .name("Minimal Report")
                 .dataMode("SYSTEM")
                 .build();
+        dto.setOrganisationId("org111");
 
         // When
         ReportEntity result = reportMapper.toEntity(dto, null, template);
@@ -419,7 +418,6 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org555")
                 .name("Updated Report")
                 .intervalType("MONTH")
                 .period((short) 6)
@@ -427,6 +425,7 @@ class ReportMapperTest {
                 .dataMode("USER")
                 .fields(List.of(newFieldDto))
                 .build();
+        dto.setOrganisationId("org555");
 
         when(reportTemplateFieldRepository.findById(500L)).thenReturn(Optional.of(templateField));
 
@@ -455,11 +454,11 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org666")
                 .name("Custom Field Report")
                 .dataMode("USER")
                 .fields(List.of(fieldDto))
                 .build();
+        dto.setOrganisationId("org666");
 
         // When
         ReportEntity result = reportMapper.toEntity(dto, null, template);
@@ -536,11 +535,11 @@ class ReportMapperTest {
                 .build();
 
         ReportDto dto = ReportDto.builder()
-                .organisationId("org888")
                 .name("Complex Report")
                 .dataMode("USER")
                 .fields(List.of(parentDto1, parentDto2))
                 .build();
+        dto.setOrganisationId("org888");
 
         when(reportTemplateFieldRepository.findById(800L)).thenReturn(Optional.of(template1));
         when(reportTemplateFieldRepository.findById(801L)).thenReturn(Optional.of(template2));

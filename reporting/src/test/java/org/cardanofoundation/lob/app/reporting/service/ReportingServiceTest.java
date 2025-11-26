@@ -99,6 +99,7 @@ class ReportingServiceTest {
         reportResponseDto = new ReportResponseDto();
         reportResponseDto.setId("abc");
         reportResponseDto.setName("Test Report");
+
     }
 
     @Test
@@ -114,13 +115,14 @@ class ReportingServiceTest {
         when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
         when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+        reportResponseDto.setError(Optional.empty());
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
+        ReportResponseDto result = reportingService.create(reportDto);
 
         // Then
-        assertTrue(result.isRight());
-        assertEquals("Test Report", result.get().getName());
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Test Report", result.getName());
         verify(reportRepository).save(any(ReportEntity.class));
     }
 
@@ -130,11 +132,11 @@ class ReportingServiceTest {
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
+        ReportResponseDto result = reportingService.create(reportDto);
 
         // Then
-        assertTrue(result.isLeft());
-        assertEquals("Report Template Not Found", result.getLeft().getTitle());
+        assertTrue(result.getError().isPresent());
+        assertEquals("Report Template Not Found", result.getError().get().getTitle());
         verify(reportRepository, never()).save(any());
     }
 
@@ -145,11 +147,11 @@ class ReportingServiceTest {
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
+        ReportResponseDto result = reportingService.create(reportDto);
 
         // Then
-        assertTrue(result.isLeft());
-        assertEquals("Organisation Mismatch", result.getLeft().getTitle());
+        assertTrue(result.getError().isPresent());
+        assertEquals("Organisation Mismatch", result.getError().get().getTitle());
         verify(reportRepository, never()).save(any());
     }
 
@@ -172,12 +174,13 @@ class ReportingServiceTest {
                 .thenReturn(existingReport);
         when(reportRepository.save(any(ReportEntity.class))).thenReturn(existingReport);
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+        reportResponseDto.setError(Optional.empty());
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
+        ReportResponseDto result = reportingService.create(reportDto);
 
         // Then
-        assertTrue(result.isRight());
+        assertTrue(result.getError().isEmpty());
         verify(reportMapper).toEntity(any(ReportDto.class), eq(existingReport), eq(templateEntity));
     }
 
@@ -202,12 +205,13 @@ class ReportingServiceTest {
                 .thenReturn(newReport);
         when(reportRepository.save(any(ReportEntity.class))).thenReturn(newReport);
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+        reportResponseDto.setError(Optional.empty());
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.create(reportDto);
+        ReportResponseDto result = reportingService.create(reportDto);
 
         // Then
-        assertTrue(result.isRight());
+        assertTrue(result.getError().isEmpty());
         verify(reportMapper).toEntity(any(ReportDto.class), isNull(), eq(templateEntity));
         assertEquals(2L, newReport.getVer());
     }

@@ -71,10 +71,9 @@ class ReportingControllerTest {
     @Test
     void create_Success() {
         // Given
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportService.create(any(ReportDto.class)))
-                .thenReturn(Either.right(reportResponseDto));
-
+                .thenReturn(reportResponseDto);
+        reportResponseDto.setError(Optional.empty());
         // When
         ResponseEntity<?> response = reportingController.create(reportDto);
 
@@ -85,36 +84,23 @@ class ReportingControllerTest {
     }
 
     @Test
-    void create_NoOrganisationAccess() {
-        // Given
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        // When
-        ResponseEntity<?> response = reportingController.create(reportDto);
-
-        // Then
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportService, never()).create(any());
-    }
-
-    @Test
     void create_ServiceError() {
         // Given
         Problem problem = Problem.builder()
                 .withTitle("Template Not Found")
                 .withStatus(Status.NOT_FOUND)
                 .build();
+        ReportResponseDto responseDto = ReportResponseDto.builder().error(Optional.of(problem)).build();
 
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportService.create(any(ReportDto.class)))
-                .thenReturn(Either.left(problem));
+                .thenReturn(responseDto);
 
         // When
         ResponseEntity<?> response = reportingController.create(reportDto);
 
         // Then
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-        assertEquals(problem, response.getBody());
+        assertEquals(responseDto, response.getBody());
     }
 
     @Test

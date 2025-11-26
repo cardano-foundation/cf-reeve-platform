@@ -57,26 +57,26 @@ public class ReportingService {
     private final AuthenticationUserService authenticationUserService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
-    public Either<Problem, ReportResponseDto> create(ReportDto dto) {
+    public ReportResponseDto create(ReportDto dto) {
         log.info("Creating report: {}", dto.getName());
 
         // Validate dataMode is provided and valid
         DataMode dataMode = validateAndParseDataMode(dto.getDataMode());
         if (dataMode == null) {
-            return Either.left(buildDataModeError(dto.getDataMode()));
+            return ReportResponseDto.builder().error(Optional.of(buildDataModeError(dto.getDataMode()))).build();
         }
 
         // Validate report template exists and organization matches
         Either<Problem, ReportTemplateEntity> templateResult = validateTemplate(dto.getReportTemplateId(), dto.getOrganisationId());
         if (templateResult.isLeft()) {
-            return Either.left(templateResult.getLeft());
+            return ReportResponseDto.builder().error(Optional.of(templateResult.getLeft())).build();
         }
         ReportTemplateEntity template = templateResult.get();
 
         // Handle field generation based on data mode
         Either<Problem, List<ReportFieldDto>> fieldsResult = generateOrValidateFields(dto, dataMode, template);
         if (fieldsResult.isLeft()) {
-            return Either.left(fieldsResult.getLeft());
+            return ReportResponseDto.builder().error(Optional.of(fieldsResult.getLeft())).build();
         }
         List<ReportFieldDto> fields = fieldsResult.get();
 
@@ -95,7 +95,7 @@ public class ReportingService {
         entity.setReadyToPublish(true);
 
         entity = reportRepository.save(entity);
-        return Either.right(reportMapper.toResponseDto(entity));
+        return reportMapper.toResponseDto(entity);
     }
 
     public Either<Problem, ReportResponseDto> generate(ReportGenerateRequest request) {
@@ -124,7 +124,6 @@ public class ReportingService {
 
         // Create report DTO for preview (not saved)
         ReportDto reportDto = ReportDto.builder()
-                .organisationId(request.getOrganisationId())
                 .reportTemplateId(request.getReportTemplateId())
                 .name(reportName)
                 .intervalType(request.getIntervalType())
@@ -133,6 +132,7 @@ public class ReportingService {
                 .dataMode(SYSTEM.name())
                 .fields(fields)
                 .build();
+        reportDto.setOrganisationId(request.getOrganisationId());
 
         // Map to entity without saving to get the response structure
         ReportEntity previewEntity = reportMapper.toEntity(reportDto, null, template);
@@ -236,16 +236,17 @@ public class ReportingService {
     }
 
     private ReportDto buildReportDtoWithFields(ReportDto dto, List<ReportFieldDto> fields) {
-        return ReportDto.builder()
-            .organisationId(dto.getOrganisationId())
-            .reportTemplateId(dto.getReportTemplateId())
-            .name(dto.getName())
-            .intervalType(dto.getIntervalType())
-            .period(dto.getPeriod())
-            .year(dto.getYear())
-            .dataMode(dto.getDataMode())
-            .fields(fields)
-            .build();
+        ReportDto reportDto = ReportDto.builder()
+                .reportTemplateId(dto.getReportTemplateId())
+                .name(dto.getName())
+                .intervalType(dto.getIntervalType())
+                .period(dto.getPeriod())
+                .year(dto.getYear())
+                .dataMode(dto.getDataMode())
+                .fields(fields)
+                .build();
+        reportDto.setOrganisationId(dto.getOrganisationId());
+        return reportDto;
     }
 
     private ReportEntity findExistingReport(ReportDto dto) {

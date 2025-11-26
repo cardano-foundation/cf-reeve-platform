@@ -66,7 +66,7 @@ public class ReportingController {
     )
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
-    public ResponseEntity<?> create(
+    public ResponseEntity<ReportResponseDto> create(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Report data. For GENERATED dataMode, fields are auto-calculated. For USER dataMode, provide fields manually.",
             required = true
@@ -74,22 +74,16 @@ public class ReportingController {
     ) {
         log.info("POST /api/reports - Creating report: {}", report.getName());
 
-        // Check organisation access
-        if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
-        }
+        ReportResponseDto result = reportService.create(report);
 
-        Either<Problem, ReportResponseDto> result = reportService.create(report);
-
-        if (result.isLeft()) {
-            Problem problem = result.getLeft();
+        if (result.getError().isPresent()) {
+            Problem problem = result.getError().get();
             return ResponseEntity
                 .status(problem.getStatus().getStatusCode())
-                .body(problem);
+                .body(result);
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     @Operation(
