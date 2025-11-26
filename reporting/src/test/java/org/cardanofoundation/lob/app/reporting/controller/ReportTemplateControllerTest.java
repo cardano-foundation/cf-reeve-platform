@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.reporting.controller;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
@@ -61,7 +63,6 @@ class ReportTemplateControllerTest {
     @Test
     void create_Success() {
         // Given
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportTemplateService.create(any(ReportTemplateDto.class)))
                 .thenReturn(Either.right(templateResponseDto));
 
@@ -81,8 +82,7 @@ class ReportTemplateControllerTest {
                 .withTitle("Template Already Exists")
                 .withStatus(Status.CONFLICT)
                 .build();
-
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        ReportTemplateResponseDto reportTemplateResponseDto = ReportTemplateResponseDto.builder().error(Optional.of(problem)).build();
         when(reportTemplateService.create(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
 
@@ -91,20 +91,7 @@ class ReportTemplateControllerTest {
 
         // Then
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
-        assertEquals(problem, response.getBody());
-    }
-
-    @Test
-    void create_NoOrganisationAccess() {
-        // Given
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        // When
-        ResponseEntity<?> response = reportTemplateController.create(templateDto);
-
-        // Then
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportTemplateService, never()).create(any());
+        assertEquals(reportTemplateResponseDto, response.getBody());
     }
 
     @Test
@@ -114,8 +101,7 @@ class ReportTemplateControllerTest {
                 .withTitle("Validation Error")
                 .withStatus(Status.BAD_REQUEST)
                 .build();
-
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        ReportTemplateResponseDto reportTemplateResponseDto = ReportTemplateResponseDto.builder().error(Optional.of(problem)).build();
         when(reportTemplateService.create(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
 
@@ -124,13 +110,12 @@ class ReportTemplateControllerTest {
 
         // Then
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(problem, response.getBody());
+        assertEquals(reportTemplateResponseDto, response.getBody());
     }
 
     @Test
     void update_Success() {
         // Given
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportTemplateService.update(any(ReportTemplateDto.class)))
                 .thenReturn(Either.right(templateResponseDto));
 
@@ -151,7 +136,6 @@ class ReportTemplateControllerTest {
                 .withStatus(Status.NOT_FOUND)
                 .build();
 
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportTemplateService.update(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
 
@@ -164,19 +148,6 @@ class ReportTemplateControllerTest {
     }
 
     @Test
-    void update_NoOrganisationAccess() {
-        // Given
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        // When
-        ResponseEntity<?> response = reportTemplateController.update(templateDto);
-
-        // Then
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportTemplateService, never()).update(any());
-    }
-
-    @Test
     void update_ServiceError() {
         // Given
         Problem problem = Problem.builder()
@@ -184,7 +155,6 @@ class ReportTemplateControllerTest {
                 .withStatus(Status.BAD_REQUEST)
                 .build();
 
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportTemplateService.update(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
 
@@ -328,5 +298,32 @@ class ReportTemplateControllerTest {
         // Then
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(problem, response.getBody());
+    }
+
+    @Test
+    void templateCreateCsv_error() {
+        CreateCsvTemplateRequest csvRequest = mock(CreateCsvTemplateRequest.class);
+        Problem problem = Problem.builder()
+                .withTitle("CSV Problem")
+                .withStatus(Status.BAD_REQUEST)
+                .build();
+        when(reportTemplateService.createCsvTemplates(csvRequest)).thenReturn(Either.left(problem));
+
+        ResponseEntity<List<ReportTemplateResponseDto>> listResponseEntity = reportTemplateController.templateCreateCsv(csvRequest);
+        assertEquals(HttpStatus.BAD_REQUEST, listResponseEntity.getStatusCode());
+        assertEquals(1, listResponseEntity.getBody().size());
+        assertEquals(problem, listResponseEntity.getBody().getFirst().getError().get());
+    }
+
+    @Test
+    void templateCreateCsv_success() {
+        CreateCsvTemplateRequest csvRequest = mock(CreateCsvTemplateRequest.class);
+        ReportTemplateResponseDto templateResponseDto = mock(ReportTemplateResponseDto.class);
+        when(reportTemplateService.createCsvTemplates(csvRequest)).thenReturn(Either.right(List.of(templateResponseDto)));
+
+        ResponseEntity<List<ReportTemplateResponseDto>> listResponseEntity = reportTemplateController.templateCreateCsv(csvRequest);
+        assertEquals(HttpStatus.CREATED, listResponseEntity.getStatusCode());
+        assertEquals(1, listResponseEntity.getBody().size());
+        assertEquals(templateResponseDto, listResponseEntity.getBody().getFirst());
     }
 }

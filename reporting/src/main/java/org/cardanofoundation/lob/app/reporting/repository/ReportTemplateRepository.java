@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
 @Repository
 public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEntity, String> {
@@ -20,9 +21,18 @@ public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEn
     boolean existsByOrganisationIdAndName(String organisationId, String name);
 
     @Query("SELECT rt FROM ReportTemplateEntity rt WHERE rt.organisationId = :organisationId " +
-           "AND rt.name = :name ORDER BY rt.ver DESC LIMIT 1")
+            "AND rt.name = :name ORDER BY rt.ver DESC LIMIT 1")
     Optional<ReportTemplateEntity> findLatestByOrganisationIdAndName(
             @Param("organisationId") String organisationId,
             @Param("name") String name
     );
+
+    @Query("""
+            SELECT rt FROM ReportTemplateEntity rt WHERE rt.organisationId = :organisationId AND rt.name = :name AND rt.reportTemplateType = :reportTemplateType
+            ORDER BY rt.ver DESC
+            LIMIT 1
+            """)
+    Optional<ReportTemplateEntity> findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(@Param("organisationId") String organisationId,
+                                                                                   @Param("name") String name,
+                                                                                   @Param("reportTemplateType") ReportTemplateType reportTemplateType);
 }

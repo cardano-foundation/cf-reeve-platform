@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.reporting.dto;
 
 import java.util.List;
 
+import jakarta.validation.constraints.NotNull;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,6 +23,7 @@ public class ReportTemplateFieldDto {
     private Long id;
 
     @Schema(description = "Field name", example = "Total Revenue")
+    @NotNull(message = "Field name must not be null")
     private String fieldName;
 
     @Schema(description = "Whether values should be accumulated", example = "false", defaultValue = "false")

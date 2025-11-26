@@ -1,6 +1,11 @@
 package org.cardanofoundation.lob.app.reporting.controller;
 
+import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
+
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 import jakarta.validation.Valid;
 
@@ -13,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,6 +36,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
@@ -59,24 +66,31 @@ public class ReportTemplateController {
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
-    public ResponseEntity<?> create(
+    public ResponseEntity<ReportTemplateResponseDto> create(
             @Valid @RequestBody(required = true) ReportTemplateDto template) {
         log.info("POST /api/report-templates - Creating template: {}", template.getName());
-
-        // Check organisation access
-        if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
-        }
 
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(template);
 
         if (result.isLeft()) {
             Problem problem = result.getLeft();
-            return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+            return ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportTemplateResponseDto.builder().error(Optional.of(problem)).build());
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
+    }
+
+    @Tag(name = "Reporting", description = "Create Balance Sheet from CSV")
+    @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<List<ReportTemplateResponseDto>> templateCreateCsv(
+            @Valid @ModelAttribute CreateCsvTemplateRequest csvTemplateRequest) {
+
+        return reportTemplateService.createCsvTemplates(csvTemplateRequest)
+                .fold(
+                        error -> ResponseEntity.status(error.getStatus().getStatusCode()).body(List.of(ReportTemplateResponseDto.builder().error(Optional.of(error)).build())),
+                        templates -> ResponseEntity.status(HttpStatus.CREATED).body(templates)
+                );
     }
 
     @Operation(summary = "Update an existing report template",
@@ -102,11 +116,6 @@ public class ReportTemplateController {
             @Valid @RequestBody(required = true) ReportTemplateDto template) {
         log.info("PUT /api/report-templates - Updating template: {}", template.getName());
 
-        // Check organisation access
-        if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
-        }
 
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(template);
 
@@ -208,4 +217,5 @@ public class ReportTemplateController {
             })
             .orElse(ResponseEntity.notFound().build());
     }
+
 }

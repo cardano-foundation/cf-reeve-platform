@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.reporting.dto;
 
 import java.util.List;
 
+import jakarta.validation.constraints.NotNull;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,21 +12,24 @@ import lombok.NoArgsConstructor;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "Report template data transfer object for creating or updating templates")
-public class ReportTemplateDto {
-
-    @Schema(description = "Organisation ID", example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94", required = true)
-    private String organisationId;
+public class ReportTemplateDto extends BaseRequest {
 
     @Schema(description = "Template name", example = "Quarterly Financial Report Template", required = true)
+    @NotNull(message = "Template name must not be null")
     private String name;
 
+    @Schema(description = "Template Version", example = "1", required = true)
+    private Long ver;
+
     @Schema(description = "Report template type", example = "BALANCE_SHEET", required = true)
+    @NotNull(message = "Report template type must not be null")
     private ReportTemplateType reportTemplateType;
 
     @Schema(description = "Template description", example = "Standard quarterly financial report with balance sheet", nullable = true)

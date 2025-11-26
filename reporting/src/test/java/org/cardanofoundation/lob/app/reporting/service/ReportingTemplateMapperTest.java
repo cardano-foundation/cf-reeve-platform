@@ -42,12 +42,13 @@ class ReportingTemplateMapperTest {
     void toEntity_shouldCreateNewEntityWhenExistingTemplateIsNull() {
         // Given
         ReportTemplateDto dto = ReportTemplateDto.builder()
-            .organisationId("org123")
+
             .name("Test Template")
             .description("Test Description")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .fields(Collections.emptyList())
             .build();
+        dto.setOrganisationId("org123");
 
         // When
         ReportTemplateEntity result = mapper.toEntity(dto, null);
@@ -73,12 +74,12 @@ class ReportingTemplateMapperTest {
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
-            .organisationId("new-org")
             .name("New Name")
             .description("New Description")
             .reportTemplateType(ReportTemplateType.INCOME_STATEMENT)
             .fields(Collections.emptyList())
             .build();
+        dto.setOrganisationId("new-org");
 
         // When
         ReportTemplateEntity result = mapper.toEntity(dto, existingTemplate);
@@ -105,12 +106,11 @@ class ReportingTemplateMapperTest {
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
-            .organisationId("org123")
             .name("Test Template")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .fields(Collections.singletonList(fieldDto))
             .build();
-
+        dto.setOrganisationId("org123");
         // When
         ReportTemplateEntity result = mapper.toEntity(dto, null);
 
@@ -147,11 +147,11 @@ class ReportingTemplateMapperTest {
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
-            .organisationId("org123")
             .name("Test Template")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .fields(Collections.singletonList(fieldDto))
             .build();
+        dto.setOrganisationId("org123");
 
         // When
         ReportTemplateEntity result = mapper.toEntity(dto, null);
@@ -178,11 +178,11 @@ class ReportingTemplateMapperTest {
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
-            .organisationId("org123")
             .name("Test Template")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .fields(Collections.singletonList(parentFieldDto))
             .build();
+        dto.setOrganisationId("org123");
 
         // When
         ReportTemplateEntity result = mapper.toEntity(dto, null);
@@ -222,11 +222,11 @@ class ReportingTemplateMapperTest {
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
-            .organisationId("org123")
             .name("Template")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .fields(Collections.singletonList(newFieldDto))
             .build();
+        dto.setOrganisationId("org123");
 
         // When
         ReportTemplateEntity result = mapper.toEntity(dto, existingTemplate);
@@ -412,11 +412,11 @@ class ReportingTemplateMapperTest {
     void toEntity_shouldHandleNullFields() {
         // Given
         ReportTemplateDto dto = ReportTemplateDto.builder()
-            .organisationId("org123")
             .name("Test Template")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .fields(null)
             .build();
+        dto.setOrganisationId("org123");
 
         // When
         ReportTemplateEntity result = mapper.toEntity(dto, null);

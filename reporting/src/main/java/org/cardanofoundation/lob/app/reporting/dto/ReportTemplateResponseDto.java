@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.dto;
 
 import java.util.List;
+import java.util.Optional;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
@@ -40,4 +42,7 @@ public class ReportTemplateResponseDto {
     @Schema(description = "List of template field definitions")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ReportTemplateFieldDto> columns;
+
+    private Optional<Problem> error;
+
 }
