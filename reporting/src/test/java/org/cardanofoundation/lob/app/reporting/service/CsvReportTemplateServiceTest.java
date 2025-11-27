@@ -39,7 +39,7 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 
 @ExtendWith(MockitoExtension.class)
-public class CsvReportTemplateServiceTest {
+class CsvReportTemplateServiceTest {
 
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;

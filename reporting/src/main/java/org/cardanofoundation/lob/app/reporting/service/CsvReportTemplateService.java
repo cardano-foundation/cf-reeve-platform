@@ -96,10 +96,10 @@ public class CsvReportTemplateService {
             ReportTemplateDto reportTemplateDto = new ReportTemplateDto();
             reportTemplateDto.setOrganisationId(csvTemplateRequest.getOrganisationId());
             reportTemplateDto.setName(firstLine.getName());
-            reportTemplateDto.setReportTemplateType(reportTemplateType);
+            reportTemplateDto.setReportTemplateType(reportTemplateType.name());
             reportTemplateDto.setVer(1L);
             reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(reportTemplateDto.getOrganisationId(),
-                            reportTemplateDto.getName(), reportTemplateDto.getReportTemplateType())
+                            reportTemplateDto.getName(), reportTemplateType)
                     .ifPresent(existingTemplate -> reportTemplateDto.setVer(existingTemplate.getVer() + 1));
             List<ReportTemplateFieldDto> fieldDtos = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
@@ -127,7 +127,7 @@ public class CsvReportTemplateService {
                         parentField.setChildFields(new ArrayList<>());
                     }
                     Optional<ReportTemplateFieldDto> childWithSameName = parentField.getChildFields().stream().filter(field -> field.getFieldName().equals(fieldDto.getFieldName())).findFirst();
-                    if(childWithSameName.isPresent()) {
+                    if (childWithSameName.isPresent()) {
                         Problem problem = Problem.builder()
                                 .withTitle(Constants.CSV_PARSING_ERROR)
                                 .withDetail("Duplicate field name under the same parent: " + fieldDto.getFieldName() + " under parent: " + parentField.getFieldName())
@@ -147,7 +147,9 @@ public class CsvReportTemplateService {
         return Either.right(results.stream().map(e -> e.fold(
                 left -> ReportTemplateResponseDto.builder().error(Optional.of(left)).build(),
                 dto -> {
-                    ReportTemplateEntity existingTemplate = reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), dto.getReportTemplateType()).orElse(null);
+                    ReportTemplateEntity existingTemplate = reportTemplateRepository
+                            .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()))
+                            .orElse(null);
                     ReportTemplateEntity entity = reportTemplateMapper.toEntity(dto, existingTemplate);
                     entity = reportTemplateRepository.save(entity);
                     return reportTemplateMapper.toResponseDto(entity);

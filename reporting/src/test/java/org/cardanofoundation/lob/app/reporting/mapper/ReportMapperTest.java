@@ -26,13 +26,17 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldE
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.model.enums.PublishError;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateFieldRepository;
+import org.cardanofoundation.lob.app.reporting.viewConverter.ReportResponseConverter;
 
 @ExtendWith(MockitoExtension.class)
 class ReportMapperTest {
 
     @Mock
     private ReportTemplateFieldRepository reportTemplateFieldRepository;
+    @Mock
+    private ReportResponseConverter reportResponseConverter;
 
     @InjectMocks
     private ReportMapper reportMapper;
@@ -178,7 +182,6 @@ class ReportMapperTest {
 
         ReportFieldDto parentFieldDto = ReportFieldDto.builder()
                 .templateFieldId(200L)
-                .value(new BigDecimal("50000.00"))
                 .childFields(List.of(childFieldDto))
                 .build();
 
@@ -203,7 +206,7 @@ class ReportMapperTest {
         assertEquals(1, result.getFields().size());
 
         ReportFieldEntity parentField = result.getFields().get(0);
-        assertEquals(new BigDecimal("50000.00"), parentField.getValue());
+        assertEquals(new BigDecimal("30000.00"), parentField.getValue());
         assertEquals(parentTemplateField, parentField.getFieldTemplate());
 
         assertNotNull(parentField.getChildFields());
@@ -273,7 +276,7 @@ class ReportMapperTest {
                 .publishError(PublishError.INVALID_REPORT_DATA)
                 .fields(new ArrayList<>())
                 .build();
-
+        when(reportResponseConverter.convertResponse(any(), any())).thenAnswer(invocationOnMock -> invocationOnMock.getArguments()[0]);
         // When
         ReportResponseDto result = reportMapper.toResponseDto(entity);
 
@@ -336,14 +339,13 @@ class ReportMapperTest {
                 .id(1L)
                 .report(entity)
                 .fieldTemplate(parentTemplateField)
-                .value(new BigDecimal("20000"))
                 .childFields(List.of(childField))
                 .build();
 
         childField.setParentField(parentField);
         entity.getFields().add(parentField);
         entity.getFields().add(childField);
-
+        when(reportResponseConverter.convertResponse(any(), any())).thenAnswer(invocationOnMock -> invocationOnMock.getArguments()[0]);
         // When
         ReportResponseDto result = reportMapper.toResponseDto(entity);
 
@@ -355,7 +357,7 @@ class ReportMapperTest {
         ReportFieldDto topLevelFieldDto = result.getFields().get(0);
         assertEquals(300L, topLevelFieldDto.getTemplateFieldId());
         assertEquals("Parent Field", topLevelFieldDto.getTemplateFieldName());
-        assertEquals(new BigDecimal("20000"), topLevelFieldDto.getValue());
+        assertEquals(new BigDecimal("10000"), topLevelFieldDto.getValue());
 
         assertNotNull(topLevelFieldDto.getChildFields());
         assertEquals(1, topLevelFieldDto.getChildFields().size());
@@ -374,8 +376,9 @@ class ReportMapperTest {
                 .organisationId("org444")
                 .name("Minimal Report")
                 .fields(null)
+                .reportTemplate(ReportTemplateEntity.builder().reportTemplateType(ReportTemplateType.BALANCE_SHEET).build())
                 .build();
-
+        when(reportResponseConverter.convertResponse(any(), any())).thenAnswer(invocationOnMock -> invocationOnMock.getArguments()[0]);
         // When
         ReportResponseDto result = reportMapper.toResponseDto(entity);
 
@@ -491,6 +494,7 @@ class ReportMapperTest {
                 .fields(new ArrayList<>())
                 .build();
 
+        when(reportResponseConverter.convertResponse(any(), any())).thenAnswer(invocationOnMock -> invocationOnMock.getArguments()[0]);
         // When
         ReportResponseDto result = reportMapper.toResponseDto(publishedReport);
 
@@ -525,13 +529,11 @@ class ReportMapperTest {
 
         ReportFieldDto parentDto1 = ReportFieldDto.builder()
                 .templateFieldId(800L)
-                .value(new BigDecimal("10000"))
                 .childFields(List.of(childDto))
                 .build();
 
         ReportFieldDto parentDto2 = ReportFieldDto.builder()
                 .templateFieldId(800L)
-                .value(new BigDecimal("15000"))
                 .build();
 
         ReportDto dto = ReportDto.builder()
@@ -543,7 +545,6 @@ class ReportMapperTest {
 
         when(reportTemplateFieldRepository.findById(800L)).thenReturn(Optional.of(template1));
         when(reportTemplateFieldRepository.findById(801L)).thenReturn(Optional.of(template2));
-
         // When
         ReportEntity result = reportMapper.toEntity(dto, null, template);
 
@@ -553,14 +554,14 @@ class ReportMapperTest {
 
         // Verify first parent field has child
         ReportFieldEntity firstParent = result.getFields().get(0);
-        assertEquals(new BigDecimal("10000"), firstParent.getValue());
+        assertEquals(new BigDecimal("5000"), firstParent.getValue());
         assertNotNull(firstParent.getChildFields());
         assertEquals(1, firstParent.getChildFields().size());
         assertEquals(new BigDecimal("5000"), firstParent.getChildFields().get(0).getValue());
 
         // Verify second parent field has no children
         ReportFieldEntity secondParent = result.getFields().get(1);
-        assertEquals(new BigDecimal("15000"), secondParent.getValue());
+        assertEquals(new BigDecimal("0"), secondParent.getValue());
         assertTrue(secondParent.getChildFields() == null || secondParent.getChildFields().isEmpty());
     }
 }

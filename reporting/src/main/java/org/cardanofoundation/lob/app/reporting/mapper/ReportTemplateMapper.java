@@ -16,6 +16,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
 @Component
 @RequiredArgsConstructor
@@ -29,7 +30,7 @@ public class ReportTemplateMapper {
         template.setOrganisationId(dto.getOrganisationId());
         template.setName(dto.getName());
         template.setDescription(dto.getDescription());
-        template.setReportTemplateType(dto.getReportTemplateType());
+        template.setReportTemplateType(ReportTemplateType.valueOf(dto.getReportTemplateType()));
         if (dto.getFields() != null) {
             List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
                 .map(columnDto -> toColumnEntity(columnDto, template, null))

@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.reporting.model.entity;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
@@ -53,4 +54,11 @@ public class ReportFieldEntity extends CommonEntity {
     private List<ReportFieldEntity> childFields = new ArrayList<>();
 
     private BigDecimal value;
+
+    public BigDecimal getValue() {
+        if(childFields.isEmpty()) return Optional.ofNullable(value).orElse(BigDecimal.ZERO);
+        return childFields.stream()
+                .map(ReportFieldEntity::getValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }

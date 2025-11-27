@@ -240,7 +240,7 @@ class ReportingServiceTest {
 
         // Then
         assertTrue(result.isLeft());
-        assertEquals("Report Not Found", result.getLeft().getTitle());
+        assertEquals("REPORT_NOT_FOUND", result.getLeft().getTitle());
         verify(reportRepository, never()).deleteById(anyString());
     }
 
@@ -258,7 +258,7 @@ class ReportingServiceTest {
 
         // Then
         assertTrue(result.isLeft());
-        assertEquals("Report Already Published", result.getLeft().getTitle());
+        assertEquals("REPORT_ALREADY_PUBLISHED", result.getLeft().getTitle());
         verify(reportRepository, never()).deleteById(anyString());
     }
 

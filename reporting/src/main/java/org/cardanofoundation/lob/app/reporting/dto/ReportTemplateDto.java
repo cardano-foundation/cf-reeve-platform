@@ -11,7 +11,6 @@ import lombok.NoArgsConstructor;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Data
@@ -30,7 +29,7 @@ public class ReportTemplateDto extends BaseRequest {
 
     @Schema(description = "Report template type", example = "BALANCE_SHEET", required = true)
     @NotNull(message = "Report template type must not be null")
-    private ReportTemplateType reportTemplateType;
+    private String reportTemplateType;
 
     @Schema(description = "Template description", example = "Standard quarterly financial report with balance sheet", nullable = true)
     private String description;

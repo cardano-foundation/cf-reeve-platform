@@ -35,7 +35,7 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldE
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 
 @ExtendWith(MockitoExtension.class)
-public class CsvReportServiceTest {
+class CsvReportServiceTest {
 
 
     @Mock

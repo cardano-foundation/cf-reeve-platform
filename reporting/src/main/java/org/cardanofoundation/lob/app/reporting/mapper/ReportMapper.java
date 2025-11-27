@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.reporting.mapper;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -18,12 +19,14 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldE
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateFieldRepository;
+import org.cardanofoundation.lob.app.reporting.viewConverter.ReportResponseConverter;
 
 @Component
 @RequiredArgsConstructor
 public class ReportMapper {
 
     private final ReportTemplateFieldRepository reportTemplateFieldRepository;
+    private final ReportResponseConverter reportResponseConverter;
 
     public ReportEntity toEntity(ReportDto dto, ReportEntity existingReport, ReportTemplateEntity template) {
         final ReportEntity report = existingReport != null ? existingReport : new ReportEntity();
@@ -88,22 +91,24 @@ public class ReportMapper {
                 .collect(Collectors.toList())
             : Collections.emptyList();
 
-        return ReportResponseDto.builder()
-            .id(entity.getId())
-            .organisationId(entity.getOrganisationId())
-            .reportTemplateId(entity.getReportTemplate() != null ? entity.getReportTemplate().getId() : null)
-            .name(entity.getName())
-            .intervalType(entity.getIntervalType() != null ? entity.getIntervalType().name() : null)
-            .period(entity.getPeriod())
-            .year(entity.getYear())
-            .ver(entity.getVer())
-            .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
-            .isReadyToPublish(entity.isReadyToPublish())
-            .isPublished(entity.isLedgerDispatchApproved())
-            .blockchainTxId(entity.getBlockchainHash())
-            .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
-            .fields(topLevelFields)
-            .build();
+        ReportResponseDto responseDto = ReportResponseDto.builder()
+                .id(entity.getId())
+                .organisationId(entity.getOrganisationId())
+                .reportTemplateId(entity.getReportTemplate() != null ? entity.getReportTemplate().getId() : null)
+                .name(entity.getName())
+                .intervalType(entity.getIntervalType() != null ? entity.getIntervalType().name() : null)
+                .period(entity.getPeriod())
+                .year(entity.getYear())
+                .ver(entity.getVer())
+                .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
+                .isReadyToPublish(entity.isReadyToPublish())
+                .isPublished(entity.isLedgerDispatchApproved())
+                .blockchainTxId(entity.getBlockchainHash())
+                .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
+                .fields(topLevelFields)
+                .error(Optional.empty())
+                .build();
+        return reportResponseConverter.convertResponse(responseDto, entity.getReportTemplate().getReportTemplateType());
     }
 
     private ReportFieldEntity toColumnEntity(ReportFieldDto dto) {

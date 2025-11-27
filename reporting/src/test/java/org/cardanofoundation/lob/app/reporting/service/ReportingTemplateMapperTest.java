@@ -45,7 +45,7 @@ class ReportingTemplateMapperTest {
 
             .name("Test Template")
             .description("Test Description")
-            .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
+            .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.emptyList())
             .build();
         dto.setOrganisationId("org123");
@@ -76,7 +76,7 @@ class ReportingTemplateMapperTest {
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("New Name")
             .description("New Description")
-            .reportTemplateType(ReportTemplateType.INCOME_STATEMENT)
+            .reportTemplateType("INCOME_STATEMENT")
             .fields(Collections.emptyList())
             .build();
         dto.setOrganisationId("new-org");
@@ -107,7 +107,7 @@ class ReportingTemplateMapperTest {
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Test Template")
-            .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
+            .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.singletonList(fieldDto))
             .build();
         dto.setOrganisationId("org123");
@@ -148,7 +148,7 @@ class ReportingTemplateMapperTest {
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Test Template")
-            .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
+            .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.singletonList(fieldDto))
             .build();
         dto.setOrganisationId("org123");
@@ -179,7 +179,7 @@ class ReportingTemplateMapperTest {
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Test Template")
-            .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
+            .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.singletonList(parentFieldDto))
             .build();
         dto.setOrganisationId("org123");
@@ -223,7 +223,7 @@ class ReportingTemplateMapperTest {
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Template")
-            .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
+            .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.singletonList(newFieldDto))
             .build();
         dto.setOrganisationId("org123");
@@ -413,7 +413,7 @@ class ReportingTemplateMapperTest {
         // Given
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Test Template")
-            .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
+            .reportTemplateType("BALANCE_SHEET")
             .fields(null)
             .build();
         dto.setOrganisationId("org123");

@@ -30,19 +30,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
-import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
-import org.cardanofoundation.lob.app.reporting.dto.TemplateCsvLine;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
+import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
 
 @ExtendWith(MockitoExtension.class)
 class ReportTemplateServiceTest {
@@ -56,13 +53,7 @@ class ReportTemplateServiceTest {
     @Mock
     private Validator validator;
     @Mock
-    private CsvParser<TemplateCsvLine> csvParser;
-    @Mock
-    private ChartOfAccountTypeRepository chartOfAccountTypeRepository;
-    @Mock
-    private ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
-    @Mock
-    private OrganisationPublicApiIF organisationPublicApi;
+    private ReportTemplateTypeValidator reportTemplateTypeValidator;
 
     @InjectMocks
     private ReportTemplateService reportTemplateService;
@@ -77,6 +68,7 @@ class ReportTemplateServiceTest {
         templateDto = new ReportTemplateDto();
         templateDto.setName("Test Template");
         templateDto.setOrganisationId("org123");
+        templateDto.setReportTemplateType("BALANCE_SHEET");
         templateDto.setFields(new ArrayList<>());
 
         templateEntity = new ReportTemplateEntity();
@@ -84,6 +76,7 @@ class ReportTemplateServiceTest {
         templateEntity.setOrganisationId("org123");
         templateEntity.setName("Test Template");
         templateEntity.setVer(1L);
+        templateEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
         templateEntity.setColumns(new ArrayList<>());
 
         templateResponseDto = new ReportTemplateResponseDto();
@@ -104,7 +97,7 @@ class ReportTemplateServiceTest {
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
-
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
         // When
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
@@ -112,6 +105,25 @@ class ReportTemplateServiceTest {
         assertTrue(result.isRight());
         assertEquals("Test Template", result.get().getName());
         verify(reportTemplateRepository).save(templateEntity);
+    }
+
+    @Test
+    void create_NewTemplate_TypeValidatorError() {
+
+        // Given
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
+                .thenReturn(Optional.empty());
+        when(reportTemplateMapper.toEntity(eq(templateDto), isNull())).thenReturn(templateEntity);
+
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.left(Problem.builder().build()));
+        // When
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
     }
 
     @Test
@@ -215,6 +227,8 @@ class ReportTemplateServiceTest {
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
+
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
         // When
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
@@ -245,6 +259,7 @@ class ReportTemplateServiceTest {
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
 
         // When
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
@@ -296,7 +311,7 @@ class ReportTemplateServiceTest {
 
         // Then
         assertTrue(result.isLeft());
-        assertEquals("Report Template Not Found", result.getLeft().getTitle());
+        assertEquals("TEMPLATE_NOT_FOUND", result.getLeft().getTitle());
         verify(reportTemplateRepository, never()).deleteById(anyString());
     }
 
@@ -314,7 +329,7 @@ class ReportTemplateServiceTest {
 
         // Then
         assertTrue(result.isLeft());
-        assertEquals("Template Has Associated Reports", result.getLeft().getTitle());
+        assertEquals("TEMPLATE_IN_USE", result.getLeft().getTitle());
         verify(reportTemplateRepository, never()).deleteById(anyString());
     }
 

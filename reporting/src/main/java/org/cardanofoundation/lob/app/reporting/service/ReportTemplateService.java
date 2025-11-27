@@ -28,8 +28,10 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
+import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +44,7 @@ public class ReportTemplateService {
     private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
     private final ReportingRepository reportingRepository;
     private final Validator validator;
+    private final ReportTemplateTypeValidator reportTemplateTypeValidator;
 
     public Either<Problem, ReportTemplateResponseDto> create(ReportTemplateDto dto) {
         log.info("Creating report template: {}", dto.getName());
@@ -70,11 +73,24 @@ public class ReportTemplateService {
                     .withStatus(Status.CONFLICT)
                     .build());
         }
-
+        try {
+            ReportTemplateType.valueOf(dto.getReportTemplateType());
+        } catch (IllegalArgumentException e) {
+            return Either.left(Problem.builder()
+                    .withTitle("Invalid Report Template Type")
+                    .withDetail("The report template type '" + dto.getReportTemplateType() + "' is not valid.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
 
         // New template - create with version 1
         log.info("Creating new template: {}", dto.getName());
         ReportTemplateEntity templateToSave = reportTemplateMapper.toEntity(dto, null);
+
+        Either<Problem, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
+        if(reportTypeValidated.isLeft()) {
+            return Either.left(reportTypeValidated.getLeft());
+        }
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
@@ -142,7 +158,15 @@ public class ReportTemplateService {
         // Check if there are any reports using this template
         List<org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity> existingReports =
                 reportingRepository.findByReportTemplateId(existing.getId());
-
+        try {
+            ReportTemplateType.valueOf(dto.getReportTemplateType());
+        } catch (IllegalArgumentException e) {
+            return Either.left(Problem.builder()
+                    .withTitle("Invalid Report Template Type")
+                    .withDetail("The report template type '" + dto.getReportTemplateType() + "' is not valid.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
         if (!existingReports.isEmpty()) {
             // Reports exist - create a new version
             log.info("Template '{}' has {} existing reports, creating new version {} -> {}",
@@ -156,6 +180,10 @@ public class ReportTemplateService {
             templateToSave = reportTemplateMapper.toEntity(dto, existing);
         }
 
+        Either<Problem, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
+        if(reportTypeValidated.isLeft()) {
+            return Either.left(reportTypeValidated.getLeft());
+        }
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
@@ -186,7 +214,7 @@ public class ReportTemplateService {
         Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(id);
         if (templateOpt.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("Report Template Not Found")
+                    .withTitle("TEMPLATE_NOT_FOUND")
                     .withDetail("Report template with ID " + id + " does not exist")
                     .withStatus(Status.NOT_FOUND)
                     .build());
@@ -198,7 +226,7 @@ public class ReportTemplateService {
 
         if (!existingReports.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("Template Has Associated Reports")
+                    .withTitle("TEMPLATE_IN_USE")
                     .withDetail("Cannot delete template with ID " + id + " because it has " +
                             existingReports.size() + " associated report(s)")
                     .withStatus(Status.BAD_REQUEST)
