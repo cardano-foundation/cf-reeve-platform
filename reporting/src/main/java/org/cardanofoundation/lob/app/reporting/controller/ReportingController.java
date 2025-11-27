@@ -1,6 +1,11 @@
 package org.cardanofoundation.lob.app.reporting.controller;
 
+
+import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
+
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.validation.Valid;
 
@@ -8,11 +13,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,10 +35,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -45,6 +52,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 public class ReportingController {
 
     private final ReportingService reportService;
+    private final CsvReportService csvReportService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(
@@ -55,7 +63,7 @@ public class ReportingController {
                 responseCode = "201",
                 description = "Report created successfully",
                 content = @Content(
-                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ReportResponseDto.class)
                 )
             ),
@@ -64,7 +72,7 @@ public class ReportingController {
             @ApiResponse(responseCode = "404", description = "Report template not found")
         }
     )
-    @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportResponseDto> create(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -86,6 +94,18 @@ public class ReportingController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
+    @Tag(name = "Reporting", description = "Create Report from CSV")
+    @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<List<ReportResponseDto>> templateCreateCsv(
+            @Valid @ModelAttribute CreateCsvReportRequest csvReportRequest) {
+        return csvReportService.createCsvReports(csvReportRequest)
+                .fold(
+                        error -> ResponseEntity.status(error.getStatus().getStatusCode()).body(List.of(ReportResponseDto.builder().error(Optional.of(error)).build())),
+                        templates -> ResponseEntity.status(HttpStatus.CREATED).body(templates)
+                );
+    }
+
     @Operation(
         summary = "Get report by ID",
         description = "Retrieves a report by its ID with all associated column values in hierarchical structure",
@@ -94,7 +114,7 @@ public class ReportingController {
                 responseCode = "200",
                 description = "Report found",
                 content = @Content(
-                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ReportResponseDto.class)
                 )
             ),
@@ -102,7 +122,7 @@ public class ReportingController {
             @ApiResponse(responseCode = "404", description = "Report not found")
         }
     )
-    @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/{id}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> findById(
         @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
@@ -153,14 +173,14 @@ public class ReportingController {
                 responseCode = "200",
                 description = "List of reports",
                 content = @Content(
-                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    mediaType = APPLICATION_JSON_VALUE,
                     array = @ArraySchema(schema = @Schema(implementation = ReportResponseDto.class))
                 )
             ),
             @ApiResponse(responseCode = "403", description = "User does not have access to this organisation")
         }
     )
-    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> findAll(
         @RequestParam(value = "organisationId", required = true)
@@ -244,7 +264,7 @@ public class ReportingController {
                 responseCode = "201",
                 description = "Report preview generated successfully (not saved)",
                 content = @Content(
-                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ReportResponseDto.class)
                 )
             ),
@@ -253,7 +273,7 @@ public class ReportingController {
             @ApiResponse(responseCode = "404", description = "Report template not found")
         }
     )
-    @PostMapping(value = "/generate", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/generate", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> generate(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -288,14 +308,14 @@ public class ReportingController {
             responses = {
                     @ApiResponse(responseCode = "201",
                             description = "Report marked for publishing successfully",
-                            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            content = @Content(mediaType = APPLICATION_JSON_VALUE,
                                     schema = @Schema(implementation = ReportResponseDto.class))),
                     @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
                     @ApiResponse(responseCode = "403",
                             description = "User does not have access to this organisation"),
                     @ApiResponse(responseCode = "404", description = "Report not found")})
-    @PostMapping(value = "/publish", produces = MediaType.APPLICATION_JSON_VALUE,
-            consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/publish", produces = APPLICATION_JSON_VALUE,
+            consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
     public ResponseEntity<?> publish(
             @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(

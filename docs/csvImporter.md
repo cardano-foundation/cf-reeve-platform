@@ -126,3 +126,15 @@ The following columns are needed:
 - `Accumulated Yearly`: A boolean if the field is accumulated yearly (e.g. `False`)
 - `Accumulated Previous Year`: A boolean if the field is accumulated for the previous year (e.g. `False`)
 - `Negated`: A boolean if the field is negated (e.g. `False`)
+
+### Report data structure
+An example can be found here: [Report CSV Example](./examples/reporting/report_example.csv)
+The following columns are needed:
+- `Template Name`: Name of the report template (e.g. `Balance Sheet Template`)
+- `Name`: Name of the report (e.g. `Balance Sheet Q1`)
+- `Interval type`: Type of the interval (one of `MONTH`, `QUARTER`, `YEAR`)
+- `Period`: Period of the report - In case of `MONTH` a range of 1-12, in case of `QUARTER` a range of 1-4 and in case of `YEAR` a value of 1 or empty
+- `Year`: Year of the report (e.g. `2024`)
+- `Data mode`: Data mode of the report (one of `SYSTEM` or `USER`) - In case of `USER` field and amounts must be provided. In Case of `SYSTEM` fields and amounts must be empty
+- `Field name`: Name of the field. For nested fields use `.` as separator (e.g. `ASSETS.CURRENT_ASSETS.CASH_AND_CASH_EQUIVALENTS`)
+- `Amount`: Amount of the field (e.g. `1000`)

@@ -17,6 +17,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.context.ApplicationEventPublisher;
+
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -38,30 +40,25 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
+import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 
 @ExtendWith(MockitoExtension.class)
 class ReportingServiceTest {
 
     @Mock
     private ReportingRepository reportRepository;
-
     @Mock
     private ReportTemplateRepository reportTemplateRepository;
-
     @Mock
     private ReportMapper reportMapper;
-
     @Mock
     private ChartOfAccountRepository chartOfAccountRepository;
-
     @Mock
     private TransactionItemRepository transactionItemRepository;
-
     @Mock
-    private org.cardanofoundation.lob.app.support.security.AuthenticationUserService authenticationUserService;
-
+    private AuthenticationUserService authenticationUserService;
     @Mock
-    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+    private ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks
     private ReportingService reportingService;
@@ -136,7 +133,7 @@ class ReportingServiceTest {
 
         // Then
         assertTrue(result.getError().isPresent());
-        assertEquals("Report Template Not Found", result.getError().get().getTitle());
+        assertEquals("REPORT_TEMPLATE_NOT_FOUND", result.getError().get().getTitle());
         verify(reportRepository, never()).save(any());
     }
 
@@ -151,7 +148,7 @@ class ReportingServiceTest {
 
         // Then
         assertTrue(result.getError().isPresent());
-        assertEquals("Organisation Mismatch", result.getError().get().getTitle());
+        assertEquals("ORGANISATION_MISMATCH", result.getError().get().getTitle());
         verify(reportRepository, never()).save(any());
     }
 
@@ -358,6 +355,6 @@ class ReportingServiceTest {
 
         // Then
         assertTrue(result.isLeft());
-        assertEquals("Report Template Not Found", result.getLeft().getTitle());
+        assertEquals("REPORT_TEMPLATE_NOT_FOUND", result.getLeft().getTitle());
     }
 }

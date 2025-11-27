@@ -172,7 +172,7 @@ public class ReportingService {
         Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(templateId);
         if (templateOpt.isEmpty()) {
             return Either.left(Problem.builder()
-                .withTitle("Report Template Not Found")
+                .withTitle("REPORT_TEMPLATE_NOT_FOUND")
                 .withDetail("Report template with ID " + templateId + " does not exist")
                 .withStatus(Status.NOT_FOUND)
                 .build());
@@ -181,7 +181,7 @@ public class ReportingService {
         ReportTemplateEntity template = templateOpt.get();
         if (!template.getOrganisationId().equals(organisationId)) {
             return Either.left(Problem.builder()
-                .withTitle("Organisation Mismatch")
+                .withTitle("ORGANISATION_MISMATCH")
                 .withDetail("Report template belongs to a different organisation")
                 .withStatus(Status.BAD_REQUEST)
                 .build());

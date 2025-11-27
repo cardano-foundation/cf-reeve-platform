@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,7 @@ import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class API3MetadataSerialiser {
     private final OrganisationPublicApi organisationPublicApi;
     public static final String VERSION = "1.2";
@@ -37,7 +39,7 @@ public class API3MetadataSerialiser {
         globalMetadataMap.put("metadata", createMetadataSection(creationSlot));
         Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> byOrganisationId =
                 organisationPublicApi.findByOrganisationId(reportEntity.getOrganisationId());
-        if(byOrganisationId.isPresent()) {
+        if (byOrganisationId.isPresent()) {
             Organisation organisation = Organisation.fromOrganisationEntity(byOrganisationId.get());
             globalMetadataMap.put("org", serialiseOrganisation(organisation));
         } else {
@@ -58,7 +60,9 @@ public class API3MetadataSerialiser {
     private MetadataMap createRecursiveMetadataSection(
             MetadataMap MetdataMap, Map<String, Object> data) {
         data.forEach((key, value) -> {
-            if (value instanceof Map) {
+            if (value == null) {
+                log.debug("Null value for key: {}", key);
+            } else if (value instanceof Map) {
                 MetadataMap childMap = MetadataBuilder.createMap();
                 createRecursiveMetadataSection(childMap, (Map<String, Object>) value);
                 MetdataMap.put(key, childMap);
@@ -103,7 +107,8 @@ public class API3MetadataSerialiser {
                     reportEntity.getBalanceSheetReportData().orElseThrow()));
             case INCOME_STATEMENT -> globalMetadataMap.put("data", serialiseIncomeStatementData(
                     reportEntity.getIncomeStatementReportData().orElseThrow()));
-            default -> throw new IllegalArgumentException("Unsupported report type: %s".formatted(reportEntity.getType()));
+            default ->
+                    throw new IllegalArgumentException("Unsupported report type: %s".formatted(reportEntity.getType()));
         }
 
         return globalMetadataMap;

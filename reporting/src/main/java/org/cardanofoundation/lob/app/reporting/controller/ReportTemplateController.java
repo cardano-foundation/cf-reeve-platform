@@ -39,6 +39,7 @@ import org.zalando.problem.Problem;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
+import org.cardanofoundation.lob.app.reporting.service.CsvReportTemplateService;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -50,6 +51,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 public class ReportTemplateController {
 
     private final ReportTemplateService reportTemplateService;
+    private final CsvReportTemplateService csvReportTemplateService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(summary = "Create a new report template",
@@ -80,13 +82,13 @@ public class ReportTemplateController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
     }
 
-    @Tag(name = "Reporting", description = "Create Balance Sheet from CSV")
+    @Tag(name = "Reporting", description = "Create Report Template from CSV")
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<List<ReportTemplateResponseDto>> templateCreateCsv(
             @Valid @ModelAttribute CreateCsvTemplateRequest csvTemplateRequest) {
 
-        return reportTemplateService.createCsvTemplates(csvTemplateRequest)
+        return csvReportTemplateService.createCsvTemplates(csvTemplateRequest)
                 .fold(
                         error -> ResponseEntity.status(error.getStatus().getStatusCode()).body(List.of(ReportTemplateResponseDto.builder().error(Optional.of(error)).build())),
                         templates -> ResponseEntity.status(HttpStatus.CREATED).body(templates)

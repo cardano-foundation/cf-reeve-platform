@@ -1,2 +1,2 @@
 Name,ReportType,Field Name,Parent,Mapped Types,Accumulated,Accumulated Yearly,Accumulated Previous Year,Negated
-Income Statement Example,INCOME_STATEMENTE,Revenue,,,true,false,false,false
+Income Statement Example,INCOME_STATEMENT,Revenue,,,true,false,false,false

@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.reporting.controller;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,9 +26,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -36,7 +39,8 @@ class ReportingControllerTest {
 
     @Mock
     private ReportingService reportService;
-
+    @Mock
+    private CsvReportService csvReportService;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
 
@@ -314,5 +318,35 @@ class ReportingControllerTest {
         // Then
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertEquals(problem, response.getBody());
+    }
+
+    @Test
+    void templateCreateCsv_problem() {
+        CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
+        Problem problem = Problem.builder()
+                .withTitle("CSV Creation Failed")
+                .withStatus(Status.INTERNAL_SERVER_ERROR)
+                .build();
+        ReportResponseDto reportResponseDto = ReportResponseDto.builder().error(Optional.of(problem)).build();
+
+        when(csvReportService.createCsvReports(request)).thenReturn(Either.left(problem));
+
+        ResponseEntity<List<ReportResponseDto>> response = reportingController.templateCreateCsv(request);
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals(List.of(reportResponseDto), response.getBody());
+    }
+
+    @Test
+    void templateCreateCsv_success() {
+        CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
+        ReportResponseDto reportResponseDto = ReportResponseDto.builder().build();
+
+        when(csvReportService.createCsvReports(request)).thenReturn(Either.right(List.of(reportResponseDto)));
+
+        ResponseEntity<List<ReportResponseDto>> response = reportingController.templateCreateCsv(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(List.of(reportResponseDto), response.getBody());
     }
 }

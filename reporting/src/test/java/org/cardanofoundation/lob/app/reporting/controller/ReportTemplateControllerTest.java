@@ -29,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
+import org.cardanofoundation.lob.app.reporting.service.CsvReportTemplateService;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -37,7 +38,8 @@ class ReportTemplateControllerTest {
 
     @Mock
     private ReportTemplateService reportTemplateService;
-
+    @Mock
+    private CsvReportTemplateService csvReportTemplateService;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
 
@@ -307,7 +309,7 @@ class ReportTemplateControllerTest {
                 .withTitle("CSV Problem")
                 .withStatus(Status.BAD_REQUEST)
                 .build();
-        when(reportTemplateService.createCsvTemplates(csvRequest)).thenReturn(Either.left(problem));
+        when(csvReportTemplateService.createCsvTemplates(csvRequest)).thenReturn(Either.left(problem));
 
         ResponseEntity<List<ReportTemplateResponseDto>> listResponseEntity = reportTemplateController.templateCreateCsv(csvRequest);
         assertEquals(HttpStatus.BAD_REQUEST, listResponseEntity.getStatusCode());
@@ -319,7 +321,7 @@ class ReportTemplateControllerTest {
     void templateCreateCsv_success() {
         CreateCsvTemplateRequest csvRequest = mock(CreateCsvTemplateRequest.class);
         ReportTemplateResponseDto templateResponseDto = mock(ReportTemplateResponseDto.class);
-        when(reportTemplateService.createCsvTemplates(csvRequest)).thenReturn(Either.right(List.of(templateResponseDto)));
+        when(csvReportTemplateService.createCsvTemplates(csvRequest)).thenReturn(Either.right(List.of(templateResponseDto)));
 
         ResponseEntity<List<ReportTemplateResponseDto>> listResponseEntity = reportTemplateController.templateCreateCsv(csvRequest);
         assertEquals(HttpStatus.CREATED, listResponseEntity.getStatusCode());
