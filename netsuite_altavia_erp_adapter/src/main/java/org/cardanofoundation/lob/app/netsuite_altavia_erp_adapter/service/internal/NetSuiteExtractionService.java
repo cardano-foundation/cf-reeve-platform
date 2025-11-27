@@ -6,12 +6,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
+import org.cardanofoundation.lob.app.accounting_reporting_core.util.ErrorUtils;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
@@ -100,20 +96,13 @@ public class NetSuiteExtractionService {
 
                 Problem problem = netSuiteJsonE.getLeft();
 
-                Map<String, Object> bag = Map.of(
-                        Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
-                        Constants.NETSUITE_BAG_NETSUITE_URL, netSuiteClient.getBaseUrl(),
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_TITLE, requireNonNull(problem.getTitle()),
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_DETAIL, requireNonNull(problem.getDetail())
-                );
-
                 TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                         .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION, user))
                         .batchId(batchId)
                         .extractorType(ExtractorType.NETSUITE)
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
-                        .error(new FatalError(ADAPTER_ERROR, "CLIENT_ERROR", bag))
+                        .error(new FatalError(ADAPTER_ERROR, "CLIENT_ERROR", this.getBag(problem, "CLIENT_ERROR")))
                         .build();
 
                 applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -125,21 +114,13 @@ public class NetSuiteExtractionService {
                 log.warn("No data to read from NetSuite API..., bailing out!");
 
                 Problem problem = netSuiteJsonE.getLeft();
-
-                Map<String, Object> bag = Map.of(
-                        Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
-                        Constants.NETSUITE_BAG_NETSUITE_URL, netSuiteClient.getBaseUrl(),
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_TITLE, requireNonNull(problem.getTitle()),
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_DETAIL, requireNonNull(problem.getDetail())
-                );
-
                 TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                         .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION, user))
                         .batchId(batchId)
                         .extractorType(ExtractorType.NETSUITE)
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
-                        .error(new FatalError(ADAPTER_ERROR, "NO_DATA", bag))
+                        .error(new FatalError(ADAPTER_ERROR, "NO_DATA", this.getBag(problem, "CLIENT_ERROR")))
                         .build();
 
                 applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -153,19 +134,13 @@ public class NetSuiteExtractionService {
             if (systemExtractionParametersE.isLeft()) {
                 Problem problem = systemExtractionParametersE.getLeft();
 
-                Map<String, Object> bag = Map.of(
-                        Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_TITLE, requireNonNull(problem.getTitle()),
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_DETAIL, requireNonNull(problem.getDetail())
-                );
-
                 TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                         .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION, user))
                         .batchId(batchId)
                         .extractorType(ExtractorType.NETSUITE)
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
-                        .error(new FatalError(ADAPTER_ERROR, "NO_SYSTEM_PARAMETERS", bag))
+                        .error(new FatalError(ADAPTER_ERROR, "NO_SYSTEM_PARAMETERS", this.getBag(problem, "NO_SYSTEM_PARAMETERS")))
                         .build();
 
                 applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -198,7 +173,10 @@ public class NetSuiteExtractionService {
                     .extractorType(ExtractorType.NETSUITE)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, "EXCEPTION", bag))
+                    .error(new FatalError(ADAPTER_ERROR, "EXCEPTION", this.getBag(Problem.builder()
+                            .withTitle(Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID)
+                            .withDetail(e.getMessage())
+                            .build(), "EXCEPTION")))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -229,7 +207,10 @@ public class NetSuiteExtractionService {
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
                         .systemExtractionParameters(Optional.of(systemExtractionParameters))
-                        .error(new FatalError(ADAPTER_ERROR, "INGESTION_NOT_FOUND", bag))
+                        .error(new FatalError(ADAPTER_ERROR, "INGESTION_NOT_FOUND", this.getBag(Problem.builder()
+                                .withTitle(Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID)
+                                .withDetail(Constants.NETSUITE_BAG_ORGANISATION_ID)
+                                .build(), "INGESTION_NOT_FOUND")))
                         .build();
 
                 applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -249,7 +230,10 @@ public class NetSuiteExtractionService {
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
                         .systemExtractionParameters(Optional.of(systemExtractionParameters))
-                        .error(new FatalError(ADAPTER_ERROR, "ORGANISATION_MISMATCH", bag))
+                        .error(new FatalError(ADAPTER_ERROR, "ORGANISATION_MISMATCH", this.getBag(Problem.builder()
+                                .withTitle(Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID)
+                                .withDetail(Constants.NETSUITE_BAG_ORGANISATION_ID)
+                                .build(), "ORGANISATION_MISMATCH")))
                         .build();
 
                 applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -275,7 +259,7 @@ public class NetSuiteExtractionService {
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
                         .systemExtractionParameters(Optional.of(systemExtractionParameters))
-                        .error(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_PARSING_FAILED", bag))
+                        .error(new FatalError(ADAPTER_ERROR, "TRANSACTIONS_PARSING_FAILED", this.getBag(problem,"TRANSACTIONS_PARSING_FAILED")))
                         .build();
 
                 applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -313,7 +297,7 @@ public class NetSuiteExtractionService {
             Partitions.partition(transactionsWithExtractionParametersApplied, sendBatchSize).forEach(txPartition -> {
                 assert netsuiteIngestion.getId() != null;
 
-                    batchChunkEventBuilder.transactions(txPartition.asSet());
+                batchChunkEventBuilder.transactions(txPartition.asSet());
                 if (txPartition.isFirst()) {
                     batchChunkEventBuilder.status(STARTED);
                 } else if (txPartition.isLast()) {
@@ -324,7 +308,7 @@ public class NetSuiteExtractionService {
 
                 applicationEventPublisher.publishEvent(batchChunkEventBuilder.build());
             });
-            if(transactionsWithExtractionParametersApplied.isEmpty()) {
+            if (transactionsWithExtractionParametersApplied.isEmpty()) {
                 // Notifying the API component that the batch is empty
                 applicationEventPublisher.publishEvent(batchChunkEventBuilder
                         .transactions(transactionsWithExtractionParametersApplied)
@@ -348,10 +332,17 @@ public class NetSuiteExtractionService {
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
                     .systemExtractionParameters(Optional.of(systemExtractionParameters))
-                    .error(new FatalError(ADAPTER_ERROR, "EXCEPTION", bag))
+                    .error(new FatalError(ADAPTER_ERROR, "EXCEPTION", this.getBag(Problem.builder()
+                            .withTitle(Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID + "=" + netsuiteInstanceId)
+                            .withDetail(e.getMessage())
+                            .build(), "EXCEPTION")))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
         }
     }
+
+    private Map<String, Object> getBag(Problem problem, String code) {
+    return ErrorUtils.getBag(problem, code);
+}
 }

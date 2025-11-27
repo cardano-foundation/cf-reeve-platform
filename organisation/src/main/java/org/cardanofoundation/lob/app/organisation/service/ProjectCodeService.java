@@ -45,6 +45,11 @@ public class ProjectCodeService {
         return projectRepository.findById(new Project.Id(organisationId, customerCode));
     }
 
+    public Optional<Project> findActiveProjectById(String organisationId, String customerCode) {
+        return projectRepository.findActiveProjectById(new Project.Id(organisationId, customerCode),true);
+    }
+
+
     public Either<Problem, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String name, String parentCustomerCode, Pageable pageable) {
         Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Project.class, pageable, PROJECT_MAPPINGS);
         if(pageables.isLeft()) {
@@ -74,6 +79,7 @@ public class ProjectCodeService {
             }
         }
         project.setName(projectUpdate.getName());
+        project.setActive(projectUpdate.getActive());
 
         // check if parent exists
         if (projectUpdate.getParentCustomerCode() != null) {
@@ -113,6 +119,7 @@ public class ProjectCodeService {
         if(projectFound.isPresent()) {
             Project projectEntityUpdated = projectFound.get();
             projectEntityUpdated.setName(projectUpdate.getName());
+            projectEntityUpdated.setActive(projectUpdate.getActive());
             // check if parent exists
             if (projectUpdate.getParentCustomerCode() != null) {
                 Optional<Project> project = getProject(orgId, projectUpdate.getParentCustomerCode());

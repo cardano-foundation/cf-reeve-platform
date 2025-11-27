@@ -114,6 +114,9 @@
                 "amount": {
                   "$ref": "#/definitions/bigDecimalPattern"
                 },
+                "amount_lcy": {
+                  "$ref": "#/definitions/bigDecimalPattern"
+                },
                 "event": {
                   "type": "object",
                   "properties": {

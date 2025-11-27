@@ -40,6 +40,9 @@ public class TransactionItemEntity extends CommonDateOnlyEntity implements Persi
     @Column(name = "amount_fcy", nullable = false)
     private BigDecimal amountFcy;
 
+    @Column(name = "amount_lcy", nullable = true)
+    private BigDecimal amountLcy;
+
     @Nullable
     @AttributeOverrides({
             @AttributeOverride(name = "code", column = @Column(name = "account_event_code", nullable = false)),
