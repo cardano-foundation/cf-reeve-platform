@@ -80,6 +80,7 @@ jobs:
               ;;
           esac
           ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test 
+          echo "VERSION_PUBLISH=$VERSION_PUBLISH" | tee -a $GITHUB_ENV
 
       - name:  🌍 earthly (docker build and push)
         run: |
@@ -96,3 +97,30 @@ jobs:
         with:
           name: sbom
           path: build/reports/bom.xml
+
+
+      - name: Build payload
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
+        id: payload
+        run: |
+          PAYLOAD=$(cat <<EOF
+            {"version": "${VERSION_PUBLISH}"}
+          EOF)
+          echo "PAYLOAD=$PAYLOAD" | tee -a $GITHUB_ENV | tee -a $GITHUB_OUTPUT
+
+      - name: Dispatch successful build event to private repo
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@feat/dispatch-payload
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
+        with:
+          EVENT_TYPE: ${{ steps.set-event-dispatch-type.outputs.EVENT_TYPE }}
+          GITHUB_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+          GITHUB_REPO: 
+          REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
+          TRIGGERING_EVENT: ${{ github.event_name }}
+          TRIGGERING_REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
+          TRIGGERING_BRANCH: ${{ steps.cf-gha-baseline.outputs.BRANCH_NAME }}
+          TRIGGERING_TAG: ${{ steps.cf-gha-baseline.outputs.TAG_NAME }}
+          TRIGGERING_GHRUNID: ${{ github.run_id }}
+          GIT_SHORT_COMMIT: ${{ steps.cf-gha-baseline.outputs.GIT_SHORT_COMMIT }}
+          TRIGGERING_PAYLOAD: "${{ steps.payload.outputs.PAYLOAD }}"
+
