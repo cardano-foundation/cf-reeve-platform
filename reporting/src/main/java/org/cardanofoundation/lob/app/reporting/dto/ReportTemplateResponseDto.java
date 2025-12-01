@@ -39,9 +39,16 @@ public class ReportTemplateResponseDto {
     @Schema(description = "Version number for optimistic locking", example = "1")
     private Long ver;
 
+    @Schema(description = "Whether the template is active", example = "true")
+    private Boolean active;
+
     @Schema(description = "List of template field definitions")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ReportTemplateFieldDto> columns;
+
+    @Schema(description = "List of validation rules for report fields")
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    private List<ValidationRuleDto> validationRules;
 
     private Optional<Problem> error;
 

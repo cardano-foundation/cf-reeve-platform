@@ -39,7 +39,7 @@ class IncomeStatementValidatorTest {
 
         when(field2.getChildFields()).thenReturn(List.of(field3));
         when(field1.getChildFields()).thenReturn(List.of(field2));
-        when(reportTemplateEntity.getColumns()).thenReturn(List.of(field1));
+        when(reportTemplateEntity.getFields()).thenReturn(List.of(field1));
 
         when(field1.isAccumulatedYearly()).thenReturn(Boolean.TRUE);
         when(field2.isAccumulatedYearly()).thenReturn(Boolean.TRUE);
@@ -61,7 +61,7 @@ class IncomeStatementValidatorTest {
 
         when(field2.getChildFields()).thenReturn(List.of(field3));
         when(field1.getChildFields()).thenReturn(List.of(field2));
-        when(reportTemplateEntity.getColumns()).thenReturn(List.of(field1));
+        when(reportTemplateEntity.getFields()).thenReturn(List.of(field1));
 
         when(field1.isAccumulatedYearly()).thenReturn(Boolean.TRUE);
         when(field2.isAccumulatedYearly()).thenReturn(Boolean.TRUE);

@@ -59,7 +59,7 @@ class ReportingTemplateMapperTest {
         assertThat(result.getName()).isEqualTo("Test Template");
         assertThat(result.getDescription()).isEqualTo("Test Description");
         assertThat(result.getReportTemplateType()).isEqualTo(ReportTemplateType.BALANCE_SHEET);
-        assertThat(result.getColumns()).isEmpty();
+        assertThat(result.getFields()).isEmpty();
     }
 
     @Test
@@ -70,7 +70,7 @@ class ReportingTemplateMapperTest {
             .organisationId("old-org")
             .name("Old Name")
             .ver(5L)
-            .columns(new ArrayList<>())
+            .fields(new ArrayList<>())
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
@@ -115,8 +115,8 @@ class ReportingTemplateMapperTest {
         ReportTemplateEntity result = mapper.toEntity(dto, null);
 
         // Then
-        assertThat(result.getColumns()).hasSize(1);
-        ReportTemplateFieldEntity field = result.getColumns().get(0);
+        assertThat(result.getFields()).hasSize(1);
+        ReportTemplateFieldEntity field = result.getFields().get(0);
         assertThat(field.getName()).isEqualTo("Revenue");
         assertThat(field.isAccumulated()).isTrue();
         assertThat(field.isAccumulatedYearly()).isFalse();
@@ -157,8 +157,8 @@ class ReportingTemplateMapperTest {
         ReportTemplateEntity result = mapper.toEntity(dto, null);
 
         // Then
-        assertThat(result.getColumns()).hasSize(1);
-        ReportTemplateFieldEntity field = result.getColumns().get(0);
+        assertThat(result.getFields()).hasSize(1);
+        ReportTemplateFieldEntity field = result.getFields().get(0);
         assertThat(field.getMappingTypes()).hasSize(2);
         assertThat(field.getMappingTypes()).containsExactly(subType1, subType2);
     }
@@ -188,8 +188,8 @@ class ReportingTemplateMapperTest {
         ReportTemplateEntity result = mapper.toEntity(dto, null);
 
         // Then
-        assertThat(result.getColumns()).hasSize(1);
-        ReportTemplateFieldEntity parentField = result.getColumns().get(0);
+        assertThat(result.getFields()).hasSize(1);
+        ReportTemplateFieldEntity parentField = result.getFields().get(0);
         assertThat(parentField.getName()).isEqualTo("Total Assets");
         assertThat(parentField.getChildFields()).hasSize(1);
 
@@ -205,7 +205,7 @@ class ReportingTemplateMapperTest {
         ReportTemplateEntity existingTemplate = ReportTemplateEntity.builder()
             .organisationId("org123")
             .name("Template")
-            .columns(new ArrayList<>())
+            .fields(new ArrayList<>())
             .build();
 
         // Add an old field to the existing template
@@ -215,7 +215,7 @@ class ReportingTemplateMapperTest {
             .childFields(new ArrayList<>())
             .mappingTypes(new ArrayList<>())
             .build();
-        existingTemplate.getColumns().add(oldField);
+        existingTemplate.getFields().add(oldField);
 
         ReportTemplateFieldDto newFieldDto = ReportTemplateFieldDto.builder()
             .fieldName("New Field")
@@ -232,8 +232,8 @@ class ReportingTemplateMapperTest {
         ReportTemplateEntity result = mapper.toEntity(dto, existingTemplate);
 
         // Then
-        assertThat(result.getColumns()).hasSize(1);
-        assertThat(result.getColumns().get(0).getName()).isEqualTo("New Field");
+        assertThat(result.getFields()).hasSize(1);
+        assertThat(result.getFields().get(0).getName()).isEqualTo("New Field");
     }
 
     @Test
@@ -255,7 +255,7 @@ class ReportingTemplateMapperTest {
             .description("Annual financial report")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .ver(3L)
-            .columns(new ArrayList<>())
+            .fields(new ArrayList<>())
             .build();
 
         // When
@@ -281,7 +281,7 @@ class ReportingTemplateMapperTest {
             .name("Test")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .ver(1L)
-            .columns(new ArrayList<>())
+            .fields(new ArrayList<>())
             .build();
 
         ChartOfAccountSubType subType = ChartOfAccountSubType.builder()
@@ -301,7 +301,7 @@ class ReportingTemplateMapperTest {
             .childFields(new ArrayList<>())
             .build();
 
-        entity.getColumns().add(field);
+        entity.getFields().add(field);
 
         // When
         ReportTemplateResponseDto result = mapper.toResponseDto(entity);
@@ -328,7 +328,7 @@ class ReportingTemplateMapperTest {
             .name("Test")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .ver(1L)
-            .columns(new ArrayList<>())
+            .fields(new ArrayList<>())
             .build();
 
         ReportTemplateFieldEntity parentField = ReportTemplateFieldEntity.builder()
@@ -349,7 +349,7 @@ class ReportingTemplateMapperTest {
             .build();
 
         parentField.getChildFields().add(childField);
-        entity.getColumns().add(parentField);
+        entity.getFields().add(parentField);
 
         // When
         ReportTemplateResponseDto result = mapper.toResponseDto(entity);
@@ -374,7 +374,7 @@ class ReportingTemplateMapperTest {
             .name("Test")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .ver(1L)
-            .columns(new ArrayList<>())
+            .fields(new ArrayList<>())
             .build();
 
         ReportTemplateFieldEntity topLevelField = ReportTemplateFieldEntity.builder()
@@ -396,8 +396,8 @@ class ReportingTemplateMapperTest {
             .build();
 
         // Add both to the columns list (simulating what JPA might do)
-        entity.getColumns().add(topLevelField);
-        entity.getColumns().add(childField);
+        entity.getFields().add(topLevelField);
+        entity.getFields().add(childField);
 
         // When
         ReportTemplateResponseDto result = mapper.toResponseDto(entity);
@@ -423,7 +423,7 @@ class ReportingTemplateMapperTest {
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getColumns()).isEmpty();
+        assertThat(result.getFields()).isEmpty();
     }
 
     @Test
@@ -435,7 +435,7 @@ class ReportingTemplateMapperTest {
             .name("Test")
             .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
             .ver(1L)
-            .columns(null)
+            .fields(null)
             .build();
 
         // When

@@ -26,9 +26,13 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTy
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
+import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
+import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
@@ -60,6 +64,12 @@ public class ReportTemplateService {
         Either<Problem, Void> subtypeValidation = validateSubTypes(dto.getFields());
         if (subtypeValidation.isLeft()) {
             return Either.left(subtypeValidation.getLeft());
+        }
+
+        // Validate validation rules
+        Either<Problem, Void> validationRulesValidation = validateValidationRules(dto);
+        if (validationRulesValidation.isLeft()) {
+            return Either.left(validationRulesValidation.getLeft());
         }
 
         // Check if a template with the same name already exists for this organisation
@@ -150,6 +160,12 @@ public class ReportTemplateService {
         Either<Problem, Void> subtypeValidation = validateSubTypes(dto.getFields());
         if (subtypeValidation.isLeft()) {
             return Either.left(subtypeValidation.getLeft());
+        }
+
+        // Validate validation rules
+        Either<Problem, Void> validationRulesValidation = validateValidationRules(dto);
+        if (validationRulesValidation.isLeft()) {
+            return Either.left(validationRulesValidation.getLeft());
         }
 
         ReportTemplateEntity existing = existingTemplateOpt.get();
@@ -329,6 +345,107 @@ public class ReportTemplateService {
             }
             if (field.getChildFields() != null) {
                 collectSubTypeIds(field.getChildFields(), subTypeIds);
+            }
+        }
+    }
+
+    private Either<Problem, Void> validateValidationRules(ReportTemplateDto dto) {
+        if (dto.getValidationRules() == null || dto.getValidationRules().isEmpty()) {
+            return Either.right(null);
+        }
+
+        // Collect all field names from the template
+        Set<String> allFieldNames = new HashSet<>();
+        collectFieldNames(dto.getFields(), allFieldNames);
+
+        for (ValidationRuleDto rule : dto.getValidationRules()) {
+            // Validate rule has a name
+            if (rule.getName() == null || rule.getName().trim().isEmpty()) {
+                return Either.left(Problem.builder()
+                        .withTitle("Invalid Validation Rule")
+                        .withDetail("Validation rule must have a name")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
+            }
+
+            // Validate operator
+            try {
+                ComparisonOperator.valueOf(rule.getOperator());
+            } catch (IllegalArgumentException e) {
+                return Either.left(Problem.builder()
+                        .withTitle("Invalid Validation Rule")
+                        .withDetail("Invalid comparison operator: " + rule.getOperator() + ". Must be one of: GREATER_THAN_OR_EQUAL, EQUAL, LESS_THAN_OR_EQUAL")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
+            }
+
+            // Validate left side terms
+            if (rule.getLeftSideTerms() == null || rule.getLeftSideTerms().isEmpty()) {
+                return Either.left(Problem.builder()
+                        .withTitle("Invalid Validation Rule")
+                        .withDetail("Validation rule '" + rule.getName() + "' must have at least one term on the left side")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
+            }
+
+            // Validate right side terms
+            if (rule.getRightSideTerms() == null || rule.getRightSideTerms().isEmpty()) {
+                return Either.left(Problem.builder()
+                        .withTitle("Invalid Validation Rule")
+                        .withDetail("Validation rule '" + rule.getName() + "' must have at least one term on the right side")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
+            }
+
+            // Validate all terms reference existing fields
+            List<ValidationRuleTermDto> allTerms = new ArrayList<>();
+            allTerms.addAll(rule.getLeftSideTerms());
+            allTerms.addAll(rule.getRightSideTerms());
+
+            for (ValidationRuleTermDto term : allTerms) {
+                if (term.getFieldName() == null || term.getFieldName().trim().isEmpty()) {
+                    return Either.left(Problem.builder()
+                            .withTitle("Invalid Validation Rule")
+                            .withDetail("Validation rule '" + rule.getName() + "' contains a term without a field name")
+                            .withStatus(Status.BAD_REQUEST)
+                            .build());
+                }
+
+                if (!allFieldNames.contains(term.getFieldName())) {
+                    return Either.left(Problem.builder()
+                            .withTitle("Invalid Validation Rule")
+                            .withDetail("Validation rule '" + rule.getName() + "' references field name '" + term.getFieldName() + "' which does not exist in the template")
+                            .withStatus(Status.BAD_REQUEST)
+                            .build());
+                }
+
+                // Validate operation
+                try {
+                    TermOperation.valueOf(term.getOperation());
+                } catch (IllegalArgumentException e) {
+                    return Either.left(Problem.builder()
+                            .withTitle("Invalid Validation Rule")
+                            .withDetail("Invalid term operation: " + term.getOperation() + ". Must be one of: ADD, SUBTRACT")
+                            .withStatus(Status.BAD_REQUEST)
+                            .build());
+                }
+            }
+        }
+
+        return Either.right(null);
+    }
+
+    private void collectFieldNames(List<ReportTemplateFieldDto> fields, Set<String> fieldNames) {
+        if (fields == null) {
+            return;
+        }
+
+        for (ReportTemplateFieldDto field : fields) {
+            if (field.getFieldName() != null) {
+                fieldNames.add(field.getFieldName());
+            }
+            if (field.getChildFields() != null) {
+                collectFieldNames(field.getChildFields(), fieldNames);
             }
         }
     }

@@ -85,19 +85,47 @@ class ReportingServiceTest {
         templateEntity.setId("abc");
         templateEntity.setOrganisationId("org123");
         templateEntity.setName("Test Template");
-        templateEntity.setColumns(new ArrayList<>());
-
+        templateEntity.setFields(List.of());
+        templateEntity.setValidationRules(List.of());
         reportEntity = new ReportEntity();
         reportEntity.setId("abc");
         reportEntity.setName("Test Report");
         reportEntity.setOrganisationId("org123");
         reportEntity.setVer(1L);
+        reportEntity.setReportTemplate(templateEntity);
 
         reportResponseDto = new ReportResponseDto();
         reportResponseDto.setId("abc");
         reportResponseDto.setName("Test Report");
 
     }
+
+//    @Test
+//    void create_validationRuleError() {
+//        // Given
+//        ReportTemplateValidationRuleEntity rule = mock(ReportTemplateValidationRuleEntity.class);
+//        templateEntity.setValidationRules(List.of(rule));
+//
+//        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+//        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+//        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+//                any(), any(), any())).thenReturn(new ArrayList<>());
+//        when(reportRepository.findLatestByTemplateAndPeriod(
+//                eq("org123"), eq("abc"), any(IntervalType.class), eq((short) 2024), eq((short) 1)))
+//                .thenReturn(Optional.empty());
+//        when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
+//        when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
+//        when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+//        reportResponseDto.setError(Optional.empty());
+//
+//        // When
+//        ReportResponseDto result = reportingService.create(reportDto);
+//
+//        // Then
+//        assertTrue(result.getError().isEmpty());
+//        assertEquals("Test Report", result.getName());
+//        verify(reportRepository).save(any(ReportEntity.class));
+//    }
 
     @Test
     void create_Success() {
@@ -153,12 +181,28 @@ class ReportingServiceTest {
     }
 
     @Test
+    void create_ReportTemplateInActive() {
+        // Given
+        templateEntity.setActive(false);
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+
+        // When
+        ReportResponseDto result = reportingService.create(reportDto);
+
+        // Then
+        assertTrue(result.getError().isPresent());
+        assertEquals("TEMPLATE_INACTIVE", result.getError().get().getTitle());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
     void create_OverwriteUnpublishedReport() {
         // Given
         ReportEntity existingReport = new ReportEntity();
         existingReport.setId("99");
         existingReport.setLedgerDispatchApproved(false);
         existingReport.setVer(1L);
+        existingReport.setReportTemplate(templateEntity);
 
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
@@ -188,8 +232,10 @@ class ReportingServiceTest {
         publishedReport.setId("99");
         publishedReport.setLedgerDispatchApproved(true);
         publishedReport.setVer(1L);
+        publishedReport.setReportTemplate(templateEntity);
 
         ReportEntity newReport = new ReportEntity();
+        newReport.setReportTemplate(templateEntity);
 
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());

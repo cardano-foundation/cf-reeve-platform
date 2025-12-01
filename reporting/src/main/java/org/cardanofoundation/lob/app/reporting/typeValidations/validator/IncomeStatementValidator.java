@@ -29,7 +29,7 @@ public class IncomeStatementValidator implements ReportTypeValidator {
 
     @Override
     public Either<Problem, Void> validateReportTemplateType(ReportTemplateEntity reportTemplateEntity) {
-        if (areAllFieldsAccumulated(reportTemplateEntity.getColumns())) {
+        if (areAllFieldsAccumulated(reportTemplateEntity.getFields())) {
             return Either.right(null);
         } else {
             log.debug("Balance sheet report template validation failed: not all fields are accumulated");

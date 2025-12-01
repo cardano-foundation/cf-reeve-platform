@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Component;
 
+import org.cardanofoundation.lob.app.reporting.dto.FailedValidationRuleDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
@@ -91,6 +92,19 @@ public class ReportMapper {
                 .collect(Collectors.toList())
             : Collections.emptyList();
 
+        // Convert failed validation rules to DTOs
+        List<FailedValidationRuleDto> failedRuleDtos = null;
+        if (entity.getFailedValidationRules() != null && !entity.getFailedValidationRules().isEmpty()) {
+            failedRuleDtos = entity.getFailedValidationRules().stream()
+                .map(rule -> FailedValidationRuleDto.builder()
+                    .ruleId(rule.getId())
+                    .ruleName(rule.getName())
+                    .operator(rule.getOperator().name())
+                    .errorMessage("Validation rule failed")
+                    .build())
+                .collect(Collectors.toList());
+        }
+
         ReportResponseDto responseDto = ReportResponseDto.builder()
                 .id(entity.getId())
                 .organisationId(entity.getOrganisationId())
@@ -106,12 +120,13 @@ public class ReportMapper {
                 .blockchainTxId(entity.getBlockchainHash())
                 .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
                 .fields(topLevelFields)
+                .failedValidationRules(failedRuleDtos)
                 .error(Optional.empty())
                 .build();
         return reportResponseConverter.convertResponse(responseDto, entity.getReportTemplate().getReportTemplateType());
     }
 
-    private ReportFieldEntity toColumnEntity(ReportFieldDto dto) {
+    public ReportFieldEntity toColumnEntity(ReportFieldDto dto) {
         ReportFieldEntity entity = ReportFieldEntity.builder()
                 .value(dto.getValue())
                 .build();

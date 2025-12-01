@@ -62,5 +62,9 @@ public class ReportResponseDto {
     @Schema(description = "List of report fields with calculated or user-provided values")
     private List<ReportFieldDto> fields;
 
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    @Schema(description = "List of validation rules that failed", nullable = true)
+    private List<FailedValidationRuleDto> failedValidationRules;
+
     private Optional<Problem> error;
 }

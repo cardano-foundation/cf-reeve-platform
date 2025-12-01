@@ -139,7 +139,7 @@ public class CsvReportService {
                         break;
                     }
                     String[] fieldNamesSplit = reportCsvLine.getField().split("\\."); // Since field is not null nor blank the array size must be at least 1
-                    Either<Problem, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getColumns(), null);
+                    Either<Problem, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getFields(), null);
                     if (updateResult.isLeft()) {
                         fieldsSetupSuccessfully = false;
                         createdReports.add(ReportResponseDto.builder()

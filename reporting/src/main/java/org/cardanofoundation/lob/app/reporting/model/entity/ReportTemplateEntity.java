@@ -43,9 +43,16 @@ public class ReportTemplateEntity extends CommonEntity {
     @Builder.Default
     private long ver = 1;
 
+    @Builder.Default
+    private boolean active = true;
+
     @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private List<ReportTemplateFieldEntity> columns = new ArrayList<>();
+    private List<ReportTemplateFieldEntity> fields = new ArrayList<>();
+
+    @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<ReportTemplateValidationRuleEntity> validationRules = new ArrayList<>();
 
     @PrePersist
     private void generateId() {

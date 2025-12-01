@@ -196,7 +196,7 @@ class CsvReportServiceTest {
         when(validator.validateObject(reportCsvLine)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(reportTemplateRepository.findByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
-        when(reportTemplateEntity.getColumns()).thenReturn(List.of());
+        when(reportTemplateEntity.getFields()).thenReturn(List.of());
 
         Either<Problem, List<ReportResponseDto>> result = service.createCsvReports(request);
 
@@ -226,7 +226,7 @@ class CsvReportServiceTest {
         when(validator.validateObject(reportCsvLine)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(reportTemplateRepository.findByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
-        when(reportTemplateEntity.getColumns()).thenReturn(List.of(reportTemplateFieldEntity));
+        when(reportTemplateEntity.getFields()).thenReturn(List.of(reportTemplateFieldEntity));
         when(reportTemplateFieldEntity.getName()).thenReturn("Field1");
         when(reportTemplateFieldEntity.getId()).thenReturn(1L);
         when(reportingService.create(any())).thenReturn(reportResponseDto);

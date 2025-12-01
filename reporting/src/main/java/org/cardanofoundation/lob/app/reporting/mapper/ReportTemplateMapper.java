@@ -14,9 +14,16 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTy
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
+import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
+import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 
 @Component
 @RequiredArgsConstructor
@@ -31,6 +38,7 @@ public class ReportTemplateMapper {
         template.setName(dto.getName());
         template.setDescription(dto.getDescription());
         template.setReportTemplateType(ReportTemplateType.valueOf(dto.getReportTemplateType()));
+        template.setActive(dto.isActive());
         if (dto.getFields() != null) {
             List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
                 .map(columnDto -> toColumnEntity(columnDto, template, null))
@@ -38,11 +46,25 @@ public class ReportTemplateMapper {
 
             // Update the existing collection instead of replacing it
             // This is required for cascade="all-delete-orphan" to work properly
-            if (template.getColumns() != null) {
-                template.getColumns().clear();
-                template.getColumns().addAll(newColumns);
+            if (template.getFields() != null) {
+                template.getFields().clear();
+                template.getFields().addAll(newColumns);
             } else {
-                template.setColumns(newColumns);
+                template.setFields(newColumns);
+            }
+        }
+
+        // Handle validation rules
+        if (dto.getValidationRules() != null) {
+            List<ReportTemplateValidationRuleEntity> newRules = dto.getValidationRules().stream()
+                .map(ruleDto -> toValidationRuleEntity(ruleDto, template))
+                .collect(Collectors.toList());
+
+            if (template.getValidationRules() != null) {
+                template.getValidationRules().clear();
+                template.getValidationRules().addAll(newRules);
+            } else {
+                template.setValidationRules(newRules);
             }
         }
 
@@ -54,10 +76,16 @@ public class ReportTemplateMapper {
             return null;
         }
 
-        List<ReportTemplateFieldDto> topLevelColumns = entity.getColumns() != null
-            ? entity.getColumns().stream()
+        List<ReportTemplateFieldDto> topLevelColumns = entity.getFields() != null
+            ? entity.getFields().stream()
                 .filter(col -> col.getParentField() == null)
                 .map(this::toColumnDto)
+                .collect(Collectors.toList())
+            : Collections.emptyList();
+
+        List<ValidationRuleDto> validationRules = entity.getValidationRules() != null
+            ? entity.getValidationRules().stream()
+                .map(this::toValidationRuleDto)
                 .collect(Collectors.toList())
             : Collections.emptyList();
 
@@ -68,7 +96,9 @@ public class ReportTemplateMapper {
             .description(entity.getDescription())
             .reportTemplateType(entity.getReportTemplateType())
             .ver(entity.getVer())
+            .active(entity.isActive())
             .columns(topLevelColumns)
+            .validationRules(validationRules)
             .build();
     }
 
@@ -135,6 +165,130 @@ public class ReportTemplateMapper {
             .negated(entity.isNegated())
             .mappingSubTypeIds(mappingSubTypeIds)
             .childFields(children)
+            .build();
+    }
+
+    private ReportTemplateValidationRuleEntity toValidationRuleEntity(
+        ValidationRuleDto dto,
+        ReportTemplateEntity template
+    ) {
+
+        ReportTemplateValidationRuleEntity rule = ReportTemplateValidationRuleEntity.builder()
+            .reportTemplate(template)
+            .name(dto.getName())
+            .operator(ComparisonOperator.valueOf(dto.getOperator()))
+            .active(dto.isActive())
+            .build();
+
+        // Map left side terms
+        List<ValidationRuleTermEntity> allTerms = new ArrayList<>();
+        if (dto.getLeftSideTerms() != null) {
+            for (int i = 0; i < dto.getLeftSideTerms().size(); i++) {
+                ValidationRuleTermDto termDto = dto.getLeftSideTerms().get(i);
+                allTerms.add(toValidationRuleTermEntity(termDto, rule, TermSide.LEFT, i));
+            }
+        }
+
+        // Map right side terms
+        if (dto.getRightSideTerms() != null) {
+            for (int i = 0; i < dto.getRightSideTerms().size(); i++) {
+                ValidationRuleTermDto termDto = dto.getRightSideTerms().get(i);
+                allTerms.add(toValidationRuleTermEntity(termDto, rule, TermSide.RIGHT, i));
+            }
+        }
+
+        rule.setTerms(allTerms);
+        return rule;
+    }
+
+    private ValidationRuleTermEntity toValidationRuleTermEntity(
+        ValidationRuleTermDto dto,
+        ReportTemplateValidationRuleEntity rule,
+        TermSide side,
+        int order
+    ) {
+        // Find the field entity by name
+        ReportTemplateFieldEntity field = findFieldByName(rule.getReportTemplate(), dto.getFieldName());
+
+        return ValidationRuleTermEntity.builder()
+            .validationRule(rule)
+            .field(field)
+            .operation(TermOperation.valueOf(dto.getOperation()))
+            .side(side)
+            .termOrder(order)
+            .build();
+    }
+
+    private ReportTemplateFieldEntity findFieldByName(ReportTemplateEntity template, String fieldName) {
+        if (template.getFields() == null || fieldName == null) {
+            return null;
+        }
+
+        for (ReportTemplateFieldEntity field : template.getFields()) {
+            ReportTemplateFieldEntity found = findFieldByNameRecursive(field, fieldName);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private ReportTemplateFieldEntity findFieldByNameRecursive(ReportTemplateFieldEntity field, String fieldName) {
+        if (field.getName() != null && field.getName().equals(fieldName)) {
+            return field;
+        }
+
+        if (field.getChildFields() != null) {
+            for (ReportTemplateFieldEntity child : field.getChildFields()) {
+                ReportTemplateFieldEntity found = findFieldByNameRecursive(child, fieldName);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private ValidationRuleDto toValidationRuleDto(ReportTemplateValidationRuleEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        List<ValidationRuleTermDto> leftTerms = entity.getTerms() != null
+            ? entity.getTerms().stream()
+                .filter(term -> term.getSide() == TermSide.LEFT)
+                .sorted((a, b) -> Integer.compare(a.getTermOrder(), b.getTermOrder()))
+                .map(this::toValidationRuleTermDto)
+                .collect(Collectors.toList())
+            : Collections.emptyList();
+
+        List<ValidationRuleTermDto> rightTerms = entity.getTerms() != null
+            ? entity.getTerms().stream()
+                .filter(term -> term.getSide() == TermSide.RIGHT)
+                .sorted((a, b) -> Integer.compare(a.getTermOrder(), b.getTermOrder()))
+                .map(this::toValidationRuleTermDto)
+                .collect(Collectors.toList())
+            : Collections.emptyList();
+
+        return ValidationRuleDto.builder()
+            .id(entity.getId())
+            .name(entity.getName())
+            .operator(entity.getOperator().name())
+            .active(entity.isActive())
+            .leftSideTerms(leftTerms)
+            .rightSideTerms(rightTerms)
+            .build();
+    }
+
+    private ValidationRuleTermDto toValidationRuleTermDto(ValidationRuleTermEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        return ValidationRuleTermDto.builder()
+            .fieldName(entity.getField() != null ? entity.getField().getName() : null)
+            .operation(entity.getOperation().name())
             .build();
     }
 }

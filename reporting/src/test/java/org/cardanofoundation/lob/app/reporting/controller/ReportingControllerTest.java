@@ -349,4 +349,36 @@ class ReportingControllerTest {
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertEquals(List.of(reportResponseDto), response.getBody());
     }
+
+    @Test
+    void reprocess_success() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.reprocess("org123", "report123")).thenReturn(Either.right(reportResponseDto));
+
+        ResponseEntity<?> response = reportingController.reprocess( "report123", "org123");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(reportResponseDto, response.getBody());
+    }
+
+    @Test
+    void reprocess_OrgNotAccessible() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = reportingController.reprocess("report123", "org123");
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+    }
+
+    @Test
+    void reporcess_problem() {
+        Problem problem = Problem.builder()
+                .withTitle("Reprocess Failed")
+                .withStatus(Status.INTERNAL_SERVER_ERROR)
+                .build();
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.reprocess("org123", "report123")).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> response = reportingController.reprocess("report123", "org123");
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals(problem, response.getBody());
+    }
 }

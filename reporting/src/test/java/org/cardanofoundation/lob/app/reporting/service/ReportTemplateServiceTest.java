@@ -77,7 +77,7 @@ class ReportTemplateServiceTest {
         templateEntity.setName("Test Template");
         templateEntity.setVer(1L);
         templateEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
-        templateEntity.setColumns(new ArrayList<>());
+        templateEntity.setFields(new ArrayList<>());
 
         templateResponseDto = new ReportTemplateResponseDto();
         templateResponseDto.setId("abc");

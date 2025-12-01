@@ -34,6 +34,13 @@ public class ReportTemplateDto extends BaseRequest {
     @Schema(description = "Template description", example = "Standard quarterly financial report with balance sheet", nullable = true)
     private String description;
 
+    @Schema(description = "Whether the template is active", example = "true", defaultValue = "true")
+    @Builder.Default
+    private boolean active = true;
+
     @Schema(description = "List of template fields defining the report structure", required = true)
     private List<ReportTemplateFieldDto> fields;
+
+    @Schema(description = "List of validation rules for report fields", nullable = true)
+    private List<ValidationRuleDto> validationRules;
 }

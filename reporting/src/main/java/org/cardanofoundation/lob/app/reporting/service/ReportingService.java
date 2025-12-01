@@ -5,6 +5,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,10 +35,14 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.util.Constants;
@@ -72,6 +77,18 @@ public class ReportingService {
             return ReportResponseDto.builder().error(Optional.of(templateResult.getLeft())).build();
         }
         ReportTemplateEntity template = templateResult.get();
+
+        // Check if template is active
+        if (!template.isActive()) {
+            return ReportResponseDto.builder().error(Optional.of(
+                    Problem.builder()
+                            .withTitle("TEMPLATE_INACTIVE")
+                            .withDetail("Report template with ID " + dto.getReportTemplateId() + " is inactive and cannot be used to create reports")
+                            .withStatus(Status.BAD_REQUEST)
+                            .build()
+            )).build();
+        }
+
         // Validating Time in DTO
         Either<Problem, Void> timeValidation = validateTimeInDto(dto.getYear(), dto.getPeriod(), dto.getIntervalType());
         if (timeValidation.isLeft()) {
@@ -105,11 +122,79 @@ public class ReportingService {
         // Handle versioning: if overwriting a published report, increment version
         handleVersioning(entity, dto, existingReport);
 
-        // TODO Check if ready to publish
-        entity.setReadyToPublish(true);
+        List<ReportTemplateValidationRuleEntity> notPassedValidationRules = findNotPassedValidationRules(entity);
+        if(!notPassedValidationRules.isEmpty()) {
+            entity.setFailedValidationRules(notPassedValidationRules);
+            entity.setReadyToPublish(false);
+        } else {
+            entity.setFailedValidationRules(new ArrayList<>());
+            entity.setReadyToPublish(true);
+        }
 
         entity = reportRepository.save(entity);
         return reportMapper.toResponseDto(entity);
+    }
+
+    private List<ReportTemplateValidationRuleEntity> findNotPassedValidationRules(ReportEntity entity) {
+        ReportTemplateEntity reportTemplate = entity.getReportTemplate();
+        List<ReportTemplateValidationRuleEntity> validationRules = reportTemplate.getValidationRules();
+        List<ReportTemplateValidationRuleEntity> failedRules = new ArrayList<>();
+        for (ReportTemplateValidationRuleEntity rule : validationRules) {
+            // Skip inactive validation rules
+            if (!rule.isActive()) {
+                continue;
+            }
+
+            List<ValidationRuleTermEntity> allTerms = rule.getTerms();
+            List<ValidationRuleTermEntity> leftSide = allTerms.stream().filter(ruleTerm -> ruleTerm.getSide().equals(TermSide.LEFT)).toList();
+            BigDecimal leftValue = getValueFromValidationRuleTerms(entity, leftSide);
+            List<ValidationRuleTermEntity> rightSide = allTerms.stream().filter(ruleTerm -> ruleTerm.getSide().equals(TermSide.RIGHT)).toList();
+            BigDecimal rightValue = getValueFromValidationRuleTerms(entity, rightSide);
+
+            int cmp = leftValue.compareTo(rightValue);
+
+            switch (rule.getOperator()) {
+                case EQUAL -> {
+                    if (cmp != 0) failedRules.add(rule);
+                }
+                case GREATER_THAN_OR_EQUAL -> {
+                    if (cmp < 0) failedRules.add(rule);
+                }
+                case LESS_THAN_OR_EQUAL -> {
+                    if (cmp > 0) failedRules.add(rule);
+                }
+            }
+
+        }
+        return failedRules;
+    }
+
+    private BigDecimal getValueFromValidationRuleTerms(ReportEntity entity, List<ValidationRuleTermEntity> terms) {
+        BigDecimal result = BigDecimal.ZERO;
+        terms = terms.stream().sorted((o1, o2) -> o1.getTermOrder() > o2.getTermOrder() ? 1 : -1).toList();
+        for (ValidationRuleTermEntity term : terms) {
+            BigDecimal fieldValue = findFieldValueRecursively(entity.getFields(), term.getField().getId());
+            switch (term.getOperation()) {
+                case ADD -> result = result.add(fieldValue);
+                case SUBTRACT -> result = result.subtract(fieldValue);
+            }
+        }
+        return result;
+    }
+
+    private BigDecimal findFieldValueRecursively(List<ReportFieldEntity> fields, Long templateFieldId) {
+        for (ReportFieldEntity field : fields) {
+            if (field.getFieldTemplate().getId().equals(templateFieldId)) {
+                return field.getValue() != null ? field.getValue() : BigDecimal.ZERO;
+            }
+            if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
+                BigDecimal childValue = findFieldValueRecursively(field.getChildFields(), templateFieldId);
+                if (childValue != null) {
+                    return childValue;
+                }
+            }
+        }
+        return BigDecimal.ZERO;
     }
 
     /**
@@ -186,6 +271,16 @@ public class ReportingService {
             return Either.left(templateResult.getLeft());
         }
         ReportTemplateEntity template = templateResult.get();
+
+        // Check if template is active
+        if (!template.isActive()) {
+            return Either.left(Problem.builder()
+                    .withTitle("TEMPLATE_INACTIVE")
+                    .withDetail("Report template with ID " + request.getReportTemplateId() + " is inactive and cannot be used to generate reports")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+
         // Validating Time in DTO
         Either<Problem, Void> timeValidation = validateTimeInDto(request.getYear(), request.getPeriod(), request.getIntervalType());
         if (timeValidation.isLeft()) {
@@ -198,7 +293,7 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, request.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getColumns(), startDate, endDate);
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate);
 
         // Generate report name
         String reportName = generateReportName(template.getName(), request.getIntervalType(), request.getYear(), request.getPeriod());
@@ -296,7 +391,7 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, dto.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getColumns(), startDate, endDate);
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate);
         return Either.right(fields);
     }
 
@@ -311,7 +406,7 @@ public class ReportingService {
         }
 
         // Validate template fields exist
-        Either<Problem, Void> fieldValidation = validateTemplateFields(fields, template.getColumns());
+        Either<Problem, Void> fieldValidation = validateTemplateFields(fields, template.getFields());
         if (fieldValidation.isLeft()) {
             return Either.left(fieldValidation.getLeft());
         }
@@ -750,5 +845,123 @@ public class ReportingService {
 
         return Either.right(reportMapper.toResponseDto(report));
 
+    }
+
+    /**
+     * Reprocesses a report to re-evaluate validation rules.
+     * Updates the readyToPublish state and failedValidationRules based on current field values.
+     *
+     * @param organisationId The organisation ID
+     * @param reportId The report ID to reprocess
+     * @return Either a Problem if the report cannot be found or processed, or the updated ReportResponseDto
+     */
+    /**
+     * Reprocesses a report to re-evaluate validation rules.
+     * For SYSTEM data mode: regenerates field values and re-evaluates validation rules
+     * For USER data mode: only re-evaluates validation rules, keeps existing field values
+     * Updates the readyToPublish state and failedValidationRules based on current/regenerated field values.
+     *
+     * @param organisationId The organisation ID
+     * @param reportId The report ID to reprocess
+     * @return Either a Problem if the report cannot be found or processed, or the updated ReportResponseDto
+     */
+    public Either<Problem, ReportResponseDto> reprocess(String organisationId, String reportId) {
+        log.info("Reprocessing report: {}", reportId);
+
+        // Find the report
+        Optional<ReportEntity> reportOpt = reportRepository.findByOrganisationIdAndId(organisationId, reportId);
+        if (reportOpt.isEmpty()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Report Not Found")
+                    .withDetail("Report with ID " + reportId + " does not exist")
+                    .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        ReportEntity report = reportOpt.get();
+
+        // Check if report is already published - can't reprocess published reports
+        if (report.isLedgerDispatchApproved()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Report Already Published")
+                    .withDetail("Cannot reprocess report with ID " + reportId + " because it has already been published")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+
+        // If data mode is SYSTEM, regenerate field values
+        if (report.getDataMode() == DataMode.SYSTEM) {
+            log.info("Report {} is SYSTEM mode - regenerating field values", reportId);
+
+            // Validate we have the required information to regenerate
+            if (report.getIntervalType() == null || report.getYear() == 0) {
+                return Either.left(Problem.builder()
+                        .withTitle("Missing Required Information")
+                        .withDetail("Cannot regenerate fields: intervalType and year are required")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
+            }
+
+            // Calculate date range
+            LocalDate startDate = getReportStartDate(report.getIntervalType(), report.getPeriod(), report.getYear());
+            LocalDate endDate = getReportEndDate(report.getIntervalType(), startDate);
+
+            // Regenerate fields from template
+            List<ReportFieldDto> regeneratedFields = fillFieldsFromTemplate(
+                report.getReportTemplate().getFields(),
+                startDate,
+                endDate
+            );
+
+            // Convert DTOs to entities and update the report
+            List<ReportFieldEntity> newFieldEntities = regeneratedFields.stream()
+                .map(reportMapper::toColumnEntity)
+                .collect(Collectors.toList());
+
+            // Set report reference for all fields recursively
+            ReportEntity finalReport = report;
+            newFieldEntities.forEach(field -> setReportRecursively(field, finalReport));
+
+            // Update the existing collection
+            if (report.getFields() != null) {
+                report.getFields().clear();
+                report.getFields().addAll(newFieldEntities);
+            } else {
+                report.setFields(newFieldEntities);
+            }
+
+            log.info("Regenerated {} field(s) for report {}", newFieldEntities.size(), reportId);
+        } else {
+            log.info("Report {} is USER mode - keeping existing field values", reportId);
+        }
+
+        // Re-evaluate validation rules (with current or regenerated field values)
+        List<ReportTemplateValidationRuleEntity> notPassedValidationRules = findNotPassedValidationRules(report);
+
+        if (!notPassedValidationRules.isEmpty()) {
+            report.setFailedValidationRules(notPassedValidationRules);
+            report.setReadyToPublish(false);
+            log.info("Report {} failed {} validation rule(s)", reportId, notPassedValidationRules.size());
+        } else {
+            report.setFailedValidationRules(new ArrayList<>());
+            report.setReadyToPublish(true);
+            log.info("Report {} passed all validation rules", reportId);
+        }
+
+        // Save the updated report
+        report = reportRepository.save(report);
+
+        return Either.right(reportMapper.toResponseDto(report));
+    }
+
+    /**
+     * Recursively sets the report reference for the field and all its children.
+     * This ensures the report_id is properly populated in the database.
+     */
+    private void setReportRecursively(ReportFieldEntity field, ReportEntity report) {
+        field.setReport(report);
+        if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
+            field.getChildFields().forEach(child -> setReportRecursively(child, report));
+        }
     }
 }

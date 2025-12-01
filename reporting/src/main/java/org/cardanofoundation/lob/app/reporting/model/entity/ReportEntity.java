@@ -12,6 +12,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
@@ -22,6 +24,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import org.hibernate.annotations.SQLRestriction;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
@@ -61,6 +65,7 @@ public class ReportEntity extends CommonEntity {
 
 
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
+    @SQLRestriction("parent_field_id IS NULL")
     @Builder.Default
     private List<ReportFieldEntity> fields = new ArrayList<>();
 
@@ -78,6 +83,15 @@ public class ReportEntity extends CommonEntity {
     private String ledgerDispatchStatusErrorReason;
     private LocalDateTime ledgerDispatchDate;
     private String publishedBy;
+
+    @ManyToMany
+    @JoinTable(
+        name = "report_failed_validation_rule",
+        joinColumns = @JoinColumn(name = "report_id"),
+        inverseJoinColumns = @JoinColumn(name = "validation_rule_id")
+    )
+    @Builder.Default
+    private List<ReportTemplateValidationRuleEntity> failedValidationRules = new ArrayList<>();
 
     @PrePersist
     private void generateId() {

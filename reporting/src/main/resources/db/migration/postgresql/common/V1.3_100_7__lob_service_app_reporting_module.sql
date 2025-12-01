@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS report_template (
     description TEXT,
     report_template_type VARCHAR(255),
     ver BIGINT NOT NULL DEFAULT 1,
-    
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
     created_at TIMESTAMP WITHOUT TIME ZONE,
@@ -220,3 +221,73 @@ CREATE TABLE IF NOT EXISTS report_field_aud (
     
     CONSTRAINT pk_report_field_aud PRIMARY KEY (id, rev)
 );
+
+-- Report Template Validation Rule Table
+CREATE TABLE IF NOT EXISTS report_template_validation_rule (
+    id BIGSERIAL NOT NULL,
+    report_template_id VARCHAR(64) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    operator VARCHAR(50) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+    CONSTRAINT pk_report_template_validation_rule PRIMARY KEY (id),
+    CONSTRAINT fk_validation_rule_template FOREIGN KEY (report_template_id)
+        REFERENCES report_template(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_validation_rule_template_id ON report_template_validation_rule(report_template_id);
+
+COMMENT ON TABLE report_template_validation_rule IS 'Validation rules for report template fields (e.g., FieldA + FieldB >= FieldC - FieldD)';
+COMMENT ON COLUMN report_template_validation_rule.operator IS 'Comparison operator: GREATER_THAN_OR_EQUAL, EQUAL, or LESS_THAN_OR_EQUAL';
+
+-- Validation Rule Term Table
+CREATE TABLE IF NOT EXISTS validation_rule_term (
+    id BIGSERIAL NOT NULL,
+    validation_rule_id BIGINT NOT NULL,
+    field_id BIGINT NOT NULL,
+    operation VARCHAR(50) NOT NULL,
+    side VARCHAR(50) NOT NULL,
+    term_order INTEGER NOT NULL,
+
+    created_by VARCHAR(255),
+    updated_by VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+
+    CONSTRAINT pk_validation_rule_term PRIMARY KEY (id),
+    CONSTRAINT fk_validation_term_rule FOREIGN KEY (validation_rule_id)
+        REFERENCES report_template_validation_rule(id) ON DELETE CASCADE,
+    CONSTRAINT fk_validation_term_field FOREIGN KEY (field_id)
+        REFERENCES report_template_field(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_validation_term_rule_id ON validation_rule_term(validation_rule_id);
+CREATE INDEX idx_validation_term_field_id ON validation_rule_term(field_id);
+
+COMMENT ON TABLE validation_rule_term IS 'Individual terms in a validation rule expression';
+COMMENT ON COLUMN validation_rule_term.operation IS 'Operation to apply: ADD or SUBTRACT';
+COMMENT ON COLUMN validation_rule_term.side IS 'Which side of the comparison: LEFT or RIGHT';
+COMMENT ON COLUMN validation_rule_term.term_order IS 'Order of the term in the expression';
+
+-- Report Failed Validation Rule Mapping Table (Many-to-Many)
+CREATE TABLE IF NOT EXISTS report_failed_validation_rule (
+    report_id VARCHAR(64) NOT NULL,
+    validation_rule_id BIGINT NOT NULL,
+
+    CONSTRAINT pk_report_failed_validation_rule PRIMARY KEY (report_id, validation_rule_id),
+    CONSTRAINT fk_report_failed_validation_report FOREIGN KEY (report_id)
+        REFERENCES report(id) ON DELETE CASCADE,
+    CONSTRAINT fk_report_failed_validation_rule FOREIGN KEY (validation_rule_id)
+        REFERENCES report_template_validation_rule(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_report_failed_validation_report_id ON report_failed_validation_rule(report_id);
+CREATE INDEX idx_report_failed_validation_rule_id ON report_failed_validation_rule(validation_rule_id);
+
+COMMENT ON TABLE report_failed_validation_rule IS 'Mapping table for reports and their failed validation rules';
+

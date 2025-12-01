@@ -39,7 +39,7 @@ class BalanceSheetValidatorTest {
 
         when(field2.getChildFields()).thenReturn(List.of(field3));
         when(field1.getChildFields()).thenReturn(List.of(field2));
-        when(reportTemplateEntity.getColumns()).thenReturn(List.of(field1));
+        when(reportTemplateEntity.getFields()).thenReturn(List.of(field1));
 
         when(field1.isAccumulated()).thenReturn(Boolean.TRUE);
         when(field2.isAccumulated()).thenReturn(Boolean.TRUE);
@@ -61,7 +61,7 @@ class BalanceSheetValidatorTest {
 
         when(field2.getChildFields()).thenReturn(List.of(field3));
         when(field1.getChildFields()).thenReturn(List.of(field2));
-        when(reportTemplateEntity.getColumns()).thenReturn(List.of(field1));
+        when(reportTemplateEntity.getFields()).thenReturn(List.of(field1));
 
         when(field1.isAccumulated()).thenReturn(Boolean.TRUE);
         when(field2.isAccumulated()).thenReturn(Boolean.TRUE);

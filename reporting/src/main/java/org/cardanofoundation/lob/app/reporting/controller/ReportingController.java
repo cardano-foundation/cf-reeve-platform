@@ -325,12 +325,6 @@ public class ReportingController {
                 "POST /api/reports/publish - Org: {}, Report ID: {}",
                 request.getOrganisationId(), request.getReportId());
 
-        // Check organisation access
-        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body("User does not have access to this organisation");
-        }
-
         Either<Problem, ReportResponseDto> result = reportService.publish(request);
 
         if (result.isLeft()) {
@@ -339,5 +333,50 @@ public class ReportingController {
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
+    }
+
+    @Operation(
+        summary = "Reprocess a report",
+        description = "Re-evaluates validation rules for a report and updates the readyToPublish state and failedValidationRules. Can only be used on unpublished reports.",
+        responses = {
+            @ApiResponse(
+                responseCode = "200",
+                description = "Report reprocessed successfully",
+                content = @Content(
+                    mediaType = APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = ReportResponseDto.class)
+                )
+            ),
+            @ApiResponse(responseCode = "400", description = "Report is already published and cannot be reprocessed"),
+            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+            @ApiResponse(responseCode = "404", description = "Report not found")
+        }
+    )
+    @PostMapping(value = "/{id}/reprocess", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<?> reprocess(
+        @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
+        @RequestParam(value = "organisationId", required = true)
+        @Parameter(
+            description = "Organisation ID for ownership validation",
+            example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
+        ) String organisationId
+    ) {
+        log.info("POST /api/reports/{}/reprocess - organisationId: {}", id, organisationId);
+
+        // Check organisation access
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body("User does not have access to this organisation");
+        }
+
+        Either<Problem, ReportResponseDto> result = reportService.reprocess(organisationId, id);
+
+        if (result.isLeft()) {
+            Problem problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+        }
+
+        return ResponseEntity.ok(result.get());
     }
 }
