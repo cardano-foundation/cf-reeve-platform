@@ -111,7 +111,9 @@ jobs:
               "targetBranch": "${{ github.event.pull_request.base.ref }}"
             }
           EOF)
-          echo "PAYLOAD=$PAYLOAD" | tee -a $GITHUB_ENV | tee -a $GITHUB_OUTPUT
+          echo 'PAYLOAD<<EOF' | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
+          echo "$PAYLOAD" | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
+          echo EOF | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
 
       # - name: Build payload
       #   if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
