@@ -280,6 +280,9 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
         Set<TransactionItemEntity> items = this.getItems();
 
         if (this.getTransactionType().equals(TransactionType.Journal)) {
+            if(this.getViolations().stream().anyMatch(violation -> violation.getCode() == TransactionViolationCode.NET_OFF_TX)){
+                return BigDecimal.ZERO;
+            }
             items = this.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(Collectors.toSet());
         }
 
