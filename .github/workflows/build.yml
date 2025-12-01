@@ -138,10 +138,9 @@ jobs:
         with:
           EVENT_TYPE: ${{ steps.set-event-dispatch-type.outputs.EVENT_TYPE }}
           GITHUB_TOKEN: ${{ secrets.CF_REEVE_APPLICATION_REPO_PAT }}
-          GITHUB_REPO: cardano-foundation/cf-reeve-application/actions/workflows/211782476
+          GITHUB_REPO: cardano-foundation/cf-reeve-application
           REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
           TRIGGERING_EVENT: ${{ github.event_name }}
-          TRIGGERING_REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
           TRIGGERING_BRANCH: ${{ steps.cf-gha-baseline.outputs.BRANCH_NAME }}
           TRIGGERING_TAG: ${{ steps.cf-gha-baseline.outputs.TAG_NAME }}
           TRIGGERING_GHRUNID: ${{ github.run_id }}
