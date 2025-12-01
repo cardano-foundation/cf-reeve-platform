@@ -123,7 +123,7 @@ public class ReportingService {
         handleVersioning(entity, dto, existingReport);
 
         List<ReportTemplateValidationRuleEntity> notPassedValidationRules = findNotPassedValidationRules(entity);
-        if(!notPassedValidationRules.isEmpty()) {
+        if (!notPassedValidationRules.isEmpty()) {
             entity.setFailedValidationRules(notPassedValidationRules);
             entity.setReadyToPublish(false);
         } else {
@@ -200,6 +200,7 @@ public class ReportingService {
     /**
      * This function validates the time-related fields in the ReportDto.
      * It checks if intervalTypeStr is a valid Enum object and if period and year are within acceptable ranges.
+     *
      * @return Either a ReportResponseDto with error details if validation fails, or Void if validation passes.
      */
     private Either<Problem, Void> validateTimeInDto(short year, short period, String intervalTypeStr) {
@@ -217,43 +218,43 @@ public class ReportingService {
         LocalDate now = LocalDate.now();
         if (year > now.getYear()) {
             return Either.left(Problem.builder()
-                            .withTitle(Constants.REPORT_IN_FUTURE)
-                            .withDetail("Report year cannot be in the future")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
+                    .withTitle(Constants.REPORT_IN_FUTURE)
+                    .withDetail("Report year cannot be in the future")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
         }
         if (intervalType == IntervalType.MONTH) {
             if (period < 1 || period > 12) {
                 return Either.left(Problem.builder()
-                                .withTitle(Constants.INVALID_PERIOD)
-                                .withDetail("Report month must be between 1 and 12")
-                                .withStatus(Status.BAD_REQUEST)
-                                .build());
+                        .withTitle(Constants.INVALID_PERIOD)
+                        .withDetail("Report month must be between 1 and 12")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
             }
             if (year == now.getYear() && period > now.getMonthValue() - 1) {
                 return Either.left(Problem.builder()
-                                .withTitle(Constants.REPORT_IN_FUTURE)
-                                .withDetail("Report month cannot be in the future")
-                                .withStatus(Status.BAD_REQUEST)
-                                .build());
+                        .withTitle(Constants.REPORT_IN_FUTURE)
+                        .withDetail("Report month cannot be in the future")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
             }
         }
         if (intervalType == IntervalType.QUARTER) {
             if (period < 1 || period > 4) {
                 return Either.left(Problem.builder()
-                                .withTitle(Constants.INVALID_PERIOD)
-                                .withDetail("Report quarter must be between 1 and 4")
-                                .withStatus(Status.BAD_REQUEST)
-                                .build());
+                        .withTitle(Constants.INVALID_PERIOD)
+                        .withDetail("Report quarter must be between 1 and 4")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
             }
             if (year == now.getYear()) {
                 int currentQuarter = (now.getMonthValue() - 1) / 3;
                 if (period > currentQuarter) {
                     return Either.left(Problem.builder()
-                                    .withTitle(Constants.REPORT_IN_FUTURE)
-                                    .withDetail("Report quarter cannot be in the future")
-                                    .withStatus(Status.BAD_REQUEST)
-                                    .build());
+                            .withTitle(Constants.REPORT_IN_FUTURE)
+                            .withDetail("Report quarter cannot be in the future")
+                            .withStatus(Status.BAD_REQUEST)
+                            .build());
                 }
             }
         }
@@ -504,9 +505,9 @@ public class ReportingService {
     /**
      * Recursively validates report fields against template fields.
      *
-     * @param reportFields The report fields to validate
+     * @param reportFields   The report fields to validate
      * @param templateFields The template fields to validate against
-     * @param pathPrefix Path prefix for error messages (e.g., "Income.Revenue")
+     * @param pathPrefix     Path prefix for error messages (e.g., "Income.Revenue")
      * @return Either a Problem if validation fails, or void on success
      */
     private Either<Problem, Void> validateTemplateFieldsRecursive(
@@ -538,7 +539,7 @@ public class ReportingService {
                 return Either.left(Problem.builder()
                         .withTitle("Invalid Template Field")
                         .withDetail("Template field with ID " + reportField.getTemplateFieldId() +
-                                   " does not exist at path '" + pathPrefix + "'")
+                                " does not exist at path '" + pathPrefix + "'")
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
@@ -553,7 +554,7 @@ public class ReportingService {
                 return Either.left(Problem.builder()
                         .withTitle("Invalid Field Value")
                         .withDetail("Field '" + currentPath + "' has child fields and must not have a value set. " +
-                                   "Only leaf fields (fields without children) can have values.")
+                                "Only leaf fields (fields without children) can have values.")
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
@@ -566,7 +567,7 @@ public class ReportingService {
                     return Either.left(Problem.builder()
                             .withTitle("Invalid Field Structure")
                             .withDetail("Field '" + currentPath + "' has child fields in the report, " +
-                                       "but the template field has no children defined")
+                                    "but the template field has no children defined")
                             .withStatus(Status.BAD_REQUEST)
                             .build());
                 }
@@ -862,7 +863,7 @@ public class ReportingService {
      * Updates the readyToPublish state and failedValidationRules based on current/regenerated field values.
      *
      * @param organisationId The organisation ID
-     * @param reportId The report ID to reprocess
+     * @param reportId       The report ID to reprocess
      * @return Either a Problem if the report cannot be found or processed, or the updated ReportResponseDto
      */
     public Either<Problem, ReportResponseDto> reprocess(String organisationId, String reportId) {
@@ -908,15 +909,15 @@ public class ReportingService {
 
             // Regenerate fields from template
             List<ReportFieldDto> regeneratedFields = fillFieldsFromTemplate(
-                report.getReportTemplate().getFields(),
-                startDate,
-                endDate
+                    report.getReportTemplate().getFields(),
+                    startDate,
+                    endDate
             );
 
             // Convert DTOs to entities and update the report
             List<ReportFieldEntity> newFieldEntities = regeneratedFields.stream()
-                .map(reportMapper::toColumnEntity)
-                .collect(Collectors.toList());
+                    .map(reportMapper::toColumnEntity)
+                    .collect(Collectors.toList());
 
             // Set report reference for all fields recursively
             ReportEntity finalReport = report;
