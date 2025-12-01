@@ -136,7 +136,7 @@ jobs:
         uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@feat/dispatch-payload
         if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
         with:
-          EVENT_TYPE: ${{ steps.set-event-dispatch-type.outputs.EVENT_TYPE }}
+          EVENT_TYPE: cf-reeve-platform-pr
           GITHUB_TOKEN: ${{ secrets.CF_REEVE_APPLICATION_REPO_PAT }}
           GITHUB_REPO: cardano-foundation/cf-reeve-application
           REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
