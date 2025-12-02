@@ -23,8 +23,10 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
@@ -61,6 +63,7 @@ public class ReportingService {
     private final TransactionItemRepository transactionItemRepository;
     private final AuthenticationUserService authenticationUserService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final TransactionRepositoryGateway transactionRepositoryGateway;
 
     public ReportResponseDto create(ReportDto dto) {
         log.info("Creating report: {}", dto.getName());
@@ -963,6 +966,25 @@ public class ReportingService {
         field.setReport(report);
         if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
             field.getChildFields().forEach(child -> setReportRecursively(child, report));
+        }
+    }
+
+    public void reprocessBasedOnStatusUpdates(Set<TxStatusUpdate> finalizedTransactions) {
+        List<ReportEntity> reportsToReprocess = reportRepository.findAffectedByTxId(
+                finalizedTransactions.stream()
+                        .map(TxStatusUpdate::getTxId)
+                        .toList()
+        );
+
+        log.info("Reprocessing {} report(s) based on finalized transactions", reportsToReprocess.size());
+
+        for (ReportEntity report : reportsToReprocess) {
+            Either<Problem, ReportResponseDto> reprocessResult = reprocess(report.getOrganisationId(), report.getId());
+            if (reprocessResult.isLeft()) {
+                log.error("Failed to reprocess report {}: {}", report.getId(), reprocessResult.getLeft().getDetail());
+            } else {
+                log.info("Successfully reprocessed report {}", report.getId());
+            }
         }
     }
 }

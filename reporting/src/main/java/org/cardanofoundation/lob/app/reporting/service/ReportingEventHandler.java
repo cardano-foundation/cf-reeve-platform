@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.reporting.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +14,10 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
@@ -22,6 +27,7 @@ import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 public class ReportingEventHandler {
 
     private final ReportingRepository reportingRepository;
+    private final ReportingService reportingService;
 
     @EventListener
     @Async
@@ -43,5 +49,18 @@ public class ReportingEventHandler {
             reportingRepository.save(reportEntity);
         }
         log.info("Finished processing handleReportsLedgerUpdated, event: {}", event);
+    }
+
+    // This function is to check if there are any transaction ledger updates to process to reprocess reports automatically
+    @EventListener
+    @Async
+    public void handleTxsLedgerUpdateEvent(TxsLedgerUpdatedEvent event) {
+        Set<TxStatusUpdate> finalizedTransactions = event.getStatusUpdates().stream().filter(statusUpdate -> statusUpdate.getStatus().equals(LedgerDispatchStatus.FINALIZED)).collect(Collectors.toSet());
+        if(finalizedTransactions.isEmpty()) {
+            log.debug("No finalized transactions found in handleTxsLedgerUpdateEvent, skipping reprocessing.");
+            return;
+        }
+        log.info("Received handleTxsLedgerUpdateEvent, finalized transactions count: {}", finalizedTransactions.size());
+        reportingService.reprocessBasedOnStatusUpdates(finalizedTransactions);
     }
 }

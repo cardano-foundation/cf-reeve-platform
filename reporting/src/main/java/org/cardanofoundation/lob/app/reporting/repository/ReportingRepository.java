@@ -21,11 +21,11 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
     Optional<ReportEntity> findByOrganisationIdAndId(String organisationId, String id);
 
     @Query("SELECT r FROM ReportEntity r WHERE r.organisationId = :organisationId " +
-           "AND r.reportTemplate.id = :reportTemplateId " +
-           "AND r.intervalType = :intervalType " +
-           "AND r.year = :year " +
-           "AND r.period = :period " +
-           "ORDER BY r.ver DESC LIMIT 1")
+            "AND r.reportTemplate.id = :reportTemplateId " +
+            "AND r.intervalType = :intervalType " +
+            "AND r.year = :year " +
+            "AND r.period = :period " +
+            "ORDER BY r.ver DESC LIMIT 1")
     Optional<ReportEntity> findLatestByTemplateAndPeriod(
             @Param("organisationId") String organisationId,
             @Param("reportTemplateId") String reportTemplateId,
@@ -33,4 +33,18 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
             @Param("year") short year,
             @Param("period") short period
     );
+
+    @Query("""
+            SELECT DISTINCT r FROM ReportEntity r
+            JOIN r.reportTemplate.fields rf
+            JOIN rf.mappingTypes stm
+            WHERE stm.type.id IN (
+                SELECT coa.subType.id
+                FROM ChartOfAccount coa
+                JOIN accounting_reporting_core.TransactionItemEntity item
+                ON (coa.id.customerCode = item.accountDebit.code OR coa.id.customerCode = item.accountCredit.code)
+                WHERE item.transaction.id IN :txIds
+            )
+        """)
+    List<ReportEntity> findAffectedByTxId(@Param("txIds") List<String> txStatusUpdates);
 }
