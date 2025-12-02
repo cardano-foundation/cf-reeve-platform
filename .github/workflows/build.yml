@@ -122,7 +122,7 @@ jobs:
           EVENT_TYPE: cf-reeve-platform-pr
           GITHUB_TOKEN: ${{ secrets.CF_REEVE_APPLICATION_REPO_PAT }}
           GITHUB_REPO: cardano-foundation/cf-reeve-application
-          REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
+          TRIGGERING_REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
           TRIGGERING_EVENT: ${{ github.event_name }}
           TRIGGERING_BRANCH: ${{ steps.cf-gha-baseline.outputs.BRANCH_NAME }}
           TRIGGERING_TAG: ${{ steps.cf-gha-baseline.outputs.TAG_NAME }}
