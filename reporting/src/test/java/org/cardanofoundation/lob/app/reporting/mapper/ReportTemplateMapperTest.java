@@ -41,6 +41,7 @@ class ReportTemplateMapperTest {
         when(dto.getOrganisationId()).thenReturn("org-id");
         when(dto.getName()).thenReturn("name");
         when(dto.getDescription()).thenReturn("description");
+        when(dto.getDataMode()).thenReturn("SYSTEM");
         when(dto.getReportTemplateType()).thenReturn("BALANCE_SHEET");
         when(dto.isActive()).thenReturn(true);
         when(dto.getValidationRules()).thenReturn(List.of(validationRuleDto));

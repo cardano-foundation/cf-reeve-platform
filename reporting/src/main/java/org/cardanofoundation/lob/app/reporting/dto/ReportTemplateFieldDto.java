@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.dto;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.validation.constraints.NotNull;
@@ -40,9 +41,9 @@ public class ReportTemplateFieldDto {
 
     @Schema(description = "List of chart of account subtype IDs to map to this field", example = "[1, 2, 3]", nullable = true)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<Long> mappingSubTypeIds;
+    private List<Long> mappingSubTypeIds = new ArrayList<>();
 
     @Schema(description = "Child fields forming a hierarchical structure", nullable = true)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<ReportTemplateFieldDto> childFields;
+    private List<ReportTemplateFieldDto> childFields = new ArrayList<>();
 }

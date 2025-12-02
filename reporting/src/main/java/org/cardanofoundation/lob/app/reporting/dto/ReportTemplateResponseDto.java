@@ -42,6 +42,9 @@ public class ReportTemplateResponseDto {
     @Schema(description = "Whether the template is active", example = "true")
     private Boolean active;
 
+    @Schema(description = "Number of reports generated from this template", example = "42")
+    private int reportCount;
+
     @Schema(description = "List of template field definitions")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ReportTemplateFieldDto> columns;

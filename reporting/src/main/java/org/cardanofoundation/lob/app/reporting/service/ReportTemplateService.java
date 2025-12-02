@@ -31,11 +31,14 @@ import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
+import org.cardanofoundation.lob.app.reporting.util.Constants;
+import org.cardanofoundation.lob.app.reporting.util.Helper;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +57,10 @@ public class ReportTemplateService {
         log.info("Creating report template: {}", dto.getName());
         Either<Problem, Void> errorDetails = validateReportTemplateDto(dto);
         if (errorDetails.isLeft()) return Either.left(errorDetails.getLeft());
+
+        Either<Problem, Void> validDataMode = validateDataMode(dto);
+        if (validDataMode.isLeft()) return Either.left(validDataMode.getLeft());
+
         // Validate no duplicate field names under same parent
         Either<Problem, Void> duplicateValidation = validateNoDuplicateFieldNames(dto.getFields());
         if (duplicateValidation.isLeft()) {
@@ -105,6 +112,64 @@ public class ReportTemplateService {
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
+    private Either<Problem, Void> validateDataMode(ReportTemplateDto dto) {
+        DataMode dataMode;
+        try {
+            dataMode = DataMode.valueOf(dto.getDataMode());
+        } catch (IllegalArgumentException e) {
+            return Either.left(Helper.buildDataModeError(dto.getDataMode()));
+        }
+        if(dataMode.equals(DataMode.SYSTEM) && !hasAllMappings(dto.getFields())) {
+            return Either.left(Problem.builder()
+                    .withTitle(Constants.INVALID_FIELD_MAPPINGS)
+                    .withDetail("All fields must have mappings when data mode is SYSTEM")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        if(dataMode.equals(DataMode.USER) && hasMappings(dto.getFields())) {
+            return Either.left(Problem.builder()
+                    .withTitle(Constants.INVALID_FIELD_MAPPINGS)
+                    .withDetail("No field mappings are allowed in a USER data mode template")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        return Either.right(null);
+    }
+
+    private boolean hasMappings(List<ReportTemplateFieldDto> fields) {
+        boolean hasMappings = false;
+        for (ReportTemplateFieldDto field : fields) {
+            if(!field.getMappingSubTypeIds().isEmpty()) {
+                hasMappings = true;
+                break;
+            }
+            if(!field.getChildFields().isEmpty()) {
+                hasMappings = hasMappings(field.getChildFields());
+                if(hasMappings) {
+                    break;
+                }
+            }
+        }
+        return hasMappings;
+    }
+
+    private boolean hasAllMappings(List<ReportTemplateFieldDto> fields) {
+        boolean hasAllMappings = true;
+        for(ReportTemplateFieldDto field : fields) {
+            if(field.getMappingSubTypeIds().isEmpty() && field.getChildFields().isEmpty()) {
+                hasAllMappings = false;
+                break;
+            }
+            if(!field.getChildFields().isEmpty()) {
+                hasAllMappings = hasAllMappings(field.getChildFields());
+                if(!hasAllMappings) {
+                    break;
+                }
+            }
+        }
+        return hasAllMappings;
+    }
+
     private List<ObjectError> getValidationErrorsOfFields(List<ReportTemplateFieldDto> fields) {
         List<ObjectError> allErrors = new ArrayList<>();
         if (fields != null) {
@@ -138,6 +203,10 @@ public class ReportTemplateService {
         log.info("Updating report template: {}", dto.getName());
         Either<Problem, Void> errorDetails = validateReportTemplateDto(dto);
         if (errorDetails.isLeft()) return Either.left(errorDetails.getLeft());
+
+        Either<Problem, Void> validDataMode = validateDataMode(dto);
+        if (validDataMode.isLeft()) return Either.left(validDataMode.getLeft());
+
         // Validate no duplicate field names under same parent
         Either<Problem, Void> duplicateValidation = validateNoDuplicateFieldNames(dto.getFields());
         if (duplicateValidation.isLeft()) {

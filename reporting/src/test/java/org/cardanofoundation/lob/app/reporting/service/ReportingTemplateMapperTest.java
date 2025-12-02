@@ -24,18 +24,21 @@ import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
+import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ReportingTemplateMapperTest {
 
     @Mock
     private ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
+    @Mock
+    private ReportingRepository reportingRepository;
 
     private ReportTemplateMapper mapper;
 
     @BeforeEach
     void setUp() {
-        mapper = new ReportTemplateMapper(chartOfAccountSubTypeRepository);
+        mapper = new ReportTemplateMapper(chartOfAccountSubTypeRepository, reportingRepository);
     }
 
     @Test
@@ -47,6 +50,7 @@ class ReportingTemplateMapperTest {
             .description("Test Description")
             .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.emptyList())
+            .dataMode("SYSTEM")
             .build();
         dto.setOrganisationId("org123");
 
@@ -78,6 +82,7 @@ class ReportingTemplateMapperTest {
             .description("New Description")
             .reportTemplateType("INCOME_STATEMENT")
             .fields(Collections.emptyList())
+            .dataMode("SYSTEM")
             .build();
         dto.setOrganisationId("new-org");
 
@@ -109,6 +114,7 @@ class ReportingTemplateMapperTest {
             .name("Test Template")
             .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.singletonList(fieldDto))
+            .dataMode("SYSTEM")
             .build();
         dto.setOrganisationId("org123");
         // When
@@ -149,6 +155,7 @@ class ReportingTemplateMapperTest {
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Test Template")
             .reportTemplateType("BALANCE_SHEET")
+            .dataMode("SYSTEM")
             .fields(Collections.singletonList(fieldDto))
             .build();
         dto.setOrganisationId("org123");
@@ -179,6 +186,7 @@ class ReportingTemplateMapperTest {
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Test Template")
+            .dataMode("SYSTEM")
             .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.singletonList(parentFieldDto))
             .build();
@@ -223,6 +231,7 @@ class ReportingTemplateMapperTest {
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
             .name("Template")
+            .dataMode("SYSTEM")
             .reportTemplateType("BALANCE_SHEET")
             .fields(Collections.singletonList(newFieldDto))
             .build();
@@ -415,6 +424,7 @@ class ReportingTemplateMapperTest {
             .name("Test Template")
             .reportTemplateType("BALANCE_SHEET")
             .fields(null)
+            .dataMode("SYSTEM")
             .build();
         dto.setOrganisationId("org123");
 

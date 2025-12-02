@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import jakarta.validation.Valid;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -69,7 +67,7 @@ public class ReportTemplateController {
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportTemplateResponseDto> create(
-            @Valid @RequestBody(required = true) ReportTemplateDto template) {
+            @RequestBody(required = true) ReportTemplateDto template) {
         log.info("POST /api/report-templates - Creating template: {}", template.getName());
 
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(template);
@@ -86,7 +84,7 @@ public class ReportTemplateController {
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<List<ReportTemplateResponseDto>> templateCreateCsv(
-            @Valid @ModelAttribute CreateCsvTemplateRequest csvTemplateRequest) {
+            @ModelAttribute CreateCsvTemplateRequest csvTemplateRequest) {
 
         return csvReportTemplateService.createCsvTemplates(csvTemplateRequest)
                 .fold(
@@ -115,7 +113,7 @@ public class ReportTemplateController {
             consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> update(
-            @Valid @RequestBody(required = true) ReportTemplateDto template) {
+            @RequestBody(required = true) ReportTemplateDto template) {
         log.info("PUT /api/report-templates - Updating template: {}", template.getName());
 
 

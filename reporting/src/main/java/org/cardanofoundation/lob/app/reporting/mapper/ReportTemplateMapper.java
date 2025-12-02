@@ -21,15 +21,18 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldE
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
+import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 @Component
 @RequiredArgsConstructor
 public class ReportTemplateMapper {
 
     private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
+    private final ReportingRepository reportingRepository;
 
     public ReportTemplateEntity toEntity(ReportTemplateDto dto, ReportTemplateEntity existingTemplate) {
         final ReportTemplateEntity template = existingTemplate != null ? existingTemplate : new ReportTemplateEntity();
@@ -39,6 +42,7 @@ public class ReportTemplateMapper {
         template.setDescription(dto.getDescription());
         template.setReportTemplateType(ReportTemplateType.valueOf(dto.getReportTemplateType()));
         template.setActive(dto.isActive());
+        template.setDataMode(DataMode.valueOf(dto.getDataMode()));
         if (dto.getFields() != null) {
             List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
                 .map(columnDto -> toColumnEntity(columnDto, template, null))
@@ -99,6 +103,7 @@ public class ReportTemplateMapper {
             .active(entity.isActive())
             .columns(topLevelColumns)
             .validationRules(validationRules)
+            .reportCount(reportingRepository.findByReportTemplateId(entity.getId()).size())
             .build();
     }
 

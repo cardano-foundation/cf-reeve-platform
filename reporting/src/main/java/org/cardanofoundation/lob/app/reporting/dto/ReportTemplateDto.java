@@ -31,6 +31,10 @@ public class ReportTemplateDto extends BaseRequest {
     @NotNull(message = "Report template type must not be null")
     private String reportTemplateType;
 
+    @Schema(description = "Data mode for the report. Options are: SYSTEM, USER", example = "SYSTEM", required = true)
+    @NotNull(message = "Data mode must not be null")
+    private String dataMode;
+
     @Schema(description = "Template description", example = "Standard quarterly financial report with balance sheet", nullable = true)
     private String description;
 

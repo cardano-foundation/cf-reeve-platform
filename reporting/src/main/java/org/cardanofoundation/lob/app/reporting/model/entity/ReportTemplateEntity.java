@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.model.entity;
 
+import static jakarta.persistence.EnumType.STRING;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +20,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
@@ -42,6 +45,9 @@ public class ReportTemplateEntity extends CommonEntity {
 
     @Builder.Default
     private long ver = 1;
+
+    @Enumerated(STRING)
+    private DataMode dataMode;
 
     @Builder.Default
     private boolean active = true;

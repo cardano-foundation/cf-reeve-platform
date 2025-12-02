@@ -60,6 +60,7 @@ public class API3MetadataSerialiser {
     private MetadataMap createRecursiveMetadataSection(
             MetadataMap MetdataMap, Map<String, Object> data) {
         data.forEach((key, value) -> {
+            key = toLowerSnakeCase(key);
             if (value == null) {
                 log.debug("Null value for key: {}", key);
             } else if (value instanceof Map) {
@@ -78,6 +79,18 @@ public class API3MetadataSerialiser {
         });
 
         return MetdataMap;
+    }
+
+    private String toLowerSnakeCase(String input) {
+        if (input == null || input.isEmpty()) return input;
+
+        String snake = input
+                .replaceAll("([a-z])([A-Z])", "$1_$2")
+                .replaceAll("([A-Z])([A-Z][a-z])", "$1_$2")
+                .replaceAll(" ", "_")
+                .toLowerCase();
+
+        return snake;
     }
 
     public MetadataMap serialiseToMetadataMap(ReportEntity reportEntity,

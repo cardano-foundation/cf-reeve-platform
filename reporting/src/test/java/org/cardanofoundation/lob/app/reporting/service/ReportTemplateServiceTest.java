@@ -69,6 +69,7 @@ class ReportTemplateServiceTest {
         templateDto.setName("Test Template");
         templateDto.setOrganisationId("org123");
         templateDto.setReportTemplateType("BALANCE_SHEET");
+        templateDto.setDataMode("SYSTEM");
         templateDto.setFields(new ArrayList<>());
 
         templateEntity = new ReportTemplateEntity();
@@ -105,6 +106,52 @@ class ReportTemplateServiceTest {
         assertTrue(result.isRight());
         assertEquals("Test Template", result.get().getName());
         verify(reportTemplateRepository).save(templateEntity);
+    }
+
+    @Test
+    void create_NewTemplate_InvalidDataMode() {
+        templateDto.setDataMode("WRONG_DATAMODE");
+        // Given
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        // When
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("INVALID_DATA_MODE", result.getLeft().getTitle());
+
+        templateDto.setDataMode("");
+        result = reportTemplateService.create(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("DATA_MODE_MISSING", result.getLeft().getTitle());
+    }
+
+    @Test
+    void create_NewTemplate_INVALID_FIELD_MAPPINGS() {
+        templateDto.setDataMode("SYSTEM");
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().mappingSubTypeIds(List.of()).build()));
+        // Given
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        // When
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("INVALID_FIELD_MAPPINGS", result.getLeft().getTitle());
+
+        templateDto.setDataMode("USER");
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().mappingSubTypeIds(List.of(1L)).build()));
+        result = reportTemplateService.create(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("INVALID_FIELD_MAPPINGS", result.getLeft().getTitle());
     }
 
     @Test
@@ -175,6 +222,7 @@ class ReportTemplateServiceTest {
         Errors errors = mock(Errors.class);
 
         when(dto.getFields()).thenReturn(List.of(parentDtoField));
+        when(dto.getDataMode()).thenReturn("USER");
         when(parentDtoField.getChildFields()).thenReturn(List.of(fieldDto1, fieldDto2));
         when(parentDtoField.getFieldName()).thenReturn("parentName");
         when(fieldDto1.getFieldName()).thenReturn("sameName");

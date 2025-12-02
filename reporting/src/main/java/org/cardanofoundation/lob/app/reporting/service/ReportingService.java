@@ -48,6 +48,7 @@ import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.util.Constants;
+import org.cardanofoundation.lob.app.reporting.util.Helper;
 import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 
 @Service
@@ -71,7 +72,7 @@ public class ReportingService {
         // Validate dataMode is provided and valid
         DataMode dataMode = validateAndParseDataMode(dto.getDataMode());
         if (dataMode == null) {
-            return ReportResponseDto.builder().error(Optional.of(buildDataModeError(dto.getDataMode()))).build();
+            return ReportResponseDto.builder().error(Optional.of(Helper.buildDataModeError(dto.getDataMode()))).build();
         }
 
         // Validate report template exists and organization matches
@@ -80,6 +81,15 @@ public class ReportingService {
             return ReportResponseDto.builder().error(Optional.of(templateResult.getLeft())).build();
         }
         ReportTemplateEntity template = templateResult.get();
+        if(dataMode != template.getDataMode()) {
+            return ReportResponseDto.builder().error(Optional.of(
+                    Problem.builder()
+                            .withTitle("DATA_MODE_MISMATCH")
+                            .withDetail("Data mode of the report (" + dataMode.name() + ") does not match the template's data mode (" + template.getDataMode().name() + ")")
+                            .withStatus(Status.BAD_REQUEST)
+                            .build()
+            )).build();
+        }
 
         // Check if template is active
         if (!template.isActive()) {
@@ -333,21 +343,6 @@ public class ReportingService {
         }
     }
 
-    private Problem buildDataModeError(String dataModeStr) {
-        if (dataModeStr == null || dataModeStr.isBlank()) {
-            return Problem.builder()
-                    .withTitle("DATA_MODE_MISSING")
-                    .withDetail("Data mode must be specified (GENERATED or USER)")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build();
-        }
-        return Problem.builder()
-                .withTitle("INVALID_DATA_MODE")
-                .withDetail("Data mode must be either GENERATED or USER")
-                .withStatus(Status.BAD_REQUEST)
-                .build();
-    }
-
     private Either<Problem, ReportTemplateEntity> validateTemplate(String templateId, String organisationId) {
         Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(templateId);
         if (templateOpt.isEmpty()) {
@@ -383,7 +378,7 @@ public class ReportingService {
             template) {
         if (dto.getIntervalType() == null || dto.getYear() == null) {
             return Either.left(Problem.builder()
-                    .withTitle("Missing Required Fields")
+                    .withTitle(Constants.MISSING_REQUIRED_FIELDS)
                     .withDetail("intervalType and year are required for GENERATED reports")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
@@ -403,7 +398,7 @@ public class ReportingService {
             (List<ReportFieldDto> fields, ReportTemplateEntity template) {
         if (fields == null || fields.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("Missing Fields for User Report")
+                    .withTitle(Constants.MISSING_REQUIRED_FIELDS)
                     .withDetail("USER reports must have fields specified.")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
@@ -530,7 +525,7 @@ public class ReportingService {
             // Check if template field ID is provided
             if (reportField.getTemplateFieldId() == null) {
                 return Either.left(Problem.builder()
-                        .withTitle("Missing Template Field ID")
+                        .withTitle(Constants.MISSING_TEMPLATE_ID)
                         .withDetail("Report field at path '" + pathPrefix + "' is missing template field ID")
                         .withStatus(Status.BAD_REQUEST)
                         .build());
@@ -540,7 +535,7 @@ public class ReportingService {
             ReportTemplateFieldEntity templateField = templateFieldMap.get(reportField.getTemplateFieldId());
             if (templateField == null) {
                 return Either.left(Problem.builder()
-                        .withTitle("Invalid Template Field")
+                        .withTitle(Constants.INVALID_TEMPLATE_FIELD_ID)
                         .withDetail("Template field with ID " + reportField.getTemplateFieldId() +
                                 " does not exist at path '" + pathPrefix + "'")
                         .withStatus(Status.BAD_REQUEST)
@@ -555,7 +550,7 @@ public class ReportingService {
             // Validate: fields with children must NOT have a value
             if (hasChildren && reportField.getValue() != null) {
                 return Either.left(Problem.builder()
-                        .withTitle("Invalid Field Value")
+                        .withTitle(Constants.INVALID_FIELD_VALUE)
                         .withDetail("Field '" + currentPath + "' has child fields and must not have a value set. " +
                                 "Only leaf fields (fields without children) can have values.")
                         .withStatus(Status.BAD_REQUEST)
@@ -568,7 +563,7 @@ public class ReportingService {
 
                 if (templateChildFields == null || templateChildFields.isEmpty()) {
                     return Either.left(Problem.builder()
-                            .withTitle("Invalid Field Structure")
+                            .withTitle(Constants.INVALID_FIELD_STRUCTURE)
                             .withDetail("Field '" + currentPath + "' has child fields in the report, " +
                                     "but the template field has no children defined")
                             .withStatus(Status.BAD_REQUEST)
@@ -630,7 +625,7 @@ public class ReportingService {
         Optional<ReportEntity> reportOpt = reportRepository.findById(id);
         if (reportOpt.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_NOT_FOUND")
+                    .withTitle(Constants.REPORT_NOT_FOUND)
                     .withDetail("Report with ID " + id + " does not exist")
                     .withStatus(Status.NOT_FOUND)
                     .build());
@@ -641,7 +636,7 @@ public class ReportingService {
         // Check if report is already published
         if (report.isLedgerDispatchApproved()) {
             return Either.left(Problem.builder()
-                    .withTitle("REPORT_ALREADY_PUBLISHED")
+                    .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
                     .withDetail("Cannot delete report with ID " + id + " because it has already been published")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
@@ -820,7 +815,7 @@ public class ReportingService {
         Optional<ReportEntity> reportO = reportRepository.findByOrganisationIdAndId(request.getOrganisationId(), request.getReportId());
         if (reportO.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("Report Not Found")
+                    .withTitle(Constants.REPORT_NOT_FOUND)
                     .withDetail("Report with ID " + request.getReportId() + " does not exist")
                     .withStatus(Status.NOT_FOUND)
                     .build());
@@ -828,14 +823,14 @@ public class ReportingService {
         ReportEntity report = reportO.get();
         if (!report.isReadyToPublish()) {
             return Either.left(Problem.builder()
-                    .withTitle("Report Not Ready to Publish")
+                    .withTitle(Constants.REPORT_NOT_READY_TO_PUBLISH)
                     .withDetail("Report with ID " + request.getReportId() + " is not ready to be published")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
         if (report.isLedgerDispatchApproved()) {
             return Either.left(Problem.builder()
-                    .withTitle("Report Already Published")
+                    .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
                     .withDetail("Report with ID " + request.getReportId() + " has already been published")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
@@ -876,7 +871,7 @@ public class ReportingService {
         Optional<ReportEntity> reportOpt = reportRepository.findByOrganisationIdAndId(organisationId, reportId);
         if (reportOpt.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("Report Not Found")
+                    .withTitle(Constants.REPORT_NOT_FOUND)
                     .withDetail("Report with ID " + reportId + " does not exist")
                     .withStatus(Status.NOT_FOUND)
                     .build());
@@ -887,7 +882,7 @@ public class ReportingService {
         // Check if report is already published - can't reprocess published reports
         if (report.isLedgerDispatchApproved()) {
             return Either.left(Problem.builder()
-                    .withTitle("Report Already Published")
+                    .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
                     .withDetail("Cannot reprocess report with ID " + reportId + " because it has already been published")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
@@ -900,7 +895,7 @@ public class ReportingService {
             // Validate we have the required information to regenerate
             if (report.getIntervalType() == null || report.getYear() == 0) {
                 return Either.left(Problem.builder()
-                        .withTitle("Missing Required Information")
+                        .withTitle(Constants.MISSING_REQUIRED_FIELDS)
                         .withDetail("Cannot regenerate fields: intervalType and year are required")
                         .withStatus(Status.BAD_REQUEST)
                         .build());

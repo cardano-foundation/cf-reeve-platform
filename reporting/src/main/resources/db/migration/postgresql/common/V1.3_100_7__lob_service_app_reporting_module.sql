@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS report_template (
     organisation_id VARCHAR(64) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    data_mode VARCHAR(20),
     report_template_type VARCHAR(255),
     ver BIGINT NOT NULL DEFAULT 1,
     active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS report_template_aud (
     organisation_id VARCHAR(64),
     name VARCHAR(255),
     description TEXT,
+    data_mode VARCHAR(20),
     report_template_type VARCHAR(255),
     ver BIGINT NOT NULL DEFAULT 1,
     

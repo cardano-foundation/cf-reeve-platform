@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
@@ -89,6 +90,7 @@ class ReportingServiceTest {
         templateEntity.setName("Test Template");
         templateEntity.setFields(List.of());
         templateEntity.setValidationRules(List.of());
+        templateEntity.setDataMode(DataMode.SYSTEM);
         reportEntity = new ReportEntity();
         reportEntity.setId("abc");
         reportEntity.setName("Test Report");
@@ -129,6 +131,7 @@ class ReportingServiceTest {
     @Test
     void create_missingUserFields() {
         reportDto.setDataMode("USER");
+        templateEntity.setDataMode(DataMode.USER);
         // Given
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
@@ -140,9 +143,25 @@ class ReportingServiceTest {
 
         // Then
         assertTrue(result.getError().isPresent());
-        assertEquals("Missing Fields for User Report", result.getError().get().getTitle());
+        assertEquals("MISSING_REQUIRED_FIELDS", result.getError().get().getTitle());
     }
 
+    @Test
+    void create_dataModeMismatch() {
+        reportDto.setDataMode("USER");
+        // Given
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                any(), any(), any())).thenReturn(new ArrayList<>());
+
+        // When
+        ReportResponseDto result = reportingService.create(reportDto);
+
+        // Then
+        assertTrue(result.getError().isPresent());
+        assertEquals("DATA_MODE_MISMATCH", result.getError().get().getTitle());
+    }
 
     @Test
     void create_dataModeNull() {
@@ -200,6 +219,7 @@ class ReportingServiceTest {
     void create_timeValidationFailed_INVALID_PERIOD() {
         reportDto.setIntervalType("MONTH");
         reportDto.setPeriod((short) 13); // Invalid month
+
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
 
         ReportResponseDto response = reportingService.create(reportDto);
