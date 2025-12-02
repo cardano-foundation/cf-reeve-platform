@@ -115,23 +115,6 @@ jobs:
           echo "$PAYLOAD" | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
           echo EOF | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
 
-      # - name: Build payload
-      #   if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
-      #   id: payload
-      #   run: |
-      #     PAYLOAD=$(cat <<EOF
-      #       {
-      #         "version": "${VERSION_PUBLISH}",
-      #         "prName": "",
-      #         "sourceBranch": "${{ github.event.base_ref }}",
-      #         "targetBranch": "${{ github.event.ref }}"
-      #       }
-      #     EOF)
-      #     echo "PAYLOAD=$PAYLOAD" | tee -a $GITHUB_ENV | tee -a $GITHUB_OUTPUT
-      #
-      #
-      #     echo "this is the base ref: 
-
       - name: Dispatch successful build event to private repo
         uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@feat/dispatch-payload
         if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
@@ -146,8 +129,3 @@ jobs:
           TRIGGERING_GHRUNID: ${{ github.run_id }}
           GIT_SHORT_COMMIT: ${{ steps.cf-gha-baseline.outputs.GIT_SHORT_COMMIT }}
           TRIGGERING_PAYLOAD: "${{ steps.payload.outputs.PAYLOAD }}"
-
-        # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-pull_request-workflow-based-on-files-changed-in-a-pull-request
-        #
-        #
-        # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-pull_request-workflow-when-a-pull-request-merges
