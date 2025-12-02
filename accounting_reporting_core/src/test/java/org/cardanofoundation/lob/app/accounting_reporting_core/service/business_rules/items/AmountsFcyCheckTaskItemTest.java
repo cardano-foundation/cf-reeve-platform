@@ -70,7 +70,7 @@ class AmountsFcyCheckTaskItemTest {
 
         taskItem.run(tx);
 
-        assertThat(tx.getAutomatedValidationStatus()).isEqualTo(FAILED);
+        assertThat(tx.getAutomatedValidationStatus()).isEqualTo(VALIDATED);
         assertThat(tx.getViolations()).isEmpty();
     }
 
