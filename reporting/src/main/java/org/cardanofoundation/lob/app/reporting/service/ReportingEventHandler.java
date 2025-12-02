@@ -51,7 +51,7 @@ public class ReportingEventHandler {
         log.info("Finished processing handleReportsLedgerUpdated, event: {}", event);
     }
 
-    // This function is to check if there are any transaction ledger updates to process to reprocess reports automatically
+    // When transaction ledger updates include FINALIZED entries, trigger automatic reprocessing of affected reports.
     @EventListener
     @Async
     public void handleTxsLedgerUpdateEvent(TxsLedgerUpdatedEvent event) {

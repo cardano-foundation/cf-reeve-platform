@@ -28,7 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
-import org.cardanofoundation.lob.app.accounting_reporting_core.util.ErrorUtils;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
@@ -100,33 +102,6 @@ class ReportingServiceTest {
 
     }
 
-//    @Test
-//    void create_validationRuleError() {
-//        // Given
-//        ReportTemplateValidationRuleEntity rule = mock(ReportTemplateValidationRuleEntity.class);
-//        templateEntity.setValidationRules(List.of(rule));
-//
-//        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
-//        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
-//        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
-//                any(), any(), any())).thenReturn(new ArrayList<>());
-//        when(reportRepository.findLatestByTemplateAndPeriod(
-//                eq("org123"), eq("abc"), any(IntervalType.class), eq((short) 2024), eq((short) 1)))
-//                .thenReturn(Optional.empty());
-//        when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
-//        when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
-//        when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
-//        reportResponseDto.setError(Optional.empty());
-//
-//        // When
-//        ReportResponseDto result = reportingService.create(reportDto);
-//
-//        // Then
-//        assertTrue(result.getError().isEmpty());
-//        assertEquals("Test Report", result.getName());
-//        verify(reportRepository).save(any(ReportEntity.class));
-//    }
-
     @Test
     void create_Success() {
         // Given
@@ -149,6 +124,139 @@ class ReportingServiceTest {
         assertTrue(result.getError().isEmpty());
         assertEquals("Test Report", result.getName());
         verify(reportRepository).save(any(ReportEntity.class));
+    }
+
+    @Test
+    void create_missingUserFields() {
+        reportDto.setDataMode("USER");
+        // Given
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                any(), any(), any())).thenReturn(new ArrayList<>());
+
+        // When
+        ReportResponseDto result = reportingService.create(reportDto);
+
+        // Then
+        assertTrue(result.getError().isPresent());
+        assertEquals("Missing Fields for User Report", result.getError().get().getTitle());
+    }
+
+
+    @Test
+    void create_dataModeNull() {
+        reportDto.setDataMode(null);
+        ReportResponseDto response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("DATA_MODE_MISSING", response.getError().get().getTitle());
+    }
+
+    @Test
+    void create_invalidDataMode() {
+        reportDto.setDataMode("INVALID_MODE");
+        ReportResponseDto response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("INVALID_DATA_MODE", response.getError().get().getTitle());
+    }
+
+    @Test
+    void create_dataModeSystem_FieldsNotEmpty() {
+        ReportFieldDto field = new ReportFieldDto();
+        reportDto.setFields(List.of(field));
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        ReportResponseDto response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("FIELDS_NOT_ALLOWED", response.getError().get().getTitle());
+    }
+
+    @Test
+    void create_generateOrValidateFailed() {
+        reportDto.setFields(List.of(new ReportFieldDto()));
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        ReportResponseDto response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("FIELDS_NOT_ALLOWED", response.getError().get().getTitle());
+    }
+
+    @Test
+    void create_timeValidationFailedWrongIntervalType() {
+        reportDto.setIntervalType("WRONG_INTERVALTYPE");
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+
+        ReportResponseDto response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("INVALID_INTERVAL_TYPE", response.getError().get().getTitle());
+    }
+
+    @Test
+    void create_timeValidationFailed_INVALID_PERIOD() {
+        reportDto.setIntervalType("MONTH");
+        reportDto.setPeriod((short) 13); // Invalid month
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+
+        ReportResponseDto response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("INVALID_PERIOD", response.getError().get().getTitle());
+
+        reportDto.setIntervalType("MONTH");
+        reportDto.setPeriod((short) 0); // Invalid month
+
+        response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("INVALID_PERIOD", response.getError().get().getTitle());
+
+        reportDto.setIntervalType("QUARTER");
+        reportDto.setPeriod((short) 0); // Invalid month
+
+        response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("INVALID_PERIOD", response.getError().get().getTitle());
+
+        reportDto.setIntervalType("QUARTER");
+        reportDto.setPeriod((short) 5); // Invalid month
+
+        response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("INVALID_PERIOD", response.getError().get().getTitle());
+    }
+
+
+    @Test
+    void create_timeValidationFailed() {
+        LocalDate now = LocalDate.now();
+
+        reportDto.setIntervalType("MONTH");
+        reportDto.setPeriod((short) 12); // Invalid month
+        reportDto.setYear((short) now.getYear());
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+
+        ReportResponseDto response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("REPORT_IN_FUTURE", response.getError().get().getTitle());
+
+        reportDto.setIntervalType("QUARTER");
+        reportDto.setPeriod((short) 4); // Invalid month
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+
+        response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("REPORT_IN_FUTURE", response.getError().get().getTitle());
     }
 
     @Test
@@ -384,6 +492,29 @@ class ReportingServiceTest {
         // Then
         assertTrue(result.isRight());
         assertEquals("Test Report", result.get().getName());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void generate_failedInactiveTemplate() {
+        // Given
+        ReportGenerateRequest request = new ReportGenerateRequest();
+        request.setReportTemplateId("abc");
+        request.setOrganisationId("org123");
+        request.setIntervalType("MONTH");
+        request.setYear((short) 2024);
+        request.setPeriod((short) 1);
+
+        templateEntity.setActive(false);
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+
+        // When
+        Either<Problem, ReportResponseDto> result = reportingService.generate(request);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("TEMPLATE_INACTIVE", result.getLeft().getTitle());
         verify(reportRepository, never()).save(any());
     }
 

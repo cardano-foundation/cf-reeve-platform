@@ -213,7 +213,7 @@ public class ReportingService {
         } catch (IllegalArgumentException e) {
             return Either.left(
                     Problem.builder()
-                            .withTitle("Invalid Interval Type")
+                            .withTitle("INVALID_INTERVAL_TYPE")
                             .withDetail("Interval type must be one of: MONTH, QUARTER, YEAR")
                             .withStatus(Status.BAD_REQUEST)
                             .build());
@@ -336,13 +336,13 @@ public class ReportingService {
     private Problem buildDataModeError(String dataModeStr) {
         if (dataModeStr == null || dataModeStr.isBlank()) {
             return Problem.builder()
-                    .withTitle("Data Mode Required")
+                    .withTitle("DATA_MODE_MISSING")
                     .withDetail("Data mode must be specified (GENERATED or USER)")
                     .withStatus(Status.BAD_REQUEST)
                     .build();
         }
         return Problem.builder()
-                .withTitle("Invalid Data Mode")
+                .withTitle("INVALID_DATA_MODE")
                 .withDetail("Data mode must be either GENERATED or USER")
                 .withStatus(Status.BAD_REQUEST)
                 .build();
