@@ -47,7 +47,10 @@ public class ReportTemplateResponseDto {
 
     @Schema(description = "List of template field definitions")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<ReportTemplateFieldDto> columns;
+    private List<ReportTemplateFieldDto> fields;
+
+    @Schema(description = "Data mode for the report. Options are: SYSTEM, USER", example = "SYSTEM")
+    private String dataMode;
 
     @Schema(description = "List of validation rules for report fields")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)

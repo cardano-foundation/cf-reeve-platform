@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.reporting.controller;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -37,6 +38,7 @@ import org.zalando.problem.Problem;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportTemplateService;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -51,6 +53,12 @@ public class ReportTemplateController {
     private final ReportTemplateService reportTemplateService;
     private final CsvReportTemplateService csvReportTemplateService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+
+    @GetMapping(value = "/types", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<List<String>> getReportTypes() {
+        return ResponseEntity.ok(Arrays.stream(ReportTemplateType.values()).map(ReportTemplateType::name).toList());
+    }
 
     @Operation(summary = "Create a new report template",
             description = "Creates a new report template with hierarchical column structure for an organisation. Returns 409 if template already exists.",

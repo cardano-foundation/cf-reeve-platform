@@ -278,7 +278,7 @@ class ReportingTemplateMapperTest {
         assertThat(result.getDescription()).isEqualTo("Annual financial report");
         assertThat(result.getReportTemplateType()).isEqualTo(ReportTemplateType.BALANCE_SHEET);
         assertThat(result.getVer()).isEqualTo(3L);
-        assertThat(result.getColumns()).isEmpty();
+        assertThat(result.getFields()).isEmpty();
     }
 
     @Test
@@ -316,8 +316,8 @@ class ReportingTemplateMapperTest {
         ReportTemplateResponseDto result = mapper.toResponseDto(entity);
 
         // Then
-        assertThat(result.getColumns()).hasSize(1);
-        ReportTemplateFieldDto fieldDto = result.getColumns().get(0);
+        assertThat(result.getFields()).hasSize(1);
+        ReportTemplateFieldDto fieldDto = result.getFields().get(0);
         assertThat(fieldDto.getId()).isEqualTo(100L);
         assertThat(fieldDto.getFieldName()).isEqualTo("Revenue");
         assertThat(fieldDto.isAccumulated()).isTrue();
@@ -364,8 +364,8 @@ class ReportingTemplateMapperTest {
         ReportTemplateResponseDto result = mapper.toResponseDto(entity);
 
         // Then
-        assertThat(result.getColumns()).hasSize(1);
-        ReportTemplateFieldDto parentDto = result.getColumns().get(0);
+        assertThat(result.getFields()).hasSize(1);
+        ReportTemplateFieldDto parentDto = result.getFields().get(0);
         assertThat(parentDto.getFieldName()).isEqualTo("Parent Field");
         assertThat(parentDto.getChildFields()).hasSize(1);
 
@@ -413,8 +413,8 @@ class ReportingTemplateMapperTest {
 
         // Then
         // Only the top-level field should be in the result's columns
-        assertThat(result.getColumns()).hasSize(1);
-        assertThat(result.getColumns().get(0).getFieldName()).isEqualTo("Top Level");
+        assertThat(result.getFields()).hasSize(1);
+        assertThat(result.getFields().get(0).getFieldName()).isEqualTo("Top Level");
     }
 
     @Test
@@ -453,6 +453,6 @@ class ReportingTemplateMapperTest {
 
         // Then
         assertThat(result).isNotNull();
-        assertThat(result.getColumns()).isEmpty();
+        assertThat(result.getFields()).isEmpty();
     }
 }
