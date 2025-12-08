@@ -20,6 +20,9 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 @Schema(description = "Report template data transfer object for creating or updating templates")
 public class ReportTemplateDto extends BaseRequest {
 
+    @Schema(description = "Unique template ID (SHA3-256 hash)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2", required = true)
+    private String id;
+
     @Schema(description = "Template name", example = "Quarterly Financial Report Template", required = true)
     @NotNull(message = "Template name must not be null")
     private String name;

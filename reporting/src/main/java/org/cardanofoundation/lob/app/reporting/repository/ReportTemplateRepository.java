@@ -35,4 +35,8 @@ public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEn
     Optional<ReportTemplateEntity> findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(@Param("organisationId") String organisationId,
                                                                                    @Param("name") String name,
                                                                                    @Param("reportTemplateType") ReportTemplateType reportTemplateType);
+
+    @Query("SELECT rt FROM ReportTemplateEntity rt WHERE rt.organisationId = :organisationId " +
+            "AND rt.id = :id ORDER BY rt.ver DESC LIMIT 1")
+    Optional<ReportTemplateEntity> findLatestByOrganisationIdAndId(@Param("organisationId") String organisationId, @Param("id") String id);
 }

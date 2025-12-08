@@ -215,12 +215,12 @@ public class ReportTemplateService {
 
         // Check if a template with the same name exists for this organisation
         Optional<ReportTemplateEntity> existingTemplateOpt =
-                reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
+                reportTemplateRepository.findLatestByOrganisationIdAndId(dto.getOrganisationId(), dto.getId());
 
         if (existingTemplateOpt.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("Template Not Found")
-                    .withDetail("No template with name '" + dto.getName() + "' exists for this organisation. Use POST to create.")
+                    .withDetail("No template with id '" + dto.getId() + "' exists for this organisation. Use POST to create.")
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
