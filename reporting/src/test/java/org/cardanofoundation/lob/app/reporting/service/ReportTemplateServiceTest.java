@@ -66,6 +66,7 @@ class ReportTemplateServiceTest {
     void setUp() {
         // Setup test data
         templateDto = new ReportTemplateDto();
+        templateDto.setId("abc");
         templateDto.setName("Test Template");
         templateDto.setOrganisationId("org123");
         templateDto.setReportTemplateType("BALANCE_SHEET");
@@ -133,7 +134,7 @@ class ReportTemplateServiceTest {
     @Test
     void create_NewTemplate_INVALID_FIELD_MAPPINGS() {
         templateDto.setDataMode("SYSTEM");
-        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().mappingSubTypeIds(List.of()).build()));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().childFields(List.of()).mappingSubTypeIds(List.of()).build()));
         // Given
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
@@ -266,7 +267,7 @@ class ReportTemplateServiceTest {
         existing.setId("abc");
         existing.setVer(1L);
 
-        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
         when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
         when(reportTemplateMapper.toEntity(eq(templateDto), eq(existing))).thenReturn(existing);
@@ -298,7 +299,7 @@ class ReportTemplateServiceTest {
 
         ReportTemplateEntity newVersion = new ReportTemplateEntity();
 
-        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
         when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(report));
         when(reportTemplateMapper.toEntity(eq(templateDto), isNull())).thenReturn(newVersion);
@@ -321,7 +322,7 @@ class ReportTemplateServiceTest {
     @Test
     void update_TemplateNotFound_ReturnsNotFound() {
         // Given
-        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.empty());
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
