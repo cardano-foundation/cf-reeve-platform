@@ -53,6 +53,28 @@ class AmountsFcyCheckTaskItemTest {
     }
 
     @Test
+    void whenTransactionTypeIsFxRevaluation_thenNoViolations() {
+        val txId = Transaction.id("2", "1");
+
+        val txItem1 = new TransactionItemEntity();
+        txItem1.setId(TransactionItem.id(txId, "1"));
+        txItem1.setAmountFcy(BigDecimal.ZERO);
+        txItem1.setAmountLcy(BigDecimal.valueOf(100));
+
+        val tx = new TransactionEntity();
+        tx.setId(txId);
+        tx.setInternalTransactionNumber("2");
+        tx.setOrganisation(Organisation.builder().id("1").build());
+        tx.setTransactionType(TransactionType.FxRevaluation);
+        tx.setItems(Set.of(txItem1));
+
+        taskItem.run(tx);
+
+        assertThat(tx.getAutomatedValidationStatus()).isEqualTo(VALIDATED);
+        assertThat(tx.getViolations()).isEmpty();
+    }
+
+    @Test
     void whenBothFcyAndLcyAreNonZero_thenNoViolations() {
         val txId = Transaction.id("3", "1");
 
