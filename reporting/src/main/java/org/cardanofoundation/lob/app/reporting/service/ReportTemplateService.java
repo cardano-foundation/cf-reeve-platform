@@ -29,6 +29,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
@@ -53,8 +54,7 @@ public class ReportTemplateService {
     private final Validator validator;
     private final ReportTemplateTypeValidator reportTemplateTypeValidator;
 
-    public Either<Problem, ReportTemplateResponseDto> create(ReportTemplateDto dto) {
-        log.info("Creating report template: {}", dto.getName());
+    private Either<Problem, Void> validateReport(ReportTemplateDto dto) {
         Either<Problem, Void> errorDetails = validateReportTemplateDto(dto);
         if (errorDetails.isLeft()) return Either.left(errorDetails.getLeft());
 
@@ -62,7 +62,7 @@ public class ReportTemplateService {
         if (validDataMode.isLeft()) return Either.left(validDataMode.getLeft());
 
         // Validate no duplicate field names under same parent
-        Either<Problem, Void> duplicateValidation = validateNoDuplicateFieldNames(dto.getFields());
+        Either<Problem, Void> duplicateValidation = validateNoDuplicateFields(dto.getFields());
         if (duplicateValidation.isLeft()) {
             return Either.left(duplicateValidation.getLeft());
         }
@@ -79,6 +79,13 @@ public class ReportTemplateService {
             return Either.left(validationRulesValidation.getLeft());
         }
 
+        return Either.right(null);
+    }
+
+    public Either<Problem, ReportTemplateResponseDto> create(ReportTemplateDto dto) {
+        log.info("Creating report template: {}", dto.getName());
+        Either<Problem, Void> validateReport = validateReport(dto);
+        if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
         // Check if a template with the same name already exists for this organisation
         Optional<ReportTemplateEntity> existingTemplateOpt =
                 reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
@@ -103,7 +110,6 @@ public class ReportTemplateService {
         // New template - create with version 1
         log.info("Creating new template: {}", dto.getName());
         ReportTemplateEntity templateToSave = reportTemplateMapper.toEntity(dto, null);
-
         Either<Problem, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
         if(reportTypeValidated.isLeft()) {
             return Either.left(reportTypeValidated.getLeft());
@@ -155,7 +161,7 @@ public class ReportTemplateService {
 
     private boolean hasAllMappings(List<ReportTemplateFieldDto> fields) {
         boolean hasAllMappings = true;
-        for(ReportTemplateFieldDto field : fields) {
+        for (ReportTemplateFieldDto field : fields) {
             if(field.getMappingSubTypeIds().isEmpty() && field.getChildFields().isEmpty()) {
                 hasAllMappings = false;
                 break;
@@ -201,17 +207,8 @@ public class ReportTemplateService {
 
     public Either<Problem, ReportTemplateResponseDto> update(ReportTemplateDto dto) {
         log.info("Updating report template: {}", dto.getName());
-        Either<Problem, Void> errorDetails = validateReportTemplateDto(dto);
-        if (errorDetails.isLeft()) return Either.left(errorDetails.getLeft());
-
-        Either<Problem, Void> validDataMode = validateDataMode(dto);
-        if (validDataMode.isLeft()) return Either.left(validDataMode.getLeft());
-
-        // Validate no duplicate field names under same parent
-        Either<Problem, Void> duplicateValidation = validateNoDuplicateFieldNames(dto.getFields());
-        if (duplicateValidation.isLeft()) {
-            return Either.left(duplicateValidation.getLeft());
-        }
+        Either<Problem, Void> validateReport = validateReport(dto);
+        if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
 
         // Check if a template with the same name exists for this organisation
         Optional<ReportTemplateEntity> existingTemplateOpt =
@@ -225,23 +222,11 @@ public class ReportTemplateService {
                     .build());
         }
 
-        // Validate subtypes exist
-        Either<Problem, Void> subtypeValidation = validateSubTypes(dto.getFields());
-        if (subtypeValidation.isLeft()) {
-            return Either.left(subtypeValidation.getLeft());
-        }
-
-        // Validate validation rules
-        Either<Problem, Void> validationRulesValidation = validateValidationRules(dto);
-        if (validationRulesValidation.isLeft()) {
-            return Either.left(validationRulesValidation.getLeft());
-        }
-
         ReportTemplateEntity existing = existingTemplateOpt.get();
         ReportTemplateEntity templateToSave;
 
         // Check if there are any reports using this template
-        List<org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity> existingReports =
+        List<ReportEntity> existingReports =
                 reportingRepository.findByReportTemplateId(existing.getId());
         try {
             ReportTemplateType.valueOf(dto.getReportTemplateType());
@@ -264,11 +249,11 @@ public class ReportTemplateService {
             log.info("Template '{}' has no existing reports, updating in place", dto.getName());
             templateToSave = reportTemplateMapper.toEntity(dto, existing);
         }
-
         Either<Problem, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
         if(reportTypeValidated.isLeft()) {
             return Either.left(reportTypeValidated.getLeft());
         }
+
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
@@ -327,11 +312,52 @@ public class ReportTemplateService {
         return reportTemplateRepository.existsByOrganisationIdAndName(organisationId, name);
     }
 
-    private Either<Problem, Void> validateNoDuplicateFieldNames(List<ReportTemplateFieldDto> fields) {
-        return validateNoDuplicateFieldNamesRecursive(fields, null);
+    private Either<Problem, Void> validateNoDuplicateFields(List<ReportTemplateFieldDto> fields) {
+        Either<Problem, Void> duplicateFieldsNamesRecursive = validateNoDuplicateFieldsNamesRecursive(fields, null);
+        if (duplicateFieldsNamesRecursive.isLeft()) {
+            return duplicateFieldsNamesRecursive;
+        }
+        HashSet<Long> existingIds = new HashSet<>();
+        Either<Problem, Void> duplicateIdsRecursive = validateNoDuplicateFieldIdsRecursive(fields, existingIds);
+        if (duplicateIdsRecursive.isLeft()) {
+            return duplicateIdsRecursive;
+        }
+        return Either.right(null);
     }
 
-    private Either<Problem, Void> validateNoDuplicateFieldNamesRecursive(List<ReportTemplateFieldDto> fields, String parentName) {
+    private Either<Problem, Void> validateNoDuplicateFieldIdsRecursive(List<ReportTemplateFieldDto> fields, Set<Long> existingIds) {
+        if (fields == null || fields.isEmpty()) {
+            return Either.right(null);
+        }
+
+        for (ReportTemplateFieldDto field : fields) {
+            if (field.getId() != null) {
+                if (existingIds.contains(field.getId())) {
+                    return Either.left(Problem.builder()
+                            .withTitle("DUPLICATE_FIELD_ID")
+                            .withDetail("Duplicate field ID '" + field.getId() + "'. Field IDs must be unique within the template.")
+                            .withStatus(Status.BAD_REQUEST)
+                            .build());
+                }
+                existingIds.add(field.getId());
+            }
+
+            // Recursively validate child fields
+            if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
+                Either<Problem, Void> childValidation = validateNoDuplicateFieldIdsRecursive(
+                        field.getChildFields(),
+                        existingIds
+                );
+                if (childValidation.isLeft()) {
+                    return childValidation;
+                }
+            }
+        }
+
+        return Either.right(null);
+    }
+
+    private Either<Problem, Void> validateNoDuplicateFieldsNamesRecursive(List<ReportTemplateFieldDto> fields, String parentName) {
         if (fields == null || fields.isEmpty()) {
             return Either.right(null);
         }
@@ -342,7 +368,7 @@ public class ReportTemplateService {
             if (fieldNames.contains(field.getFieldName())) {
                 String parentInfo = parentName != null ? " under parent '" + parentName + "'" : " at root level";
                 return Either.left(Problem.builder()
-                        .withTitle("Duplicate Field Name")
+                        .withTitle("DUPLICATE_FIELD_NAME")
                         .withDetail("Duplicate field name '" + field.getFieldName() + "'" + parentInfo + ". Field names must be unique within the same parent.")
                         .withStatus(Status.BAD_REQUEST)
                         .build());
@@ -351,7 +377,7 @@ public class ReportTemplateService {
 
             // Recursively validate child fields
             if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
-                Either<Problem, Void> childValidation = validateNoDuplicateFieldNamesRecursive(
+                Either<Problem, Void> childValidation = validateNoDuplicateFieldsNamesRecursive(
                         field.getChildFields(),
                         field.getFieldName()
                 );
