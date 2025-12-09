@@ -36,9 +36,12 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.TemplateCsvLine;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
+import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +52,7 @@ public class CsvReportTemplateService {
     private final OrganisationPublicApiIF organisationPublicApiIF;
     private final CsvParser<TemplateCsvLine> csvParser;
     private final ReportTemplateRepository reportTemplateRepository;
+    private final ReportingRepository reportingRepository;
     private final ReportTemplateMapper reportTemplateMapper;
     private final ChartOfAccountTypeRepository chartOfAccountTypeRepository;
     private final Validator validator;
@@ -93,14 +97,23 @@ public class CsvReportTemplateService {
                 results.add(Either.left(problem));
                 continue;
             }
+            try {
+                DataMode.valueOf(firstLine.getDataMode());
+            } catch (IllegalArgumentException e) {
+                Problem problem = Problem.builder()
+                        .withTitle(Constants.CSV_PARSING_ERROR)
+                        .withDetail("Invalid data mode: " + firstLine.getDataMode() + ". Options are: SYSTEM, USER")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build();
+                results.add(Either.left(problem));
+                continue;
+            }
             ReportTemplateDto reportTemplateDto = new ReportTemplateDto();
             reportTemplateDto.setOrganisationId(csvTemplateRequest.getOrganisationId());
             reportTemplateDto.setName(firstLine.getName());
             reportTemplateDto.setReportTemplateType(reportTemplateType.name());
+            reportTemplateDto.setDataMode(firstLine.getDataMode());
             reportTemplateDto.setVer(1L);
-            reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(reportTemplateDto.getOrganisationId(),
-                            reportTemplateDto.getName(), reportTemplateType)
-                    .ifPresent(existingTemplate -> reportTemplateDto.setVer(existingTemplate.getVer() + 1));
             List<ReportTemplateFieldDto> fieldDtos = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
                 Either<Problem, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), templateCsvLine);
@@ -147,11 +160,20 @@ public class CsvReportTemplateService {
         return Either.right(results.stream().map(e -> e.fold(
                 left -> ReportTemplateResponseDto.builder().error(Optional.of(left)).build(),
                 dto -> {
-                    ReportTemplateEntity existingTemplate = reportTemplateRepository
-                            .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()))
-                            .orElse(null);
-                    ReportTemplateEntity entity = reportTemplateMapper.toEntity(dto, existingTemplate);
-                    entity = reportTemplateRepository.save(entity);
+                    Optional<ReportTemplateEntity> existingTemplateO = reportTemplateRepository
+                            .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()));
+                    ReportTemplateEntity entity = existingTemplateO.map(existingTemplate -> {
+                                List<ReportEntity> byReportTemplateId = reportingRepository.findByReportTemplateId(existingTemplate.getId());
+                                ReportTemplateEntity newEntity;
+                                if(byReportTemplateId.isEmpty()) {
+                                    newEntity = reportTemplateMapper.toEntity(dto, existingTemplate);
+                                } else {
+                                    newEntity = reportTemplateMapper.toEntity(dto, ReportTemplateEntity.builder().ver(existingTemplate.getVer() + 1).build());
+                                }
+                                return newEntity;
+                            })
+                            .orElseGet(() -> reportTemplateMapper.toEntity(dto, null));
+                    entity = reportTemplateRepository.saveAndFlush(entity);
                     return reportTemplateMapper.toResponseDto(entity);
                 }
         )).toList());

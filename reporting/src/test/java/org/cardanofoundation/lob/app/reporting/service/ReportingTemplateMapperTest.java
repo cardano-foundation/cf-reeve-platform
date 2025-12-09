@@ -318,7 +318,6 @@ class ReportingTemplateMapperTest {
         // Then
         assertThat(result.getFields()).hasSize(1);
         ReportTemplateFieldDto fieldDto = result.getFields().get(0);
-        assertThat(fieldDto.getId()).isEqualTo(100L);
         assertThat(fieldDto.getFieldName()).isEqualTo("Revenue");
         assertThat(fieldDto.isAccumulated()).isTrue();
         assertThat(fieldDto.isAccumulatedYearly()).isTrue();

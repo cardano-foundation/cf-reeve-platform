@@ -18,9 +18,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Validation rule for report template fields")
 public class ValidationRuleDto {
 
-    @Schema(description = "Rule ID", example = "123", nullable = true)
-    private Long id;
-
     @Schema(description = "Rule name", example = "Assets Balance Check")
     @NotNull(message = "Rule name must not be null")
     private String name;

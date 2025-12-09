@@ -80,7 +80,7 @@ public class CsvReportService {
                     )
                     .toList();
             reportLines.removeAll(sameReportLines);
-            Optional<ReportTemplateEntity> templateEntityO = reportTemplateRepository.findByOrganisationIdAndName(csvTemplateRequest.getOrganisationId(), line.getTemplateName());
+            Optional<ReportTemplateEntity> templateEntityO = reportTemplateRepository.findLatestByOrganisationIdAndName(csvTemplateRequest.getOrganisationId(), line.getTemplateName());
             if(templateEntityO.isEmpty()) {
                 createdReports.add(ReportResponseDto.builder()
                                 .error(Optional.of(Problem.builder()

@@ -317,43 +317,6 @@ public class ReportTemplateService {
         if (duplicateFieldsNamesRecursive.isLeft()) {
             return duplicateFieldsNamesRecursive;
         }
-        HashSet<Long> existingIds = new HashSet<>();
-        Either<Problem, Void> duplicateIdsRecursive = validateNoDuplicateFieldIdsRecursive(fields, existingIds);
-        if (duplicateIdsRecursive.isLeft()) {
-            return duplicateIdsRecursive;
-        }
-        return Either.right(null);
-    }
-
-    private Either<Problem, Void> validateNoDuplicateFieldIdsRecursive(List<ReportTemplateFieldDto> fields, Set<Long> existingIds) {
-        if (fields == null || fields.isEmpty()) {
-            return Either.right(null);
-        }
-
-        for (ReportTemplateFieldDto field : fields) {
-            if (field.getId() != null) {
-                if (existingIds.contains(field.getId())) {
-                    return Either.left(Problem.builder()
-                            .withTitle("DUPLICATE_FIELD_ID")
-                            .withDetail("Duplicate field ID '" + field.getId() + "'. Field IDs must be unique within the template.")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
-                }
-                existingIds.add(field.getId());
-            }
-
-            // Recursively validate child fields
-            if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
-                Either<Problem, Void> childValidation = validateNoDuplicateFieldIdsRecursive(
-                        field.getChildFields(),
-                        existingIds
-                );
-                if (childValidation.isLeft()) {
-                    return childValidation;
-                }
-            }
-        }
-
         return Either.right(null);
     }
 

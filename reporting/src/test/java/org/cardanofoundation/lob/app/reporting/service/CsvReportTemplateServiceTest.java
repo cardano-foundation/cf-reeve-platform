@@ -147,7 +147,7 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
-        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(anyString(), anyString(), any())).thenReturn(Optional.empty());
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("InvalidMapping");
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
@@ -174,7 +174,7 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
-        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(anyString(), anyString(), any())).thenReturn(Optional.empty());
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.empty());
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
@@ -204,7 +204,7 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
-        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(anyString(), anyString(), any())).thenReturn(Optional.empty());
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
         when(chartOfAccountType.getSubTypes()).thenReturn(Set.of());
@@ -238,7 +238,7 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
-        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(anyString(), anyString(), any())).thenReturn(Optional.empty());
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
         when(chartOfAccountType.getSubTypes()).thenReturn(Set.of(chartOfAccountSubType));
@@ -266,7 +266,6 @@ class CsvReportTemplateServiceTest {
         Errors errors = mock(Errors.class);
         ChartOfAccountType chartOfAccountType = mock(ChartOfAccountType.class);
         ChartOfAccountSubType chartOfAccountSubType = mock(ChartOfAccountSubType.class);
-        ReportTemplateEntity saved = mock(ReportTemplateEntity.class);
         ReportTemplateResponseDto responseDto = mock(ReportTemplateResponseDto.class);
 
         when(errors.getAllErrors()).thenReturn(List.of());
@@ -277,15 +276,14 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
-        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(anyString(), anyString(), any())).thenReturn(Optional.empty());
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
         when(chartOfAccountType.getSubTypes()).thenReturn(Set.of(chartOfAccountSubType));
         when(chartOfAccountSubType.getName()).thenReturn("subtype");
         when(chartOfAccountSubType.getId()).thenReturn(1L);
         when(templateCsvLine.getParent()).thenReturn("");
-        when(reportTemplateRepository.save(any())).thenReturn(saved);
-        when(reportTemplateMapper.toResponseDto(saved)).thenReturn(responseDto);
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(responseDto);
 
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 

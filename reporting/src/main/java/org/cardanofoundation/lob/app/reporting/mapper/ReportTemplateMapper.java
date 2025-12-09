@@ -162,7 +162,6 @@ public class ReportTemplateMapper {
             : Collections.emptyList();
 
         return ReportTemplateFieldDto.builder()
-            .id(entity.getId())
             .fieldName(entity.getName())
             .accumulated(entity.isAccumulated())
             .accumulatedYearly(entity.isAccumulatedYearly())
@@ -277,7 +276,6 @@ public class ReportTemplateMapper {
             : Collections.emptyList();
 
         return ValidationRuleDto.builder()
-            .id(entity.getId())
             .name(entity.getName())
             .operator(entity.getOperator().name())
             .active(entity.isActive())

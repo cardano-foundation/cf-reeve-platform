@@ -20,9 +20,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Report template field definition")
 public class ReportTemplateFieldDto {
 
-    @Schema(description = "Field ID", example = "101", nullable = true)
-    private Long id;
-
     @Schema(description = "Field name", example = "Total Revenue")
     @NotNull(message = "Field name must not be null")
     private String fieldName;

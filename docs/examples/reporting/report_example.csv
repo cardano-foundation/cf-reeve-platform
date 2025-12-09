@@ -1,2 +1,2 @@
 Template name,Name,Interval type,Period,Year,Data mode,Field name,Amount
-Income Statement Example,TestReport,QUARTER,1,2025,SYSTEM,,
+Income Statement Example,TestReport,QUARTER,1,2025,USER,Revenue,10

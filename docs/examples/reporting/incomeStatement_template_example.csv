@@ -1,23 +1,23 @@
-Name,ReportType,Field Name,Parent,Mapped Types,Accumulated,Accumulated Yearly,Accumulated Previous Year,Negated
-Income Statement Example,INCOME_STATEMENT,Revenues,,,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Other Income,Revenues,,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Building of long term provisions,Revenues,Revenues_Build of long term provision,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Cost of goods and services,,,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,External Services,Cost of goods and services,COGS_External services,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Operating Expenses,,,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Personnel Expenses,Operating Expenses,Expenses_Personnel expenses,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,General administrative expenses,Operating Expenses,Expenses_General and Administrative expenses,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Depreciation and impairment losses on tangible Assets,Operating Expenses,Expenses_Depreciation and impairment losses on movable tangible assets,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Amortization on intangible assets,Operating Expenses,Expenses_Amortization on intangible assets,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Rent Expenses,Operating Expenses,Expenses_Rent expenses,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Financial Income,,,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Financial Revenues,Financial Income,Expenses_Financial income,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Financial Expenses,Financial Income,Expenses_Financial expenses,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Realised Gains on Sale of Cryptocurrencies,Financial Income,Expenses_Realised gains on sale of crypto currencies,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Staking Rewards income,Financial Income,Expenses_Staking rewards income,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Net Income options sale,Financial Income,Expenses_Net income option sales,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Extraordinary income,,,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Extraordinary Expenses,Extraordinary income,"Expenses_Extraordinary, non-recurring or prior period expenses",false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Tax Expense,,,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Direct Taxes,Tax Expense,Expenses_Direct taxes,false,true,false,true
-Income Statement Example,INCOME_STATEMENT,Profit for the year,,Expenses_Net income option sales,false,true,false,true
+Name,ReportType,DataMode,Field Name,Parent,Mapped Types,Accumulated,Accumulated Yearly,Accumulated Previous Year,Negated
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Revenues,,,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Other Income,Revenues,,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Building of long term provisions,Revenues,Revenues_Build of long term provision,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Cost of goods and services,,,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,External Services,Cost of goods and services,COGS_External services,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Operating Expenses,,,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Personnel Expenses,Operating Expenses,Expenses_Personnel expenses,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,General administrative expenses,Operating Expenses,Expenses_General and Administrative expenses,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Depreciation and impairment losses on tangible Assets,Operating Expenses,Expenses_Depreciation and impairment losses on movable tangible assets,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Amortization on intangible assets,Operating Expenses,Expenses_Amortization on intangible assets,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Rent Expenses,Operating Expenses,Expenses_Rent expenses,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Financial Income,,,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Financial Revenues,Financial Income,Expenses_Financial income,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Financial Expenses,Financial Income,Expenses_Financial expenses,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Realised Gains on Sale of Cryptocurrencies,Financial Income,Expenses_Realised gains on sale of crypto currencies,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Staking Rewards income,Financial Income,Expenses_Staking rewards income,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Net Income options sale,Financial Income,Expenses_Net income option sales,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Extraordinary income,,,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Extraordinary Expenses,Extraordinary income,"Expenses_Extraordinary, non-recurring or prior period expenses",false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Tax Expense,,,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Direct Taxes,Tax Expense,Expenses_Direct taxes,false,true,false,true
+Income Statement Example,INCOME_STATEMENT,SYSTEM,Profit for the year,,Expenses_Net income option sales,false,true,false,true

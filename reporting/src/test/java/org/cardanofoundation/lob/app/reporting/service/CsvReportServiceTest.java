@@ -118,7 +118,6 @@ class CsvReportServiceTest {
         when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.right(List.of(reportCsvLine)));
         when(validator.validateObject(reportCsvLine)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
-        when(reportTemplateRepository.findByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.empty());
         Either<Problem, List<ReportResponseDto>> result = service.createCsvReports(request);
 
         assertTrue(result.isRight());
@@ -143,7 +142,7 @@ class CsvReportServiceTest {
         when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.right(List.of(reportCsvLine)));
         when(validator.validateObject(reportCsvLine)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
-        when(reportTemplateRepository.findByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
 
         Either<Problem, List<ReportResponseDto>> result = service.createCsvReports(request);
 
@@ -169,7 +168,7 @@ class CsvReportServiceTest {
         when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.right(List.of(reportCsvLine)));
         when(validator.validateObject(reportCsvLine)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
-        when(reportTemplateRepository.findByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
 
         Either<Problem, List<ReportResponseDto>> result = service.createCsvReports(request);
 
@@ -195,7 +194,7 @@ class CsvReportServiceTest {
         when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.right(List.of(reportCsvLine)));
         when(validator.validateObject(reportCsvLine)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
-        when(reportTemplateRepository.findByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
         when(reportTemplateEntity.getFields()).thenReturn(List.of());
 
         Either<Problem, List<ReportResponseDto>> result = service.createCsvReports(request);
@@ -215,7 +214,6 @@ class CsvReportServiceTest {
         ReportCsvLine reportCsvLine = new ReportCsvLine("Template1", "Report1", "MONTH", (short)2024, (short)1, "USER", "Field1", "5");
         ReportTemplateEntity reportTemplateEntity = mock(ReportTemplateEntity.class);
         ReportTemplateFieldEntity reportTemplateFieldEntity = mock(ReportTemplateFieldEntity.class);
-        ReportEntity reportEntity = mock(ReportEntity.class);
         ReportResponseDto reportResponseDto = mock(ReportResponseDto.class);
         Errors errors = mock(Errors.class);
 
@@ -225,7 +223,7 @@ class CsvReportServiceTest {
         when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.right(List.of(reportCsvLine)));
         when(validator.validateObject(reportCsvLine)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
-        when(reportTemplateRepository.findByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
         when(reportTemplateEntity.getFields()).thenReturn(List.of(reportTemplateFieldEntity));
         when(reportTemplateFieldEntity.getName()).thenReturn("Field1");
         when(reportTemplateFieldEntity.getId()).thenReturn(1L);
