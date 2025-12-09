@@ -201,6 +201,26 @@ class ProjectCodeServiceTest {
     }
 
     @Test
+    void updateProject_unlinkParent() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+
+        project.setParentCustomerCode("parentCode");
+
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
+        when(projectRepository.save(any(Project.class))).thenReturn(project);
+
+        ProjectView projectView = projectCodeService.updateProject(organisationId, update);
+
+        project.setParentCustomerCode(null);
+
+        assertEquals(customerCode, projectView.getCustomerCode());
+        assertEquals(Optional.empty(), projectView.getError());
+        assertNull(projectView.getParentCustomerCode());
+        verify(projectRepository).save(project);
+    }
+
+    @Test
     void createProjectCodeFromCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
 

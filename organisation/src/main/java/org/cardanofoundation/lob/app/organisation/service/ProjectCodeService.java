@@ -145,6 +145,9 @@ public class ProjectCodeService {
                                     .build()
                     );
                 }
+            } else {
+                // Unlink it
+                projectEntityUpdated.setParentCustomerCode(null);
             }
 
             return ProjectView.fromEntity(projectRepository.save(projectEntityUpdated));
