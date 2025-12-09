@@ -80,7 +80,7 @@ public class TransactionReconcilationService {
         reconcilationEntity.setTo(Optional.of(to));
         reconcilationEntity.setViolations(new LinkedHashSet<>());
 
-        transactionReconcilationRepository.save(reconcilationEntity);
+        transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
 
         log.info("Reconcilation created, reconcilationId: {}", reconcilationId);
 
@@ -128,7 +128,7 @@ public class TransactionReconcilationService {
                 .build())
         );
 
-        transactionReconcilationRepository.save(reconcilationEntity);
+        transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
 
         log.info("Reconcilation failed, reconcilationId: {}", reconcilationId);
     }
