@@ -5,7 +5,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.OK;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,7 +49,6 @@ public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
 
         // Mark the original items as ERASED
         tx.getItems().forEach(item -> item.setStatus(ERASED_SUM_APPLIED));
-        BigDecimal numero = BigDecimal.ZERO;
 
         // Collapsing logic: combine the amounts for items with the same key
         Set<TransactionItemEntity> collapsedItems = itemsPerKeyMap.values().stream()
