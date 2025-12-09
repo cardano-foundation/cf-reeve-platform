@@ -13,12 +13,14 @@ import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 
+import org.hibernate.envers.Audited;
 import org.javers.core.metamodel.annotation.DiffIgnore;
 
 @Setter
 @Getter
 @MappedSuperclass
 @NoArgsConstructor
+@Audited
 public abstract class CommonDateOnlyEntity {
 
     @Temporal(TIMESTAMP)

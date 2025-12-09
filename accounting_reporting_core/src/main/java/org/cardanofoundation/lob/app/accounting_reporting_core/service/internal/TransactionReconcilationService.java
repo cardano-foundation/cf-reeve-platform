@@ -114,14 +114,16 @@ public class TransactionReconcilationService {
         );
         Optional<ReconcilationEntity> reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
 
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        ReconcilationEntity reconcilationEntity;
         if (reconcilationEntityM.isPresent()) {
             reconcilationEntity = reconcilationEntityM.orElseThrow();
         } else {
+            reconcilationEntity = new ReconcilationEntity();
             reconcilationEntity.setOrganisationId(organisationId);
             reconcilationEntity.setId(reconcilationId);
             reconcilationEntity.setFrom(from);
             reconcilationEntity.setTo(to);
+            reconcilationEntity.setViolations(new LinkedHashSet<>());
         }
 
         reconcilationEntity.setStatus(ReconcilationStatus.FAILED);

@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
@@ -29,6 +30,9 @@ public class TransactionConverter {
     private final CoreCurrencyService coreCurrencyService;
     private final OrganisationConverter organisationConverter;
     private final OrganisationPublicApiIF organisationPublicApiIF;
+
+    @Value("${lob.blockchain-publisher.rollback.enabled}")
+    private Optional<Boolean> rollbackEnabled;
 
     public FilteringParameters convertToDbDetached(SystemExtractionParameters systemExtractionParameters,
                                                    UserExtractionParameters userExtractionParameters) {
@@ -146,6 +150,11 @@ public class TransactionConverter {
 
         txEntity.setViolations(violations);
         txEntity.setItems(txItems);
+
+        if(transaction.getLetter() != null && !transaction.getLetter().isEmpty() && rollbackEnabled.orElse(false)){
+            rollbackTransaction(txEntity,transaction);
+        }
+
         return txEntity;
     }
 
@@ -290,6 +299,12 @@ public class TransactionConverter {
                         .build()))
 
                 .build());
+    }
+
+    private void rollbackTransaction(TransactionEntity txEntity, Transaction transaction) {
+        txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber() + "-" + transaction.getLetter());
+        txEntity.setProcessingStatus(TransactionProcessingStatus.ROLLBACK);
+
     }
 
     public void copyFields(TransactionEntity attached,

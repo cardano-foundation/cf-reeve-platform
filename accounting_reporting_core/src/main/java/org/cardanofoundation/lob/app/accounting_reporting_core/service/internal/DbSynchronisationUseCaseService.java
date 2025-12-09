@@ -16,22 +16,24 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchAssocEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
+import org.cardanofoundation.lob.app.blockchain_common.event.TransactionRolledBackEvent;
+
 
 @Service
 @Slf4j
@@ -43,10 +45,14 @@ public class DbSynchronisationUseCaseService {
     private final TransactionItemRepository transactionItemRepository;
     private final TransactionBatchAssocRepository transactionBatchAssocRepository;
     private final TransactionBatchService transactionBatchService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Cache<String, Integer> batchTransactionCountCache = CacheBuilder.newBuilder()
             .expireAfterWrite(1, TimeUnit.MINUTES)
-                .expireAfterAccess(10, TimeUnit.MINUTES)
-                .build();
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
+
+    @Value("${lob.blockchain-publisher.rollback.enabled}")
+    private Optional<Boolean> rollbackEnabled;
 
     @Transactional
     public void execute(String batchId,
@@ -86,10 +92,10 @@ public class DbSynchronisationUseCaseService {
     }
 
     public void processTransactionsForTheFirstTime(String batchId,
-                                                    String organisationId,
-                                                    Set<TransactionEntity> incomingDetachedTransactions,
-                                                    int totalTransactionsCount,
-                                                    ProcessorFlags flags) {
+                                                   String organisationId,
+                                                   Set<TransactionEntity> incomingDetachedTransactions,
+                                                   int totalTransactionsCount,
+                                                   ProcessorFlags flags) {
         LinkedHashSet<TransactionEntity> txsAlreadyStored = new LinkedHashSet<>();
 
         Set<String> txIds = incomingDetachedTransactions.stream()
@@ -102,6 +108,7 @@ public class DbSynchronisationUseCaseService {
 
         LinkedHashSet<TransactionEntity> toProcessTransactions = new LinkedHashSet<>();
         Set<String> batchesToBeUpdated = new HashSet<>();
+        Set<String> publishedTransactionToReset = new HashSet<>();
         int alreadyStoredCount = 0;
         for (TransactionEntity incomingTx : incomingDetachedTransactions) {
             Optional<TransactionEntity> txM = Optional.ofNullable(databaseTransactionsMap.get(incomingTx.getId()));
@@ -110,6 +117,13 @@ public class DbSynchronisationUseCaseService {
             boolean notStoredYet = txM.isEmpty();
             /** If is a new transaction || the new one is different from our Db copy  -> then should be processed*/
             boolean isChanged = notStoredYet || (txM.map(tx -> !isIncomingTransactionERPSame(tx, incomingTx)).orElse(false));
+
+            if (TransactionProcessingStatus.ROLLBACK.equals(incomingTx.getProcessingStatus().orElse(null))) {
+                log.warn("Transaction {} is in ROLLBACK status, it will be processed and can be republished", incomingTx.getId());
+                isDispatchMarked = false;
+                publishedTransactionToReset.add(incomingTx.getId());
+
+            }
 
             if (isDispatchMarked && isChanged) {
                 log.warn("Transaction cannot be altered, it is already marked as dispatched, transactionNumber: {}", incomingTx.getInternalTransactionNumber());
@@ -123,6 +137,16 @@ public class DbSynchronisationUseCaseService {
                     transactionConverter.copyFields(attached, incomingTx);
                     attached.getAllItems().clear();
                     attached.getAllItems().addAll(incomingTx.getAllItems());
+                    if (TransactionProcessingStatus.ROLLBACK.equals(incomingTx.getProcessingStatus().orElse(null)) && rollbackEnabled.orElse(false)) {
+                        log.info("Rolling back transaction and it should ready to approve: {}", attached);
+                        attached.setLedgerDispatchApproved(false);
+                        attached.setTransactionApproved(false);
+                        attached.setLedgerDispatchReceipt(null);
+                        attached.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+                        attached.setReconcilation(Optional.empty());
+                        attached.setLastReconcilation(Optional.empty());
+                        attached.updateProcessingStatus();
+                    }
                     toProcessTransactions.add(attached);
                 } else {
                     toProcessTransactions.add(incomingTx);
@@ -144,6 +168,7 @@ public class DbSynchronisationUseCaseService {
         // we don't need to pass in Transactions, since we just saved them and the status was updated
         transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalProcessTx, Optional.empty());
         batchesToBeUpdated.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
+        publishedTransactionToReset.forEach(txId -> eventPublisher.publishEvent(new TransactionRolledBackEvent(this, txId)));
     }
 
     private Set<TransactionEntity> storeTransactions(String batchId,
