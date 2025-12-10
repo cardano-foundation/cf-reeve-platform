@@ -216,7 +216,7 @@ public class CsvReportService {
                 problems.add(error);
             }
         }
-        if (problems.size() > 0) {
+        if (!problems.isEmpty()) {
             return Either.left(problems);
         }
         return Either.right(null);

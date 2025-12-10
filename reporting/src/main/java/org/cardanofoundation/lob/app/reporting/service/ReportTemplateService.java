@@ -1,7 +1,5 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
-import static java.util.stream.Collectors.toList;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -369,12 +367,12 @@ public class ReportTemplateService {
         // Convert Long IDs to String for repository lookup
         List<String> stringIds = allSubTypeIds.stream()
                 .map(String::valueOf)
-                .collect(toList());
+                .toList();
 
         // Fetch existing subtypes
         List<String> existingSubTypeIds = chartOfAccountSubTypeRepository.findAllById(stringIds).stream()
                 .map(subType -> String.valueOf(subType.getId()))
-                .collect(toList());
+                .toList();
 
         // Find missing subtypes
         Set<String> missingSubTypeIds = stringIds.stream()
@@ -420,7 +418,7 @@ public class ReportTemplateService {
             // Validate rule has a name
             if (rule.getName() == null || rule.getName().trim().isEmpty()) {
                 return Either.left(Problem.builder()
-                        .withTitle("Invalid Validation Rule")
+                        .withTitle(Constants.INVALID_VALIDATION_RULE)
                         .withDetail("Validation rule must have a name")
                         .withStatus(Status.BAD_REQUEST)
                         .build());
@@ -431,7 +429,7 @@ public class ReportTemplateService {
                 ComparisonOperator.valueOf(rule.getOperator());
             } catch (IllegalArgumentException e) {
                 return Either.left(Problem.builder()
-                        .withTitle("Invalid Validation Rule")
+                        .withTitle(Constants.INVALID_VALIDATION_RULE)
                         .withDetail("Invalid comparison operator: " + rule.getOperator() + ". Must be one of: GREATER_THAN_OR_EQUAL, EQUAL, LESS_THAN_OR_EQUAL")
                         .withStatus(Status.BAD_REQUEST)
                         .build());
@@ -440,8 +438,8 @@ public class ReportTemplateService {
             // Validate left side terms
             if (rule.getLeftSideTerms() == null || rule.getLeftSideTerms().isEmpty()) {
                 return Either.left(Problem.builder()
-                        .withTitle("Invalid Validation Rule")
-                        .withDetail("Validation rule '" + rule.getName() + "' must have at least one term on the left side")
+                        .withTitle(Constants.INVALID_VALIDATION_RULE)
+                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_LEFT_SIDE.formatted(rule.getName()))
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
@@ -449,8 +447,8 @@ public class ReportTemplateService {
             // Validate right side terms
             if (rule.getRightSideTerms() == null || rule.getRightSideTerms().isEmpty()) {
                 return Either.left(Problem.builder()
-                        .withTitle("Invalid Validation Rule")
-                        .withDetail("Validation rule '" + rule.getName() + "' must have at least one term on the right side")
+                        .withTitle(Constants.INVALID_VALIDATION_RULE)
+                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_LEFT_SIDE.formatted(rule.getName()))
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
@@ -463,15 +461,15 @@ public class ReportTemplateService {
             for (ValidationRuleTermDto term : allTerms) {
                 if (term.getFieldName() == null || term.getFieldName().trim().isEmpty()) {
                     return Either.left(Problem.builder()
-                            .withTitle("Invalid Validation Rule")
-                            .withDetail("Validation rule '" + rule.getName() + "' contains a term without a field name")
+                            .withTitle(Constants.INVALID_VALIDATION_RULE)
+                            .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_LEFT_SIDE.formatted(rule.getName()))
                             .withStatus(Status.BAD_REQUEST)
                             .build());
                 }
 
                 if (!allFieldNames.contains(term.getFieldName())) {
                     return Either.left(Problem.builder()
-                            .withTitle("Invalid Validation Rule")
+                            .withTitle(Constants.INVALID_VALIDATION_RULE)
                             .withDetail("Validation rule '" + rule.getName() + "' references field name '" + term.getFieldName() + "' which does not exist in the template")
                             .withStatus(Status.BAD_REQUEST)
                             .build());
@@ -482,7 +480,7 @@ public class ReportTemplateService {
                     TermOperation.valueOf(term.getOperation());
                 } catch (IllegalArgumentException e) {
                     return Either.left(Problem.builder()
-                            .withTitle("Invalid Validation Rule")
+                            .withTitle(Constants.INVALID_VALIDATION_RULE)
                             .withDetail("Invalid term operation: " + term.getOperation() + ". Must be one of: ADD, SUBTRACT")
                             .withStatus(Status.BAD_REQUEST)
                             .build());

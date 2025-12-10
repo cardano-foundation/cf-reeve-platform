@@ -42,6 +42,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
+import org.cardanofoundation.lob.app.reporting.util.Constants;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -68,7 +69,7 @@ public class ReportingController {
                 )
             ),
             @ApiResponse(responseCode = "400", description = "Invalid input data or missing required fields"),
-            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+            @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
             @ApiResponse(responseCode = "404", description = "Report template not found")
         }
     )
@@ -118,7 +119,7 @@ public class ReportingController {
                     schema = @Schema(implementation = ReportResponseDto.class)
                 )
             ),
-            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+            @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
             @ApiResponse(responseCode = "404", description = "Report not found")
         }
     )
@@ -137,7 +138,7 @@ public class ReportingController {
         // If organisationId is provided, check access
         if (organisationId != null && !keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
+                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
 
         if (organisationId != null) {
@@ -177,7 +178,7 @@ public class ReportingController {
                     array = @ArraySchema(schema = @Schema(implementation = ReportResponseDto.class))
                 )
             ),
-            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation")
+            @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION)
         }
     )
     @GetMapping(produces = APPLICATION_JSON_VALUE)
@@ -201,7 +202,7 @@ public class ReportingController {
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
+                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
 
         List<ReportResponseDto> reports;
@@ -223,7 +224,7 @@ public class ReportingController {
         responses = {
             @ApiResponse(responseCode = "204", description = "Report deleted successfully"),
             @ApiResponse(responseCode = "400", description = "Report is already published and cannot be deleted"),
-            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+            @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
             @ApiResponse(responseCode = "404", description = "Report not found")
         }
     )
@@ -240,7 +241,7 @@ public class ReportingController {
                 // Check organisation access
                 if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
                     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body("User does not have access to this organisation");
+                        .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
                 }
 
                 // Proceed with deletion
@@ -269,7 +270,7 @@ public class ReportingController {
                 )
             ),
             @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
-            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+            @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
             @ApiResponse(responseCode = "404", description = "Report template not found")
         }
     )
@@ -288,7 +289,7 @@ public class ReportingController {
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
+                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
 
         Either<Problem, ReportResponseDto> result = reportService.generate(request);
@@ -312,7 +313,7 @@ public class ReportingController {
                                     schema = @Schema(implementation = ReportResponseDto.class))),
                     @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
                     @ApiResponse(responseCode = "403",
-                            description = "User does not have access to this organisation"),
+                            description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Report not found")})
     @PostMapping(value = "/publish", produces = APPLICATION_JSON_VALUE,
             consumes = APPLICATION_JSON_VALUE)
@@ -348,7 +349,7 @@ public class ReportingController {
                 )
             ),
             @ApiResponse(responseCode = "400", description = "Report is already published and cannot be reprocessed"),
-            @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+            @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
             @ApiResponse(responseCode = "404", description = "Report not found")
         }
     )
@@ -367,7 +368,7 @@ public class ReportingController {
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
+                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
 
         Either<Problem, ReportResponseDto> result = reportService.reprocess(organisationId, id);

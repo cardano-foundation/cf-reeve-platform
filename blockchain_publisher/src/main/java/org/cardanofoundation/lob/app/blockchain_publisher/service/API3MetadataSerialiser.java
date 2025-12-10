@@ -58,7 +58,7 @@ public class API3MetadataSerialiser {
     }
 
     private MetadataMap createRecursiveMetadataSection(
-            MetadataMap MetdataMap, Map<String, Object> data) {
+            MetadataMap metadataMap, Map<String, Object> data) {
         data.forEach((key, value) -> {
             key = toLowerSnakeCase(key);
             if (value == null) {
@@ -66,31 +66,29 @@ public class API3MetadataSerialiser {
             } else if (value instanceof Map) {
                 MetadataMap childMap = MetadataBuilder.createMap();
                 createRecursiveMetadataSection(childMap, (Map<String, Object>) value);
-                MetdataMap.put(key, childMap);
+                metadataMap.put(key, childMap);
             } else if (value instanceof Integer integerValue) {
-                MetdataMap.put(key, BigInteger.valueOf(integerValue));
+                metadataMap.put(key, BigInteger.valueOf(integerValue));
             } else if (value instanceof Long longValue) {
-                MetdataMap.put(key, BigInteger.valueOf(longValue));
+                metadataMap.put(key, BigInteger.valueOf(longValue));
             } else if (value instanceof Double doubleValue) {
-                MetdataMap.put(key, BigDecimal.valueOf(doubleValue).toBigInteger());
+                metadataMap.put(key, BigDecimal.valueOf(doubleValue).toBigInteger());
             } else {
                 throw new IllegalArgumentException("Unsupported data type in report data: %s".formatted(value.getClass().getName()));
             }
         });
 
-        return MetdataMap;
+        return metadataMap;
     }
 
     private String toLowerSnakeCase(String input) {
         if (input == null || input.isEmpty()) return input;
 
-        String snake = input
+        return input
                 .replaceAll("([a-z])([A-Z])", "$1_$2")
                 .replaceAll("([A-Z])([A-Z][a-z])", "$1_$2")
                 .replaceAll(" ", "_")
                 .toLowerCase();
-
-        return snake;
     }
 
     public MetadataMap serialiseToMetadataMap(ReportEntity reportEntity,

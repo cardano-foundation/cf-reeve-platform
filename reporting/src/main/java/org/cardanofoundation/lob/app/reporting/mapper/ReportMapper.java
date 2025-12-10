@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.reporting.mapper;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 
@@ -53,7 +52,7 @@ public class ReportMapper {
         if (dto.getFields() != null) {
             List<ReportFieldEntity> newFields = dto.getFields().stream()
                 .map(this::toColumnEntity)
-                .collect(Collectors.toList());
+                .toList();
             newFields.forEach(col -> setReportRecursively(col, report));
 
             // Update the existing collection instead of replacing it
@@ -89,7 +88,7 @@ public class ReportMapper {
             ? entity.getFields().stream()
                 .filter(field -> field.getParentField() == null)
                 .map(this::toColumnDto)
-                .collect(Collectors.toList())
+                .toList()
             : Collections.emptyList();
 
         // Convert failed validation rules to DTOs
@@ -102,7 +101,7 @@ public class ReportMapper {
                     .operator(rule.getOperator().name())
                     .errorMessage("Validation rule failed")
                     .build())
-                .collect(Collectors.toList());
+                .toList();
         }
 
         ReportResponseDto responseDto = ReportResponseDto.builder()

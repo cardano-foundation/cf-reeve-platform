@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
-import static java.util.stream.Collectors.toList;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -222,7 +221,7 @@ public class CsvReportTemplateService {
             }
             mappedSubTypes.add(subtypeO.get());
         }
-        fieldEntity.setMappingSubTypeIds(mappedSubTypes.stream().map(ChartOfAccountSubType::getId).collect(toList()));
+        fieldEntity.setMappingSubTypeIds(mappedSubTypes.stream().map(ChartOfAccountSubType::getId).toList());
         return Either.right(fieldEntity);
     }
 
@@ -240,7 +239,7 @@ public class CsvReportTemplateService {
                 problems.add(error);
             }
         }
-        if (problems.size() > 0) {
+        if (!problems.isEmpty()) {
             return Either.left(problems);
         }
         return Either.right(null);

@@ -117,7 +117,6 @@ class BlockchainReportsV2DispatchTest {
         Organisation organisation = mock(Organisation.class);
         ReportV2Entity reportEntity = mock(ReportV2Entity.class);
         API3BlockchainTransaction api3BlockchainTransaction = mock(API3BlockchainTransaction.class);
-        L1Submission l1Submission = new L1Submission("txHash123", Optional.of(1L), true);
         L1SubmissionData l1SubmissionData = mock(L1SubmissionData.class);
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));

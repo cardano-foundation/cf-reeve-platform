@@ -29,7 +29,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @ExtendWith(MockitoExtension.class)
-public class API3L1TransactionCreaterTest {
+class API3L1TransactionCreaterTest {
 
     @Mock
     private BackendService backendService;
@@ -39,7 +39,6 @@ public class API3L1TransactionCreaterTest {
     private BlockchainReaderPublicApiIF blockchainReaderPublicApi;
     @Mock
     private MetadataChecker jsonSchemaMetadataChecker;
-    private Account organiserAccount;
     @Mock
     private Optional<KeriService> keriService;
 
@@ -47,13 +46,13 @@ public class API3L1TransactionCreaterTest {
 
     @BeforeEach
     void setUp() {
-        organiserAccount = new Account();
+        Account organiserAccount = new Account();
         api3L1TransactionCreator = new API3L1TransactionCreator(
             backendService,
             api3MetadataSerialiser,
             blockchainReaderPublicApi,
             jsonSchemaMetadataChecker,
-            organiserAccount,
+                organiserAccount,
             3, // metadataLabel
             false, // debugStoreOutputTx
             false, // keriEnabled

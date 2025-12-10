@@ -41,6 +41,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportTemplateService;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
+import org.cardanofoundation.lob.app.reporting.util.Constants;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -69,7 +70,7 @@ public class ReportTemplateController {
                                     schema = @Schema(
                                             implementation = ReportTemplateResponseDto.class))),
                     @ApiResponse(responseCode = "400", description = "Invalid input data"),
-                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+                    @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "409", description = "Template already exists - use PUT to update")})
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -110,7 +111,7 @@ public class ReportTemplateController {
                                     schema = @Schema(
                                             implementation = ReportTemplateResponseDto.class))),
                     @ApiResponse(responseCode = "400", description = "Invalid input data"),
-                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+                    @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Template not found - use POST to create")})
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Report template data to update",
@@ -142,7 +143,7 @@ public class ReportTemplateController {
                             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
                                     schema = @Schema(
                                             implementation = ReportTemplateResponseDto.class))),
-                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+                    @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Report template not found")})
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
@@ -154,7 +155,7 @@ public class ReportTemplateController {
                 // Check organisation access
                 if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
                     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body("User does not have access to this organisation");
+                        .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
                 }
                 return ResponseEntity.ok(template);
             })
@@ -168,7 +169,7 @@ public class ReportTemplateController {
                             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
                                     array = @ArraySchema(schema = @Schema(
                                             implementation = ReportTemplateResponseDto.class)))),
-                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation")})
+                    @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION)})
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> findAll(
@@ -180,7 +181,7 @@ public class ReportTemplateController {
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("User does not have access to this organisation");
+                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
 
         List<ReportTemplateResponseDto> templates =
@@ -196,7 +197,7 @@ public class ReportTemplateController {
                             description = "Report template deleted successfully"),
                     @ApiResponse(responseCode = "400",
                             description = "Template has associated reports and cannot be deleted"),
-                    @ApiResponse(responseCode = "403", description = "User does not have access to this organisation"),
+                    @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Report template not found")})
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
@@ -210,7 +211,7 @@ public class ReportTemplateController {
                 // Check organisation access
                 if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
                     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body("User does not have access to this organisation");
+                        .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
                 }
 
                 // Proceed with deletion

@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.reporting.mapper;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 
@@ -46,7 +45,7 @@ public class ReportTemplateMapper {
         if (dto.getFields() != null) {
             List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
                 .map(columnDto -> toColumnEntity(columnDto, template, null))
-                .collect(Collectors.toList());
+                .toList();
 
             // Update the existing collection instead of replacing it
             // This is required for cascade="all-delete-orphan" to work properly
@@ -62,7 +61,7 @@ public class ReportTemplateMapper {
         if (dto.getValidationRules() != null) {
             List<ReportTemplateValidationRuleEntity> newRules = dto.getValidationRules().stream()
                 .map(ruleDto -> toValidationRuleEntity(ruleDto, template))
-                .collect(Collectors.toList());
+                .toList();
 
             if (template.getValidationRules() != null) {
                 template.getValidationRules().clear();
@@ -84,13 +83,13 @@ public class ReportTemplateMapper {
             ? entity.getFields().stream()
                 .filter(col -> col.getParentField() == null)
                 .map(this::toColumnDto)
-                .collect(Collectors.toList())
+                .toList()
             : Collections.emptyList();
 
         List<ValidationRuleDto> validationRules = entity.getValidationRules() != null
             ? entity.getValidationRules().stream()
                 .map(this::toValidationRuleDto)
-                .collect(Collectors.toList())
+                .toList()
             : Collections.emptyList();
 
         return ReportTemplateResponseDto.builder()
@@ -118,7 +117,7 @@ public class ReportTemplateMapper {
             // Convert Long IDs to String and fetch
             List<String> stringIds = dto.getMappingSubTypeIds().stream()
                 .map(String::valueOf)
-                .collect(Collectors.toList());
+                .toList();
             mappingTypes = chartOfAccountSubTypeRepository.findAllById(stringIds);
         }
 
@@ -136,7 +135,7 @@ public class ReportTemplateMapper {
         if (dto.getChildFields() != null) {
             List<ReportTemplateFieldEntity> children = dto.getChildFields().stream()
                 .map(childDto -> toColumnEntity(childDto, template, column))
-                .collect(Collectors.toList());
+                .toList();
             column.setChildFields(children);
         }
 
@@ -151,14 +150,14 @@ public class ReportTemplateMapper {
         List<ReportTemplateFieldDto> children = entity.getChildFields() != null
             ? entity.getChildFields().stream()
                 .map(this::toColumnDto)
-                .collect(Collectors.toList())
+                .toList()
             : Collections.emptyList();
 
         // Extract mapping sub type IDs
         List<Long> mappingSubTypeIds = entity.getMappingTypes() != null
             ? entity.getMappingTypes().stream()
                 .map(ChartOfAccountSubType::getId)
-                .collect(Collectors.toList())
+                .toList()
             : Collections.emptyList();
 
         return ReportTemplateFieldDto.builder()
@@ -265,7 +264,7 @@ public class ReportTemplateMapper {
                 .filter(term -> term.getSide() == TermSide.LEFT)
                 .sorted((a, b) -> Integer.compare(a.getTermOrder(), b.getTermOrder()))
                 .map(this::toValidationRuleTermDto)
-                .collect(Collectors.toList())
+                .toList()
             : Collections.emptyList();
 
         List<ValidationRuleTermDto> rightTerms = entity.getTerms() != null
@@ -273,7 +272,7 @@ public class ReportTemplateMapper {
                 .filter(term -> term.getSide() == TermSide.RIGHT)
                 .sorted((a, b) -> Integer.compare(a.getTermOrder(), b.getTermOrder()))
                 .map(this::toValidationRuleTermDto)
-                .collect(Collectors.toList())
+                .toList()
             : Collections.emptyList();
 
         return ValidationRuleDto.builder()

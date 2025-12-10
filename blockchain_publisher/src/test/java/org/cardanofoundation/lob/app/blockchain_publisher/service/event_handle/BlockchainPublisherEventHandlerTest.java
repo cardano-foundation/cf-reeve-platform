@@ -16,7 +16,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPubl
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 
 @ExtendWith(MockitoExtension.class)
-public class BlockchainPublisherEventHandlerTest {
+class BlockchainPublisherEventHandlerTest {
 
     @Mock
     private BlockchainPublisherService blockchainPublisherService;

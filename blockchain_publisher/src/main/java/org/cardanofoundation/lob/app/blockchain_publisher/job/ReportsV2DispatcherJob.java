@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.BlockchainReportsV2Dispatcher;
 
-@Service("blockchain_publisher.ReportsV2DispatcherJob")
+@Service("reportsV2DispatcherJob")
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnProperty(value = "lob.blockchain_publisher.enabled", havingValue = "true", matchIfMissing = true)

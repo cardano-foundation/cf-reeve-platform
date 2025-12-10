@@ -38,7 +38,7 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @ExtendWith(MockitoExtension.class)
-public class BlockchainReportsDispatchTest {
+class BlockchainReportsDispatchTest {
 
     @Mock
     private OrganisationPublicApi organisationPublicApi;
