@@ -38,6 +38,7 @@ import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
 import org.cardanofoundation.signify.cesr.util.CoreUtil;
 import org.cardanofoundation.signify.cesr.util.Utils;
 import org.cardanofoundation.signify.core.States;
+import org.cardanofoundation.signify.core.States.HabState;
 
 import com.bloxbean.cardano.client.account.Account;
 import com.bloxbean.cardano.client.api.model.Amount;
@@ -60,8 +61,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class CreateProvenantCredential {
 
     // ------- Constants ------- //
-    private static final String CLIENT_NAME = "GT Reeve Client";
-    private static final String REGISTRY_NAME = "GT Registry";
+    private static final String CLIENT_NAME = "GTReeveClient";
+    private static final String REGISTRY_NAME = "GTRegistry";
     private static final String IDENTIFIER_BRAN = "0ADF2TpptgqcDE5IQUF1H"; // TODO Need to randomized or passed in
     
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
@@ -69,17 +70,14 @@ public class CreateProvenantCredential {
     private static final String REEVE_SCHEMA_SAID = "ED_GbUPpS8ZJEY-u8OB3QVe9C_CAFBdSimS5KxclkgWT";
 
     public static final String vLEIServer = "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
-    public static final String KERI_URL = "http://localhost:3901";
-    public static final String KERI_BOOT_URL = "http://localhost:3903";
+    public static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
+    public static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
     // Schemas
     public static final String REEVE_SCHEMA_URL = vLEIServer + "/" + REEVE_SCHEMA_SAID;
     public static final String LE_SCHEMA_URL = vLEIServer + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = vLEIServer + "/" + QVI_SCHEMA_SAID;
 
-    private static final List<String> WITNESS_IDS = Arrays.asList(
-                            "BBilc4-L3tFUnfM_wJr4S4OJanAv_VmF_dJNN6vkf2Ha",
-                            "BLskRTInXnMxWaGqcpSyMgo0nYbalW99cGZESrz3zapM",
-                            "BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX");
+    private static final List<String> WITNESS_IDS = Arrays.asList();
 
     // TODO Replace with actual Issuer AID and Parent Credential ID
     private static final String ISSUER_AID = "DUMMY_AID";
@@ -127,7 +125,9 @@ public class CreateProvenantCredential {
 
         Optional<Object> credential = client.credentials().get(aid.prefix, true);
         String cesrQb64 = (String) credential.orElseThrow();
-        buildTransaction(aid.prefix, cesrQb64.getBytes(), QVI_SCHEMA_SAID, LEI);
+        Optional<HabState> optional = client.identifiers().get(CLIENT_NAME);
+        String prefix = optional.orElseThrow().getPrefix();
+        buildTransaction(prefix, cesrQb64.getBytes(), QVI_SCHEMA_SAID, LEI);
 
         System.out.println("=== vLEI Credential Chain Setup Completed ===");
     }
