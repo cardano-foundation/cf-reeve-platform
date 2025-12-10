@@ -6,6 +6,8 @@
 //RUNTIME_OPTIONS
 
 //DEPS org.cardanofoundation:signify:0.1.3-af01d93-SNAPSHOT
+//DEPS com.bloxbean.cardano:cardano-client-lib:0.7.0-beta2
+//DEPS com.bloxbean.cardano:cardano-client-backend-blockfrost:0.7.0-beta2
 // @formatter:on
 
 import java.io.IOException;
@@ -33,15 +35,27 @@ import org.cardanofoundation.signify.app.credentialing.registries.CreateRegistry
 import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult;
 import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
+import org.cardanofoundation.signify.cesr.util.CoreUtil;
 import org.cardanofoundation.signify.cesr.util.Utils;
 import org.cardanofoundation.signify.core.States;
 
+import com.bloxbean.cardano.client.account.Account;
+import com.bloxbean.cardano.client.api.model.Amount;
+import com.bloxbean.cardano.client.backend.api.BackendService;
+import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService;
+import com.bloxbean.cardano.client.common.model.Network;
+import com.bloxbean.cardano.client.common.model.Networks;
+import com.bloxbean.cardano.client.function.helper.SignerProviders;
+import com.bloxbean.cardano.client.metadata.Metadata;
+import com.bloxbean.cardano.client.metadata.MetadataBuilder;
+import com.bloxbean.cardano.client.metadata.MetadataList;
+import com.bloxbean.cardano.client.metadata.MetadataMap;
+import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
+import com.bloxbean.cardano.client.quicktx.Tx;
+import com.bloxbean.cardano.client.quicktx.TxResult;
+import com.bloxbean.cardano.client.transaction.spec.Transaction;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import test
-import test-vlei.src.main.java.org.cardanofoundation.domain.CredentialType;
-import test-vlei.src.main.java.org.cardanofoundation.domain.CredentialType;-vlei.src.main.java.org.cardanofoundation.domain.CredentialType;
 
 public class CreateProvenantCredential {
 
@@ -70,6 +84,15 @@ public class CreateProvenantCredential {
     // TODO Replace with actual Issuer AID and Parent Credential ID
     private static final String ISSUER_AID = "DUMMY_AID";
     private static final String PARENT_CREDENTIAL_ID = "DUMMY_CREDENTIAL_ID";
+    private static final String LEI = "5493001KJTIIGC8Y1R12"; // Dummy LEI for testing
+
+    // Wallet specific constants
+    private static final String mnemonic = "test test test test test test test test test test test test test test test test test test test test test test test sauce";
+    private static final Network network = Networks.testnet();
+    private static final BackendService backendService = new BFBackendService("http://localhost:8081/api/v1/", "Dummy Key");
+    private static final QuickTxBuilder QuickTxBuilder = new QuickTxBuilder(backendService);
+
+
 
     private static final List<Aid> oobis = new ArrayList<>();
 
@@ -81,12 +104,13 @@ public class CreateProvenantCredential {
         SignifyClient client = getOrCreateClient(IDENTIFIER_BRAN);
         Aid aid = createAid(client, CLIENT_NAME);
         RegistryResult registry = createRegistry(client, aid, REGISTRY_NAME);
-
+        
         // TODO Also Reeve schema?
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
         resolveAidOobis(client, oobis);
 
+        System.out.println("Client AID: " + aid.prefix() + " OOBI: " + aid.oobi());
 
         // ------- IPEX ADMIT ------- //
 
@@ -99,10 +123,47 @@ public class CreateProvenantCredential {
                     ISSUER_AID);
         executeAdmitProcess(client, aid, ISSUER_AID, admitArgs, notifications.get(0).i);
 
-        // ------- CREATING CREDENTIAL ------- //
+        // ------- Building the transaction ------- //
 
         Optional<Object> credential = client.credentials().get(aid.prefix, true);
+        String cesrQb64 = (String) credential.orElseThrow();
+        buildTransaction(aid.prefix, cesrQb64.getBytes(), QVI_SCHEMA_SAID, LEI);
 
+        System.out.println("=== vLEI Credential Chain Setup Completed ===");
+    }
+
+    static void buildTransaction(String aid, byte[] credentialChain, String saidOfLeafCredentialSchema, String lei) {
+        Account account = Account.createFromMnemonic(network, mnemonic);
+
+        MetadataMap metadataMap = MetadataBuilder.createMap();
+        metadataMap.put("t", "AUTH_BEGIN");
+        metadataMap.put("s", saidOfLeafCredentialSchema);
+        metadataMap.put("s", credentialChain);
+        MetadataMap v = MetadataBuilder.createMap();
+        v.put("v", "1.0");
+        v.put("k", "KERI10");
+        v.put("a", "ACDC10");
+        metadataMap.put("v", v);
+        MetadataMap m = MetadataBuilder.createMap();
+        MetadataList l = MetadataBuilder.createList();
+        l.add("1447");
+        m.put("l", l);
+        m.put("LEI", lei);
+        metadataMap.put("m", m);
+
+        Metadata metadata = MetadataBuilder.createMetadata();
+        metadata.put(170, metadataMap);
+        
+
+        Tx tx = new Tx()
+                .payToAddress(account.baseAddress(), Amount.ada(2))
+                .from(account.baseAddress())
+                .attachMetadata(metadata);
+        TxResult txResult = QuickTxBuilder.compose(tx)
+                .withSigner(SignerProviders.signerFrom(account))
+                .feePayer(account.baseAddress())
+                .completeAndWait();
+        System.out.println("Transaction submitted. Tx Hash: " + txResult.getTxHash());
     }
 
     // ------- Helper Methods ------- //
