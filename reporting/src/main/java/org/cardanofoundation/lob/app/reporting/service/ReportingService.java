@@ -688,11 +688,11 @@ public class ReportingService {
         LocalDate effectiveEndDate = endDate;
 
         // Adjust date range based on accumulation flags
-        if (field.isAccumulatedYearly()) {
-            effectiveStartDate = LocalDate.of(startDate.getYear(), 1, 1);
-        }
         if (field.isAccumulated()) {
             effectiveStartDate = LocalDate.EPOCH;
+        }
+        if (field.isAccumulatedYearly()) {
+            effectiveStartDate = LocalDate.of(startDate.getYear(), 1, 1);
         }
         if (field.isAccumulatedPreviousYear()) {
             if (!field.isAccumulated()) {

@@ -50,6 +50,10 @@ public class ReportTemplateFieldEntity extends CommonEntity {
     @Builder.Default
     private List<ReportTemplateFieldEntity> childFields = new ArrayList<>();
 
+    @OneToMany(mappedBy = "field", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<ValidationRuleTermEntity> validationRuleTerms = new ArrayList<>();
+
     @ManyToMany
     @JoinTable(
             name = "reporting_field_subtype_mapping",

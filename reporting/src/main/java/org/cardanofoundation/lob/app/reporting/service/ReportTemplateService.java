@@ -291,7 +291,7 @@ public class ReportTemplateService {
         }
 
         // Check if there are any reports using this template
-        List<org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity> existingReports =
+        List<ReportEntity> existingReports =
                 reportingRepository.findByReportTemplateId(id);
 
         if (!existingReports.isEmpty()) {

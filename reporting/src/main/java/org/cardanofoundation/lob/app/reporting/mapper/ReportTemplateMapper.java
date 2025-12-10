@@ -162,6 +162,7 @@ public class ReportTemplateMapper {
             : Collections.emptyList();
 
         return ReportTemplateFieldDto.builder()
+            .id(entity.getId())
             .fieldName(entity.getName())
             .accumulated(entity.isAccumulated())
             .accumulatedYearly(entity.isAccumulatedYearly())

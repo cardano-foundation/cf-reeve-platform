@@ -18,6 +18,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
@@ -41,6 +44,7 @@ public class ValidationRuleTermEntity extends CommonEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "field_id", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE) // Add this
     private ReportTemplateFieldEntity field;
 
     @Enumerated(EnumType.STRING)
