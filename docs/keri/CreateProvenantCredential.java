@@ -79,12 +79,11 @@ public class CreateProvenantCredential {
     public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + QVI_SCHEMA_SAID;
 
-    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://127.0.0.1:3902/oobi/EN8WAqusLIKovTd76nOIEoIEU5M6Hx5m7Fm5LlPOf4BE/agent/EOuneIvIjAGsxA1G80cP2pQNtYwVMgngVJC-6-X0KYje");
+    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://127.0.0.1:3902/oobi/EI8r9qf3SPGqThG7IG3okfwtvMYpR8DUORvblTb2BIYq/agent/EGU8h3f0NZXtxl2pJ7XW-OfiQPsrGOsNNAExyMRh-sE9");
 
     private static final String MISCONFIGURED_AGENT_CONFIGURATION = "Agent configuration is missing iurls";
     private static final String INSUFFICIENT_WITNESSES_AVAILABLE = "Insufficient witnesses available";
 
-    // TODO Replace with actual Issuer AID and Parent Credential ID
     private static final String LEI = System.getenv().getOrDefault("LEI", "5493001KJTIIGC8Y1R12");
 
     // Wallet specific constants
@@ -113,62 +112,43 @@ public class CreateProvenantCredential {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("=== vLEI Credential Chain Setup Starting ===");
-
         // --- SETUP REEVE CLIENT AND REGISTRY --- //
         SignifyClient client = getOrCreateClient(IDENTIFIER_BRAN);
         Aid aid = createAid(client, CLIENT_NAME);
         RegistryResult registry = createRegistry(client, aid, REGISTRY_NAME);
-        
+
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
         getOrCreateContact(client, "issuer", ISSUER_OOBI);
 
         System.out.println("Client AID: " + aid.prefix() + " OOBI: " + aid.oobi());
 
-//        String credentialIdIfExists = CreateProvenantCredential.getCredentialIdIfExists(client, aid);
-
         String cesrQb64;
-//        if (credentialIdIfExists !== "") {
-//            System.out.println("Credential already exists, skipping to on-chain submission");
-//            Optional<Object> credential = client.credentials().get(credentialIdIfExists, true);
-//            cesrQb64 = (String) credential.orElseThrow();
-//        } else {
-            // ------- IPEX ADMIT ------- //
-            List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
-            if (notifications == null || notifications.isEmpty()) {
-                throw new IllegalStateException(
-                        "No grant notifications received");
-            }
 
-            LinkedHashMap<String, Object> map = (LinkedHashMap<String, Object>) client.exchanges().get(notifications.get(0).a.d).get();
-            LinkedHashMap<String, Object> exn = (LinkedHashMap<String, Object>) map.get("exn");
-            LinkedHashMap<String, Object> e = (LinkedHashMap<String, Object>) exn.get("e");
-            LinkedHashMap<String, Object> acdc = (LinkedHashMap<String, Object>) e.get("acdc");
-
-            String issuerAid = (String) exn.get("i");
-            String credentialId = (String) acdc.get("d");
-
-            IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d, issuerAid);
-            System.out.println("Admitting");
-            executeAdmitProcess(client, aid, issuerAid, admitArgs, notifications.get(0).i);
-            System.out.println("Done admitting");
-
-            Optional<String> credential = client.credentials().get(credentialId, true);
-            cesrQb64 = credential.get();
-            System.out.println("cesrQb64 is " + cesrQb64);
-//        }
-
-        // ------- Building the transaction ------- //
-        Optional<HabState> optional = client.identifiers().get(CLIENT_NAME);
-        String prefix = optional.orElseThrow().getPrefix();
-        
-        if (promptYesNo("Do you want to publish this credential on-chain?")) {
-            buildTransaction(prefix, cesrQb64.getBytes(), QVI_SCHEMA_SAID, LEI);
-        } else {
-            System.out.println("Skipping on-chain publication");
+        // ------- IPEX ADMIT ------- //
+        List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
+        if (notifications == null || notifications.isEmpty()) {
+            throw new IllegalStateException(
+                    "No grant notifications received");
         }
 
+        LinkedHashMap<String, Object> map = (LinkedHashMap<String, Object>) client.exchanges().get(notifications.get(0).a.d).get();
+        LinkedHashMap<String, Object> exn = (LinkedHashMap<String, Object>) map.get("exn");
+        LinkedHashMap<String, Object> e = (LinkedHashMap<String, Object>) exn.get("e");
+        LinkedHashMap<String, Object> acdc = (LinkedHashMap<String, Object>) e.get("acdc");
+
+        String issuerAid = (String) exn.get("i");
+        String credentialId = (String) acdc.get("d");
+
+        IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d, issuerAid);
+        executeAdmitProcess(client, aid, issuerAid, admitArgs, notifications.get(0).i);
+
+        Optional<String> credential = client.credentials().get(credentialId);
+        cesrQb64 = credential.get();
+
+        // ------- Building the transaction ------- //
+        System.out.println("cesrqb64 is " + cesrQb64);
+//        buildTransaction(aid.prefix(), cesrQb64.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
         System.out.println("=== vLEI Credential Chain Setup Completed ===");
     }
 
@@ -178,7 +158,8 @@ public class CreateProvenantCredential {
         MetadataMap metadataMap = MetadataBuilder.createMap();
         metadataMap.put("t", "AUTH_BEGIN");
         metadataMap.put("s", saidOfLeafCredentialSchema);
-        metadataMap.put("s", credentialChain);
+        metadataMap.put("i", aid);
+        metadataMap.put("c", credentialChain);
         MetadataMap v = MetadataBuilder.createMap();
         v.put("v", "1.0");
         v.put("k", "KERI10");
@@ -195,6 +176,7 @@ public class CreateProvenantCredential {
         metadata.put(170, metadataMap);
         
 
+        System.out.println("baseAddress is " + account.baseAddress());
         Tx tx = new Tx()
                 .payToAddress(account.baseAddress(), Amount.ada(2))
                 .from(account.baseAddress())
@@ -203,6 +185,7 @@ public class CreateProvenantCredential {
                 .withSigner(SignerProviders.signerFrom(account))
                 .feePayer(account.baseAddress())
                 .completeAndWait();
+        System.out.println("txResult: " + txResult);
         System.out.println("Transaction submitted. Tx Hash: " + txResult.getTxHash());
     }
 
@@ -420,7 +403,6 @@ public class CreateProvenantCredential {
         Object operation = client.ipex().submitAdmit(receiver.name(),
                 admitResult.exn(), admitResult.sigs(), admitResult.atc(),
                 Collections.singletonList(issuerAid));
-        System.out.println("operation is " + operation);
 
         // Wait for operation completion
         Operation<Object> waitOp =
@@ -470,35 +452,6 @@ public class CreateProvenantCredential {
             return contacts.getFirst().getId();
         }
         return null;
-    }
-
-    private static String getCredentialIdIfExists(SignifyClient client) {
-//        try {
-//            Map<String, Object> filter = new LinkedHashMap<>() {{
-//                put("-s", VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID);
-//            }};
-//            CredentialFilter credentialFilter = CredentialFilter.builder()
-//                    .filter(filter)
-//                    .build();
-//            List<Object> credential = client.credentials().list(credentialFilter);
-//            if (credential.size() > 0) {
-//                return "";//credential.getFirst();//todo get ID
-//            }
-//        } catch (Exception e) {
-//            System.out.println("Error checking for existing credential: " + e.getMessage());
-//        }
-        return "";
-    }
-
-    private static boolean promptYesNo(String prompt) {
-        System.out.print(prompt + " (yes/no): ");
-        try (java.util.Scanner scanner = new java.util.Scanner(System.in)) {
-            String response = scanner.nextLine().trim().toLowerCase();
-            return response.equals("yes") || response.equals("y");
-        } catch (Exception e) {
-            System.out.println("Error reading input: " + e.getMessage());
-            return false;
-        }
     }
 
     private static AvailableWitnesses getAvailableWitnesses(SignifyClient client) throws Exception {
