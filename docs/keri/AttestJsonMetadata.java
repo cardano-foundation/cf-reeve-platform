@@ -45,66 +45,77 @@ import com.bloxbean.cardano.client.quicktx.TxResult;
 public class AttestJsonMetadata {
 
     // ------- Constants ------- //
+    // KERI Identifier values
     private static final String CLIENT_NAME = "GTReeveClient";
     private static final String IDENTIFIER_BRAN = "0ADF2TpptgqcDE5IQUF1H"; // TODO Need to randomized or passed in
+
+    // Reeve KERI service URLs
     public static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
     public static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
 
-    private static final String transactionHash = "313267a550a0ebc35dacf4d30c95fa71cdbe88349df2acc80d5579c3a20c9493";
+    // Transaction Hash which contains the JSON metadata to be attested
+    private static final String transactionHash = "81280d4b7a04f42a87c7873df55111fed440e8e5d30e42df444e9db873e4ed95";
+    // Mnemonic which will be used to create the Account for submitting the transaction
     private static final String mnemonic = "test test test test test test test test test test test test test test test test test test test test test test test sauce";
+
     private static final Network network = Networks.mainnet();
+    //     private static final Network network = Networks.testnet(); // User for testing in Devnet
     private static final BackendService backendService = new BFBackendService(
-            "https://cardano-mainnet.blockfrost.io/api/v0/", "mainnetlD8Ml06QIX8KlTH9Oa4Ovvvl5hHv9xdn");
+            "https://cardano-mainnet.blockfrost.io/api/v0/", "MAINNET_BLOCKFROST_API_KEY");
+            //     "http://localhost:8081/api/v1/", "Dummy Key"); // Used for Devnet
     private static final QuickTxBuilder quickTxBuilder = new QuickTxBuilder(backendService);
 
     public static void main(String[] args) throws Exception {
-        Result<List<MetadataCBORContent>> cborMetadataByTxnHash = backendService.getMetadataService()
-                .getCBORMetadataByTxnHash(transactionHash);
-        List<MetadataCBORContent> value = cborMetadataByTxnHash.getValue();
-        MetadataCBORContent first = value.getFirst();
-        String cborString = first.getCborMetadata();
-        SignifyClient client = getOrCreateClient(IDENTIFIER_BRAN);
+        
+        // ---- Preparing Metadata from on-chain transaction and KERI attestation ---- //
+
+        // Retrieving the JSON metadata with the label 1447 from the specific transaction
+        Result<List<MetadataJSONContent>> jsonMetadataByTxnHash = backendService.getMetadataService()
+                .getJSONMetadataByTxnHash(transactionHash);
+        MetadataJSONContent jsonContent = jsonMetadataByTxnHash.getValue().stream().filter(json -> json.getLabel().equals("1447")).findFirst().orElseThrow();
+        String jsonString = jsonContent.getJsonMetadata().toString();
+        MetadataMap reeveMetadataMap = MetadataBuilder.metadataMapFromJsonBody(jsonString);
+        
+        // Serializing the JSON metadata map to create a digest
         byte[] blake3_256 = CoreUtil.blake3_256(
-                cborString.getBytes(), 32);
+                    CborSerializationUtil.serialize(reeveMetadataMap.getMap()), 32);
         Diger diger = new Diger(RawArgs.builder().raw(blake3_256).build());
-        EventResult interact = client.identifiers().interact(CLIENT_NAME, cborMetadataByTxnHash);
+        // This digest will be attested on-chain
+        String qb64 = diger.getQb64();
+
+        // Creating KERI attestation for the digest
+        SignifyClient client = getOrCreateClient(IDENTIFIER_BRAN);
+        EventResult interact = client.identifiers().interact(CLIENT_NAME, qb64);
 
         Optional<HabState> optional = client.identifiers().get(CLIENT_NAME);
         String prefix = optional.orElseThrow().getPrefix();
 
+        // Building the metadata structure for on-chain attestation
         Map<String, Object> ked = interact.serder().getKed();
         MetadataMap keriMetadataMap = MetadataBuilder.createMap();
         keriMetadataMap.put("t", "ATTEST");
         keriMetadataMap.put("i", prefix);
-        keriMetadataMap.put("d", diger.getQb64());
+        keriMetadataMap.put("d", qb64);
         keriMetadataMap.put("s", ked.get("s").toString());
         MetadataMap v = MetadataBuilder.createMap();
         v.put("v", "1.0");
         keriMetadataMap.put("v", v);
         Metadata metadata = MetadataBuilder.createMetadata();
         metadata.put(170, keriMetadataMap);
-
-        // Reeve Data
-        Result<List<MetadataJSONContent>> jsonMetadataByTxnHash = backendService.getMetadataService()
-                .getJSONMetadataByTxnHash(transactionHash);
-        MetadataJSONContent jsonContent = jsonMetadataByTxnHash.getValue().getFirst();
-        String asText = jsonContent.getJsonMetadata().asText();
-        String prettyString = jsonContent.getJsonMetadata().toString();
-        MetadataMap reeveMetadataMap = MetadataBuilder.metadataMapFromJsonBody(prettyString);
-
+        // Putting the original JSON metadata under label 1447
         metadata.put(1447, reeveMetadataMap);
 
-        // Devnet Test
-        BackendService devNetBackendService = new BFBackendService("http://localhost:8081/api/v1/", "Dummy Key");
-        QuickTxBuilder devNetQuickTxBuilder = new QuickTxBuilder(devNetBackendService);
-
-        Account devnetAccount = Account.createFromMnemonic(Networks.testnet(), mnemonic);
-        Tx tx = new Tx().payToAddress(devnetAccount.baseAddress(), Amount.ada(2)).attachMetadata(metadata).from(devnetAccount.baseAddress());
-        TxResult completeAndWait = devNetQuickTxBuilder.compose(tx)
-                .withSigner(SignerProviders.signerFrom(devnetAccount)).feePayer(devnetAccount.baseAddress())
+        // ---- Submitting the transaction with KERI attestation ---- //
+        Account account = Account.createFromMnemonic(network, mnemonic);
+        Tx tx = new Tx().payToAddress(account.baseAddress(), Amount.ada(2)).attachMetadata(metadata).from(account.baseAddress());
+        TxResult completeAndWait = quickTxBuilder.compose(tx)
+                .withSigner(SignerProviders.signerFrom(account)).feePayer(account.baseAddress())
                 .completeAndWait();
-        System.out.println(completeAndWait);
-        System.out.println("Test");
+        if(!completeAndWait.isSuccessful()) {
+            throw new RuntimeException("Transaction failed: " + completeAndWait);
+        } else {
+            System.out.println("Transaction successful. TxHash: " + completeAndWait.getTxHash());
+        }
     }
 
     // Helper methods can be added here

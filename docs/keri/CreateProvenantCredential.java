@@ -5,7 +5,9 @@
 //COMPILE_OPTIONS -source 24
 //RUNTIME_OPTIONS
 
-//DEPS org.cardanofoundation:signify:0.1.3-af01d93-SNAPSHOT
+//REPOS snapshots=https://central.sonatype.com/repository/maven-snapshots/
+//REPOS central=https://repo.maven.apache.org/maven2
+//DEPS org.cardanofoundation:signify:0.1.2-ebfb904-SNAPSHOT
 //DEPS com.bloxbean.cardano:cardano-client-lib:0.7.0-beta2
 //DEPS com.bloxbean.cardano:cardano-client-backend-blockfrost:0.7.0-beta2
 // @formatter:on
