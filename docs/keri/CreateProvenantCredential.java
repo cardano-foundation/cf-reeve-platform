@@ -8,10 +8,11 @@
 //REPOS snapshots=https://central.sonatype.com/repository/maven-snapshots/
 //REPOS central=https://repo.maven.apache.org/maven2
 //DEPS org.cardanofoundation:signify:0.1.2-ebfb904-SNAPSHOT
-//DEPS com.bloxbean.cardano:cardano-client-lib:0.7.0-beta2
+//DEPS com.bloxbean.cardano:cardano-client-lib:0.7.1
 //DEPS com.bloxbean.cardano:cardano-client-backend-blockfrost:0.7.0-beta2
 // @formatter:on
 
+import java.math.BigInteger;
 import java.io.IOException;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
@@ -38,6 +39,7 @@ import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult
 import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
 import org.cardanofoundation.signify.cesr.util.CoreUtil;
+import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 import org.cardanofoundation.signify.cesr.util.Utils;
 import org.cardanofoundation.signify.core.States;
 import org.cardanofoundation.signify.core.States.HabState;
@@ -79,7 +81,7 @@ public class CreateProvenantCredential {
     public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + QVI_SCHEMA_SAID;
 
-    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://127.0.0.1:3902/oobi/EI8r9qf3SPGqThG7IG3okfwtvMYpR8DUORvblTb2BIYq/agent/EGU8h3f0NZXtxl2pJ7XW-OfiQPsrGOsNNAExyMRh-sE9");
+    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://127.0.0.1:3902/oobi/ELLfnHnBLhnvA_KiuHDnVBPQnIiwzGQ3FBvd61KktBBp/agent/EFwhZaBQbFkR56yBgwXfMmmi8_XUt2gyhTlrQa4wIfwX");
 
     private static final String MISCONFIGURED_AGENT_CONFIGURATION = "Agent configuration is missing iurls";
     private static final String INSUFFICIENT_WITNESSES_AVAILABLE = "Insufficient witnesses available";
@@ -90,7 +92,7 @@ public class CreateProvenantCredential {
     private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "test test test test test test test test test test test test test test test test test test test test test test test sauce");
     private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "preview");
     private static final Network network = getNetwork();
-    private static final String BLOCKFROST_PROJECT_ID = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "Dummy Key");
+    private static final String BLOCKFROST_PROJECT_ID = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "dummy");
     private static final BackendService backendService = createBackendService();
     private static final QuickTxBuilder QuickTxBuilder = new QuickTxBuilder(backendService);
 
@@ -144,22 +146,77 @@ public class CreateProvenantCredential {
         executeAdmitProcess(client, aid, issuerAid, admitArgs, notifications.get(0).i);
 
         Optional<String> credential = client.credentials().get(credentialId);
-        cesrQb64 = credential.get();
+
+        List<Map<String, Object>> cesrData = CESRStreamUtil.parseCESRData(credential.get());
+        String stripped = CreateProvenantCredential.strip(cesrData);
 
         // ------- Building the transaction ------- //
-        System.out.println("cesrqb64 is " + cesrQb64);
-//        buildTransaction(aid.prefix(), cesrQb64.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
+        buildTransaction(aid.prefix(), stripped.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
         System.out.println("=== vLEI Credential Chain Setup Completed ===");
+    }
+
+    static String strip(List<Map<String, Object>> cesrData) {
+        List<Map<String, Object>> allVcpEvents = new ArrayList<>();
+        List<String> allVcpAttachments = new ArrayList<>();
+        List<Map<String, Object>> allIssEvents = new ArrayList<>();
+        List<String> allIssAttachments = new ArrayList<>();
+        List<Map<String, Object>> allAcdcEvents = new ArrayList<>();
+        List<String> allAcdcAttachments = new ArrayList<>();
+
+        for (Map<String, Object> eventData : cesrData) {
+            Map<String, Object> event = (Map<String, Object>) eventData.get("event");
+
+            // Check for event type
+            Object eventTypeObj = event.get("t");
+            if (eventTypeObj != null) {
+                String eventType = eventTypeObj.toString();
+                switch (eventType) {
+                    case "vcp":
+                        allVcpEvents.add(event);
+                        allVcpAttachments.add((String) eventData.get("atc"));
+                        break;
+                    case "iss":
+                        allIssEvents.add(event);
+                        allIssAttachments.add((String) eventData.get("atc"));
+                        break;
+                }
+            } else {
+                // Check if this is an ACDC (credential data) without "t" field
+                if (event.containsKey("s") && event.containsKey("a") && event.containsKey("i")) {
+                    Object schemaObj = event.get("s");
+                    if (schemaObj != null) {
+                        allAcdcEvents.add(event);
+                        allAcdcAttachments.add("");
+                    }
+                }
+            }
+        }
+
+        List<Map<String, Object>> combinedEvents = new ArrayList<>();
+        List<String> combinedAttachments = new ArrayList<>();
+
+        combinedEvents.addAll(allVcpEvents);
+        combinedEvents.addAll(allIssEvents);
+        combinedEvents.addAll(allAcdcEvents);
+
+        combinedAttachments.addAll(allVcpAttachments);
+        combinedAttachments.addAll(allIssAttachments);
+        combinedAttachments.addAll(allAcdcAttachments);
+
+        return CESRStreamUtil.makeCESRStream(combinedEvents, combinedAttachments);
     }
 
     static void buildTransaction(String aid, byte[] credentialChain, String saidOfLeafCredentialSchema, String lei) {
         Account account = Account.createFromMnemonic(network, mnemonic);
 
+        Array credentialChunks = new Array();
+
+
         MetadataMap metadataMap = MetadataBuilder.createMap();
         metadataMap.put("t", "AUTH_BEGIN");
         metadataMap.put("s", saidOfLeafCredentialSchema);
         metadataMap.put("i", aid);
-        metadataMap.put("c", credentialChain);
+        metadataMap.put("c", CreateProvenantCredential.splitIntoChunks(credentialChain, 64));
         MetadataMap v = MetadataBuilder.createMap();
         v.put("v", "1.0");
         v.put("k", "KERI10");
@@ -174,9 +231,7 @@ public class CreateProvenantCredential {
 
         Metadata metadata = MetadataBuilder.createMetadata();
         metadata.put(170, metadataMap);
-        
 
-        System.out.println("baseAddress is " + account.baseAddress());
         Tx tx = new Tx()
                 .payToAddress(account.baseAddress(), Amount.ada(2))
                 .from(account.baseAddress())
@@ -184,6 +239,25 @@ public class CreateProvenantCredential {
         TxResult txResult = QuickTxBuilder.compose(tx)
                 .withSigner(SignerProviders.signerFrom(account))
                 .feePayer(account.baseAddress())
+                .postBalanceTx((context, txn) -> {
+                    // Adjust fee AFTER balancing to account for metadata
+                    BigInteger currentFee = txn.getBody().getFee();
+                    BigInteger adjustedFee = new BigInteger("390000"); // Slightly more than required 185995
+
+                    // Calculate the difference to adjust the change output
+                    BigInteger feeDiff = adjustedFee.subtract(currentFee);
+
+                    // Update fee
+                    txn.getBody().setFee(adjustedFee);
+
+                    // Adjust the first output (change back to sender) to compensate
+                    if (!txn.getBody().getOutputs().isEmpty()) {
+                        var output = txn.getBody().getOutputs().get(0);
+                        BigInteger currentAmount = output.getValue().getCoin();
+                        output.getValue().setCoin(currentAmount.subtract(feeDiff));
+                    }
+
+                })
                 .completeAndWait();
         System.out.println("txResult: " + txResult);
         System.out.println("Transaction submitted. Tx Hash: " + txResult.getTxHash());
@@ -208,6 +282,19 @@ public class CreateProvenantCredential {
             public String d;
             public String m;
         }
+    }
+
+    public static byte[][] splitIntoChunks(byte[] data, int chunkSize) {
+        int numChunks = (data.length + chunkSize - 1) / chunkSize; // ceiling division
+        byte[][] chunks = new byte[numChunks][];
+
+        for (int i = 0; i < numChunks; i++) {
+            int start = i * chunkSize;
+            int end = Math.min(start + chunkSize, data.length);
+            chunks[i] = Arrays.copyOfRange(data, start, end);
+        }
+
+        return chunks;
     }
 
     public static SignifyClient getOrCreateClient(String bran) throws Exception {
