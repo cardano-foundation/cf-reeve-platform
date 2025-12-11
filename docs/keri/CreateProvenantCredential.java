@@ -65,27 +65,27 @@ public class CreateProvenantCredential {
     // ------- Constants ------- //
     private static final String CLIENT_NAME = "GTReeveClient";
     private static final String REGISTRY_NAME = "GTRegistry";
-    private static final String IDENTIFIER_BRAN = System.getenv().getOrDefault("IDENTIFIER_BRAN", "0ADF2TpptgqcDE5IQUF1H");
+    private static final String IDENTIFIER_BRAN = System.getenv().getOrDefault("IDENTIFIER_BRAN", "0ADF2TpptgqcDE5IQUF1x");
     
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
     public static final String LE_SCHEMA_SAID = "ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY";
-    private static final String REEVE_SCHEMA_SAID = "ED_GbUPpS8ZJEY-u8OB3QVe9C_CAFBdSimS5KxclkgWT";
+    private static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID = "EKU2UWx115nPv1JqWVMCFRn0_EMaME08HrUK5cLuTP89";
 
-    public static final String vLEIServer = "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
-    public static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
-    public static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
+    public static final String SCHEMA_SERVER_URL = "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
+    public static final String KERI_URL = "http://127.0.0.1:3901";// "https://keria.staging.cardano-foundation.app.reeve.technology";
+    public static final String KERI_BOOT_URL = "http://127.0.0.1:3903";//"https://keria-boot.staging.cardano-foundation.app.reeve.technology";
     // Schemas
-    public static final String REEVE_SCHEMA_URL = vLEIServer + "/" + REEVE_SCHEMA_SAID;
-    public static final String LE_SCHEMA_URL = vLEIServer + "/" + LE_SCHEMA_SAID;
-    public static final String QVI_SCHEMA_URL = vLEIServer + "/" + QVI_SCHEMA_SAID;
+    public static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID;
+    public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;
+    public static final String QVI_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + QVI_SCHEMA_SAID;
+
+    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://127.0.0.1:3902/oobi/EN8WAqusLIKovTd76nOIEoIEU5M6Hx5m7Fm5LlPOf4BE/agent/EOuneIvIjAGsxA1G80cP2pQNtYwVMgngVJC-6-X0KYje");
 
     private static final String MISCONFIGURED_AGENT_CONFIGURATION = "Agent configuration is missing iurls";
     private static final String INSUFFICIENT_WITNESSES_AVAILABLE = "Insufficient witnesses available";
 
     // TODO Replace with actual Issuer AID and Parent Credential ID
-    private static final String ISSUER_AID = "DUMMY_AID";
-    private static final String PARENT_CREDENTIAL_ID = "DUMMY_CREDENTIAL_ID";
-    private static final String LEI = "5493001KJTIIGC8Y1R12"; // Dummy LEI for testing
+    private static final String LEI = System.getenv().getOrDefault("LEI", "5493001KJTIIGC8Y1R12");
 
     // Wallet specific constants
     private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "test test test test test test test test test test test test test test test test test test test test test test test sauce");
@@ -112,48 +112,52 @@ public class CreateProvenantCredential {
         return new BFBackendService(baseUrl, BLOCKFROST_PROJECT_ID);
     }
 
-
-
-    private static final List<Aid> oobis = new ArrayList<>();
-
     public static void main(String[] args) throws Exception {
         System.out.println("=== vLEI Credential Chain Setup Starting ===");
-
 
         // --- SETUP REEVE CLIENT AND REGISTRY --- //
         SignifyClient client = getOrCreateClient(IDENTIFIER_BRAN);
         Aid aid = createAid(client, CLIENT_NAME);
         RegistryResult registry = createRegistry(client, aid, REGISTRY_NAME);
         
-        // TODO Also Reeve schema?
-        List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, REEVE_SCHEMA_URL);
+        List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
-        resolveAidOobis(client, oobis);
+        getOrCreateContact(client, "issuer", ISSUER_OOBI);
 
         System.out.println("Client AID: " + aid.prefix() + " OOBI: " + aid.oobi());
 
-        // ------- IPEX ADMIT ------- //
-        boolean credentialExists = checkCredentialExists(client, aid);
-        
+//        String credentialIdIfExists = CreateProvenantCredential.getCredentialIdIfExists(client, aid);
+
         String cesrQb64;
-        if (credentialExists) {
-            System.out.println("Credential already exists, skipping to on-chain submission");
-            Optional<Object> credential = client.credentials().get(aid.prefix, true);
-            cesrQb64 = (String) credential.orElseThrow();
-        } else {
+//        if (credentialIdIfExists !== "") {
+//            System.out.println("Credential already exists, skipping to on-chain submission");
+//            Optional<Object> credential = client.credentials().get(credentialIdIfExists, true);
+//            cesrQb64 = (String) credential.orElseThrow();
+//        } else {
             // ------- IPEX ADMIT ------- //
             List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
             if (notifications == null || notifications.isEmpty()) {
                 throw new IllegalStateException(
                         "No grant notifications received");
             }
-            IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d,
-                        ISSUER_AID);
-            executeAdmitProcess(client, aid, ISSUER_AID, admitArgs, notifications.get(0).i);
 
-            Optional<Object> credential = client.credentials().get(aid.prefix, true);
-            cesrQb64 = (String) credential.orElseThrow();
-        }
+            LinkedHashMap<String, Object> map = (LinkedHashMap<String, Object>) client.exchanges().get(notifications.get(0).a.d).get();
+            LinkedHashMap<String, Object> exn = (LinkedHashMap<String, Object>) map.get("exn");
+            LinkedHashMap<String, Object> e = (LinkedHashMap<String, Object>) exn.get("e");
+            LinkedHashMap<String, Object> acdc = (LinkedHashMap<String, Object>) e.get("acdc");
+
+            String issuerAid = (String) exn.get("i");
+            String credentialId = (String) acdc.get("d");
+
+            IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d, issuerAid);
+            System.out.println("Admitting");
+            executeAdmitProcess(client, aid, issuerAid, admitArgs, notifications.get(0).i);
+            System.out.println("Done admitting");
+
+            Optional<String> credential = client.credentials().get(credentialId, true);
+            cesrQb64 = credential.get();
+            System.out.println("cesrQb64 is " + cesrQb64);
+//        }
 
         // ------- Building the transaction ------- //
         Optional<HabState> optional = client.identifiers().get(CLIENT_NAME);
@@ -237,9 +241,6 @@ public class CreateProvenantCredential {
             client.boot();
             client.connect();
         }
-        System.out.println("Client: "
-                + Map.of("agent", client.getAgent() != null ? client.getAgent().getPre() : null,
-                        "controller", client.getController().getPre()));
         return client;
     }
 
@@ -324,8 +325,7 @@ public class CreateProvenantCredential {
             Operation<Object> wait = client.operations().wait(Operation.fromObject(registryResult.op()));
             return registryResult;
         } catch (Exception e) {
-            System.out.println(
-                    "Registry " + registryName + " probably already exists for " + aid.name());
+            // Probably exists
         }
         return null;
     }
@@ -343,56 +343,36 @@ public class CreateProvenantCredential {
         }
     }
 
-    public static void resolveAidOobis(SignifyClient client, List<Aid> aids) throws Exception {
-        for (Aid aid : aids) {
-            // Check if contact already exists
-            List<Contacting.Contact> list =
-                    Arrays.asList(client.contacts().list(null, "alias", "^" + aid.name() + "$"));
-            if (!list.isEmpty()) {
-                Contacting.Contact contact = list.getFirst();
-                if (contact.getOobi().equals(aid.oobi())) {
-                    continue;
-                }
-            }
-
-            try {
-                Object op = client.oobis().resolve(aid.oobi(), aid.name());
-                Operation<Object> opBody = client.operations().wait(Operation.fromObject(op));
-                @SuppressWarnings("unchecked")
-                LinkedHashMap<String, Object> response =
-                        (LinkedHashMap<String, Object>) opBody.getResponse();
-
-                if (response.get("i") == null) {
-                    aids.add(aid); // repeat it
-                }
-            } catch (Exception e) {
-                System.out.println("Error resolving OOBI for " + aid.name() + ": " + e.getMessage());
-                throw e;
+    public static void getOrCreateContact(SignifyClient client, String name, String oobi) throws IOException, InterruptedException, LibsodiumException {
+        List<Contacting.Contact> list = Arrays.asList(client.contacts().list(null, "alias", "^" + name + "$"));
+        if (!list.isEmpty()) {
+            Contacting.Contact contact = list.getFirst();
+            if (contact.getOobi().equals(oobi)) {
+                return;
             }
         }
+        Object op = client.oobis().resolve(oobi, name);
+        Operation<Object> waitOp =
+                client.operations().wait(Operation.fromObject(op));
     }
 
     private static List<Notification> waitForNotifications(String route,
             SignifyClient client, Aid aid) throws IOException, InterruptedException {
-        int retryCount = 10;
         int waitTimeMs = 3000;
 
-        System.out.println("Waiting for notifications for route: " + route);
+        System.out.println("Waiting to be issued a credential...");
         System.out.println("Receiver client prefix: " + aid.prefix());
 
-        for (int i = 0; i < retryCount; i++) {
-            System.out.println(
-                    "Checking for notifications, attempt " + (i + 1) + " of " + retryCount);
+        while (true) {
+            System.out.println("...");
 
             try {
                 Notifying.Notifications.NotificationListResponse response =
                         client.notifications().list();
                 String notesResponse = response.notes();
-                System.out.println("Raw notification response: " + notesResponse);
 
                 List<Notification> receiverNotifications =
                         Utils.fromJson(notesResponse, new TypeReference<>() {});
-                System.out.println(receiverNotifications.size() + " total notifications found");
 
                 List<Notification> filteredNotifications =
                         receiverNotifications.stream().filter(note -> {
@@ -401,13 +381,9 @@ public class CreateProvenantCredential {
                             // Check if route matches
                             boolean routeMatches = note.a != null && route.equals(note.a.r);
 
-                            System.out.println("Filtering notification - isUnread: " + isUnread
-                                    + ", routeMatches: " + routeMatches);
                             return isUnread && routeMatches;
                         }).toList();
 
-                System.out.println(filteredNotifications.size()
-                        + " matching notifications found for route: " + route);
                 if (filteredNotifications.size() > 0) {
                     return filteredNotifications;
                 }
@@ -416,10 +392,8 @@ public class CreateProvenantCredential {
                 e.printStackTrace();
             }
 
-            System.out.println("No matching notifications yet, waiting " + waitTimeMs + "ms...");
             Thread.sleep(waitTimeMs);
         }
-        return null;
     }
 
     /**
@@ -446,6 +420,7 @@ public class CreateProvenantCredential {
         Object operation = client.ipex().submitAdmit(receiver.name(),
                 admitResult.exn(), admitResult.sigs(), admitResult.atc(),
                 Collections.singletonList(issuerAid));
+        System.out.println("operation is " + operation);
 
         // Wait for operation completion
         Operation<Object> waitOp =
@@ -497,16 +472,22 @@ public class CreateProvenantCredential {
         return null;
     }
 
-    private static boolean checkCredentialExists(SignifyClient client, Aid aid) {
-        try {
-            Optional<Object> credential = client.credentials().get(aid.prefix, true);
-            if (credential.isPresent()) {
-                return true;
-            }
-        } catch (Exception e) {
-            System.out.println("Error checking for existing credential: " + e.getMessage());
-        }
-        return false;
+    private static String getCredentialIdIfExists(SignifyClient client) {
+//        try {
+//            Map<String, Object> filter = new LinkedHashMap<>() {{
+//                put("-s", VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID);
+//            }};
+//            CredentialFilter credentialFilter = CredentialFilter.builder()
+//                    .filter(filter)
+//                    .build();
+//            List<Object> credential = client.credentials().list(credentialFilter);
+//            if (credential.size() > 0) {
+//                return "";//credential.getFirst();//todo get ID
+//            }
+//        } catch (Exception e) {
+//            System.out.println("Error checking for existing credential: " + e.getMessage());
+//        }
+        return "";
     }
 
     private static boolean promptYesNo(String prompt) {
