@@ -63,7 +63,7 @@ public class CreateProvenantCredential {
     // ------- Constants ------- //
     private static final String CLIENT_NAME = "GTReeveClient";
     private static final String REGISTRY_NAME = "GTRegistry";
-    private static final String IDENTIFIER_BRAN = "0ADF2TpptgqcDE5IQUF1H"; // TODO Need to randomized or passed in
+    private static final String IDENTIFIER_BRAN = System.getenv().getOrDefault("IDENTIFIER_BRAN", "0ADF2TpptgqcDE5IQUF1H");
     
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
     public static final String LE_SCHEMA_SAID = "ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY";
@@ -86,10 +86,29 @@ public class CreateProvenantCredential {
     private static final String LEI = "5493001KJTIIGC8Y1R12"; // Dummy LEI for testing
 
     // Wallet specific constants
-    private static final String mnemonic = "test test test test test test test test test test test test test test test test test test test test test test test sauce";
-    private static final Network network = Networks.testnet();
-    private static final BackendService backendService = new BFBackendService("http://localhost:8081/api/v1/", "Dummy Key");
+    private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "test test test test test test test test test test test test test test test test test test test test test test test sauce");
+    private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "preview");
+    private static final Network network = getNetwork();
+    private static final String BLOCKFROST_PROJECT_ID = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "Dummy Key");
+    private static final BackendService backendService = createBackendService();
     private static final QuickTxBuilder QuickTxBuilder = new QuickTxBuilder(backendService);
+
+    private static Network getNetwork() {
+        return switch (NETWORK_TYPE.toLowerCase()) {
+            case "mainnet" -> Networks.mainnet();
+            case "preprod" -> Networks.preprod();
+            default -> Networks.testnet(); // preview is the default
+        };
+    }
+
+    private static BackendService createBackendService() {
+        String baseUrl = switch (NETWORK_TYPE.toLowerCase()) {
+            case "mainnet" -> "https://cardano-mainnet.blockfrost.io/api/v0/";
+            case "preprod" -> "https://cardano-preprod.blockfrost.io/api/v0/";
+            default -> "https://cardano-preview.blockfrost.io/api/v0/";
+        };
+        return new BFBackendService(baseUrl, BLOCKFROST_PROJECT_ID);
+    }
 
 
 
@@ -112,23 +131,37 @@ public class CreateProvenantCredential {
         System.out.println("Client AID: " + aid.prefix() + " OOBI: " + aid.oobi());
 
         // ------- IPEX ADMIT ------- //
+        boolean credentialExists = checkCredentialExists(client, aid);
+        
+        String cesrQb64;
+        if (credentialExists) {
+            System.out.println("Credential already exists, skipping to on-chain submission");
+            Optional<Object> credential = client.credentials().get(aid.prefix, true);
+            cesrQb64 = (String) credential.orElseThrow();
+        } else {
+            // ------- IPEX ADMIT ------- //
+            List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
+            if (notifications == null || notifications.isEmpty()) {
+                throw new IllegalStateException(
+                        "No grant notifications received");
+            }
+            IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d,
+                        ISSUER_AID);
+            executeAdmitProcess(client, aid, ISSUER_AID, admitArgs, notifications.get(0).i);
 
-        List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
-        if (notifications == null || notifications.isEmpty()) {
-            throw new IllegalStateException(
-                    "No grant notifications received");
+            Optional<Object> credential = client.credentials().get(aid.prefix, true);
+            cesrQb64 = (String) credential.orElseThrow();
         }
-        IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d,
-                    ISSUER_AID);
-        executeAdmitProcess(client, aid, ISSUER_AID, admitArgs, notifications.get(0).i);
 
         // ------- Building the transaction ------- //
-
-        Optional<Object> credential = client.credentials().get(aid.prefix, true);
-        String cesrQb64 = (String) credential.orElseThrow();
         Optional<HabState> optional = client.identifiers().get(CLIENT_NAME);
         String prefix = optional.orElseThrow().getPrefix();
-        buildTransaction(prefix, cesrQb64.getBytes(), QVI_SCHEMA_SAID, LEI);
+        
+        if (promptYesNo("Do you want to publish this credential on-chain?")) {
+            buildTransaction(prefix, cesrQb64.getBytes(), QVI_SCHEMA_SAID, LEI);
+        } else {
+            System.out.println("Skipping on-chain publication");
+        }
 
         System.out.println("=== vLEI Credential Chain Setup Completed ===");
     }
@@ -460,6 +493,29 @@ public class CreateProvenantCredential {
             return contacts.getFirst().getId();
         }
         return null;
+    }
+
+    private static boolean checkCredentialExists(SignifyClient client, Aid aid) {
+        try {
+            Optional<Object> credential = client.credentials().get(aid.prefix, true);
+            if (credential.isPresent()) {
+                return true;
+            }
+        } catch (Exception e) {
+            System.out.println("Error checking for existing credential: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private static boolean promptYesNo(String prompt) {
+        System.out.print(prompt + " (yes/no): ");
+        try (java.util.Scanner scanner = new java.util.Scanner(System.in)) {
+            String response = scanner.nextLine().trim().toLowerCase();
+            return response.equals("yes") || response.equals("y");
+        } catch (Exception e) {
+            System.out.println("Error reading input: " + e.getMessage());
+            return false;
+        }
     }
 
     private static AvailableWitnesses getAvailableWitnesses(SignifyClient client) throws Exception {
