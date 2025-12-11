@@ -77,7 +77,8 @@ public class CreateProvenantCredential {
     public static final String LE_SCHEMA_URL = vLEIServer + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = vLEIServer + "/" + QVI_SCHEMA_SAID;
 
-    private static final List<String> WITNESS_IDS = Arrays.asList();
+    private static final String MISCONFIGURED_AGENT_CONFIGURATION = "Agent configuration is missing iurls";
+    private static final String INSUFFICIENT_WITNESSES_AVAILABLE = "Insufficient witnesses available";
 
     // TODO Replace with actual Issuer AID and Parent Credential ID
     private static final String ISSUER_AID = "DUMMY_AID";
@@ -170,6 +171,10 @@ public class CreateProvenantCredential {
 
     private static record Aid(String name, String prefix, String oobi) {}
 
+    private static record WitnessInfo(String eid, String oobi) {}
+
+    private static record AvailableWitnesses(int toad, List<WitnessInfo> witnesses) {}
+
     private static class Notification {
         public String i;
         public String dt;
@@ -206,9 +211,15 @@ public class CreateProvenantCredential {
     public static Aid createAid(SignifyClient client, String name) throws Exception {
         Object id = null;
         String eid = "";
+        
+        AvailableWitnesses availableWitnesses = getAvailableWitnesses(client);
+        List<String> witnessIds = availableWitnesses.witnesses().stream()
+            .map(WitnessInfo::eid)
+            .toList();
+        
         CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
-        kArgs.setToad(WITNESS_IDS.size());
-        kArgs.setWits(WITNESS_IDS);
+        kArgs.setToad(availableWitnesses.toad());
+        kArgs.setWits(witnessIds);
         Object op, ops;
         Optional<States.HabState> optionalIdentifier = client.identifiers().get(name);
         if (optionalIdentifier.isPresent()) {
@@ -449,5 +460,44 @@ public class CreateProvenantCredential {
             return contacts.getFirst().getId();
         }
         return null;
+    }
+
+    private static AvailableWitnesses getAvailableWitnesses(SignifyClient client) throws Exception {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) new Coring.Config(client).get();
+        
+        @SuppressWarnings("unchecked")
+        List<String> iurls = (List<String>) config.get("iurls");
+        if (iurls == null) {
+            throw new IllegalStateException(MISCONFIGURED_AGENT_CONFIGURATION);
+        }
+
+        Map<String, WitnessInfo> witnessMap = new LinkedHashMap<>();
+        for (String oobi : iurls) {
+            try {
+                java.net.URL url = new java.net.URL(oobi);
+                if (url != null) {
+                    String[] parts = oobi.split("/oobi/");
+                    if (parts.length > 1) {
+                        String eid = parts[1].split("/")[0];
+                        witnessMap.putIfAbsent(eid, new WitnessInfo(eid, oobi));
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println("Error parsing oobi URL: " + oobi + " - " + e.getMessage());
+            }
+        }
+
+        List<WitnessInfo> uniqueWitnesses = new ArrayList<>(witnessMap.values());
+        int size = uniqueWitnesses.size();
+
+        if (size >= 12) return new AvailableWitnesses(8, uniqueWitnesses.subList(0, 12));
+        if (size >= 10) return new AvailableWitnesses(7, uniqueWitnesses.subList(0, 10));
+        if (size >= 9) return new AvailableWitnesses(6, uniqueWitnesses.subList(0, 9));
+        if (size >= 7) return new AvailableWitnesses(5, uniqueWitnesses.subList(0, 7));
+        if (size >= 6) return new AvailableWitnesses(4, uniqueWitnesses.subList(0, 6));
+        if (size < 6 && size > 0) return new AvailableWitnesses(size, uniqueWitnesses.subList(0, size));
+
+        throw new IllegalStateException(INSUFFICIENT_WITNESSES_AVAILABLE);
     }
 }
