@@ -5,6 +5,7 @@
 //COMPILE_OPTIONS -source 24
 //RUNTIME_OPTIONS
 
+//REPOS snapshots=https://oss.sonatype.org/content/repositories/snapshots/
 //DEPS org.cardanofoundation:signify:0.1.2-ebfb904-SNAPSHOT
 //DEPS com.bloxbean.cardano:cardano-client-lib:0.7.0-beta2
 //DEPS com.bloxbean.cardano:cardano-client-backend-blockfrost:0.7.0-beta2
