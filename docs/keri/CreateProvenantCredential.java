@@ -209,14 +209,17 @@ public class CreateProvenantCredential {
     static void buildTransaction(String aid, byte[] credentialChain, String saidOfLeafCredentialSchema, String lei) {
         Account account = Account.createFromMnemonic(network, mnemonic);
 
-        Array credentialChunks = new Array();
-
+        byte[][] chunks = CreateProvenantCredential.splitIntoChunks(credentialChain, 64);
+        MetadataList credentialChunks = MetadataBuilder.createList();
+        for (byte[] chunk : chunks) {
+            credentialChunks.add(chunk);
+        }
 
         MetadataMap metadataMap = MetadataBuilder.createMap();
         metadataMap.put("t", "AUTH_BEGIN");
         metadataMap.put("s", saidOfLeafCredentialSchema);
         metadataMap.put("i", aid);
-        metadataMap.put("c", CreateProvenantCredential.splitIntoChunks(credentialChain, 64));
+        metadataMap.put("c", credentialChunks);
         MetadataMap v = MetadataBuilder.createMap();
         v.put("v", "1.0");
         v.put("k", "KERI10");
