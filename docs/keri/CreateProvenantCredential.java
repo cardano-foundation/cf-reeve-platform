@@ -81,7 +81,7 @@ public class CreateProvenantCredential {
     public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + QVI_SCHEMA_SAID;
 
-    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://127.0.0.1:3902/oobi/ELLfnHnBLhnvA_KiuHDnVBPQnIiwzGQ3FBvd61KktBBp/agent/EFwhZaBQbFkR56yBgwXfMmmi8_XUt2gyhTlrQa4wIfwX");
+    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://keria:3902/oobi/EPHDURdr576cf2HHjzqA68uqnTse0Pi7eMoDkBvr1-jw/agent/EBvTnpvK02atW3EYBbd4CRaEhzSe5a0V7_xREHxaHviB");
 
     private static final String MISCONFIGURED_AGENT_CONFIGURATION = "Agent configuration is missing iurls";
     private static final String INSUFFICIENT_WITNESSES_AVAILABLE = "Insufficient witnesses available";
@@ -146,6 +146,9 @@ public class CreateProvenantCredential {
         executeAdmitProcess(client, aid, issuerAid, admitArgs, notifications.get(0).i);
 
         Optional<String> credential = client.credentials().get(credentialId);
+        if (credential.isEmpty()) {
+            throw new IllegalStateException("Credential not found with ID: " + credentialId);
+        }
 
         List<Map<String, Object>> cesrData = CESRStreamUtil.parseCESRData(credential.get());
         String stripped = CreateProvenantCredential.strip(cesrData);
