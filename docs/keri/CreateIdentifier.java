@@ -29,7 +29,6 @@ public class CreateIdentifier {
         KeriUtils.Aid aid = KeriUtils.createAid(client, CLIENT_NAME);
 
         System.out.println("=== Identifier Created Successfully ===");
-        System.out.println("Identifier Name: " + CLIENT_NAME);
         System.out.println("Identifier Prefix (AID): " + aid.prefix());
         System.out.println("OOBI: " + aid.oobi());
         System.out.println("Passcode: " + passcode);
