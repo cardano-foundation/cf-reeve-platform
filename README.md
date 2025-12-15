@@ -66,6 +66,11 @@ This project offers the needed components to customize an own application. To ru
 **We will provide a sample application in the near future to demonstrate how to use the Reeve platform.**
 
 
+## Github Workflows
+As part of our Github build pipeline we are automatically syncing new platform versions to corresponding branchens in 
+[cf-reeve-application](https://github.com/cardano-foundation/cf-reeve-application) in order to ease the development
+workflow and test changes using E2E tests as soon as possible.
+
 ## Documentation
 
 | Link                                           | Audience   |
