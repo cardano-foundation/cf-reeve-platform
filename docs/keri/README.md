@@ -61,3 +61,9 @@ export BLOCKFROST_PROJECT_ID=<blockfrostkey>
 
 jbang docs/keri/ReceiveCredentialWithIdentifier.java
 ```
+
+## Advanced - re-submit
+
+In case there is an issue submitting the transaction onto Cardano, we may need to retry after receiving the credential.
+Using the same environment variables as above, `jbang docs/keri/advanced/PublishExistingCredential.java` may be used to fetch the already accepted credential and publish it on-chain again.
+You will be prompted `yes/no` for final submission if a credential is found.
