@@ -10,6 +10,7 @@
 //DEPS org.cardanofoundation:signify:0.1.2-ebfb904-SNAPSHOT
 //DEPS com.bloxbean.cardano:cardano-client-lib:0.7.1
 //DEPS com.bloxbean.cardano:cardano-client-backend-blockfrost:0.7.0-beta2
+//SOURCES KeriUtils.java
 // @formatter:on
 
 import java.math.BigInteger;
@@ -27,22 +28,14 @@ import java.util.Optional;
 import org.cardanofoundation.signify.app.Contacting;
 import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Notifying;
-import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
-import org.cardanofoundation.signify.app.aiding.EventResult;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Coring;
 import org.cardanofoundation.signify.app.coring.Operation;
-import org.cardanofoundation.signify.app.credentialing.credentials.CredentialData;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.app.credentialing.registries.CreateRegistryArgs;
 import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult;
-import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
-import org.cardanofoundation.signify.cesr.util.CoreUtil;
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 import org.cardanofoundation.signify.cesr.util.Utils;
-import org.cardanofoundation.signify.core.States;
-import org.cardanofoundation.signify.core.States.HabState;
 
 import com.bloxbean.cardano.client.account.Account;
 import com.bloxbean.cardano.client.api.model.Amount;
@@ -58,41 +51,33 @@ import com.bloxbean.cardano.client.metadata.MetadataMap;
 import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
 import com.bloxbean.cardano.client.quicktx.Tx;
 import com.bloxbean.cardano.client.quicktx.TxResult;
-import com.bloxbean.cardano.client.transaction.spec.Transaction;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-public class CreateProvenantCredential {
+public class ReceiveCredentialWithIdentifier {
+    private static final String REGISTRY_NAME = "CredentialRegistry";
+    private static final String IDENTIFIER_NAME = "GTReeveClient";
 
-    // ------- Constants ------- //
-    private static final String CLIENT_NAME = "GTReeveClient";
-    private static final String REGISTRY_NAME = "GTRegistry";
-    private static final String IDENTIFIER_BRAN = System.getenv().getOrDefault("IDENTIFIER_BRAN", "0ADF2TpptgqcDE5IQUF1x");
-    
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
     public static final String LE_SCHEMA_SAID = "ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY";
     private static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID = "EKU2UWx115nPv1JqWVMCFRn0_EMaME08HrUK5cLuTP89";
 
     public static final String SCHEMA_SERVER_URL = "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
-    public static final String KERI_URL = "http://127.0.0.1:3901";// "https://keria.staging.cardano-foundation.app.reeve.technology";
-    public static final String KERI_BOOT_URL = "http://127.0.0.1:3903";//"https://keria-boot.staging.cardano-foundation.app.reeve.technology";
-    // Schemas
+    public static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
+    public static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
+    
     public static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID;
     public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + QVI_SCHEMA_SAID;
 
-    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://keria:3902/oobi/EPHDURdr576cf2HHjzqA68uqnTse0Pi7eMoDkBvr1-jw/agent/EBvTnpvK02atW3EYBbd4CRaEhzSe5a0V7_xREHxaHviB");
-
-    private static final String MISCONFIGURED_AGENT_CONFIGURATION = "Agent configuration is missing iurls";
-    private static final String INSUFFICIENT_WITNESSES_AVAILABLE = "Insufficient witnesses available";
-
-    private static final String LEI = System.getenv().getOrDefault("LEI", "5493001KJTIIGC8Y1R12");
+    private static final String passcode = System.getenv().getOrDefault("PASSCODE", "");
+    private static final String LEI = System.getenv().getOrDefault("LEI", "");
 
     // Wallet specific constants
-    private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "test test test test test test test test test test test test test test test test test test test test test test test sauce");
-    private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "preview");
+    private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "");
+    private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "mainnet");
     private static final Network network = getNetwork();
-    private static final String BLOCKFROST_PROJECT_ID = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "dummy");
+    private static final String blockfrostProjectId = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "");
     private static final BackendService backendService = createBackendService();
     private static final QuickTxBuilder QuickTxBuilder = new QuickTxBuilder(backendService);
 
@@ -110,29 +95,50 @@ public class CreateProvenantCredential {
             case "preprod" -> "https://cardano-preprod.blockfrost.io/api/v0/";
             default -> "https://cardano-preview.blockfrost.io/api/v0/";
         };
-        return new BFBackendService(baseUrl, BLOCKFROST_PROJECT_ID);
+        return new BFBackendService(baseUrl, blockfrostProjectId);
     }
 
     public static void main(String[] args) throws Exception {
-        // --- SETUP REEVE CLIENT AND REGISTRY --- //
-        SignifyClient client = getOrCreateClient(IDENTIFIER_BRAN);
-        Aid aid = createAid(client, CLIENT_NAME);
+        Map<String, String> requiredEnvVars = Map.of(
+                "PASSCODE", passcode,
+                "LEI", LEI,
+                "MNEMONIC", mnemonic,
+                "BLOCKFROST_PROJECT_ID", blockfrostProjectId
+        );
+
+        requiredEnvVars.forEach((name, value) -> {
+            if (value == null || value.isEmpty()) {
+                System.err.println("ERROR: " + name + " environment variable is required.");
+                System.exit(1);
+            }
+        });
+
+        // --- SETUP CLIENT WITH EXISTING IDENTIFIER --- //
+        SignifyClient client = KeriUtils.connectClient(KERI_URL, KERI_BOOT_URL, passcode);
+        KeriUtils.Aid aid = KeriUtils.getExistingAid(client, IDENTIFIER_NAME);
+        
+        if (aid == null) {
+            System.err.println("ERROR: Identifier '" + IDENTIFIER_NAME + "' not found!");
+            System.exit(1);
+        }
+
+        System.out.println("Successfully connected to identifier:");
+        System.out.println("  AID: " + aid.prefix());
+        System.out.println("  OOBI: " + aid.oobi());
+        System.out.println();
+
         RegistryResult registry = createRegistry(client, aid, REGISTRY_NAME);
 
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
-        getOrCreateContact(client, "issuer", ISSUER_OOBI);
-
-        System.out.println("Client AID: " + aid.prefix() + " OOBI: " + aid.oobi());
-
-        String cesrQb64;
 
         // ------- IPEX ADMIT ------- //
         List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
         if (notifications == null || notifications.isEmpty()) {
-            throw new IllegalStateException(
-                    "No grant notifications received");
+            throw new IllegalStateException("No grant notifications received");
         }
+
+        System.out.println("Received credential grant notification!");
 
         LinkedHashMap<String, Object> map = (LinkedHashMap<String, Object>) client.exchanges().get(notifications.get(0).a.d).get();
         LinkedHashMap<String, Object> exn = (LinkedHashMap<String, Object>) map.get("exn");
@@ -142,20 +148,28 @@ public class CreateProvenantCredential {
         String issuerAid = (String) exn.get("i");
         String credentialId = (String) acdc.get("d");
 
+        System.out.println("Credential ID: " + credentialId);
+        System.out.println("Issuer AID: " + issuerAid);
+
         IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d, issuerAid);
         executeAdmitProcess(client, aid, issuerAid, admitArgs, notifications.get(0).i);
 
-        Optional<String> credential = client.credentials().get(credentialId);
+        System.out.println("Credential admitted successfully!");
+
+        Optional<String> credential = waitForCredential(client, credentialId);
         if (credential.isEmpty()) {
             throw new IllegalStateException("Credential not found with ID: " + credentialId);
         }
 
         List<Map<String, Object>> cesrData = CESRStreamUtil.parseCESRData(credential.get());
-        String stripped = CreateProvenantCredential.strip(cesrData);
+        String stripped = strip(cesrData);
 
-        // ------- Building the transaction ------- //
+        System.out.println("Credential chain prepared for Cardano transaction.");
+
         buildTransaction(aid.prefix(), stripped.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
-        System.out.println("=== vLEI Credential Chain Setup Completed ===");
+
+        System.out.println();
+        System.out.println("=== Credential Received and Stored on Cardano ===");
     }
 
     static String strip(List<Map<String, Object>> cesrData) {
@@ -212,7 +226,7 @@ public class CreateProvenantCredential {
     static void buildTransaction(String aid, byte[] credentialChain, String saidOfLeafCredentialSchema, String lei) {
         Account account = Account.createFromMnemonic(network, mnemonic);
 
-        byte[][] chunks = CreateProvenantCredential.splitIntoChunks(credentialChain, 64);
+        byte[][] chunks = splitIntoChunks(credentialChain, 64);
         MetadataList credentialChunks = MetadataBuilder.createList();
         for (byte[] chunk : chunks) {
             credentialChunks.add(chunk);
@@ -248,12 +262,11 @@ public class CreateProvenantCredential {
                 .postBalanceTx((context, txn) -> {
                     // Adjust fee AFTER balancing to account for metadata
                     BigInteger currentFee = txn.getBody().getFee();
-                    BigInteger adjustedFee = new BigInteger("390000"); // Slightly more than required 185995
+                    BigInteger adjustedFee = new BigInteger("390000"); // Slightly more than required
 
                     // Calculate the difference to adjust the change output
                     BigInteger feeDiff = adjustedFee.subtract(currentFee);
 
-                    // Update fee
                     txn.getBody().setFee(adjustedFee);
 
                     // Adjust the first output (change back to sender) to compensate
@@ -262,7 +275,6 @@ public class CreateProvenantCredential {
                         BigInteger currentAmount = output.getValue().getCoin();
                         output.getValue().setCoin(currentAmount.subtract(feeDiff));
                     }
-
                 })
                 .completeAndWait();
         System.out.println("txResult: " + txResult);
@@ -270,12 +282,6 @@ public class CreateProvenantCredential {
     }
 
     // ------- Helper Methods ------- //
-
-    private static record Aid(String name, String prefix, String oobi) {}
-
-    private static record WitnessInfo(String eid, String oobi) {}
-
-    private static record AvailableWitnesses(int toad, List<WitnessInfo> witnesses) {}
 
     private static class Notification {
         public String i;
@@ -291,7 +297,7 @@ public class CreateProvenantCredential {
     }
 
     public static byte[][] splitIntoChunks(byte[] data, int chunkSize) {
-        int numChunks = (data.length + chunkSize - 1) / chunkSize; // ceiling division
+        int numChunks = (data.length + chunkSize - 1) / chunkSize;
         byte[][] chunks = new byte[numChunks][];
 
         for (int i = 0; i < numChunks; i++) {
@@ -303,101 +309,13 @@ public class CreateProvenantCredential {
         return chunks;
     }
 
-    public static SignifyClient getOrCreateClient(String bran) throws Exception {
-
-        if (bran == null || bran.isEmpty()) {
-            bran = Coring.randomPasscode();
-        }
-
-        SignifyClient client = new SignifyClient(
-                KERI_URL, bran, Salter.Tier.low, KERI_BOOT_URL, null);
-        try {
-            client.connect();
-        } catch (Exception e) {
-            client.boot();
-            client.connect();
-        }
-        return client;
-    }
-
-    public static Aid createAid(SignifyClient client, String name) throws Exception {
-        Object id = null;
-        String eid = "";
-        
-        AvailableWitnesses availableWitnesses = getAvailableWitnesses(client);
-        List<String> witnessIds = availableWitnesses.witnesses().stream()
-            .map(WitnessInfo::eid)
-            .toList();
-        
-        CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
-        kArgs.setToad(availableWitnesses.toad());
-        kArgs.setWits(witnessIds);
-        Object op, ops;
-        Optional<States.HabState> optionalIdentifier = client.identifiers().get(name);
-        if (optionalIdentifier.isPresent()) {
-            id = optionalIdentifier.get().getPrefix();
-        } else {
-            EventResult result = client.identifiers().create(name, kArgs);
-            op = result.op();
-            op = client.operations().wait(Operation.fromObject(op));
-            LinkedHashMap<String, Object> resp = (LinkedHashMap<String, Object>) (Operation.fromObject(op).getResponse());
-        
-            id = resp.get("i");
-            if (client.getAgent() != null && client.getAgent().getPre() != null) {
-                eid = client.getAgent().getPre();
-            } else {
-                throw new IllegalStateException("Agent or pre is null");
-            }
-            if (!hasEndRole(client, name, "agent", eid)) {
-                EventResult results = client.identifiers().addEndRole(name, "agent", eid, null);
-                ops = results.op();
-                ops = client.operations().wait(Operation.fromObject(ops));
-            }
-        }
-
-        Object oobi = client.oobis().get(name, "agent").get();
-        String getOobi = ((LinkedHashMap) oobi).get("oobis").toString().replaceAll("[\\[\\]]", "");
-        String[] result = new String[] {id != null ? id.toString() : null, getOobi};
-        return new Aid(name, result[0], result[1]);
-    }
-
-    public static Boolean hasEndRole(SignifyClient client, String alias, String role, String eid)
-            throws Exception {
-        List<Map<String, Object>> list = getEndRoles(client, alias, role);
-        for (Map<String, Object> endRoleMap : list) {
-            String endRole = (String) endRoleMap.get("role");
-            String endRoleEid = (String) endRoleMap.get("eid");
-
-            if (endRole != null && endRoleEid != null && endRole.equals(role)
-                    && endRoleEid.equals(eid)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public static List<Map<String, Object>> getEndRoles(SignifyClient client, String alias, String role) throws Exception {
-        String path = (role != null)
-                ? "/identifiers/" + alias + "/endroles/" + role
-                : "/identifiers/" + alias + "/endroles";
-
-        HttpResponse<String> response = client.fetch(path, "GET", alias, null);
-        String responseBody = response.body();
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        List<Map<String, Object>> result = objectMapper.readValue(responseBody, new TypeReference<>() {
-        });
-        return result;
-    }
-
-    private static RegistryResult createRegistry(SignifyClient client, Aid aid, String registryName) {
+    private static RegistryResult createRegistry(SignifyClient client, KeriUtils.Aid aid, String registryName) {
         CreateRegistryArgs registryArgs = CreateRegistryArgs.builder().build();
         registryArgs.setRegistryName(registryName);
         registryArgs.setName(aid.name());
         RegistryResult registryResult;
         try {
             registryResult = client.registries().create(registryArgs);
-            
             Operation<Object> wait = client.operations().wait(Operation.fromObject(registryResult.op()));
             return registryResult;
         } catch (Exception e) {
@@ -412,10 +330,8 @@ public class CreateProvenantCredential {
                 Object result = client.oobis().resolve(schemaUrl, null);
                 client.operations().wait(Operation.fromObject(result));
             } catch (LibsodiumException | IOException | InterruptedException e) {
-                // TODO Auto-generated catch block
                 e.printStackTrace();
             }
-            
         }
     }
 
@@ -428,12 +344,10 @@ public class CreateProvenantCredential {
             }
         }
         Object op = client.oobis().resolve(oobi, name);
-        Operation<Object> waitOp =
-                client.operations().wait(Operation.fromObject(op));
+        Operation<Object> waitOp = client.operations().wait(Operation.fromObject(op));
     }
-
     private static List<Notification> waitForNotifications(String route,
-            SignifyClient client, Aid aid) throws IOException, InterruptedException {
+            SignifyClient client, KeriUtils.Aid aid) throws IOException, InterruptedException {
         int waitTimeMs = 3000;
 
         System.out.println("Waiting to be issued a credential...");
@@ -452,9 +366,7 @@ public class CreateProvenantCredential {
 
                 List<Notification> filteredNotifications =
                         receiverNotifications.stream().filter(note -> {
-                            // Check if notification has not been read yet (r field should be false)
                             boolean isUnread = !Boolean.TRUE.equals(note.r);
-                            // Check if route matches
                             boolean routeMatches = note.a != null && route.equals(note.a.r);
 
                             return isUnread && routeMatches;
@@ -470,6 +382,37 @@ public class CreateProvenantCredential {
 
             Thread.sleep(waitTimeMs);
         }
+    }
+
+    /**
+     * Wait for credential to be available in the credential store
+     * The credential may not be immediately available after admit process completes
+     */
+    private static Optional<String> waitForCredential(SignifyClient client, String credentialId) 
+            throws InterruptedException {
+        int maxAttempts = 10;
+        int waitTimeMs = 2000;
+        
+        System.out.println("Waiting for credential to be available in store...");
+        
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                Optional<String> credential = client.credentials().get(credentialId);
+                if (credential.isPresent()) {
+                    System.out.println("Credential retrieved successfully!");
+                    return credential;
+                }
+            } catch (Exception e) {
+                System.out.println("Attempt " + attempt + " failed: " + e.getMessage());
+            }
+            
+            if (attempt < maxAttempts) {
+                System.out.println("Credential not yet available, waiting... (attempt " + attempt + "/" + maxAttempts + ")");
+                Thread.sleep(waitTimeMs);
+            }
+        }
+        
+        return Optional.empty();
     }
 
     /**
@@ -489,15 +432,13 @@ public class CreateProvenantCredential {
         return args;
     }
 
-    private static void executeAdmitProcess(SignifyClient client, Aid receiver, String issuerAid,
+    private static void executeAdmitProcess(SignifyClient client, KeriUtils.Aid receiver, String issuerAid,
             IpexAdmitArgs admitArgs, String notificationId) throws Exception {
-        // Create and submit admit
         Exchanging.ExchangeMessageResult admitResult = client.ipex().admit(admitArgs);
         Object operation = client.ipex().submitAdmit(receiver.name(),
                 admitResult.exn(), admitResult.sigs(), admitResult.atc(),
                 Collections.singletonList(issuerAid));
 
-        // Wait for operation completion
         Operation<Object> waitOp =
                 client.operations().wait(Operation.fromObject(operation));
         if (!waitOp.isDone() || waitOp.getError() != null) {
@@ -505,84 +446,7 @@ public class CreateProvenantCredential {
                     + (waitOp.getError() != null ? waitOp.getError() : "unknown"));
         }
 
-        // Mark notification as read and cleanup
         client.notifications().mark(notificationId);
         client.operations().delete(waitOp.getName());
-    }
-
-    private static CredentialData.CredentialSubject buildCredentialSubject(
-            SignifyClient issuerClient, Aid recipientAid, String lei) {
-
-        Map<String, Object> additionalProperties = new LinkedHashMap<>();
-        additionalProperties.put("LEI", lei);
-
-        CredentialData.CredentialSubject subject =
-                CredentialData.CredentialSubject.builder().build();
-        subject.setI(resolveRecipientContact(issuerClient, recipientAid));
-        subject.setAdditionalProperties(additionalProperties);
-        return subject;
-    }
-
-    private static String resolveRecipientContact(SignifyClient issuerClient, Aid recipientAid) {
-        try {
-            String contactId = getContactId(issuerClient, recipientAid.name());
-            if (contactId != null) {
-                System.out.println("Using resolved contact ID: " + contactId);
-                return contactId;
-            }
-        } catch (Exception e) {
-            System.out.println("ERROR resolving contact ID: " + e.getMessage());
-        }
-
-        System.out.println("WARNING: Using original prefix as fallback: " + recipientAid.prefix());
-        return recipientAid.prefix();
-    }
-
-    public static String getContactId(SignifyClient client, String alias) throws Exception {
-        List<Contacting.Contact> contacts =
-                Arrays.asList(client.contacts().list(null, "alias", "^" + alias + "$"));
-        if (!contacts.isEmpty()) {
-            return contacts.getFirst().getId();
-        }
-        return null;
-    }
-
-    private static AvailableWitnesses getAvailableWitnesses(SignifyClient client) throws Exception {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> config = (Map<String, Object>) new Coring.Config(client).get();
-        
-        @SuppressWarnings("unchecked")
-        List<String> iurls = (List<String>) config.get("iurls");
-        if (iurls == null) {
-            throw new IllegalStateException(MISCONFIGURED_AGENT_CONFIGURATION);
-        }
-
-        Map<String, WitnessInfo> witnessMap = new LinkedHashMap<>();
-        for (String oobi : iurls) {
-            try {
-                java.net.URL url = new java.net.URL(oobi);
-                if (url != null) {
-                    String[] parts = oobi.split("/oobi/");
-                    if (parts.length > 1) {
-                        String eid = parts[1].split("/")[0];
-                        witnessMap.putIfAbsent(eid, new WitnessInfo(eid, oobi));
-                    }
-                }
-            } catch (Exception e) {
-                System.out.println("Error parsing oobi URL: " + oobi + " - " + e.getMessage());
-            }
-        }
-
-        List<WitnessInfo> uniqueWitnesses = new ArrayList<>(witnessMap.values());
-        int size = uniqueWitnesses.size();
-
-        if (size >= 12) return new AvailableWitnesses(8, uniqueWitnesses.subList(0, 12));
-        if (size >= 10) return new AvailableWitnesses(7, uniqueWitnesses.subList(0, 10));
-        if (size >= 9) return new AvailableWitnesses(6, uniqueWitnesses.subList(0, 9));
-        if (size >= 7) return new AvailableWitnesses(5, uniqueWitnesses.subList(0, 7));
-        if (size >= 6) return new AvailableWitnesses(4, uniqueWitnesses.subList(0, 6));
-        if (size < 6 && size > 0) return new AvailableWitnesses(size, uniqueWitnesses.subList(0, size));
-
-        throw new IllegalStateException(INSUFFICIENT_WITNESSES_AVAILABLE);
     }
 }
