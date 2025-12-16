@@ -259,23 +259,6 @@ public class ReceiveCredentialWithIdentifier {
         TxResult txResult = QuickTxBuilder.compose(tx)
                 .withSigner(SignerProviders.signerFrom(account))
                 .feePayer(account.baseAddress())
-                .postBalanceTx((context, txn) -> {
-                    // Adjust fee AFTER balancing to account for metadata
-                    BigInteger currentFee = txn.getBody().getFee();
-                    BigInteger adjustedFee = new BigInteger("390000"); // Slightly more than required
-
-                    // Calculate the difference to adjust the change output
-                    BigInteger feeDiff = adjustedFee.subtract(currentFee);
-
-                    txn.getBody().setFee(adjustedFee);
-
-                    // Adjust the first output (change back to sender) to compensate
-                    if (!txn.getBody().getOutputs().isEmpty()) {
-                        var output = txn.getBody().getOutputs().get(0);
-                        BigInteger currentAmount = output.getValue().getCoin();
-                        output.getValue().setCoin(currentAmount.subtract(feeDiff));
-                    }
-                })
                 .completeAndWait();
         System.out.println("txResult: " + txResult);
         System.out.println("Transaction submitted. Tx Hash: " + txResult.getTxHash());
