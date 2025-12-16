@@ -193,7 +193,7 @@ Key dependencies (see pom.xml for complete list):
 
 ## Related Documentation
 
-For standalone scripts that demonstrate specific aspects of KERI-Cardano integration, see the [parent directory README](../README.md) which covers:
+For standalone scripts that demonstrate specific aspects of KERI-Cardano integration, see the [parent directory README](../old/README.md) which covers:
 - `AttestJsonMetadata.java` - Attesting to existing on-chain metadata
 - `CreateProvenantCredential.java` - Creating provenant credentials
 

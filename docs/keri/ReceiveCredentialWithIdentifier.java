@@ -55,38 +55,29 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class ReceiveCredentialWithIdentifier {
-
-    // ------- Constants ------- //
     private static final String REGISTRY_NAME = "CredentialRegistry";
-    
-    // Required: Passcode from CreateRandomIdentifier.java
-    private static final String IDENTIFIER_BRAN = System.getenv("IDENTIFIER_BRAN");
-    
-    // Required: Identifier name from CreateRandomIdentifier.java
     private static final String IDENTIFIER_NAME = "GTReeveClient";
-    
+
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
     public static final String LE_SCHEMA_SAID = "ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY";
     private static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID = "EKU2UWx115nPv1JqWVMCFRn0_EMaME08HrUK5cLuTP89";
 
     public static final String SCHEMA_SERVER_URL = "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
-    public static final String KERI_URL = "http://127.0.0.1:3901";
-    public static final String KERI_BOOT_URL = "http://127.0.0.1:3903";
+    public static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
+    public static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
     
-    // Schemas
     public static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID;
     public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + QVI_SCHEMA_SAID;
 
-    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://keria:3902/oobi/EPHDURdr576cf2HHjzqA68uqnTse0Pi7eMoDkBvr1-jw/agent/EBvTnpvK02atW3EYBbd4CRaEhzSe5a0V7_xREHxaHviB");
-
-    private static final String LEI = System.getenv().getOrDefault("LEI", "5493001KJTIIGC8Y1R12");
+    private static final String passcode = System.getenv().getOrDefault("PASSCODE", "");
+    private static final String LEI = System.getenv().getOrDefault("LEI", "");
 
     // Wallet specific constants
-    private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "test test test test test test test test test test test test test test test test test test test test test test test sauce");
-    private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "preview");
+    private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "");
+    private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "mainnet");
     private static final Network network = getNetwork();
-    private static final String BLOCKFROST_PROJECT_ID = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "dummy");
+    private static final String blockfrostProjectId = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "");
     private static final BackendService backendService = createBackendService();
     private static final QuickTxBuilder QuickTxBuilder = new QuickTxBuilder(backendService);
 
@@ -104,18 +95,26 @@ public class ReceiveCredentialWithIdentifier {
             case "preprod" -> "https://cardano-preprod.blockfrost.io/api/v0/";
             default -> "https://cardano-preview.blockfrost.io/api/v0/";
         };
-        return new BFBackendService(baseUrl, BLOCKFROST_PROJECT_ID);
+        return new BFBackendService(baseUrl, blockfrostProjectId);
     }
 
     public static void main(String[] args) throws Exception {
-        // Validate required environment variables
-        if (IDENTIFIER_BRAN == null || IDENTIFIER_BRAN.isEmpty()) {
-            System.err.println("ERROR: IDENTIFIER_BRAN environment variable is required.");
-            System.exit(1);
-        }
+        Map<String, String> requiredEnvVars = Map.of(
+                "PASSCODE", passcode,
+                "LEI", LEI,
+                "MNEMONIC", mnemonic,
+                "BLOCKFROST_PROJECT_ID", blockfrostProjectId
+        );
+
+        requiredEnvVars.forEach((name, value) -> {
+            if (value == null || value.isEmpty()) {
+                System.err.println("ERROR: " + name + " environment variable is required.");
+                System.exit(1);
+            }
+        });
 
         // --- SETUP CLIENT WITH EXISTING IDENTIFIER --- //
-        SignifyClient client = KeriUtils.connectClient(KERI_URL, KERI_BOOT_URL, IDENTIFIER_BRAN);
+        SignifyClient client = KeriUtils.connectClient(KERI_URL, KERI_BOOT_URL, passcode);
         KeriUtils.Aid aid = KeriUtils.getExistingAid(client, IDENTIFIER_NAME);
         
         if (aid == null) {
@@ -128,15 +127,10 @@ public class ReceiveCredentialWithIdentifier {
         System.out.println("  OOBI: " + aid.oobi());
         System.out.println();
 
-        // Create registry if it doesn't exist
         RegistryResult registry = createRegistry(client, aid, REGISTRY_NAME);
 
-        // Resolve schemas
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
-        
-        // Add issuer contact
-        getOrCreateContact(client, "issuer", ISSUER_OOBI);
 
         // ------- IPEX ADMIT ------- //
         List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
@@ -162,7 +156,6 @@ public class ReceiveCredentialWithIdentifier {
 
         System.out.println("Credential admitted successfully!");
 
-        // Wait for credential to be available in the credential store
         Optional<String> credential = waitForCredential(client, credentialId);
         if (credential.isEmpty()) {
             throw new IllegalStateException("Credential not found with ID: " + credentialId);
@@ -173,9 +166,8 @@ public class ReceiveCredentialWithIdentifier {
 
         System.out.println("Credential chain prepared for Cardano transaction.");
 
-        // ------- Building the transaction ------- //
         buildTransaction(aid.prefix(), stripped.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
-        
+
         System.out.println();
         System.out.println("=== Credential Received and Stored on Cardano ===");
     }
@@ -275,7 +267,6 @@ public class ReceiveCredentialWithIdentifier {
                     // Calculate the difference to adjust the change output
                     BigInteger feeDiff = adjustedFee.subtract(currentFee);
 
-                    // Update fee
                     txn.getBody().setFee(adjustedFee);
 
                     // Adjust the first output (change back to sender) to compensate
@@ -306,7 +297,7 @@ public class ReceiveCredentialWithIdentifier {
     }
 
     public static byte[][] splitIntoChunks(byte[] data, int chunkSize) {
-        int numChunks = (data.length + chunkSize - 1) / chunkSize; // ceiling division
+        int numChunks = (data.length + chunkSize - 1) / chunkSize;
         byte[][] chunks = new byte[numChunks][];
 
         for (int i = 0; i < numChunks; i++) {
@@ -375,9 +366,7 @@ public class ReceiveCredentialWithIdentifier {
 
                 List<Notification> filteredNotifications =
                         receiverNotifications.stream().filter(note -> {
-                            // Check if notification has not been read yet (r field should be false)
                             boolean isUnread = !Boolean.TRUE.equals(note.r);
-                            // Check if route matches
                             boolean routeMatches = note.a != null && route.equals(note.a.r);
 
                             return isUnread && routeMatches;
@@ -445,13 +434,11 @@ public class ReceiveCredentialWithIdentifier {
 
     private static void executeAdmitProcess(SignifyClient client, KeriUtils.Aid receiver, String issuerAid,
             IpexAdmitArgs admitArgs, String notificationId) throws Exception {
-        // Create and submit admit
         Exchanging.ExchangeMessageResult admitResult = client.ipex().admit(admitArgs);
         Object operation = client.ipex().submitAdmit(receiver.name(),
                 admitResult.exn(), admitResult.sigs(), admitResult.atc(),
                 Collections.singletonList(issuerAid));
 
-        // Wait for operation completion
         Operation<Object> waitOp =
                 client.operations().wait(Operation.fromObject(operation));
         if (!waitOp.isDone() || waitOp.getError() != null) {
@@ -459,7 +446,6 @@ public class ReceiveCredentialWithIdentifier {
                     + (waitOp.getError() != null ? waitOp.getError() : "unknown"));
         }
 
-        // Mark notification as read and cleanup
         client.notifications().mark(notificationId);
         client.operations().delete(waitOp.getName());
     }

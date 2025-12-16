@@ -16,15 +16,13 @@ import org.cardanofoundation.signify.app.coring.Coring;
 
 public class CreateIdentifier {
 
-    private static final String KERI_URL = "http://127.0.0.1:3901";
-    private static final String KERI_BOOT_URL = "http://127.0.0.1:3903";
+    private static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
+    private static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
     private static final String CLIENT_NAME = "GTReeveClient";
 
     public static void main(String[] args) throws Exception {
-        // Generate random passcode
         String passcode = Coring.randomPasscode();
 
-        // Create client with random passcode
         SignifyClient client = KeriUtils.getOrCreateClient(KERI_URL, KERI_BOOT_URL, passcode);
         KeriUtils.Aid aid = KeriUtils.createAid(client, CLIENT_NAME);
 
