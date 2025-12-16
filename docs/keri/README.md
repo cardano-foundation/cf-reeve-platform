@@ -8,20 +8,13 @@ This directory contains jbang scripts which can be used to bootstrap Reeve attes
 - Cardano wallet mnemonic for transaction signing
 
 ## High level outline
-1. Retrieve the OOBI (Out-Of-Band-Introduction) URL for the legal entity identifier from QVI Suite
-2. Run `CreateIdentifier.java` after setting the `LEGAL_ENTITY_OOBI` environment variable to the retrieved OOBI URL
-3. Use the output of `CreateIdentifier.java` to perform the credential issuance from the QVI Suite
-4. Run `ReceiveCredentialWithIdentifier.java` to accept the credential issuance, and write it on Cardano for discovery for Reeve attestations
-
-The order of these steps is strict.
+1. Run `CreateIdentifier.java`
+2. Use the output of `CreateIdentifier.java` to perform the credential issuance from the QVI Suite
+3. Run `ReceiveCredentialWithIdentifier.java` to accept the credential issuance, and write it on Cardano for discovery for Reeve attestations
 
 ## Creation of the identifier
 
-For this example, lets assume the OOBI of the legal entity identifier within the QVI Suite is `http://127.0.0.1:3902/oobi/EKsgZSDfMc0Vje7Z9LfIb0dOUWI05_wweEK4w1Dv2rom/agent/EHoLTUK7bJ7LZTGWxxuLtvKcqfYEAeBLBF6bOvlYKdvv`.
-
 ```bash
-export LEGAL_ENTITY_OOBI=http://127.0.0.1:3902/oobi/EKsgZSDfMc0Vje7Z9LfIb0dOUWI05_wweEK4w1Dv2rom/agent/EHoLTUK7bJ7LZTGWxxuLtvKcqfYEAeBLBF6bOvlYKdvv
-
 jbang docs/keri/CreateIdentifier.java
 ```
 
