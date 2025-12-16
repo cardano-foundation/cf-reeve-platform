@@ -64,7 +64,7 @@ A number of environment variables must be set for this to work:
 export PASSCODE=A2lSGsKYW1uXB0jZjsF-w
 export LEI=5493001KJTIIGC8Y1R12
 export MNEMONIC="test test test test test test test test test test test test test test test test test test test test test test test sauce"
-export BLOCKFROST_PROJECT_ID=preview4Ixkw19qg8MmxU2InS3GuNrLdQga6CCT
+export BLOCKFROST_PROJECT_ID=<blockfrostkey>
 
 jbang docs/keri/ReceiveCredentialWithIdentifier.java
 ```
