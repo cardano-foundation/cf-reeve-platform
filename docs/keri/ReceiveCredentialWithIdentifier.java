@@ -31,8 +31,6 @@ import org.cardanofoundation.signify.app.Notifying;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
-import org.cardanofoundation.signify.app.credentialing.registries.CreateRegistryArgs;
-import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 import org.cardanofoundation.signify.cesr.util.Utils;
@@ -55,7 +53,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class ReceiveCredentialWithIdentifier {
-    private static final String REGISTRY_NAME = "CredentialRegistry";
     private static final String IDENTIFIER_NAME = "GTReeveClient";
 
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
@@ -78,6 +75,7 @@ public class ReceiveCredentialWithIdentifier {
     private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "mainnet");
     private static final Network network = getNetwork();
     private static final String blockfrostProjectId = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "");
+
     private static final BackendService backendService = createBackendService();
     private static final QuickTxBuilder QuickTxBuilder = new QuickTxBuilder(backendService);
 
@@ -126,8 +124,6 @@ public class ReceiveCredentialWithIdentifier {
         System.out.println("  AID: " + aid.prefix());
         System.out.println("  OOBI: " + aid.oobi());
         System.out.println();
-
-        RegistryResult registry = createRegistry(client, aid, REGISTRY_NAME);
 
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
@@ -244,7 +240,7 @@ public class ReceiveCredentialWithIdentifier {
         metadataMap.put("v", v);
         MetadataMap m = MetadataBuilder.createMap();
         MetadataList l = MetadataBuilder.createList();
-        l.add("1447");
+        l.add(BigInteger.valueOf(1447));
         m.put("l", l);
         m.put("LEI", lei);
         metadataMap.put("m", m);
@@ -292,21 +288,6 @@ public class ReceiveCredentialWithIdentifier {
         return chunks;
     }
 
-    private static RegistryResult createRegistry(SignifyClient client, KeriUtils.Aid aid, String registryName) {
-        CreateRegistryArgs registryArgs = CreateRegistryArgs.builder().build();
-        registryArgs.setRegistryName(registryName);
-        registryArgs.setName(aid.name());
-        RegistryResult registryResult;
-        try {
-            registryResult = client.registries().create(registryArgs);
-            Operation<Object> wait = client.operations().wait(Operation.fromObject(registryResult.op()));
-            return registryResult;
-        } catch (Exception e) {
-            // Probably exists
-        }
-        return null;
-    }
-
     private static void resolveSchemas(SignifyClient client, List<String> schemaUrls) {
         for (String schemaUrl : schemaUrls) {
             try {
@@ -318,17 +299,6 @@ public class ReceiveCredentialWithIdentifier {
         }
     }
 
-    public static void getOrCreateContact(SignifyClient client, String name, String oobi) throws IOException, InterruptedException, LibsodiumException {
-        List<Contacting.Contact> list = Arrays.asList(client.contacts().list(null, "alias", "^" + name + "$"));
-        if (!list.isEmpty()) {
-            Contacting.Contact contact = list.getFirst();
-            if (contact.getOobi().equals(oobi)) {
-                return;
-            }
-        }
-        Object op = client.oobis().resolve(oobi, name);
-        Operation<Object> waitOp = client.operations().wait(Operation.fromObject(op));
-    }
     private static List<Notification> waitForNotifications(String route,
             SignifyClient client, KeriUtils.Aid aid) throws IOException, InterruptedException {
         int waitTimeMs = 3000;

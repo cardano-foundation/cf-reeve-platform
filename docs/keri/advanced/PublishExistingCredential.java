@@ -32,8 +32,6 @@ import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.credentialing.credentials.CredentialFilter;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
-import org.cardanofoundation.signify.app.credentialing.registries.CreateRegistryArgs;
-import org.cardanofoundation.signify.app.credentialing.registries.RegistryResult;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 import org.cardanofoundation.signify.cesr.util.Utils;
@@ -56,14 +54,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class PublishExistingCredential {
-
-    // ------- Constants ------- //
-    private static final String REGISTRY_NAME = "CredentialRegistry";
-    
-    // Required: Passcode from CreateRandomIdentifier.java
-    private static final String IDENTIFIER_BRAN = System.getenv("IDENTIFIER_BRAN");
-    
-    // Required: Identifier name from CreateRandomIdentifier.java
     private static final String IDENTIFIER_NAME = "GTReeveClient";
     
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
@@ -71,23 +61,22 @@ public class PublishExistingCredential {
     private static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID = "EKU2UWx115nPv1JqWVMCFRn0_EMaME08HrUK5cLuTP89";
 
     public static final String SCHEMA_SERVER_URL = "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
-    public static final String KERI_URL = "http://127.0.0.1:3901";
-    public static final String KERI_BOOT_URL = "http://127.0.0.1:3903";
+    public static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
+    public static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
     
-    // Schemas
     public static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID;
     public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;
     public static final String QVI_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + QVI_SCHEMA_SAID;
 
-    private static final String ISSUER_OOBI = System.getenv().getOrDefault("ISSUER_OOBI", "http://keria:3902/oobi/EPHDURdr576cf2HHjzqA68uqnTse0Pi7eMoDkBvr1-jw/agent/EBvTnpvK02atW3EYBbd4CRaEhzSe5a0V7_xREHxaHviB");
-
-    private static final String LEI = System.getenv().getOrDefault("LEI", "5493001KJTIIGC8Y1R12");
+    private static final String passcode = System.getenv().getOrDefault("PASSCODE", "");
+    private static final String LEI = System.getenv().getOrDefault("LEI", "");
 
     // Wallet specific constants
-    private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "test test test test test test test test test test test test test test test test test test test test test test test sauce");
-    private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "preview");
+    private static final String mnemonic = System.getenv().getOrDefault("MNEMONIC", "");
+    private static final String NETWORK_TYPE = System.getenv().getOrDefault("NETWORK", "mainnet");
     private static final Network network = getNetwork();
-    private static final String BLOCKFROST_PROJECT_ID = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "dummy");
+    private static final String blockfrostProjectId = System.getenv().getOrDefault("BLOCKFROST_PROJECT_ID", "");
+
     private static final BackendService backendService = createBackendService();
     private static final QuickTxBuilder QuickTxBuilder = new QuickTxBuilder(backendService);
 
@@ -105,18 +94,26 @@ public class PublishExistingCredential {
             case "preprod" -> "https://cardano-preprod.blockfrost.io/api/v0/";
             default -> "https://cardano-preview.blockfrost.io/api/v0/";
         };
-        return new BFBackendService(baseUrl, BLOCKFROST_PROJECT_ID);
+        return new BFBackendService(baseUrl, blockfrostProjectId);
     }
 
     public static void main(String[] args) throws Exception {
-        // Validate required environment variables
-        if (IDENTIFIER_BRAN == null || IDENTIFIER_BRAN.isEmpty()) {
-            System.err.println("ERROR: IDENTIFIER_BRAN environment variable is required.");
-            System.exit(1);
-        }
+        Map<String, String> requiredEnvVars = Map.of(
+                "PASSCODE", passcode,
+                "LEI", LEI,
+                "MNEMONIC", mnemonic,
+                "BLOCKFROST_PROJECT_ID", blockfrostProjectId
+        );
+
+        requiredEnvVars.forEach((name, value) -> {
+            if (value == null || value.isEmpty()) {
+                System.err.println("ERROR: " + name + " environment variable is required.");
+                System.exit(1);
+            }
+        });
 
         // --- SETUP CLIENT WITH EXISTING IDENTIFIER --- //
-        SignifyClient client = KeriUtils.connectClient(KERI_URL, KERI_BOOT_URL, IDENTIFIER_BRAN);
+        SignifyClient client = KeriUtils.connectClient(KERI_URL, KERI_BOOT_URL, passcode);
         KeriUtils.Aid aid = KeriUtils.getExistingAid(client, IDENTIFIER_NAME);
         
         if (aid == null) {
@@ -129,53 +126,42 @@ public class PublishExistingCredential {
         System.out.println("  OOBI: " + aid.oobi());
         System.out.println();
 
-        // Create registry if it doesn't exist
-        RegistryResult registry = createRegistry(client, aid, REGISTRY_NAME);
-
-        // Resolve schemas
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
-        
-        // Add issuer contact
-        getOrCreateContact(client, "issuer", ISSUER_OOBI);
 
-        // Check if credential was already issued
         List<Map<String, Object>> existingCredentials = findIssuedCredential(client, aid.prefix(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID);
-        if (existingCredentials.size() > 0) {
-            // Ask user if they want to push existing credential to chain
-            System.out.print("\nDo you want to push the existing credential to the blockchain? (yes/no): ");
-            String response = System.console() != null ? System.console().readLine() : new java.util.Scanner(System.in).nextLine();
-            
-            if (response != null && (response.equalsIgnoreCase("yes") || response.equalsIgnoreCase("y"))) {
-                // Get the credential ID from the first existing credential
-                Map<String, Object> firstCred = existingCredentials.get(0);
-                Object sadObj = firstCred.get("sad");
-                
-                String existingCredId;
-                if (sadObj instanceof Map) {
-                    existingCredId = (String) ((Map<String, Object>) sadObj).get("d");
-                } else {
-                    existingCredId = (String) sadObj;
-                }
-                
-                // Retrieve the full credential
-                Optional<String> credential = client.credentials().get(existingCredId);
-                if (credential.isPresent()) {                 
-                    List<Map<String, Object>> cesrData = CESRStreamUtil.parseCESRData(credential.get());
-                    String stripped = strip(cesrData);             
-                    // Build and submit transaction
-                    buildTransaction(aid.prefix(), stripped.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
-                    System.exit(1);
-                } else {
-                    System.err.println("ERROR: Could not retrieve full credential data for ID: " + existingCredId);
-                    System.exit(1);
-                }
-            } else {
-                System.out.println("Skipping blockchain push for existing credential.");
-                System.exit(1);
-            }
-        } else {
+        if (existingCredentials.size() == 0) {
             System.out.println("No existing credential found.");
+            System.exit(1);
+        }
+
+        System.out.print("\nExisting credential found. Do you want to push the existing credential to the blockchain? (yes/no): ");
+        String response = System.console() != null ? System.console().readLine() : new java.util.Scanner(System.in).nextLine();
+
+        if (response == null || !(response.equalsIgnoreCase("yes") || response.equalsIgnoreCase("y"))) {
+            System.out.println("Skipping blockchain push for existing credential.");
+            System.exit(1);
+        }
+
+        Map<String, Object> firstCred = existingCredentials.get(0);
+        Object sadObj = firstCred.get("sad");
+
+        String existingCredId;
+        if (sadObj instanceof Map) {
+            existingCredId = (String) ((Map<String, Object>) sadObj).get("d");
+        } else {
+            existingCredId = (String) sadObj;
+        }
+
+        // Re-fetch as we need the full CESR stream, not JSON variant
+        Optional<String> credential = client.credentials().get(existingCredId);
+        if (credential.isPresent()) {
+            List<Map<String, Object>> cesrData = CESRStreamUtil.parseCESRData(credential.get());
+            String stripped = strip(cesrData);
+
+            buildTransaction(aid.prefix(), stripped.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
+        } else {
+            System.err.println("ERROR: Could not retrieve full credential data for ID: " + existingCredId);
         }
     }
 
@@ -251,7 +237,7 @@ public class PublishExistingCredential {
         metadataMap.put("v", v);
         MetadataMap m = MetadataBuilder.createMap();
         MetadataList l = MetadataBuilder.createList();
-        l.add("1447");
+        l.add(BigInteger.valueOf(1447));
         m.put("l", l);
         m.put("LEI", lei);
         metadataMap.put("m", m);
@@ -266,24 +252,6 @@ public class PublishExistingCredential {
         TxResult txResult = QuickTxBuilder.compose(tx)
                 .withSigner(SignerProviders.signerFrom(account))
                 .feePayer(account.baseAddress())
-                .postBalanceTx((context, txn) -> {
-                    // Adjust fee AFTER balancing to account for metadata
-                    BigInteger currentFee = txn.getBody().getFee();
-                    BigInteger adjustedFee = new BigInteger("390000"); // Slightly more than required
-
-                    // Calculate the difference to adjust the change output
-                    BigInteger feeDiff = adjustedFee.subtract(currentFee);
-
-                    // Update fee
-                    txn.getBody().setFee(adjustedFee);
-
-                    // Adjust the first output (change back to sender) to compensate
-                    if (!txn.getBody().getOutputs().isEmpty()) {
-                        var output = txn.getBody().getOutputs().get(0);
-                        BigInteger currentAmount = output.getValue().getCoin();
-                        output.getValue().setCoin(currentAmount.subtract(feeDiff));
-                    }
-                })
                 .completeAndWait();
         System.out.println("txResult: " + txResult);
         System.out.println("Transaction submitted. Tx Hash: " + txResult.getTxHash());
@@ -317,21 +285,6 @@ public class PublishExistingCredential {
         return chunks;
     }
 
-    private static RegistryResult createRegistry(SignifyClient client, KeriUtils.Aid aid, String registryName) {
-        CreateRegistryArgs registryArgs = CreateRegistryArgs.builder().build();
-        registryArgs.setRegistryName(registryName);
-        registryArgs.setName(aid.name());
-        RegistryResult registryResult;
-        try {
-            registryResult = client.registries().create(registryArgs);
-            Operation<Object> wait = client.operations().wait(Operation.fromObject(registryResult.op()));
-            return registryResult;
-        } catch (Exception e) {
-            // Probably exists
-        }
-        return null;
-    }
-
     private static void resolveSchemas(SignifyClient client, List<String> schemaUrls) {
         for (String schemaUrl : schemaUrls) {
             try {
@@ -341,18 +294,6 @@ public class PublishExistingCredential {
                 e.printStackTrace();
             }
         }
-    }
-
-    public static void getOrCreateContact(SignifyClient client, String name, String oobi) throws IOException, InterruptedException, LibsodiumException {
-        List<Contacting.Contact> list = Arrays.asList(client.contacts().list(null, "alias", "^" + name + "$"));
-        if (!list.isEmpty()) {
-            Contacting.Contact contact = list.getFirst();
-            if (contact.getOobi().equals(oobi)) {
-                return;
-            }
-        }
-        Object op = client.oobis().resolve(oobi, name);
-        Operation<Object> waitOp = client.operations().wait(Operation.fromObject(op));
     }
 
     private static List<Notification> waitForNotifications(String route,
