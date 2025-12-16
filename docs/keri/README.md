@@ -48,7 +48,7 @@ The credential should be issued to the OOBI printed above.
 
 Any time after issuing the credential from the QVI Suite, the second script may be ran to accept the credential and persist it on Cardano.
 A number of environment variables must be set for this to work:
-- The passcode printed above - this is a seed for secret key material and should be kept safe.
+- The passcode printed above - this is a seed for secret key material and should be kept safe
 - The LEI number
 - The Cardano mnemonic, which should have a funded address to sign the transaction submitted on-chain
 - A Blockfrost project ID which can be used to submit the transaction to a node
@@ -60,6 +60,27 @@ export MNEMONIC="test test test test test test test test test test test test tes
 export BLOCKFROST_PROJECT_ID=<blockfrostkey>
 
 jbang docs/keri/ReceiveCredentialWithIdentifier.java
+```
+
+## Attesting 
+
+Once the credential chain has been published on-chain, the KERI identifier may be used to attest to Reeve transactions.
+- The passcode from before that was kept safe
+- The Cardano mnemonic to submit transactions on-chain
+- A Blockfrost project ID which can be used to submit the transaction to a node
+- A Cardano transaction hash to attest
+
+The `AttestTransaction.java` script will fetch the Reeve metadata using the provided transaction hash and copy it into a new attestation transaction.
+The vLEI backed signer in the Java client will create a KERI interaction event of the data hash which effectively signs it.
+This information is then bundled in an attestation transaction on-chain for discovery.
+
+```bash
+export PASSCODE=A2lSGsKYW1uXB0jZjsF-w
+export TX_HASH_TO_ATTEST=215a38e92e5d063d1f93c8b65cff737aa6134519206a34e1f79e0b9b7932e631
+export MNEMONIC="test test test test test test test test test test test test test test test test test test test test test test test sauce"
+export BLOCKFROST_PROJECT_ID=<blockfrostkey>
+
+jbang docs/keri/AttestTransaction.java
 ```
 
 ## Advanced - re-submit
