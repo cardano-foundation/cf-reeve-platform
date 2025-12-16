@@ -61,8 +61,8 @@ public class PublishExistingCredential {
     private static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID = "EKU2UWx115nPv1JqWVMCFRn0_EMaME08HrUK5cLuTP89";
 
     public static final String SCHEMA_SERVER_URL = "https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi";
-    public static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
-    public static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
+    public static final String KERI_URL = "https://keria.cardano-foundation.app.reeve.technology";
+    public static final String KERI_BOOT_URL = "https://keria-boot.cardano-foundation.app.reeve.technology";
     
     public static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID;
     public static final String LE_SCHEMA_URL = SCHEMA_SERVER_URL + "/" + LE_SCHEMA_SAID;

@@ -16,8 +16,8 @@ import org.cardanofoundation.signify.app.coring.Coring;
 
 public class CreateIdentifier {
 
-    private static final String KERI_URL = "https://keria.staging.cardano-foundation.app.reeve.technology";
-    private static final String KERI_BOOT_URL = "https://keria-boot.staging.cardano-foundation.app.reeve.technology";
+    private static final String KERI_URL = "https://keria.cardano-foundation.app.reeve.technology";
+    private static final String KERI_BOOT_URL = "https://keria-boot.cardano-foundation.app.reeve.technology";
     private static final String CLIENT_NAME = "GTReeveClient";
 
     public static void main(String[] args) throws Exception {
