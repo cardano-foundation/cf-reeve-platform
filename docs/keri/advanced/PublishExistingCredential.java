@@ -10,7 +10,7 @@
 //DEPS org.cardanofoundation:signify:0.1.2-ebfb904-SNAPSHOT
 //DEPS com.bloxbean.cardano:cardano-client-lib:0.7.1
 //DEPS com.bloxbean.cardano:cardano-client-backend-blockfrost:0.7.0-beta2
-//SOURCES KeriUtils.java
+//SOURCES ../KeriUtils.java
 // @formatter:on
 
 import java.math.BigInteger;
@@ -30,6 +30,7 @@ import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Notifying;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Operation;
+import org.cardanofoundation.signify.app.credentialing.credentials.CredentialFilter;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.cesr.exceptions.LibsodiumException;
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
@@ -52,9 +53,9 @@ import com.bloxbean.cardano.client.quicktx.TxResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-public class ReceiveCredentialWithIdentifier {
+public class PublishExistingCredential {
     private static final String IDENTIFIER_NAME = "GTReeveClient";
-
+    
     public static final String QVI_SCHEMA_SAID = "EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao";
     public static final String LE_SCHEMA_SAID = "ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY";
     private static final String VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID = "EKU2UWx115nPv1JqWVMCFRn0_EMaME08HrUK5cLuTP89";
@@ -128,44 +129,40 @@ public class ReceiveCredentialWithIdentifier {
         List<String> schemaUrls = List.of(QVI_SCHEMA_URL, LE_SCHEMA_URL, VLEI_CARDANO_METADATA_SIGNER_SCHEMA_URL);
         resolveSchemas(client, schemaUrls);
 
-        // ------- IPEX ADMIT ------- //
-        List<Notification> notifications = waitForNotifications("/exn/ipex/grant", client, aid);
-        if (notifications == null || notifications.isEmpty()) {
-            throw new IllegalStateException("No grant notifications received");
+        List<Map<String, Object>> existingCredentials = findIssuedCredential(client, aid.prefix(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID);
+        if (existingCredentials.size() == 0) {
+            System.out.println("No existing credential found.");
+            System.exit(1);
         }
 
-        System.out.println("Received credential grant notification!");
+        System.out.print("\nExisting credential found. Do you want to push the existing credential to the blockchain? (yes/no): ");
+        String response = System.console() != null ? System.console().readLine() : new java.util.Scanner(System.in).nextLine();
 
-        LinkedHashMap<String, Object> map = (LinkedHashMap<String, Object>) client.exchanges().get(notifications.get(0).a.d).get();
-        LinkedHashMap<String, Object> exn = (LinkedHashMap<String, Object>) map.get("exn");
-        LinkedHashMap<String, Object> e = (LinkedHashMap<String, Object>) exn.get("e");
-        LinkedHashMap<String, Object> acdc = (LinkedHashMap<String, Object>) e.get("acdc");
-
-        String issuerAid = (String) exn.get("i");
-        String credentialId = (String) acdc.get("d");
-
-        System.out.println("Credential ID: " + credentialId);
-        System.out.println("Issuer AID: " + issuerAid);
-
-        IpexAdmitArgs admitArgs = buildAdmitArgs(aid.name(), notifications.get(0).a.d, issuerAid);
-        executeAdmitProcess(client, aid, issuerAid, admitArgs, notifications.get(0).i);
-
-        System.out.println("Credential admitted successfully!");
-
-        Optional<String> credential = waitForCredential(client, credentialId);
-        if (credential.isEmpty()) {
-            throw new IllegalStateException("Credential not found with ID: " + credentialId);
+        if (response == null || !(response.equalsIgnoreCase("yes") || response.equalsIgnoreCase("y"))) {
+            System.out.println("Skipping blockchain push for existing credential.");
+            System.exit(1);
         }
 
-        List<Map<String, Object>> cesrData = CESRStreamUtil.parseCESRData(credential.get());
-        String stripped = strip(cesrData);
+        Map<String, Object> firstCred = existingCredentials.get(0);
+        Object sadObj = firstCred.get("sad");
 
-        System.out.println("Credential chain prepared for Cardano transaction.");
+        String existingCredId;
+        if (sadObj instanceof Map) {
+            existingCredId = (String) ((Map<String, Object>) sadObj).get("d");
+        } else {
+            existingCredId = (String) sadObj;
+        }
 
-        buildTransaction(aid.prefix(), stripped.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
+        // Re-fetch as we need the full CESR stream, not JSON variant
+        Optional<String> credential = client.credentials().get(existingCredId);
+        if (credential.isPresent()) {
+            List<Map<String, Object>> cesrData = CESRStreamUtil.parseCESRData(credential.get());
+            String stripped = strip(cesrData);
 
-        System.out.println();
-        System.out.println("=== Credential Received and Stored on Cardano ===");
+            buildTransaction(aid.prefix(), stripped.getBytes(), VLEI_CARDANO_METADATA_SIGNER_SCHEMA_SAID, LEI);
+        } else {
+            System.err.println("ERROR: Could not retrieve full credential data for ID: " + existingCredId);
+        }
     }
 
     static String strip(List<Map<String, Object>> cesrData) {
@@ -276,7 +273,7 @@ public class ReceiveCredentialWithIdentifier {
     }
 
     public static byte[][] splitIntoChunks(byte[] data, int chunkSize) {
-        int numChunks = (data.length + chunkSize - 1) / chunkSize;
+        int numChunks = (data.length + chunkSize - 1) / chunkSize; // ceiling division
         byte[][] chunks = new byte[numChunks][];
 
         for (int i = 0; i < numChunks; i++) {
@@ -319,7 +316,9 @@ public class ReceiveCredentialWithIdentifier {
 
                 List<Notification> filteredNotifications =
                         receiverNotifications.stream().filter(note -> {
+                            // Check if notification has not been read yet (r field should be false)
                             boolean isUnread = !Boolean.TRUE.equals(note.r);
+                            // Check if route matches
                             boolean routeMatches = note.a != null && route.equals(note.a.r);
 
                             return isUnread && routeMatches;
@@ -332,9 +331,24 @@ public class ReceiveCredentialWithIdentifier {
                 System.out.println("Error retrieving notifications: " + e.getMessage());
                 e.printStackTrace();
             }
-
-            Thread.sleep(waitTimeMs);
         }
+    }
+
+    private static List<Map<String, Object>> findIssuedCredential(SignifyClient client, String holderAid, String schemaSaid) {
+        try {
+            Map<String, Object> filterData = new LinkedHashMap<>();
+            CredentialFilter credentialFilter = CredentialFilter.builder().build();
+            credentialFilter.setFilter(filterData);
+            filterData.put("-s", schemaSaid);
+            filterData.put("-a-i", holderAid);
+            List<Map<String, Object>> list = castObjectToListMap(client.credentials().list(credentialFilter));
+            return list;
+
+        } catch (Exception e) {
+            System.out.println("Error checking for existing credential: " + e.getMessage());
+        }
+        
+        return new ArrayList<>();
     }
 
     /**
@@ -387,11 +401,13 @@ public class ReceiveCredentialWithIdentifier {
 
     private static void executeAdmitProcess(SignifyClient client, KeriUtils.Aid receiver, String issuerAid,
             IpexAdmitArgs admitArgs, String notificationId) throws Exception {
+        // Create and submit admit
         Exchanging.ExchangeMessageResult admitResult = client.ipex().admit(admitArgs);
         Object operation = client.ipex().submitAdmit(receiver.name(),
                 admitResult.exn(), admitResult.sigs(), admitResult.atc(),
                 Collections.singletonList(issuerAid));
 
+        // Wait for operation completion
         Operation<Object> waitOp =
                 client.operations().wait(Operation.fromObject(operation));
         if (!waitOp.isDone() || waitOp.getError() != null) {
@@ -399,7 +415,16 @@ public class ReceiveCredentialWithIdentifier {
                     + (waitOp.getError() != null ? waitOp.getError() : "unknown"));
         }
 
+        // Mark notification as read and cleanup
         client.notifications().mark(notificationId);
         client.operations().delete(waitOp.getName());
+    }
+
+    public static List<Map<String, Object>> castObjectToListMap(Object object) {
+        return (List<Map<String, Object>>) object;
+    }
+
+    public static LinkedHashMap<String, Object> castObjectToLinkedHashMap(Object object) {
+        return (LinkedHashMap<String, Object>) object;
     }
 }

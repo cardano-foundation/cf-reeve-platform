@@ -179,7 +179,6 @@ public class KeriUtils {
      * Get available witnesses from the client configuration
      */
     public static AvailableWitnesses getAvailableWitnesses(SignifyClient client) throws Exception {
-
         @SuppressWarnings("unchecked")
         Map<String, Object> config = (Map<String, Object>) new Coring.Config(client).get();
 
@@ -216,27 +215,5 @@ public class KeriUtils {
         if (size < 6 && size > 0) return new AvailableWitnesses(size, uniqueWitnesses.subList(0, size));
 
         throw new IllegalStateException(INSUFFICIENT_WITNESSES_AVAILABLE);
-    }
-
-    public static void getOrCreateContact(SignifyClient client, String name, String oobi) throws Exception {
-        List<Contacting.Contact> list = Arrays.asList(client.contacts().list(null, "alias", "^" + name + "$"));
-        if (!list.isEmpty()) {
-            Contacting.Contact contact = list.getFirst();
-            if (contact.getOobi().equals(oobi)) {
-                return;
-            }
-        }
-        Object op = client.oobis().resolve(oobi, name);
-
-        Operation<?> opBody = KeriUtils.waitOperation(client, op);
-    }
-
-    public static <T> Operation<T> waitOperation(
-            SignifyClient client,
-            Object op
-    ) throws Exception {
-        Operation operation = Operation.fromObject(op);
-        operation = client.operations().wait(operation);
-        return operation;
     }
 }
