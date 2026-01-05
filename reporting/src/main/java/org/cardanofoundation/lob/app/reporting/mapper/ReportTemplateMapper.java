@@ -211,8 +211,8 @@ public class ReportTemplateMapper {
         TermSide side,
         int order
     ) {
-        // Find the field entity by name
-        ReportTemplateFieldEntity field = findFieldByName(rule.getReportTemplate(), dto.getFieldName());
+        // Find the field entity by concatenated name (e.g., "parent.child.grandchild")
+        ReportTemplateFieldEntity field = findFieldByConcatenatedName(rule.getReportTemplate(), dto.getFieldName());
 
         return ValidationRuleTermEntity.builder()
             .validationRule(rule)
@@ -221,6 +221,26 @@ public class ReportTemplateMapper {
             .side(side)
             .termOrder(order)
             .build();
+    }
+
+    private ReportTemplateFieldEntity findFieldByConcatenatedName(ReportTemplateEntity template, String concatenatedName) {
+        String[] names = concatenatedName.split("\\.");
+        List<ReportTemplateFieldEntity> fields = template.getFields();
+        ReportTemplateFieldEntity currentField = null;
+        for (String name : names) {
+            currentField = null;
+            for (ReportTemplateFieldEntity field : fields) {
+                if (field.getName().equals(name)) {
+                    currentField = field;
+                    fields = field.getChildFields();
+                    break;
+                }
+            }
+            if (currentField == null) {
+                return null; // Field not found
+            }
+        }
+        return currentField;
     }
 
     private ReportTemplateFieldEntity findFieldByName(ReportTemplateEntity template, String fieldName) {

@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -65,6 +66,11 @@ public class ReportTemplateService {
             return Either.left(duplicateValidation.getLeft());
         }
 
+        Either<Problem, Void> forbiddenCharacters = validateForbiddenCharacters(dto.getFields());
+        if (forbiddenCharacters.isLeft()) {
+            return Either.left(forbiddenCharacters.getLeft());
+        }
+
         // Validate subtypes exist
         Either<Problem, Void> subtypeValidation = validateSubTypes(dto.getFields());
         if (subtypeValidation.isLeft()) {
@@ -77,6 +83,25 @@ public class ReportTemplateService {
             return Either.left(validationRulesValidation.getLeft());
         }
 
+        return Either.right(null);
+    }
+
+    private Either<Problem, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
+        for(ReportTemplateFieldDto field : fields) {
+            if(!field.getChildFields().isEmpty()) {
+                Either<Problem, Void> childValidation = validateForbiddenCharacters(field.getChildFields());
+                if (childValidation.isLeft()) {
+                    return childValidation;
+                }
+            }
+            if(Helper.containsForbiddenCharacters(field.getFieldName())) {
+                return Either.left(Problem.builder()
+                        .withTitle(Constants.INVALID_FIELD_NAME)
+                        .withDetail("Field name '" + field.getFieldName() + "' contains forbidden characters. Only alphanumeric characters are allowed. Following Characters aren't allowed: " + Helper.FORBIDDEN_CHARACTERS)
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
+            }
+        }
         return Either.right(null);
     }
 
@@ -466,11 +491,11 @@ public class ReportTemplateService {
                             .withStatus(Status.BAD_REQUEST)
                             .build());
                 }
-
-                if (!allFieldNames.contains(term.getFieldName())) {
+                List<String> namesNotExist = Arrays.stream(term.getFieldName().split("\\.")).filter(s -> !allFieldNames.contains(s)).toList();
+                if (!namesNotExist.isEmpty()) {
                     return Either.left(Problem.builder()
                             .withTitle(Constants.INVALID_VALIDATION_RULE)
-                            .withDetail("Validation rule '" + rule.getName() + "' references field name '" + term.getFieldName() + "' which does not exist in the template")
+                            .withDetail("Validation rule '" + rule.getName() + "' references field names '" + namesNotExist + "' which do not exist in the template")
                             .withStatus(Status.BAD_REQUEST)
                             .build());
                 }
