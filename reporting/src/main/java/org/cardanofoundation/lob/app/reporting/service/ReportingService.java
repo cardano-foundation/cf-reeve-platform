@@ -197,17 +197,24 @@ public class ReportingService {
 
     private BigDecimal findFieldValueRecursively(List<ReportFieldEntity> fields, Long templateFieldId) {
         for (ReportFieldEntity field : fields) {
+
             if (field.getFieldTemplate().getId().equals(templateFieldId)) {
-                return field.getValue() != null ? field.getValue() : BigDecimal.ZERO;
+                return field.getValue() != null
+                        ? field.getValue()
+                        : BigDecimal.ZERO;
             }
+
             if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
-                BigDecimal childValue = findFieldValueRecursively(field.getChildFields(), templateFieldId);
+                BigDecimal childValue =
+                        findFieldValueRecursively(field.getChildFields(), templateFieldId);
+
                 if (childValue != null) {
                     return childValue;
                 }
             }
         }
-        return BigDecimal.ZERO;
+
+        return null; // ← important
     }
 
     /**
