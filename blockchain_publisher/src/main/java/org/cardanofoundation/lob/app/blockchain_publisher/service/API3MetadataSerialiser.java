@@ -68,11 +68,11 @@ public class API3MetadataSerialiser {
                 createRecursiveMetadataSection(childMap, (Map<String, Object>) value);
                 metadataMap.put(key, childMap);
             } else if (value instanceof Integer integerValue) {
-                metadataMap.put(key, BigInteger.valueOf(integerValue));
+                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(integerValue)));
             } else if (value instanceof Long longValue) {
-                metadataMap.put(key, BigInteger.valueOf(longValue));
+                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(longValue)));
             } else if (value instanceof Double doubleValue) {
-                metadataMap.put(key, BigDecimal.valueOf(doubleValue).toBigInteger());
+                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(doubleValue)));
             } else {
                 throw new IllegalArgumentException("Unsupported data type in report data: %s".formatted(value.getClass().getName()));
             }

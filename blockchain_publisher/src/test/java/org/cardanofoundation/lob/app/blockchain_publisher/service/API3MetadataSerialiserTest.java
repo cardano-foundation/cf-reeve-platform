@@ -236,7 +236,7 @@ class API3MetadataSerialiserTest {
         assertThat(metadataMap.get("period")).isEqualTo(BigInteger.valueOf(1));
         assertThat(metadataMap.get("data")).isNotNull();
         MetadataMap data = (MetadataMap) metadataMap.get("data");
-        assertThat(data.get("test123")).isEqualTo(BigInteger.valueOf(5));
+        assertThat(data.get("test123")).isEqualTo("5");
     }
 
 }
