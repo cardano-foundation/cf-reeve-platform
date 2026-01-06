@@ -41,7 +41,7 @@ public class DefaultTransactionSubmissionService implements TransactionSubmissio
     }
 
     @Override
-    public L1Submission submitTransactionWithPossibleConfirmation(byte[] txData, String receiverAddress) throws ApiException, InterruptedException {
+    public L1Submission submitTransactionWithPossibleConfirmation(byte[] txData, String receiverAddress) throws ApiException {
         log.info("Submitting transaction with confirmation.., txId:{}", TransactionUtil.getTxHash(txData));
         String txHash = submitTransaction(txData);
 
@@ -57,7 +57,6 @@ public class DefaultTransactionSubmissionService implements TransactionSubmissio
                     Thread.sleep(sleepTimeSeconds * 1000L);
                 } catch (InterruptedException e) {
                     log.error("Thread interrupted while waiting for transaction confirmation", e);
-                    throw new InterruptedException("Thread interrupted while waiting for transaction confirmation");
                 }
                 continue;
             }

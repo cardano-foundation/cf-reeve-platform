@@ -13,10 +13,13 @@ import lombok.Setter;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @Getter
 @Setter

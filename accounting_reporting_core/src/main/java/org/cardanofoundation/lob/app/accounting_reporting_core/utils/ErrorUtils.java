@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.accounting_reporting_core.util;
+package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
 
 import java.util.HashMap;
 import java.util.Map;

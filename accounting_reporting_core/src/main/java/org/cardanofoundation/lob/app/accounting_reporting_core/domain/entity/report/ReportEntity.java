@@ -1,13 +1,21 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report;
 
 import static jakarta.persistence.EnumType.STRING;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.NOT_DISPATCHED;
+import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.NOT_DISPATCHED;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import jakarta.persistence.*;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -15,7 +23,12 @@ import jakarta.validation.constraints.NotNull;
 
 import javax.annotation.Nullable;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.val;
 
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -25,7 +38,6 @@ import org.hibernate.annotations.JdbcType;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.hibernate.envers.Audited;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Validable;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
@@ -33,6 +45,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.repor
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.LedgerDispatchReceipt;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @Entity(name = "accounting_reporting_core.report.ReportEntity")
@@ -60,6 +73,7 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Column(name = "ver", nullable = false)
     @Getter
     @Setter
+    @Builder.Default
     private long ver = 1;
 
     @Override
@@ -196,11 +210,13 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Column(name = "ledger_dispatch_approved", nullable = false)
     @Getter
     @Setter
+    @Builder.Default
     private Boolean ledgerDispatchApproved = false;
 
     @Column(name = "is_ready_to_publish", nullable = false)
     @Getter
     @Setter
+    @Builder.Default
     private Boolean isReadyToPublish = false;
 
     @Column(name = "publish_error")
@@ -216,6 +232,7 @@ public class ReportEntity extends CommonEntity implements Persistable<String>, V
     @Getter
     @Setter
     // https://www.baeldung.com/java-enums-jpa-postgresql
+    @Builder.Default
     private LedgerDispatchStatus ledgerDispatchStatus = NOT_DISPATCHED;
 
     @Getter

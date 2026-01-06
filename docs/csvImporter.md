@@ -113,3 +113,28 @@ The following columns are needed:
 - `Country`: Country code of the VAT (e.g. `CH`)
 - `Rate`: Rate of the VAT (e.g. `0.2`)
 - `Active`: Active status of the VAT (e.g. `True`)
+
+### Report Template data structure
+An example can be found here: [Report Template CSV Example](./examples/reporting/report_template_example.csv)
+The following columns are needed:
+- `Name`: Name of the report template (e.g. `Balance Sheet Template`)
+- `Type`: Type of the report template (one of `BALANCE_SHEET`, `INCOME_STATEMENT`, `CUSTOM`)
+- `Field Name`: Name of the field (e.g. `TOTAL_ASSETS`)
+- `Parent`: Name of the Parent field (e.g. `ASSETS`)
+- `Mapped Types`: A list of type and subtype names. The type and subtypes are separated by `-` and multiple entries are separated by `,` (e.g. `ASSET-BANK,ASSET-CASH_AND_CASH_EQUIVALENTS`)
+- `Accumulated`: A boolean if the field is accumulated (e.g. `True`)
+- `Accumulated Yearly`: A boolean if the field is accumulated yearly (e.g. `False`)
+- `Accumulated Previous Year`: A boolean if the field is accumulated for the previous year (e.g. `False`)
+- `Negated`: A boolean if the field is negated (e.g. `False`)
+
+### Report data structure
+An example can be found here: [Report CSV Example](./examples/reporting/report_example.csv)
+The following columns are needed:
+- `Template Name`: Name of the report template (e.g. `Balance Sheet Template`)
+- `Name`: Name of the report (e.g. `Balance Sheet Q1`)
+- `Interval type`: Type of the interval (one of `MONTH`, `QUARTER`, `YEAR`)
+- `Period`: Period of the report - In case of `MONTH` a range of 1-12, in case of `QUARTER` a range of 1-4 and in case of `YEAR` a value of 1 or empty
+- `Year`: Year of the report (e.g. `2024`)
+- `Data mode`: Data mode of the report (one of `SYSTEM` or `USER`) - In case of `USER` field and amounts must be provided. In Case of `SYSTEM` fields and amounts must be empty
+- `Field name`: Name of the field. For nested fields use `.` as separator (e.g. `ASSETS.CURRENT_ASSETS.CASH_AND_CASH_EQUIVALENTS`)
+- `Amount`: Amount of the field (e.g. `1000`)

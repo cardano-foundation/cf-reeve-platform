@@ -3,9 +3,9 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity;
 import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.FetchType.EAGER;
 import static java.util.stream.Collectors.toSet;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.NOT_DISPATCHED;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source.ERP;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
+import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.NOT_DISPATCHED;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -15,12 +15,35 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import jakarta.persistence.*;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 
 import javax.annotation.Nullable;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -31,10 +54,16 @@ import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.hibernate.envers.Audited;
 import org.javers.core.metamodel.annotation.DiffIgnore;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.annotations.LOBVersionSourceRelevant;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @Entity(name = "accounting_reporting_core.TransactionEntity")
@@ -151,6 +180,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Column(name = "total_amount_lcy")
     @Getter
     @Setter
+    @Builder.Default
     private BigDecimal totalAmountLcy = BigDecimal.ZERO;
 
     @Column(name = "transaction_approved", nullable = false)
@@ -322,6 +352,8 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
             case DISPATCHED, COMPLETED, FINALIZED -> {
                 this.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
                 return;
+            }
+            case FAILED, RETRYING -> {
             }
         }
         this.setProcessingStatus(TransactionProcessingStatus.APPROVE);

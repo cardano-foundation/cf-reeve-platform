@@ -14,12 +14,13 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublishStatusMapper;
@@ -83,19 +84,19 @@ public class LedgerUpdatedEventPublisher {
 
     @Transactional
     public void sendReportLedgerUpdatedEvents(String organisationId,
-                                              Set<ReportEntity> reports) {
-        log.info("Sending report ledger updated event for organisation:{}, reports:{}", organisationId, reports.size());
+                                              Set<Pair<String, L1SubmissionData>> pair) {
+        log.info("Sending report ledger updated event for organisation:{}, reports:{}", organisationId, pair.size());
 
-        val partitions = Partitions.partition(reports, dispatchBatchSize);
+        val partitions = Partitions.partition(pair, dispatchBatchSize);
         for (val partition : partitions) {
             val reportStatuses = partition.asSet().stream()
-                    .map(reportEntity -> {
-                        val publishStatusM = reportEntity.getL1SubmissionData().flatMap(L1SubmissionData::getPublishStatus);
-                        val cardanoFinalityScoreM = reportEntity.getL1SubmissionData().flatMap(L1SubmissionData::getFinalityScore);
+                    .map(reportPair -> {
+                        val publishStatusM = reportPair.getRight().getPublishStatus();
+                        val cardanoFinalityScoreM = reportPair.getRight().getFinalityScore();
                         val ledgerDispatchStatus = blockchainPublishStatusMapper.convert(publishStatusM, cardanoFinalityScoreM);
-                        val reportId = reportEntity.getReportId();
+                        val reportId = reportPair.getLeft();
 
-                        val blockchainHashM = reportEntity.getL1SubmissionData().flatMap(L1SubmissionData::getTransactionHash);
+                        val blockchainHashM = reportPair.getRight().getTransactionHash();
 
                         String blockchainHash = blockchainHashM.orElse(null);
 
@@ -106,7 +107,7 @@ public class LedgerUpdatedEventPublisher {
                                 )
                         );
 
-                        return new ReportStatusUpdate(reportId, ledgerDispatchStatus, reportEntity.getL1SubmissionData().get().getPublishStatusErrorReason().orElse(null), blockchainReceipts);
+                        return new ReportStatusUpdate(reportId, ledgerDispatchStatus, reportPair.getRight().getPublishStatusErrorReason().orElse(null), blockchainReceipts);
                     })
                     .collect(Collectors.toSet());
 

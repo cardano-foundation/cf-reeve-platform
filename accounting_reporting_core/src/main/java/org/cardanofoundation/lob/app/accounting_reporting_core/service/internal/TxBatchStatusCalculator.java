@@ -1,7 +1,5 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.*;
-
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;

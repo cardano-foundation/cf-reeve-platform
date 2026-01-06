@@ -1,60 +1,94 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
+import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Service;
 
-import co.nstant.in.cbor.CborException;
-import com.bloxbean.cardano.client.crypto.bip39.Sha256Hash;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
-import com.bloxbean.cardano.client.util.HexUtil;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.BalanceSheetData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.IncomeStatementData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class API3MetadataSerialiser {
-
+    private final OrganisationPublicApi organisationPublicApi;
     public static final String VERSION = "1.2";
     private final Clock clock;
 
-    public MetadataMap serializeToKeriMap(ReportEntity reportEntity) {
+    public MetadataMap serialiseToMetadataMap(ReportV2Entity reportEntity,
+                                              long creationSlot) {
         MetadataMap globalMetadataMap = MetadataBuilder.createMap();
-        globalMetadataMap.put("org", serialiseOrganisation(reportEntity.getOrganisation()));
-        globalMetadataMap.put("subType", reportEntity.getType().name());
+        globalMetadataMap.put("metadata", createMetadataSection(creationSlot));
+        Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> byOrganisationId =
+                organisationPublicApi.findByOrganisationId(reportEntity.getOrganisationId());
+        if (byOrganisationId.isPresent()) {
+            Organisation organisation = Organisation.fromOrganisationEntity(byOrganisationId.get());
+            globalMetadataMap.put("org", serialiseOrganisation(organisation));
+        } else {
+            throw new IllegalArgumentException("Organisation not found for id: %s".formatted(reportEntity.getOrganisationId()));
+        }
+        globalMetadataMap.put("type", "REPORT");
+        globalMetadataMap.put("subType", reportEntity.getReportTemplateType().name());
         globalMetadataMap.put("interval", reportEntity.getIntervalType().name());
-        globalMetadataMap.put("year", reportEntity.getYear().toString());
-        globalMetadataMap.put("mode", reportEntity.getMode().name());
-        globalMetadataMap.put("ver", BigInteger.valueOf(reportEntity.getVer()));
-
-        MetadataMap dataMap;
-        switch (reportEntity.getType()) {
-            case BALANCE_SHEET -> dataMap = serialiseBalanceSheetData(
-                    reportEntity.getBalanceSheetReportData().orElseThrow());
-            case INCOME_STATEMENT -> dataMap = serialiseIncomeStatementData(
-                    reportEntity.getIncomeStatementReportData().orElseThrow());
-            default -> throw new IllegalArgumentException(
-                    "Unsupported report type: %s".formatted(reportEntity.getType()));
-        }
-        try {
-            // Convert the hash to a hex String and put into globalDataMap
-            globalMetadataMap.put("dataHash", HexUtil.encodeHexString(Sha256Hash.hash(
-                    dataMap.toJson().getBytes())));
-        } catch (CborException e) {
-            throw new IllegalArgumentException("Failed to calculate data hash", e);
-        }
+        globalMetadataMap.put("year", String.valueOf(reportEntity.getYear()));
+        globalMetadataMap.put("mode", reportEntity.getDataMode().name());
+        globalMetadataMap.put("ver", BigInteger.valueOf(reportEntity.getReportVer()));
+        globalMetadataMap.put("period", BigInteger.valueOf(reportEntity.getPeriod()));
+        MetadataMap dataMap = MetadataBuilder.createMap();
+        globalMetadataMap.put("data", createRecursiveMetadataSection(dataMap, reportEntity.getReportData()));
         return globalMetadataMap;
+    }
+
+    private MetadataMap createRecursiveMetadataSection(
+            MetadataMap metadataMap, Map<String, Object> data) {
+        data.forEach((key, value) -> {
+            key = toLowerSnakeCase(key);
+            if (value == null) {
+                log.debug("Null value for key: {}", key);
+            } else if (value instanceof Map) {
+                MetadataMap childMap = MetadataBuilder.createMap();
+                createRecursiveMetadataSection(childMap, (Map<String, Object>) value);
+                metadataMap.put(key, childMap);
+            } else if (value instanceof Integer integerValue) {
+                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(integerValue)));
+            } else if (value instanceof Long longValue) {
+                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(longValue)));
+            } else if (value instanceof Double doubleValue) {
+                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(doubleValue)));
+            } else {
+                throw new IllegalArgumentException("Unsupported data type in report data: %s".formatted(value.getClass().getName()));
+            }
+        });
+
+        return metadataMap;
+    }
+
+    private String toLowerSnakeCase(String input) {
+        if (input == null || input.isEmpty()) return input;
+
+        return input
+                .replaceAll("([a-z])([A-Z])", "$1_$2")
+                .replaceAll("([A-Z])([A-Z][a-z])", "$1_$2")
+                .replaceAll(" ", "_")
+                .toLowerCase();
     }
 
     public MetadataMap serialiseToMetadataMap(ReportEntity reportEntity,
@@ -84,7 +118,8 @@ public class API3MetadataSerialiser {
                     reportEntity.getBalanceSheetReportData().orElseThrow()));
             case INCOME_STATEMENT -> globalMetadataMap.put("data", serialiseIncomeStatementData(
                     reportEntity.getIncomeStatementReportData().orElseThrow()));
-            default -> throw new IllegalArgumentException("Unsupported report type: %s".formatted(reportEntity.getType()));
+            default ->
+                    throw new IllegalArgumentException("Unsupported report type: %s".formatted(reportEntity.getType()));
         }
 
         return globalMetadataMap;

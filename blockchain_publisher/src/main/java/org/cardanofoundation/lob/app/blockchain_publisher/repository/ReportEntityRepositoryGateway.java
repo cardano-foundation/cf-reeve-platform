@@ -15,14 +15,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@Transactional(readOnly = true)
+@Transactional
 public class ReportEntityRepositoryGateway {
 
     private final ReportEntityRepository reportEntityRepository;
+    private final ReportV2EntityRepository reportV2EntityRepository;
 
     @Transactional
     public Set<ReportEntity> storeOnlyNew(Set<ReportEntity> reportEntities) {
@@ -49,6 +51,12 @@ public class ReportEntityRepositoryGateway {
         return reportEntityRepository.findDispatchedReportsThatAreNotFinalizedYet(organisationId, notFinalisedButVisibleOnChain, limit);
     }
 
+    public Set<ReportV2Entity> findDispatchedReportsV2ThatAreNotFinalizedYet(String organisationId, Limit limit) {
+        Set<BlockchainPublishStatus> notFinalisedButVisibleOnChain = BlockchainPublishStatus.notFinalisedButVisibleOnChain();
+
+        return reportV2EntityRepository.findDispatchedReportsThatAreNotFinalizedYet(organisationId, notFinalisedButVisibleOnChain, limit);
+    }
+
     @Transactional
     public Set<ReportEntity> findReportsByStatus(String organisationId,
                                                  int pullReportsBatchSize) {
@@ -61,6 +69,28 @@ public class ReportEntityRepositoryGateway {
     @Transactional
     public void storeReport(ReportEntity reportEntity) {
         reportEntityRepository.save(reportEntity);
+    }
+
+    @Transactional
+    public void storeReport(ReportV2Entity reportEntity) {
+        reportV2EntityRepository.save(reportEntity);
+    }
+
+    @Transactional
+    public void storeReportV2IfNew(ReportV2Entity reportV2Entity) {
+        boolean exists = reportV2EntityRepository.existsById(reportV2Entity.getId());
+        if (!exists) {
+            reportV2EntityRepository.save(reportV2Entity);
+        }
+    }
+
+    @Transactional
+    public Set<ReportV2Entity> findReportsV2ByStatus(String organisationId, int pullReportsBatchSize) {
+        Set<BlockchainPublishStatus> dispatchStatuses =
+                BlockchainPublishStatus.toDispatchStatuses();
+        Limit limit = Limit.of(pullReportsBatchSize);
+
+        return reportV2EntityRepository.findReportsByStatus(organisationId, dispatchStatuses, limit);
     }
 
 }

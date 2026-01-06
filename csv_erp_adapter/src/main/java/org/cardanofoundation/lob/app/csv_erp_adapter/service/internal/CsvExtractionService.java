@@ -42,7 +42,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reco
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
-import org.cardanofoundation.lob.app.accounting_reporting_core.util.ErrorUtils;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils;
 import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.ExtractionData;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;

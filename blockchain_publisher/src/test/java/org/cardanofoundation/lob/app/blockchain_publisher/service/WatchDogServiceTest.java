@@ -17,6 +17,7 @@ import java.util.Set;
 import org.springframework.data.domain.Limit;
 
 import io.vavr.control.Either;
+import org.apache.commons.lang3.tuple.Pair;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -261,6 +262,7 @@ class WatchDogServiceTest {
     @Test
     void updateReportStatusFinalTransaction() {
         ReportEntity reportEntity = ReportEntity.builder()
+                .reportId("reportId")
                 .l1SubmissionData(L1SubmissionData.builder()
                         .creationSlot(1L)
                         .transactionHash("txHash")
@@ -276,7 +278,7 @@ class WatchDogServiceTest {
 
         watchDogService.checkReportStatusForOrganisations(1);
 
-        verify(ledgerUpdatedEventPublisher).sendReportLedgerUpdatedEvents(null,Set.of(reportEntity));
+        verify(ledgerUpdatedEventPublisher).sendReportLedgerUpdatedEvents(null,Set.of(Pair.of(reportEntity.getId(), reportEntity.getL1SubmissionData().get())));
         verify(organisationPublicApiIF).listAll();
         verify(blockchainReaderPublicApi).getChainTip();
         verify(reportEntityRepositoryGateway).findDispatchedReportsThatAreNotFinalizedYet(null, Limit.of(1));

@@ -97,6 +97,10 @@ subprojects {
         withSourcesJar()
     }
 
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
+    }
+
     configurations {
         compileOnly {
             extendsFrom(configurations.annotationProcessor.get())
@@ -224,6 +228,8 @@ subprojects {
                     "**/entity/**, " +
                     "**/config/**, " +
                     "**/domain/**, " +
+                    "**/dto/**, " +
+                    "**/enums/**, " +
                     "**/repository/**, " +
                     "**/spring_web/**," +
                     "**/spring_audit/**")

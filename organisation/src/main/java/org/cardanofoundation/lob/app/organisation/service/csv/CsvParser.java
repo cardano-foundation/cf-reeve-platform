@@ -137,7 +137,7 @@ public class CsvParser<T> {
             return Either.left(Problem.builder()
                     .withTitle("CSV_PARSING_ERROR")
                     .withStatus(Status.BAD_REQUEST)
-                    .withDetail(e.getMessage())
+                    .withDetail(e.getMessage() + ". " + e.getCause().getMessage())
                     .build());
         }
     }
