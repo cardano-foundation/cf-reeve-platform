@@ -44,6 +44,10 @@ allprojects {
         mavenLocal()
         mavenCentral()
         maven {
+            name = "sonatype"
+            url = uri("https://oss.sonatype.org/content/repositories/releases/")
+        }
+        maven {
             name = "sonatypeSnapshots"
             url = uri("https://oss.sonatype.org/content/repositories/snapshots")
         }
