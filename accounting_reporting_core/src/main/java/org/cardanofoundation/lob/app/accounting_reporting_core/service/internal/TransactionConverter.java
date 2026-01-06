@@ -31,7 +31,7 @@ public class TransactionConverter {
     private final OrganisationConverter organisationConverter;
     private final OrganisationPublicApiIF organisationPublicApiIF;
 
-    @Value("${lob.blockchain-publisher.rollback.enabled}")
+    @Value("${lob.blockchain-publisher.rollback.enabled:false}")
     private Optional<Boolean> rollbackEnabled;
 
     public FilteringParameters convertToDbDetached(SystemExtractionParameters systemExtractionParameters,
@@ -151,7 +151,7 @@ public class TransactionConverter {
         txEntity.setViolations(violations);
         txEntity.setItems(txItems);
 
-        if(transaction.getLetter() != null && !transaction.getLetter().isEmpty() && rollbackEnabled.orElse(false)){
+        if(transaction.getRollbackSuffix() != null && !transaction.getRollbackSuffix().isEmpty() && rollbackEnabled.orElse(false)){
             rollbackTransaction(txEntity,transaction);
         }
 
@@ -302,7 +302,7 @@ public class TransactionConverter {
     }
 
     private void rollbackTransaction(TransactionEntity txEntity, Transaction transaction) {
-        txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber() + "-" + transaction.getLetter());
+        txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber() + "-" + transaction.getRollbackSuffix());
         txEntity.setProcessingStatus(TransactionProcessingStatus.ROLLBACK);
 
     }

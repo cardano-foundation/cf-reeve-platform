@@ -28,11 +28,11 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Ledge
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxRollbackEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
-import org.cardanofoundation.lob.app.blockchain_common.event.TransactionRolledBackEvent;
 
 
 @Service
@@ -51,7 +51,7 @@ public class DbSynchronisationUseCaseService {
             .expireAfterAccess(10, TimeUnit.MINUTES)
             .build();
 
-    @Value("${lob.blockchain-publisher.rollback.enabled}")
+    @Value("${lob.blockchain-publisher.rollback.enabled:false}")
     private Optional<Boolean> rollbackEnabled;
 
     @Transactional
@@ -168,7 +168,7 @@ public class DbSynchronisationUseCaseService {
         // we don't need to pass in Transactions, since we just saved them and the status was updated
         transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalProcessTx, Optional.empty());
         batchesToBeUpdated.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
-        publishedTransactionToReset.forEach(txId -> eventPublisher.publishEvent(new TransactionRolledBackEvent(this, txId)));
+        publishedTransactionToReset.forEach(txId -> eventPublisher.publishEvent(new TxRollbackEvent(txId)));
     }
 
     private Set<TransactionEntity> storeTransactions(String batchId,

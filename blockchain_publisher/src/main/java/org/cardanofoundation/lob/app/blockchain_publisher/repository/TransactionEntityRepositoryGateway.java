@@ -40,7 +40,7 @@ public class TransactionEntityRepositoryGateway {
     @Value("${lob.blockchain_publisher.dispatcher.lock_timeout:PT3H}") // Default grace period to 3 hours
     private Duration lockTimeoutDuration;
 
-    @Value("${lob.blockchain-publisher.rollback.enabled}")
+    @Value("${lob.blockchain-publisher.rollback.enabled:false}")
     private Optional<Boolean> rollbackEnabled;
 
     public Optional<TransactionEntity> findById(String txId) {

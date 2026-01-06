@@ -39,6 +39,7 @@ The following columns are needed (* denotes a mandatory field):
 - `Cost Center Code`: Cost center code of the transaction (e.g. `COST_CENTER_1`)
 - `Counterparty Code`: Counterparty code of the transaction (e.g. `VENDOR_1`)
 - `Counterparty Name`: Counterparty name of the transaction (e.g. `Vendor 1`)
+- `Rollback Suffix`: Suffix to identify rollbacks. If this feature is enable, it will overwrite onchain transactions. **Use with caution!** (e.g. `-RB`)
 
 ### Account Events data structure
 An example can be found here: [Account Events CSV Example](./examples/account_event_csv_example.csv)

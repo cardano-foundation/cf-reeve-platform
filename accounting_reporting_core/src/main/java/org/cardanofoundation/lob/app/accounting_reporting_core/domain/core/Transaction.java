@@ -77,7 +77,7 @@ public class Transaction {
     @Builder.Default
     private Set<Violation> violations = new LinkedHashSet<>();
 
-    private String letter;
+    private String rollbackSuffix;
 
     public static String id(String organisationId,
                             String internalTransactionNumber) {

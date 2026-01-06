@@ -63,6 +63,6 @@ public class TransactionLine {
     @CsvBindByName(column = "Counterparty Name")
     private String counterPartyName;
 
-    @CsvBindByName(column = "Letter")
-    private String letter;
+    @CsvBindByName(column = "Rollback Suffix")
+    private String rollbackSuffix;
 }
