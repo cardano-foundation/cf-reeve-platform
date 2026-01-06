@@ -22,6 +22,11 @@ public class SequenceResyncRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         resyncSequence("organisation_chart_of_account_type", "id");
         resyncSequence("organisation_chart_of_account_sub_type", "id");
+        // Reporting module
+        resyncSequence("report_template", "id");
+        resyncSequence("report_template_field", "id");
+        resyncSequence("report_template_validation_rule", "id");
+        resyncSequence("report_template_validation_rule_term", "id");
         // Add more entities as needed
     }
 
