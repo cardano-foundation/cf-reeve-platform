@@ -8,10 +8,12 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -38,9 +40,16 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
@@ -126,6 +135,105 @@ class ReportingServiceTest {
         assertTrue(result.getError().isEmpty());
         assertEquals("Test Report", result.getName());
         verify(reportRepository).save(any(ReportEntity.class));
+    }
+
+    @Test
+    void create_Success_NotActiveValidationRule() {
+        // Given
+        ReportTemplateFieldEntity field1 = mock(ReportTemplateFieldEntity.class);
+        when(field1.getName()).thenReturn("Field1");
+        ReportTemplateFieldEntity field2 = mock(ReportTemplateFieldEntity.class);
+        when(field2.getName()).thenReturn("Field2");
+        templateEntity.setFields(List.of(field1, field2));
+        ReportTemplateValidationRuleEntity validationRule = mock(ReportTemplateValidationRuleEntity.class);
+        when(validationRule.isActive()).thenReturn(false);
+        templateEntity.setValidationRules(List.of(validationRule));
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                any(), any(), any())).thenReturn(new ArrayList<>());
+        when(reportRepository.findLatestByTemplateAndPeriod(
+                eq("org123"), eq("abc"), any(IntervalType.class), eq((short) 2024), eq((short) 1)))
+                .thenReturn(Optional.empty());
+        when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
+        when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
+        when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+        reportResponseDto.setError(Optional.empty());
+
+        // When
+        ReportResponseDto result = reportingService.create(reportDto);
+
+        // Then
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Test Report", result.getName());
+        verify(reportRepository).save(any(ReportEntity.class));
+    }
+
+    @Test
+    void create_Success_FailedValidationRule() {
+        // Given
+        ReportTemplateFieldEntity templateField1 = mock(ReportTemplateFieldEntity.class);
+        when(templateField1.getName()).thenReturn("Field1");
+        when(templateField1.getId()).thenReturn(1L);
+        ReportFieldEntity field1 = mock(ReportFieldEntity.class);
+        when(field1.getFieldTemplate()).thenReturn(templateField1);
+        when(field1.getValue()).thenReturn(BigDecimal.ONE);
+
+        ReportTemplateFieldEntity templateField2 = mock(ReportTemplateFieldEntity.class);
+        when(templateField2.getId()).thenReturn(2L);
+        when(templateField2.getName()).thenReturn("Field2");
+        ReportFieldEntity field2 = mock(ReportFieldEntity.class);
+        when(field2.getFieldTemplate()).thenReturn(templateField2);
+        when(field2.getValue()).thenReturn(BigDecimal.ONE);
+
+        templateEntity.setFields(List.of(templateField1, templateField2));
+        reportEntity.setFields(List.of(field1, field2));
+
+        ReportTemplateValidationRuleEntity validationRule = mock(ReportTemplateValidationRuleEntity.class);
+        when(validationRule.isActive()).thenReturn(true);
+        when(validationRule.getOperator()).thenReturn(ComparisonOperator.EQUAL);
+        when(validationRule.getTerms()).thenReturn(List.of(
+                ValidationRuleTermEntity.builder().id(1L).side(TermSide.LEFT).field(templateField1).termOrder(1).operation(TermOperation.SUBTRACT).build(),
+                ValidationRuleTermEntity.builder().id(2L).side(TermSide.RIGHT).field(templateField2).termOrder(2).operation(TermOperation.ADD).build()));
+        templateEntity.setValidationRules(List.of(validationRule));
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
+        lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
+                any(), any(), any())).thenReturn(new ArrayList<>());
+        when(reportRepository.findLatestByTemplateAndPeriod(
+                eq("org123"), eq("abc"), any(IntervalType.class), eq((short) 2024), eq((short) 1)))
+                .thenReturn(Optional.empty());
+        when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
+        when(reportRepository.save(any(ReportEntity.class))).thenReturn(reportEntity);
+        when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+        reportResponseDto.setError(Optional.empty());
+
+        // When
+        ReportResponseDto result = reportingService.create(reportDto);
+
+        // Then
+        assertFalse(reportEntity.isReadyToPublish());
+        assertTrue(result.getError().isEmpty());
+        assertEquals("Test Report", result.getName());
+        verify(reportRepository).save(any(ReportEntity.class));
+
+        when(validationRule.getOperator()).thenReturn(ComparisonOperator.GREATER_THAN_OR_EQUAL);
+
+        // When
+        reportingService.create(reportDto);
+
+        // Then
+        assertFalse(reportEntity.isReadyToPublish());
+
+        when(validationRule.getOperator()).thenReturn(ComparisonOperator.LESS_THAN_OR_EQUAL);
+
+        // When
+        reportingService.create(reportDto);
+
+        // Then
+        assertTrue(reportEntity.isReadyToPublish());
     }
 
     @Test
@@ -250,6 +358,13 @@ class ReportingServiceTest {
 
         assertTrue(response.getError().isPresent());
         assertEquals("INVALID_PERIOD", response.getError().get().getTitle());
+
+        reportDto.setYear((short) 2100); // Year in future
+
+        response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("REPORT_IN_FUTURE", response.getError().get().getTitle());
     }
 
 

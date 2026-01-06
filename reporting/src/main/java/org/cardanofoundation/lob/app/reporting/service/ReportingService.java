@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -96,7 +97,7 @@ public class ReportingService {
             return ReportResponseDto.builder().error(Optional.of(
                     Problem.builder()
                             .withTitle("TEMPLATE_INACTIVE")
-                            .withDetail("Report template with ID " + dto.getReportTemplateId() + " is inactive and cannot be used to create reports")
+                            .withDetail("Report template with ID %s is inactive and cannot be used to create reports".formatted(dto.getReportTemplateId()))
                             .withStatus(Status.BAD_REQUEST)
                             .build()
             )).build();
@@ -184,7 +185,7 @@ public class ReportingService {
 
     private BigDecimal getValueFromValidationRuleTerms(ReportEntity entity, List<ValidationRuleTermEntity> terms) {
         BigDecimal result = BigDecimal.ZERO;
-        terms = terms.stream().sorted((o1, o2) -> o1.getTermOrder() > o2.getTermOrder() ? 1 : -1).toList();
+        terms = terms.stream().sorted(Comparator.comparingInt(ValidationRuleTermEntity::getTermOrder)).toList();
         for (ValidationRuleTermEntity term : terms) {
             BigDecimal fieldValue = findFieldValueRecursively(entity.getFields(), term.getField().getId());
             switch (term.getOperation()) {
@@ -297,7 +298,7 @@ public class ReportingService {
         if (!template.isActive()) {
             return Either.left(Problem.builder()
                     .withTitle("TEMPLATE_INACTIVE")
-                    .withDetail("Report template with ID " + request.getReportTemplateId() + " is inactive and cannot be used to generate reports")
+                    .withDetail("Report template with ID %s is inactive and cannot be used to generate reports".formatted(request.getReportTemplateId()))
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -310,7 +311,7 @@ public class ReportingService {
         // Calculate date range and generate fields
         IntervalType intervalType = IntervalType.valueOf(request.getIntervalType());
         Short periodValue = request.getPeriod();
-        short period = (periodValue != null) ? periodValue.shortValue() : (short) 1;
+        short period = (periodValue != null) ? periodValue : (short) 1;
         LocalDate startDate = getReportStartDate(intervalType, period, request.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
@@ -355,7 +356,7 @@ public class ReportingService {
         if (templateOpt.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("REPORT_TEMPLATE_NOT_FOUND")
-                    .withDetail("Report template with ID " + templateId + " does not exist")
+                    .withDetail("Report template with ID %s does not exist".formatted(templateId))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -393,7 +394,7 @@ public class ReportingService {
 
         IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
         Short periodValue = dto.getPeriod();
-        short period = (periodValue != null) ? periodValue.shortValue() : (short) 1;
+        short period = (periodValue != null) ? periodValue : (short) 1;
         LocalDate startDate = getReportStartDate(intervalType, period, dto.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
@@ -558,8 +559,7 @@ public class ReportingService {
             if (hasChildren && reportField.getValue() != null) {
                 return Either.left(Problem.builder()
                         .withTitle(Constants.INVALID_FIELD_VALUE)
-                        .withDetail("Field '" + currentPath + "' has child fields and must not have a value set. " +
-                                "Only leaf fields (fields without children) can have values.")
+                        .withDetail("Field '%s' has child fields and must not have a value set. Only leaf fields (fields without children) can have values.".formatted(currentPath))
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
@@ -633,7 +633,7 @@ public class ReportingService {
         if (reportOpt.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail("Report with ID " + id + " does not exist")
+                    .withDetail("Report with ID %s does not exist".formatted(id))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -644,7 +644,7 @@ public class ReportingService {
         if (report.isLedgerDispatchApproved()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
-                    .withDetail("Cannot delete report with ID " + id + " because it has already been published")
+                    .withDetail("Cannot delete report with ID %s because it has already been published".formatted(id))
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -662,7 +662,7 @@ public class ReportingService {
         return templateFields.stream()
                 .filter(field -> field.getParentField() == null) // Only top-level fields
                 .map(field -> fillTemplateFieldRecursively(field, startDate, endDate))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private ReportFieldDto fillTemplateFieldRecursively(ReportTemplateFieldEntity templateField, LocalDate
@@ -673,7 +673,7 @@ public class ReportingService {
             // Has children - recursively fill child fields
             childColumns = templateField.getChildFields().stream()
                     .map(child -> fillTemplateFieldRecursively(child, startDate, endDate))
-                    .collect(Collectors.toList());
+                    .toList();
         }
 
         // Calculate value based on mapping types (if no children or if it's an accumulated field)
@@ -742,9 +742,8 @@ public class ReportingService {
 
             // Get account codes for transaction lookup
             List<String> accountCodes = chartOfAccounts.stream()
-                    .filter(coa -> coa.getId() != null && coa.getId().getCustomerCode() != null)
                     .map(coa -> coa.getId().getCustomerCode())
-                    .collect(Collectors.toList());
+                    .toList();
 
             if (!accountCodes.isEmpty()) {
                 // Query transaction items for these accounts in the date range
@@ -753,7 +752,6 @@ public class ReportingService {
 
                 // Map accounts for quick lookup
                 Map<String, ChartOfAccount> accountMap = chartOfAccounts.stream()
-                        .filter(coa -> coa.getId() != null && coa.getId().getCustomerCode() != null)
                         .collect(Collectors.toMap(
                                 coa -> coa.getId().getCustomerCode(),
                                 coa -> coa
@@ -766,25 +764,7 @@ public class ReportingService {
                         continue;
                     }
 
-                    BigDecimal itemAmount = BigDecimal.ZERO;
-
-                    // Check if account is on debit side
-                    if (txItem.getAccountDebit().isPresent() && accountMap.containsKey(txItem.getAccountDebit().get().getCode())) {
-                        if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
-                            itemAmount = itemAmount.add(txItem.getAmountLcy());
-                        } else {
-                            itemAmount = itemAmount.add(txItem.getAmountLcy().negate());
-                        }
-                    }
-
-                    // Check if account is on credit side
-                    if (txItem.getAccountCredit().isPresent() && accountMap.containsKey(txItem.getAccountCredit().get().getCode())) {
-                        if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
-                            itemAmount = itemAmount.subtract(txItem.getAmountLcy());
-                        } else {
-                            itemAmount = itemAmount.subtract(txItem.getAmountLcy().negate());
-                        }
-                    }
+                    BigDecimal itemAmount = getItemAmountFromItem(txItem, accountMap);
 
                     totalAmount = totalAmount.add(itemAmount);
                 }
@@ -797,6 +777,29 @@ public class ReportingService {
         }
 
         return totalAmount.stripTrailingZeros();
+    }
+
+    private BigDecimal getItemAmountFromItem(TransactionItemEntity txItem, Map<String, ChartOfAccount> accountMap) {
+        BigDecimal itemAmount = BigDecimal.ZERO;
+
+        // Check if account is on debit side
+        if (txItem.getAccountDebit().isPresent() && accountMap.containsKey(txItem.getAccountDebit().get().getCode())) {
+            if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
+                itemAmount = itemAmount.add(txItem.getAmountLcy());
+            } else {
+                itemAmount = itemAmount.add(txItem.getAmountLcy().negate());
+            }
+        }
+
+        // Check if account is on credit side
+        if (txItem.getAccountCredit().isPresent() && accountMap.containsKey(txItem.getAccountCredit().get().getCode())) {
+            if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
+                itemAmount = itemAmount.subtract(txItem.getAmountLcy());
+            } else {
+                itemAmount = itemAmount.subtract(txItem.getAmountLcy().negate());
+            }
+        }
+        return itemAmount;
     }
 
     private LocalDate getReportStartDate(IntervalType intervalType, short period, short year) {
@@ -823,7 +826,7 @@ public class ReportingService {
         if (reportO.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail("Report with ID " + request.getReportId() + " does not exist")
+                    .withDetail("Report with ID %s does not exist".formatted(request.getReportId()))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -831,14 +834,14 @@ public class ReportingService {
         if (!report.isReadyToPublish()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_READY_TO_PUBLISH)
-                    .withDetail("Report with ID " + request.getReportId() + " is not ready to be published")
+                    .withDetail("Report with ID %s is not ready to be published".formatted(request.getReportId()))
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
         if (report.isLedgerDispatchApproved()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
-                    .withDetail("Report with ID " + request.getReportId() + " has already been published")
+                    .withDetail("Report with ID %s has already been published".formatted(request.getReportId()))
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -853,14 +856,6 @@ public class ReportingService {
 
     }
 
-    /**
-     * Reprocesses a report to re-evaluate validation rules.
-     * Updates the readyToPublish state and failedValidationRules based on current field values.
-     *
-     * @param organisationId The organisation ID
-     * @param reportId The report ID to reprocess
-     * @return Either a Problem if the report cannot be found or processed, or the updated ReportResponseDto
-     */
     /**
      * Reprocesses a report to re-evaluate validation rules.
      * For SYSTEM data mode: regenerates field values and re-evaluates validation rules
@@ -879,7 +874,7 @@ public class ReportingService {
         if (reportOpt.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail("Report with ID " + reportId + " does not exist")
+                    .withDetail("Report with ID %s does not exist".formatted(reportId))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -890,7 +885,7 @@ public class ReportingService {
         if (report.isLedgerDispatchApproved()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
-                    .withDetail("Cannot reprocess report with ID " + reportId + " because it has already been published")
+                    .withDetail("Cannot reprocess report with ID %s because it has already been published".formatted(reportId))
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -922,7 +917,7 @@ public class ReportingService {
             // Convert DTOs to entities and update the report
             List<ReportFieldEntity> newFieldEntities = regeneratedFields.stream()
                     .map(reportMapper::toColumnEntity)
-                    .collect(Collectors.toList());
+                    .toList();
 
             // Set report reference for all fields recursively
             ReportEntity finalReport = report;
