@@ -26,7 +26,7 @@ import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @Entity
-@Table(name = "validation_rule_term")
+@Table(name = "report_template_validation_rule_term")
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder

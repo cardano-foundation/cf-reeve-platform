@@ -56,7 +56,7 @@ public class ReportTemplateFieldEntity extends CommonEntity {
 
     @ManyToMany
     @JoinTable(
-            name = "reporting_field_subtype_mapping",
+            name = "report_field_subtype_mapping",
             joinColumns = @JoinColumn(name = "field_id"),
             inverseJoinColumns = @JoinColumn(name = "sub_type_id")
     )

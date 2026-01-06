@@ -91,19 +91,19 @@ CREATE TABLE IF NOT EXISTS report_template_field_aud (
 );
 
 -- Organisation Report Setup Field SubType Mapping Table (Many-to-Many)
-CREATE TABLE IF NOT EXISTS reporting_field_subtype_mapping (
+CREATE TABLE IF NOT EXISTS report_field_subtype_mapping (
     field_id BIGINT NOT NULL,
     sub_type_id BIGINT NOT NULL,
     
-    CONSTRAINT pk_reporting_field_subtype_mapping PRIMARY KEY (field_id, sub_type_id),
-    CONSTRAINT fk_reporting_field_mapping_field FOREIGN KEY (field_id) 
+    CONSTRAINT pk_report_field_subtype_mapping PRIMARY KEY (field_id, sub_type_id),
+    CONSTRAINT fk_report_field_mapping_field FOREIGN KEY (field_id)
         REFERENCES report_template_field(id) ON DELETE CASCADE,
-    CONSTRAINT fk_reporting_field_mapping_subtype FOREIGN KEY (sub_type_id) 
+    CONSTRAINT fk_report_field_mapping_subtype FOREIGN KEY (sub_type_id)
         REFERENCES organisation_chart_of_account_sub_type(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_reporting_field_subtype_mapping_field_id ON reporting_field_subtype_mapping(field_id);
-CREATE INDEX idx_reporting_field_subtype_mapping_subtype_id ON reporting_field_subtype_mapping(sub_type_id);
+CREATE INDEX idx_report_field_subtype_mapping_field_id ON report_field_subtype_mapping(field_id);
+CREATE INDEX idx_report_field_subtype_mapping_subtype_id ON report_field_subtype_mapping(sub_type_id);
 
 -- Report Table
 CREATE TABLE IF NOT EXISTS report (
@@ -248,7 +248,7 @@ COMMENT ON TABLE report_template_validation_rule IS 'Validation rules for report
 COMMENT ON COLUMN report_template_validation_rule.operator IS 'Comparison operator: GREATER_THAN_OR_EQUAL, EQUAL, or LESS_THAN_OR_EQUAL';
 
 -- Validation Rule Term Table
-CREATE TABLE IF NOT EXISTS validation_rule_term (
+CREATE TABLE IF NOT EXISTS report_template_validation_rule_term (
     id BIGSERIAL NOT NULL,
     validation_rule_id BIGINT NOT NULL,
     field_id BIGINT NOT NULL,
@@ -268,13 +268,13 @@ CREATE TABLE IF NOT EXISTS validation_rule_term (
         REFERENCES report_template_field(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_validation_term_rule_id ON validation_rule_term(validation_rule_id);
-CREATE INDEX idx_validation_term_field_id ON validation_rule_term(field_id);
+CREATE INDEX idx_validation_term_rule_id ON report_template_validation_rule_term(validation_rule_id);
+CREATE INDEX idx_validation_term_field_id ON report_template_validation_rule_term(field_id);
 
-COMMENT ON TABLE validation_rule_term IS 'Individual terms in a validation rule expression';
-COMMENT ON COLUMN validation_rule_term.operation IS 'Operation to apply: ADD or SUBTRACT';
-COMMENT ON COLUMN validation_rule_term.side IS 'Which side of the comparison: LEFT or RIGHT';
-COMMENT ON COLUMN validation_rule_term.term_order IS 'Order of the term in the expression';
+COMMENT ON TABLE report_template_validation_rule_term IS 'Individual terms in a validation rule expression';
+COMMENT ON COLUMN report_template_validation_rule_term.operation IS 'Operation to apply: ADD or SUBTRACT';
+COMMENT ON COLUMN report_template_validation_rule_term.side IS 'Which side of the comparison: LEFT or RIGHT';
+COMMENT ON COLUMN report_template_validation_rule_term.term_order IS 'Order of the term in the expression';
 
 -- Report Failed Validation Rule Mapping Table (Many-to-Many)
 CREATE TABLE IF NOT EXISTS report_failed_validation_rule (
