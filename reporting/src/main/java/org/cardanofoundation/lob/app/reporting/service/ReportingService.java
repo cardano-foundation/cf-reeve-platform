@@ -315,7 +315,7 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, request.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate);
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, request.isPreview());
 
         // Generate report name
         String reportName = generateReportName(template.getName(), request.getIntervalType(), request.getYear(), request.getPeriod());
@@ -334,7 +334,6 @@ public class ReportingService {
 
         // Map to entity without saving to get the response structure
         ReportEntity previewEntity = reportMapper.toEntity(reportDto, null, template);
-        previewEntity.setReadyToPublish(true);
 
         // Return the preview without saving
         return Either.right(reportMapper.toResponseDto(previewEntity));
@@ -398,7 +397,7 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, dto.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate);
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, false);
         return Either.right(fields);
     }
 
@@ -654,32 +653,32 @@ public class ReportingService {
     }
 
     private List<ReportFieldDto> fillFieldsFromTemplate
-            (List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate) {
+            (List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate, boolean preview) {
         if (templateFields == null) {
             return null;
         }
 
         return templateFields.stream()
                 .filter(field -> field.getParentField() == null) // Only top-level fields
-                .map(field -> fillTemplateFieldRecursively(field, startDate, endDate))
+                .map(field -> fillTemplateFieldRecursively(field, startDate, endDate, preview))
                 .toList();
     }
 
     private ReportFieldDto fillTemplateFieldRecursively(ReportTemplateFieldEntity templateField, LocalDate
-            startDate, LocalDate endDate) {
+            startDate, LocalDate endDate, boolean preview) {
         List<ReportFieldDto> childColumns = null;
 
         if (templateField.getChildFields() != null && !templateField.getChildFields().isEmpty()) {
             // Has children - recursively fill child fields
             childColumns = templateField.getChildFields().stream()
-                    .map(child -> fillTemplateFieldRecursively(child, startDate, endDate))
+                    .map(child -> fillTemplateFieldRecursively(child, startDate, endDate, preview))
                     .toList();
         }
 
         // Calculate value based on mapping types (if no children or if it's an accumulated field)
         BigDecimal value = null;
         if (templateField.getMappingTypes() != null && !templateField.getMappingTypes().isEmpty()) {
-            value = calculateFieldValue(templateField, startDate, endDate);
+            value = calculateFieldValue(templateField, startDate, endDate, preview);
         }
 
         return ReportFieldDto.builder()
@@ -690,7 +689,7 @@ public class ReportingService {
                 .build();
     }
 
-    private BigDecimal calculateFieldValue(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate) {
+    private BigDecimal calculateFieldValue(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview) {
         LocalDate effectiveStartDate = startDate;
         LocalDate effectiveEndDate = endDate;
 
@@ -747,8 +746,14 @@ public class ReportingService {
 
             if (!accountCodes.isEmpty()) {
                 // Query transaction items for these accounts in the date range
-                List<TransactionItemEntity> transactionItems = transactionItemRepository
+                List<TransactionItemEntity> transactionItems;
+                if(preview) {
+                    transactionItems = transactionItemRepository
+                            .findPreviewTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
+                } else {
+                    transactionItems = transactionItemRepository
                         .findTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
+                }
 
                 // Map accounts for quick lookup
                 Map<String, ChartOfAccount> accountMap = chartOfAccounts.stream()
@@ -911,7 +916,8 @@ public class ReportingService {
             List<ReportFieldDto> regeneratedFields = fillFieldsFromTemplate(
                     report.getReportTemplate().getFields(),
                     startDate,
-                    endDate
+                    endDate,
+                    false
             );
 
             // Convert DTOs to entities and update the report

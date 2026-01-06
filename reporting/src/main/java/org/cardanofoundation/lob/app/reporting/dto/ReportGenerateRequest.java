@@ -34,4 +34,8 @@ public class ReportGenerateRequest {
 
     @Schema(description = "Period number (1-12 for MONTH, 1-4 for QUARTER, null for YEAR)", example = "3", nullable = true)
     private Short period;
+
+    @NotNull
+    @Schema(description = "Indicates whether the report is generated in preview mode", example = "false", required = true)
+    private boolean preview = false;
 }
