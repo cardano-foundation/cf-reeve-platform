@@ -51,6 +51,12 @@ public class ReportEntityRepositoryGateway {
         return reportEntityRepository.findDispatchedReportsThatAreNotFinalizedYet(organisationId, notFinalisedButVisibleOnChain, limit);
     }
 
+    public Set<ReportV2Entity> findDispatchedReportsV2ThatAreNotFinalizedYet(String organisationId, Limit limit) {
+        Set<BlockchainPublishStatus> notFinalisedButVisibleOnChain = BlockchainPublishStatus.notFinalisedButVisibleOnChain();
+
+        return reportV2EntityRepository.findDispatchedReportsThatAreNotFinalizedYet(organisationId, notFinalisedButVisibleOnChain, limit);
+    }
+
     @Transactional
     public Set<ReportEntity> findReportsByStatus(String organisationId,
                                                  int pullReportsBatchSize) {

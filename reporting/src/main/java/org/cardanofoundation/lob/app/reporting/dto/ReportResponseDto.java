@@ -12,6 +12,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -54,6 +56,9 @@ public class ReportResponseDto {
 
     @Schema(description = "Indicates if the report has been published to blockchain", example = "false")
     private Boolean isPublished;
+
+    @Schema(description = "Ledger Dispatch status", example = "PENDING", allowableValues = {"NOT_DISPATCHED", "MARK_DISPATCH", "COMPLETED", "FINALIZED", "RETRYING", "FAILED"}, nullable = true)
+    private LedgerDispatchStatus ledgerDispatchStatus;
 
     @Schema(description = "Blockchain transaction ID if published", example = "4f5e6d7c8b9a0b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6", nullable = true)
     private String blockchainTxId;

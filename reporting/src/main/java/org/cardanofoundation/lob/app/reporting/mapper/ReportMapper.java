@@ -117,6 +117,7 @@ public class ReportMapper {
                 .isReadyToPublish(entity.isReadyToPublish())
                 .isPublished(entity.isLedgerDispatchApproved())
                 .blockchainTxId(entity.getBlockchainHash())
+                .ledgerDispatchStatus(entity.getLedgerDispatchStatus())
                 .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
                 .fields(topLevelFields)
                 .failedValidationRules(failedRuleDtos)
