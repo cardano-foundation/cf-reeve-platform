@@ -353,8 +353,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
                 this.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
                 return;
             }
-            case FAILED, RETRYING -> {
-            }
         }
         this.setProcessingStatus(TransactionProcessingStatus.APPROVE);
     }
