@@ -25,6 +25,7 @@ import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
@@ -383,14 +384,6 @@ public class ReportingService {
 
     private Either<Problem, List<ReportFieldDto>> generateFieldsForReport(ReportDto dto, ReportTemplateEntity
             template) {
-        if (dto.getIntervalType() == null || dto.getYear() == null) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.MISSING_REQUIRED_FIELDS)
-                    .withDetail("intervalType and year are required for GENERATED reports")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
-        }
-
         IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
         Short periodValue = dto.getPeriod();
         short period = (periodValue != null) ? periodValue : (short) 1;
@@ -632,7 +625,7 @@ public class ReportingService {
         if (reportOpt.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail("Report with ID %s does not exist".formatted(id))
+                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(id))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -744,8 +737,7 @@ public class ReportingService {
                 .map(org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType::getId)
                 .collect(Collectors.toList());
 
-        Set<ChartOfAccount> chartOfAccounts = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(subTypeIds);
-        return chartOfAccounts;
+        return chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(subTypeIds);
     }
 
     private static LocalDate getEffectiveEndDate(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate) {
@@ -817,7 +809,7 @@ public class ReportingService {
         BigDecimal itemAmount = BigDecimal.ZERO;
 
         // Check if account is on debit side
-        if (txItem.getAccountDebit().isPresent() && accountMap.containsKey(txItem.getAccountDebit().get().getCode())) {
+        if (accountMap.containsKey(txItem.getAccountDebit().orElse(Account.builder().code("").build()).getCode())) {
             if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
                 itemAmount = itemAmount.add(txItem.getAmountLcy());
             } else {
@@ -826,7 +818,7 @@ public class ReportingService {
         }
 
         // Check if account is on credit side
-        if (txItem.getAccountCredit().isPresent() && accountMap.containsKey(txItem.getAccountCredit().get().getCode())) {
+        if (accountMap.containsKey(txItem.getAccountCredit().orElse(Account.builder().code("").build()).getCode())) {
             if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
                 itemAmount = itemAmount.subtract(txItem.getAmountLcy());
             } else {
@@ -860,7 +852,7 @@ public class ReportingService {
         if (reportO.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail("Report with ID %s does not exist".formatted(request.getReportId()))
+                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(request.getReportId()))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
@@ -908,7 +900,7 @@ public class ReportingService {
         if (reportOpt.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail("Report with ID %s does not exist".formatted(reportId))
+                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(reportId))
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
