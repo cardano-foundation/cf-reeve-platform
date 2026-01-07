@@ -13,7 +13,4 @@ public class PageableFieldMappings {
             "reportTemplateId", "reportTemplate.id",
             "isPublished", "ledgerDispatchApproved"
     );
-
-    public static final Map<String, String> TEMPLATE_MAPPINGS = Map.of(
-    );
 }

@@ -1,11 +1,11 @@
 package org.cardanofoundation.lob.app.reporting.controller;
 
-import static org.cardanofoundation.lob.app.reporting.util.PageableFieldMappings.TEMPLATE_MAPPINGS;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -196,7 +196,7 @@ public class ReportTemplateController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
-        Either<Problem, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, TEMPLATE_MAPPINGS, ReportTemplateEntity.class);
+        Either<Problem, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, Map.of(), ReportTemplateEntity.class);
         if (pageableE.isLeft()) {
             Problem problem = pageableE.getLeft();
             return ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem);
