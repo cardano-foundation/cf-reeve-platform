@@ -42,11 +42,7 @@ jreleaser {
 allprojects {
     repositories {
         mavenLocal()
-        // mavenCentral()
-        maven {
-            name = "sonatype"
-            url = uri("https://oss.sonatype.org/content/repositories/releases/")
-        }
+        mavenCentral()
         maven {
             name = "sonatypeSnapshots"
             url = uri("https://oss.sonatype.org/content/repositories/snapshots")
