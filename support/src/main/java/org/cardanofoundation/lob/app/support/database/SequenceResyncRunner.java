@@ -46,7 +46,7 @@ public class SequenceResyncRunner implements ApplicationRunner {
                 String sql = String.format("""
                     SELECT setval(
                         pg_get_serial_sequence('%s', '%s'),
-                        COALESCE((SELECT MAX(%s)::bigint FROM %s), 0::bigint),
+                        COALESCE((SELECT MAX(%s)::bigint FROM %s), 1::bigint),
                         true
                     )
                 """, tableName, idColumn, idColumn, tableName);
