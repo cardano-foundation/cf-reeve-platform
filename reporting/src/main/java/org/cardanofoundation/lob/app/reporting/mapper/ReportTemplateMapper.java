@@ -103,7 +103,7 @@ public class ReportTemplateMapper {
             .fields(topLevelColumns)
             .validationRules(validationRules)
             .reportCount(entity.getReportCount())
-            .dataMode(entity.getDataMode().name())
+            .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
             .build();
     }
 
