@@ -690,10 +690,75 @@ public class ReportingService {
     }
 
     private BigDecimal calculateFieldValue(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview) {
-        LocalDate effectiveStartDate = startDate;
-        LocalDate effectiveEndDate = endDate;
 
+        LocalDate effectiveStartDate = getEffectiveStartDate(field, startDate);
+        LocalDate effectiveEndDate = getEffectiveEndDate(field, startDate, endDate);
+        BigDecimal totalAmount = BigDecimal.ZERO;
+
+        // Get all chart of accounts mapped to this field's subtypes
+        if (field.getMappingTypes() != null && !field.getMappingTypes().isEmpty()) {
+            Set<ChartOfAccount> chartOfAccounts = getAllChartOfAccounts(field);
+            totalAmount = addOpeningBalances(chartOfAccounts, effectiveStartDate, effectiveEndDate, totalAmount);
+            // Get account codes for transaction lookup
+            List<String> accountCodes = chartOfAccounts.stream()
+                    .map(coa -> coa.getId().getCustomerCode())
+                    .toList();
+
+            if (!accountCodes.isEmpty()) {
+                // Query transaction items for these accounts in the date range
+                List<TransactionItemEntity> transactionItems = getTransactionItems(preview, accountCodes, effectiveStartDate, effectiveEndDate);
+
+                // Map accounts for quick lookup
+                Map<String, ChartOfAccount> accountMap = chartOfAccounts.stream()
+                        .collect(Collectors.toMap(
+                                coa -> coa.getId().getCustomerCode(),
+                                coa -> coa
+                        ));
+
+                totalAmount = SumTransactionItems(transactionItems, accountMap, totalAmount);
+            }
+        }
+
+        // Apply negation if configured
+        if (field.isNegated()) {
+            totalAmount = totalAmount.negate();
+        }
+
+        return totalAmount.stripTrailingZeros();
+    }
+
+    private List<TransactionItemEntity> getTransactionItems(boolean preview, List<String> accountCodes, LocalDate effectiveStartDate, LocalDate effectiveEndDate) {
+        List<TransactionItemEntity> transactionItems;
+        if(preview) {
+            transactionItems = transactionItemRepository
+                    .findPreviewTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
+        } else {
+            transactionItems = transactionItemRepository
+                .findTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
+        }
+        return transactionItems;
+    }
+
+    private Set<ChartOfAccount> getAllChartOfAccounts(ReportTemplateFieldEntity field) {
+        List<Long> subTypeIds = field.getMappingTypes().stream()
+                .map(org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType::getId)
+                .collect(Collectors.toList());
+
+        Set<ChartOfAccount> chartOfAccounts = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(subTypeIds);
+        return chartOfAccounts;
+    }
+
+    private static LocalDate getEffectiveEndDate(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate) {
+        LocalDate effectiveEndDate = endDate;
+        if (field.isAccumulatedPreviousYear()) {
+            effectiveEndDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
+        }
+        return effectiveEndDate;
+    }
+
+    private static LocalDate getEffectiveStartDate(ReportTemplateFieldEntity field, LocalDate startDate) {
         // Adjust date range based on accumulation flags
+        LocalDate effectiveStartDate = startDate;
         if (field.isAccumulated()) {
             effectiveStartDate = LocalDate.EPOCH;
         }
@@ -704,84 +769,48 @@ public class ReportingService {
             if (!field.isAccumulated()) {
                 effectiveStartDate = LocalDate.of(startDate.getYear() - 1, 1, 1);
             }
-            effectiveEndDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
         }
+        return effectiveStartDate;
+    }
 
-        BigDecimal totalAmount = BigDecimal.ZERO;
+    private static BigDecimal addOpeningBalances(Set<ChartOfAccount> chartOfAccounts, LocalDate effectiveStartDate, LocalDate effectiveEndDate, BigDecimal totalAmount) {
+        // Add opening balances if within date range
+        for (ChartOfAccount coa : chartOfAccounts) {
+            var openingBalance = coa.getOpeningBalance();
+            if (openingBalance != null && openingBalance.getDate() != null) {
+                LocalDate openingDate = openingBalance.getDate();
+                // Include opening balance if it's after (or equal to) start date and before (or equal to) end date
+                if (!openingDate.isBefore(effectiveStartDate) && !openingDate.isAfter(effectiveEndDate)) {
+                    BigDecimal openingAmount = openingBalance.getBalanceLCY() != null
+                            ? openingBalance.getBalanceLCY()
+                            : BigDecimal.ZERO;
 
-        // Get all chart of accounts mapped to this field's subtypes
-        if (field.getMappingTypes() != null && !field.getMappingTypes().isEmpty()) {
-            List<Long> subTypeIds = field.getMappingTypes().stream()
-                    .map(org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType::getId)
-                    .collect(Collectors.toList());
-
-            Set<ChartOfAccount> chartOfAccounts = chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(subTypeIds);
-
-            // Add opening balances if within date range
-            for (ChartOfAccount coa : chartOfAccounts) {
-                var openingBalance = coa.getOpeningBalance();
-                if (openingBalance != null && openingBalance.getDate() != null) {
-                    LocalDate openingDate = openingBalance.getDate();
-                    // Include opening balance if it's after (or equal to) start date and before (or equal to) end date
-                    if (!openingDate.isBefore(effectiveStartDate) && !openingDate.isAfter(effectiveEndDate)) {
-                        BigDecimal openingAmount = openingBalance.getBalanceLCY() != null
-                                ? openingBalance.getBalanceLCY()
-                                : BigDecimal.ZERO;
-
-                        // Check balance type - if CREDIT, negate the amount
-                        if (openingBalance.getBalanceType() != null
-                                && openingBalance.getBalanceType().name().equals("CREDIT")) {
-                            openingAmount = openingAmount.negate();
-                        }
-
-                        totalAmount = totalAmount.add(openingAmount);
-                    }
-                }
-            }
-
-            // Get account codes for transaction lookup
-            List<String> accountCodes = chartOfAccounts.stream()
-                    .map(coa -> coa.getId().getCustomerCode())
-                    .toList();
-
-            if (!accountCodes.isEmpty()) {
-                // Query transaction items for these accounts in the date range
-                List<TransactionItemEntity> transactionItems;
-                if(preview) {
-                    transactionItems = transactionItemRepository
-                            .findPreviewTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
-                } else {
-                    transactionItems = transactionItemRepository
-                        .findTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
-                }
-
-                // Map accounts for quick lookup
-                Map<String, ChartOfAccount> accountMap = chartOfAccounts.stream()
-                        .collect(Collectors.toMap(
-                                coa -> coa.getId().getCustomerCode(),
-                                coa -> coa
-                        ));
-
-                // Sum transaction amounts
-                for (TransactionItemEntity txItem : transactionItems) {
-                    // Skip invalid items
-                    if (txItem.getStatus() != org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.OK) {
-                        continue;
+                    // Check balance type - if CREDIT, negate the amount
+                    if (openingBalance.getBalanceType() != null
+                            && openingBalance.getBalanceType().name().equals("CREDIT")) {
+                        openingAmount = openingAmount.negate();
                     }
 
-                    BigDecimal itemAmount = getItemAmountFromItem(txItem, accountMap);
-
-                    totalAmount = totalAmount.add(itemAmount);
+                    totalAmount = totalAmount.add(openingAmount);
                 }
             }
         }
+        return totalAmount;
+    }
 
-        // Apply negation if configured
-        if (field.isNegated()) {
-            totalAmount = totalAmount.negate();
+    private BigDecimal SumTransactionItems(List<TransactionItemEntity> transactionItems, Map<String, ChartOfAccount> accountMap, BigDecimal totalAmount) {
+        // Sum transaction amounts
+        for (TransactionItemEntity txItem : transactionItems) {
+            // Skip invalid items
+            if (txItem.getStatus() != org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.OK) {
+                continue;
+            }
+
+            BigDecimal itemAmount = getItemAmountFromItem(txItem, accountMap);
+
+            totalAmount = totalAmount.add(itemAmount);
         }
-
-        return totalAmount.stripTrailingZeros();
+        return totalAmount;
     }
 
     private BigDecimal getItemAmountFromItem(TransactionItemEntity txItem, Map<String, ChartOfAccount> accountMap) {
