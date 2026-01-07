@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.controller;
 
+import static org.cardanofoundation.lob.app.reporting.util.PageableFieldMappings.TEMPLATE_MAPPINGS;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
@@ -11,6 +12,8 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -38,10 +41,13 @@ import org.zalando.problem.Problem;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportTemplateService;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
 import org.cardanofoundation.lob.app.reporting.util.Constants;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -54,6 +60,7 @@ public class ReportTemplateController {
     private final ReportTemplateService reportTemplateService;
     private final CsvReportTemplateService csvReportTemplateService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     @GetMapping(value = "/types", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
@@ -175,7 +182,13 @@ public class ReportTemplateController {
     public ResponseEntity<?> findAll(
             @RequestParam(value = "organisationId", required = true) @Parameter(
                     description = "Filter by organisation ID",
-                    example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
+                    example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "description", required = false) String description,
+            @RequestParam(value = "reportTemplateType", required = false) List<ReportTemplateType> reportTemplateTypes,
+            @RequestParam(value = "active", required = false) Boolean active,
+            @RequestParam(value = "dataMode", required = false) List<DataMode> dataMode,
+            @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         log.info("GET /api/report-templates - organisationId: {}", organisationId);
 
         // Check organisation access
@@ -183,10 +196,12 @@ public class ReportTemplateController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
-
-        List<ReportTemplateResponseDto> templates =
-                organisationId != null ? reportTemplateService.findByOrganisationId(organisationId)
-                        : reportTemplateService.findAll();
+        Either<Problem, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, TEMPLATE_MAPPINGS, ReportTemplateEntity.class);
+        if (pageableE.isLeft()) {
+            Problem problem = pageableE.getLeft();
+            return ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem);
+        }
+        List<ReportTemplateResponseDto> templates = reportTemplateService.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageableE.get());
         return ResponseEntity.ok(templates);
     }
 

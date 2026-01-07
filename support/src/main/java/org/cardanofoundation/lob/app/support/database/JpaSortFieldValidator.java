@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.support.database;
 
+import static org.zalando.problem.Status.BAD_REQUEST;
+
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 
@@ -10,6 +13,7 @@ import jakarta.persistence.metamodel.ManagedType;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.stereotype.Component;
 
 import io.vavr.control.Either;
@@ -72,5 +76,67 @@ public class JpaSortFieldValidator {
             // Thrown by getAttribute() if any part of the path is not found.
             return false;
         }
+    }
+
+
+    public Either<Problem, Pageable> convertPageable(Pageable page,
+                                                     Map<String, String> fieldMappings, Class<?> classType) {
+        if (page.getSort().isSorted()) {
+            Optional<Sort.Order> notSortableProperty =
+                    page.getSort().get().filter(order -> {
+                        String property = Optional
+                                .ofNullable(fieldMappings.get(order
+                                        .getProperty()))
+                                .orElse(order.getProperty());
+
+                        return !isSortable(classType,
+                                property);
+                    }).findFirst();
+
+            if (notSortableProperty.isPresent()) {
+                return Either.left(Problem.builder().withStatus(BAD_REQUEST)
+                        .withTitle("Invalid Sort Property")
+                        .withDetail("Invalid sort: " + notSortableProperty
+                                .get().getProperty())
+                        .build());
+            }
+
+            Sort sort = Sort.by(page.getSort().get().map(order -> {
+                String property = Optional
+                        .ofNullable(fieldMappings.get(order.getProperty()))
+                        .orElse(order.getProperty());
+
+                boolean isEnum = false;
+                try {
+                    String[] parts = property.split("\\.");
+                    Class<?> currentClass = classType;
+
+                    for (int i = 0; i < parts.length; i++) {
+                        Field field = currentClass
+                                .getDeclaredField(parts[i]);
+                        currentClass = field.getType();
+
+                        if (i == parts.length - 1) {
+                            isEnum = currentClass.isEnum();
+                        }
+                    }
+                } catch (NoSuchFieldException ignored) {
+                }
+
+                if (isEnum) {
+                    return JpaSort.unsafe(order.getDirection(),
+                                    "function('enum_to_text', " + property
+                                            + ")")
+                            .iterator().next();
+                }
+
+                return new Sort.Order(order.getDirection(), property);
+            }).toList());
+
+            return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
+                    sort));
+        }
+
+        return Either.right(page);
     }
 }

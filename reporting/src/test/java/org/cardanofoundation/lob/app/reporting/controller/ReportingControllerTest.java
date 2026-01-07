@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -32,6 +33,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,6 +45,8 @@ class ReportingControllerTest {
     private CsvReportService csvReportService;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private ReportingController reportingController;
@@ -168,10 +172,11 @@ class ReportingControllerTest {
         // Given
         List<ReportResponseDto> reports = List.of(reportResponseDto);
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        when(reportService.findByOrganisationId("org123")).thenReturn(reports);
+        when(jpaSortFieldValidator.convertPageable(any(), any(), any())).thenReturn(Either.right(Pageable.unpaged()));
+        when(reportService.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(reports);
 
         // When
-        ResponseEntity<?> response = reportingController.findAll("org123", null, null, null);
+        ResponseEntity<?> response = reportingController.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged());
 
         // Then
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -184,26 +189,12 @@ class ReportingControllerTest {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
         // When
-        ResponseEntity<?> response = reportingController.findAll("org123", null, null, null);
+        ResponseEntity<?> response = reportingController.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged());
+
 
         // Then
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         verify(reportService, never()).findByOrganisationId(any());
-    }
-
-    @Test
-    void findAll_ByTemplateId() {
-        // Given
-        List<ReportResponseDto> reports = List.of(reportResponseDto);
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        when(reportService.findByReportTemplateId("abc")).thenReturn(reports);
-
-        // When
-        ResponseEntity<?> response = reportingController.findAll("org123", "abc", null, null);
-
-        // Then
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(reports, response.getBody());
     }
 
     @Test

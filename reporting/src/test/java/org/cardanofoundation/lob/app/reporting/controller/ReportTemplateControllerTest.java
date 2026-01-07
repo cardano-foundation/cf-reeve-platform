@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -31,6 +32,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportTemplateService;
 import org.cardanofoundation.lob.app.reporting.service.ReportTemplateService;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,6 +44,8 @@ class ReportTemplateControllerTest {
     private CsvReportTemplateService csvReportTemplateService;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private ReportTemplateController reportTemplateController;
@@ -214,10 +218,11 @@ class ReportTemplateControllerTest {
         // Given
         List<ReportTemplateResponseDto> templates = List.of(templateResponseDto);
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        when(reportTemplateService.findByOrganisationId("org123")).thenReturn(templates);
+        when(jpaSortFieldValidator.convertPageable(any(), any(), any())).thenReturn(Either.right(Pageable.unpaged()));
+        when(reportTemplateService.findAll("org123", null, null, null, null, null, Pageable.unpaged())).thenReturn(templates);
 
         // When
-        ResponseEntity<?> response = reportTemplateController.findAll("org123");
+        ResponseEntity<?> response = reportTemplateController.findAll("org123", null, null, null, null, null, null);
 
         // Then
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -230,7 +235,7 @@ class ReportTemplateControllerTest {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
         // When
-        ResponseEntity<?> response = reportTemplateController.findAll("org123");
+        ResponseEntity<?> response = reportTemplateController.findAll("org123", null, null, null, null, null, null);
 
         // Then
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());

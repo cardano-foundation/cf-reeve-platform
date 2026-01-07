@@ -41,9 +41,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.ExtractionValidationResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @RestController
 @RequestMapping("/api/v1/extraction")
@@ -59,7 +60,7 @@ public class ExtractionController {
         private final OrganisationPublicApi organisationPublicApi;
         private final AccountingCorePresentationViewService accountingCorePresentationService;
         private final ObjectMapper objectMapper;
-        private final SortFieldMappings sortFieldMappings;
+        private final JpaSortFieldValidator jpaSortFieldValidator;
 
         @Tag(name = "Extraction", description = "Extraction search")
         @PostMapping(value = "/search", produces = APPLICATION_JSON_VALUE,
@@ -74,7 +75,7 @@ public class ExtractionController {
                         @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
                 try {
                         Either<Problem, Pageable> pageableEither =
-                                        sortFieldMappings.convertPageable(pageable, SortFieldMappings.EXTRACTION_SEARCH_FIELD_MAPPINGS, TransactionItemEntity.class);
+                                jpaSortFieldValidator.convertPageable(pageable, PageableFieldMappings.EXTRACTION_SEARCH_FIELD_MAPPINGS, TransactionItemEntity.class);
                         if (pageableEither.isLeft()) {
                                 return ResponseEntity.status(
                                                 Objects.requireNonNull(pageableEither.getLeft()
