@@ -12,4 +12,12 @@ dependencies {
     // Keycloak dependencies
     implementation("org.keycloak:keycloak-spring-boot-starter:$springBootKeycloak")
 
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:postgresql")
+
+    testImplementation("com.h2database:h2")
+
+    runtimeOnly("org.springframework.boot:spring-boot-properties-migrator")
 }

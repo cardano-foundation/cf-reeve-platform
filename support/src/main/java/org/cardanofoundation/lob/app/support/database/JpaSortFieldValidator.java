@@ -10,25 +10,24 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.ManagedType;
 
+import lombok.RequiredArgsConstructor;
+
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
 
-@Component
+@Service
+@RequiredArgsConstructor
 public class JpaSortFieldValidator {
 
     private final EntityManager entityManager;
-
-    public JpaSortFieldValidator(EntityManager entityManager) {
-        this.entityManager = entityManager;
-    }
 
     public Either<Problem, Pageable> validateEntity(Class entityClass, Pageable pageable, Map<String, String> mappings) {
         if(pageable.getSort().isSorted()) {
