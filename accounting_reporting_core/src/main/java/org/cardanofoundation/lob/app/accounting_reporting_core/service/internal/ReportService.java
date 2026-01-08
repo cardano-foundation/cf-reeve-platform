@@ -76,6 +76,7 @@ import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 @Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Deprecated
 public class ReportService {
 
 

@@ -20,6 +20,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rep
 @RequiredArgsConstructor
 @Service
 @Transactional(readOnly = true)
+@Deprecated
 public class PublicReportRepository {
     private final EntityManager em;
 

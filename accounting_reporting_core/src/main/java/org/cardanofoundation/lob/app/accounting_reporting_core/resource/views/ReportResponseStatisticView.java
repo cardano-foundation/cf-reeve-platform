@@ -9,6 +9,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @Builder
+@Deprecated
 public class ReportResponseStatisticView {
     private Long publish;
     private Long pending;

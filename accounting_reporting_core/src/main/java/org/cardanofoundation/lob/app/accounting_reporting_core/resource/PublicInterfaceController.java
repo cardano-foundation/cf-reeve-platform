@@ -41,6 +41,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 @RequestMapping("/api/v1/public")
 @RequiredArgsConstructor
 @Slf4j
+@Deprecated
 public class PublicInterfaceController {
     private final ExtractionItemService extractionItemService;
     private final ReportViewService reportViewService;

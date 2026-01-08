@@ -17,6 +17,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.repor
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseStatisticView;
 
+@Deprecated
 public interface ReportRepository extends JpaRepository<ReportEntity, String> {
 
     Optional<ReportEntity> findFirstByOrganisationIdAndReportId(
