@@ -54,6 +54,7 @@ import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
+@Deprecated
 public class ReportController {
     private final ReportViewService reportViewService;
     private final CurrencyService currencyService;

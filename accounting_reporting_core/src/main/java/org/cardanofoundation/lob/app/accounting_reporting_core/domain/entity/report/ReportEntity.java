@@ -55,6 +55,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Audited
 @EntityListeners({AuditingEntityListener.class})
 @Builder
+@Deprecated
 public class ReportEntity extends CommonEntity implements Persistable<String>, Validable {
 
     @Id

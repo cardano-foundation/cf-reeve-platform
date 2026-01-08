@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 @Slf4j
 @RequiredArgsConstructor
 @Transactional()
+@Deprecated
 public class ReportViewService {
     private final ReportService reportService;
     private final AntiVirusScanner antiVirusScanner;
