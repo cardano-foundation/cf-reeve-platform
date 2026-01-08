@@ -18,6 +18,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxSta
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.reporting.job.ReprocessJob;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
@@ -27,7 +28,7 @@ import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 public class ReportingEventHandler {
 
     private final ReportingRepository reportingRepository;
-    private final ReportingService reportingService;
+    private final ReprocessJob reprocessJob;
 
     @EventListener
     @Async
@@ -48,7 +49,7 @@ public class ReportingEventHandler {
             }
             reportingRepository.save(reportEntity);
         }
-        log.info("Finished processing handleReportsLedgerUpdated, event: {}", event);
+        log.info("Finished processing handleReportsLedgerUpdated, event: {}", event); // 58499305.14,
     }
 
     // When transaction ledger updates include FINALIZED entries, trigger automatic reprocessing of affected reports.
@@ -61,6 +62,6 @@ public class ReportingEventHandler {
             return;
         }
         log.info("Received handleTxsLedgerUpdateEvent, finalized transactions count: {}", finalizedTransactions.size());
-        reportingService.reprocessBasedOnStatusUpdates(finalizedTransactions);
+        reprocessJob.addAll(finalizedTransactions);
     }
 }

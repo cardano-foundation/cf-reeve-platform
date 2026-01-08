@@ -50,7 +50,7 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
                 WHERE item.transaction.id IN :txIds
             )
         """)
-    List<ReportEntity> findAffectedByTxId(@Param("txIds") List<String> txStatusUpdates);
+    List<ReportEntity> findAffectedByTxId(@Param("txIds") List<String> txIds);
 
     @Query("""
         SELECT r FROM ReportEntity r
