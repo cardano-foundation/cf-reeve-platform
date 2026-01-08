@@ -5,6 +5,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -12,6 +13,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,14 +38,20 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
 import org.cardanofoundation.lob.app.reporting.util.Constants;
+import org.cardanofoundation.lob.app.reporting.util.PageableFieldMappings;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -55,6 +64,7 @@ public class ReportingController {
     private final ReportingService reportService;
     private final CsvReportService csvReportService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     @Operation(
         summary = "Create a new report",
@@ -184,36 +194,39 @@ public class ReportingController {
     @GetMapping(produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> findAll(
-        @RequestParam(value = "organisationId", required = true)
+            @RequestParam(value = "organisationId", required = true)
         @Parameter(
             description = "Filter by organisation ID",
             example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
         ) String organisationId,
-        @RequestParam(value = "reportTemplateId", required = false)
-        @Parameter(description = "Filter by report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String reportTemplateId,
-        @RequestParam(value = "year", required = false)
-        @Parameter(description = "Filter by year", example = "2024") Short year,
-        @RequestParam(value = "intervalType", required = false)
-        @Parameter(description = "Filter by interval type", example = "MONTHLY", schema = @Schema(allowableValues = {"MONTHLY", "QUARTERLY", "YEARLY"})) String intervalType
-    ) {
-        log.info("GET /api/reports - organisationId: {}, templateId: {}, year: {}, intervalType: {}",
-            organisationId, reportTemplateId, year, intervalType);
+            @RequestParam(value = "year", required = false) List<Short> years,
+            @RequestParam(value = "intervalType", required = false) List<IntervalType> intervalTypes,
+            @RequestParam(value = "period", required = false) List<Short> periods,
+            @RequestParam(value = "ledgerStatus", required = false) LedgerDispatchStatus ledgerStatus,
+            @RequestParam(value = "reportType", required = false) List<ReportTemplateType> reportTypes,
+            @RequestParam(value = "templateId", required = false) List<String> reportTemplateIds,
+            @RequestParam(value = "txHash", required = false) String txHash,
+            @RequestParam(value = "isReadyToPublish", required = false) Boolean isReadyToPublish,
+            @RequestParam(value = "ledgerDispatchApproved", required = false) Boolean ledgerDispatchApproved,
+            @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable
+            ) {
+        log.info("GET /api/reports - organisationId: {}, templateIds: {}, years: {}, intervalTypes: {}",
+            organisationId, reportTemplateIds, years, intervalTypes);
 
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
-
-        List<ReportResponseDto> reports;
-
-        if (reportTemplateId != null) {
-            reports = reportService.findByReportTemplateId(reportTemplateId);
-        } else if (organisationId != null) {
-            reports = reportService.findByOrganisationId(organisationId);
-        } else {
-            reports = reportService.findAll();
+        Either<Problem, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, PageableFieldMappings.REPORT_MAPPINGS, ReportEntity.class);
+        if (pageableE.isLeft()) {
+            Problem problem = pageableE.getLeft();
+            return ResponseEntity
+                .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
+                .body(problem);
         }
+        List<ReportResponseDto> reports = reportService.findAll(organisationId, years, intervalTypes, periods, ledgerStatus,
+                reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageableE.get());
 
         return ResponseEntity.ok(reports);
     }

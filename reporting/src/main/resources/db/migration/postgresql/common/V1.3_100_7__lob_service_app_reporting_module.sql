@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS report_template (
     report_template_type VARCHAR(255),
     ver BIGINT NOT NULL DEFAULT 1,
     active BOOLEAN NOT NULL DEFAULT TRUE,
+    report_count BIGINT NOT NULL DEFAULT 0,
 
     created_by VARCHAR(255),
     updated_by VARCHAR(255),

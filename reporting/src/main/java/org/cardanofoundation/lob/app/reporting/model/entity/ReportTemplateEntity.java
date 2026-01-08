@@ -60,6 +60,13 @@ public class ReportTemplateEntity extends CommonEntity {
     @Builder.Default
     private List<ReportTemplateValidationRuleEntity> validationRules = new ArrayList<>();
 
+    @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<ReportEntity> reports = new ArrayList<>();
+
+    @Builder.Default
+    private int reportCount = 0;
+
     @PrePersist
     private void generateId() {
         if (this.id == null) {
@@ -71,5 +78,9 @@ public class ReportTemplateEntity extends CommonEntity {
             );
             this.id = SHA3.digestAsHex(hashInput);
         }
+    }
+
+    public void updateReportCount() {
+        this.reportCount = this.reports.size();
     }
 }

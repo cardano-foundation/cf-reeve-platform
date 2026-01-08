@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -297,6 +298,13 @@ public class ReportTemplateService {
     @Transactional(readOnly = true)
     public List<ReportTemplateResponseDto> findAll() {
         return reportTemplateRepository.findAll().stream()
+                .map(reportTemplateMapper::toResponseDto)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReportTemplateResponseDto> findAll(String organisationId, String name, String description, List<ReportTemplateType> reportTemplateTypes, Boolean active, List<DataMode> dataMode, Pageable pageable) {
+        return reportTemplateRepository.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageable).stream()
                 .map(reportTemplateMapper::toResponseDto)
                 .toList();
     }

@@ -32,9 +32,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presenta
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class ExtractionControllerTest {
@@ -47,20 +47,20 @@ class ExtractionControllerTest {
     @Mock
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
     @Mock
-    private SortFieldMappings sortFieldMappings;
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private ExtractionController extractionController;
 
     @BeforeEach
     void setUp() {
-        extractionController = new ExtractionController(extractionItemService, organisationPublicApi, accountingCorePresentationViewService, objectMapper, sortFieldMappings);
+        extractionController = new ExtractionController(extractionItemService, organisationPublicApi, accountingCorePresentationViewService, objectMapper, jpaSortFieldValidator);
     }
 
     @Test
     void transactionSearch_error() {
         ExtractionTransactionsRequest request = mock(ExtractionTransactionsRequest.class);
-        when(sortFieldMappings.convertPageable(any(Pageable.class), any(),
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(),
                 eq(TransactionItemEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
         when(extractionItemService.findTransactionItems(any(),any(),any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
 
@@ -74,7 +74,7 @@ class ExtractionControllerTest {
     void transactionSearch_success() {
         ExtractionTransactionsRequest request = mock(ExtractionTransactionsRequest.class);
         ExtractionTransactionView expectedResponse = mock(ExtractionTransactionView.class);
-        when(sortFieldMappings.convertPageable(any(Pageable.class), any(), eq(TransactionItemEntity.class)))
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionItemEntity.class)))
                 .thenReturn(Either.right(Pageable.unpaged()));
         when(extractionItemService.findTransactionItems(request, Pageable.unpaged())).thenReturn(expectedResponse);
 

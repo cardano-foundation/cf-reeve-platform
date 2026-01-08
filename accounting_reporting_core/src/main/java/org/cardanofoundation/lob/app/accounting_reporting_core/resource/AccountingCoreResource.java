@@ -52,9 +52,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -69,7 +69,7 @@ public class AccountingCoreResource {
     private final ObjectMapper objectMapper;
     private final OrganisationPublicApi organisationPublicApi;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
-    private final SortFieldMappings sortFieldMappings;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Transaction list", responses = {
@@ -308,7 +308,7 @@ public class AccountingCoreResource {
 
         body.setLimit(pageable.getPageSize());
         body.setPage(pageable.getPageNumber());
-        Either<Problem, Pageable> convertPageable = sortFieldMappings.convertPageable(pageable, Map.of(), TransactionBatchEntity.class);
+        Either<Problem, Pageable> convertPageable = jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class);
         if( convertPageable.isLeft()) {
             Problem problem = convertPageable.getLeft();
             return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)

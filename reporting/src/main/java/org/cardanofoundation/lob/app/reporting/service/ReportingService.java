@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Acc
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
@@ -46,6 +48,7 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValida
 import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
@@ -83,7 +86,7 @@ public class ReportingService {
             return ReportResponseDto.builder().error(Optional.of(templateResult.getLeft())).build();
         }
         ReportTemplateEntity template = templateResult.get();
-        if(dataMode != template.getDataMode()) {
+        if (dataMode != template.getDataMode()) {
             return ReportResponseDto.builder().error(Optional.of(
                     Problem.builder()
                             .withTitle("DATA_MODE_MISMATCH")
@@ -618,6 +621,24 @@ public class ReportingService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ReportResponseDto> findAll(String organisationId,
+                                           List<Short> years,
+                                           List<IntervalType> intervalTypes,
+                                           List<Short> periods,
+                                           LedgerDispatchStatus ledgerStatus,
+                                           List<ReportTemplateType> reportTypes,
+                                           List<String> reportTemplateIds,
+                                           String txHash,
+                                           Boolean isReadyToPublish,
+                                           Boolean ledgerDispatchApproved,
+                                           Pageable pageable) {
+        return reportRepository.findAll(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageable)
+                .stream()
+                .map(reportMapper::toResponseDto)
+                .toList();
+    }
+
     public Either<Problem, Void> delete(String id) {
         log.info("Deleting report id: {}", id);
 
@@ -640,7 +661,6 @@ public class ReportingService {
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
-
         reportRepository.deleteById(id);
         return Either.right(null);
     }
@@ -722,12 +742,12 @@ public class ReportingService {
 
     private List<TransactionItemEntity> getTransactionItems(boolean preview, List<String> accountCodes, LocalDate effectiveStartDate, LocalDate effectiveEndDate) {
         List<TransactionItemEntity> transactionItems;
-        if(preview) {
+        if (preview) {
             transactionItems = transactionItemRepository
                     .findPreviewTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
         } else {
             transactionItems = transactionItemRepository
-                .findTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
+                    .findTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
         }
         return transactionItems;
     }
@@ -1011,4 +1031,6 @@ public class ReportingService {
             }
         }
     }
+
+
 }

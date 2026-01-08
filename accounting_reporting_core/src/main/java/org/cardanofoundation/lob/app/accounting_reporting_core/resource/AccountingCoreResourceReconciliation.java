@@ -34,7 +34,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconcileResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -46,7 +47,7 @@ public class AccountingCoreResourceReconciliation {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final AccountingCoreService accountingCoreService;
-    private final SortFieldMappings sortFieldMappings;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @Operation(description = "Start the Reconciliation", responses = {
@@ -78,8 +79,8 @@ public class AccountingCoreResourceReconciliation {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        Either<Problem, Pageable> pageableEither = sortFieldMappings.convertPageable(pageable,
-                        SortFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
+        Either<Problem, Pageable> pageableEither = jpaSortFieldValidator.convertPageable(pageable,
+                        PageableFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return ResponseEntity.badRequest().body(pageableEither.getLeft());
         }

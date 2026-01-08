@@ -46,10 +46,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCorePresentationConverterTest {
@@ -70,7 +70,7 @@ class AccountingCorePresentationConverterTest {
     @Mock
     private ProjectRepository projectRepository;
     @Mock
-    private SortFieldMappings sortFieldMappings;
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationConverter;
@@ -208,7 +208,7 @@ class AccountingCorePresentationConverterTest {
     void testBatchDetail() {
 
         org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation organisation = mock(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.class);
-        when(sortFieldMappings.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
         when(organisation.getId()).thenReturn("123");
         TransactionItemEntity transactionItem = new TransactionItemEntity();
         transactionItem.setId("txItemId");

@@ -27,7 +27,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceReconciliationTest {
@@ -37,7 +37,7 @@ class AccountingCoreResourceReconciliationTest {
     @Mock
     private AccountingCoreService accountingCoreService;
     @Mock
-    private SortFieldMappings sortFieldMappings;
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private AccountingCoreResourceReconciliation accountingCoreResourceReconciliation;
@@ -69,7 +69,7 @@ class AccountingCoreResourceReconciliationTest {
     @Test
     void testReconcileStart() {
         when(accountingCorePresentationViewService.allReconciliationTransaction(any(), any())).thenReturn(null);
-        when(sortFieldMappings.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), Pageable.unpaged());
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
         verify(accountingCorePresentationViewService).allReconciliationTransaction(any(), any());

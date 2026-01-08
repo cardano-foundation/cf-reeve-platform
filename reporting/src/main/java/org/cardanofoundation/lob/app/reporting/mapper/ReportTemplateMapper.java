@@ -102,7 +102,8 @@ public class ReportTemplateMapper {
             .active(entity.isActive())
             .fields(topLevelColumns)
             .validationRules(validationRules)
-            .reportCount(reportingRepository.findByReportTemplateId(entity.getId()).size())
+            .reportCount(entity.getReportCount())
+            .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
             .build();
     }
 
