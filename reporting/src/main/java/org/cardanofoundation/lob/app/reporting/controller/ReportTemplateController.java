@@ -84,7 +84,7 @@ public class ReportTemplateController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<ReportTemplateResponseDto> create(
             @RequestBody(required = true) ReportTemplateDto template) {
-        log.info("POST /api/report-templates - Creating template: {}", template.getName());
+        log.debug("POST /api/report-templates - Creating template: {}", template.getName());
 
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(template);
 
@@ -130,7 +130,7 @@ public class ReportTemplateController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> update(
             @RequestBody(required = true) ReportTemplateDto template) {
-        log.info("PUT /api/report-templates - Updating template: {}", template.getName());
+        log.debug("PUT /api/report-templates - Updating template: {}", template.getName());
 
 
         Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(template);
@@ -156,7 +156,7 @@ public class ReportTemplateController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> findById(
             @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
-        log.info("GET /api/report-templates/{}", id);
+        log.debug("GET /api/report-templates/{}", id);
         return reportTemplateService.findById(id)
             .map(template -> {
                 // Check organisation access
@@ -189,7 +189,7 @@ public class ReportTemplateController {
             @RequestParam(value = "active", required = false) Boolean active,
             @RequestParam(value = "dataMode", required = false) List<DataMode> dataMode,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        log.info("GET /api/report-templates - organisationId: {}", organisationId);
+        log.debug("GET /api/report-templates - organisationId: {}", organisationId);
 
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
@@ -218,7 +218,7 @@ public class ReportTemplateController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<?> delete(
             @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
-        log.info("DELETE /api/report-templates/{}", id);
+        log.debug("DELETE /api/report-templates/{}", id);
 
         // First, get the template to check organisation access
         return reportTemplateService.findById(id)

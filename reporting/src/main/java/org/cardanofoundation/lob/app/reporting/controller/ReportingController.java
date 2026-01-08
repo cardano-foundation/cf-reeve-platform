@@ -91,7 +91,7 @@ public class ReportingController {
             required = true
         ) ReportDto report
     ) {
-        log.info("POST /api/reports - Creating report: {}", report.getName());
+        log.debug("POST /api/reports - Creating report: {}", report.getName());
 
         ReportResponseDto result = reportService.create(report);
 
@@ -143,7 +143,7 @@ public class ReportingController {
             example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
         ) String organisationId
     ) {
-        log.info("GET /api/reports/{} - organisationId: {}", id, organisationId);
+        log.debug("GET /api/reports/{} - organisationId: {}", id, organisationId);
 
         // If organisationId is provided, check access
         if (organisationId != null && !keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
@@ -210,7 +210,7 @@ public class ReportingController {
             @RequestParam(value = "ledgerDispatchApproved", required = false) Boolean ledgerDispatchApproved,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable
             ) {
-        log.info("GET /api/reports - organisationId: {}, templateIds: {}, years: {}, intervalTypes: {}",
+        log.debug("GET /api/reports - organisationId: {}, templateIds: {}, years: {}, intervalTypes: {}",
             organisationId, reportTemplateIds, years, intervalTypes);
 
         // Check organisation access
@@ -246,7 +246,7 @@ public class ReportingController {
     public ResponseEntity<?> delete(
         @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id
     ) {
-        log.info("DELETE /api/reports/{}", id);
+        log.debug("DELETE /api/reports/{}", id);
 
         // First, get the report to check organisation access
         return reportService.findById(id)
@@ -295,7 +295,7 @@ public class ReportingController {
             required = true
         ) ReportGenerateRequest request
     ) {
-        log.info("POST /api/reports/generate - Template: {}, Org: {}, Year: {}, Interval: {}, Period: {}",
+        log.debug("POST /api/reports/generate - Template: {}, Org: {}, Year: {}, Interval: {}, Period: {}",
             request.getReportTemplateId(), request.getOrganisationId(), request.getYear(),
             request.getIntervalType(), request.getPeriod());
 
@@ -335,7 +335,7 @@ public class ReportingController {
             @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Request containing report id and organisation ID",
                     required = true) ReportPublishRequest request) {
-        log.info(
+        log.debug(
                 "POST /api/reports/publish - Org: {}, Report ID: {}",
                 request.getOrganisationId(), request.getReportId());
 
@@ -376,7 +376,7 @@ public class ReportingController {
             example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
         ) String organisationId
     ) {
-        log.info("POST /api/reports/{}/reprocess - organisationId: {}", id, organisationId);
+        log.debug("POST /api/reports/{}/reprocess - organisationId: {}", id, organisationId);
 
         // Check organisation access
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
