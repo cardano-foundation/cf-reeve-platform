@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepos
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
@@ -614,28 +616,25 @@ public class ReportingService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReportResponseDto> findAll() {
-        return reportRepository.findAll().stream()
-                .map(reportMapper::toResponseDto)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<ReportResponseDto> findAll(String organisationId,
-                                           List<Short> years,
-                                           List<IntervalType> intervalTypes,
-                                           List<Short> periods,
-                                           LedgerDispatchStatus ledgerStatus,
-                                           List<ReportTemplateType> reportTypes,
-                                           List<String> reportTemplateIds,
-                                           String txHash,
-                                           Boolean isReadyToPublish,
-                                           Boolean ledgerDispatchApproved,
-                                           Pageable pageable) {
-        return reportRepository.findAll(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageable)
-                .stream()
-                .map(reportMapper::toResponseDto)
-                .toList();
+    public ReportListResponseDto findAll(String organisationId,
+                                         List<Short> years,
+                                         List<IntervalType> intervalTypes,
+                                         List<Short> periods,
+                                         LedgerDispatchStatus ledgerStatus,
+                                         List<ReportTemplateType> reportTypes,
+                                         List<String> reportTemplateIds,
+                                         String txHash,
+                                         Boolean isReadyToPublish,
+                                         Boolean ledgerDispatchApproved,
+                                         Pageable pageable) {
+        Page<ReportEntity> allFilteredReports = reportRepository.findAll(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageable);
+        return ReportListResponseDto.builder()
+                .reports(allFilteredReports.stream().map(reportMapper::toResponseDto).toList())
+                .total(allFilteredReports.getTotalElements())
+                .totalPages(allFilteredReports.getTotalPages())
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .build();
     }
 
     public Either<Problem, Void> delete(String id) {
