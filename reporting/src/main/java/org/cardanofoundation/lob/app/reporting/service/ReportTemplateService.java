@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import org.zalando.problem.Status;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
@@ -296,17 +298,18 @@ public class ReportTemplateService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReportTemplateResponseDto> findAll() {
-        return reportTemplateRepository.findAll().stream()
+    public ReportTemplateListResponseDto findAll(String organisationId, String name, String description, List<ReportTemplateType> reportTemplateTypes, Boolean active, List<DataMode> dataMode, Pageable pageable) {
+        Page<ReportTemplateEntity> findAllFiltered = reportTemplateRepository.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageable);
+        List<ReportTemplateResponseDto> dtos = findAllFiltered.stream()
                 .map(reportTemplateMapper::toResponseDto)
                 .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<ReportTemplateResponseDto> findAll(String organisationId, String name, String description, List<ReportTemplateType> reportTemplateTypes, Boolean active, List<DataMode> dataMode, Pageable pageable) {
-        return reportTemplateRepository.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageable).stream()
-                .map(reportTemplateMapper::toResponseDto)
-                .toList();
+        return ReportTemplateListResponseDto.builder()
+                .templates(dtos)
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .total(findAllFiltered.getTotalElements())
+                .totalPages(findAllFiltered.getTotalPages())
+                .build();
     }
 
     public Either<Problem, Void> delete(String id) {

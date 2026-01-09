@@ -423,21 +423,6 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void findAll_Success() {
-        // Given
-        List<ReportTemplateEntity> templates = List.of(templateEntity);
-        when(reportTemplateRepository.findAll()).thenReturn(templates);
-        when(reportTemplateMapper.toResponseDto(templateEntity)).thenReturn(templateResponseDto);
-
-        // When
-        List<ReportTemplateResponseDto> result = reportTemplateService.findAll();
-
-        // Then
-        assertEquals(1, result.size());
-        assertEquals("Test Template", result.get(0).getName());
-    }
-
-    @Test
     void existsByOrganisationIdAndName_True() {
         // Given
         when(reportTemplateRepository.existsByOrganisationIdAndName("org123", "Test Template"))

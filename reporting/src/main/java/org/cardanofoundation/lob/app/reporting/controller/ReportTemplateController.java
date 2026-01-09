@@ -41,6 +41,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
@@ -203,8 +204,8 @@ public class ReportTemplateController {
             Problem problem = pageableE.getLeft();
             return ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem);
         }
-        List<ReportTemplateResponseDto> templates = reportTemplateService.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageableE.get());
-        return ResponseEntity.ok(templates);
+        ReportTemplateListResponseDto reportListDto = reportTemplateService.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageableE.get());
+        return ResponseEntity.ok(reportListDto);
     }
 
     @Operation(summary = "Delete a report template",

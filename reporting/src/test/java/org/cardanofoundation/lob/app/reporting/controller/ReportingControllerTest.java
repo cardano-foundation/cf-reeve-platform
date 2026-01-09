@@ -30,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
@@ -170,17 +171,17 @@ class ReportingControllerTest {
     @Test
     void findAll_Success() {
         // Given
-        List<ReportResponseDto> reports = List.of(reportResponseDto);
+        ReportListResponseDto reportListResponseDto = new ReportListResponseDto();
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(jpaSortFieldValidator.convertPageable(any(), any(), any())).thenReturn(Either.right(Pageable.unpaged()));
-        when(reportService.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(reports);
+        when(reportService.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(reportListResponseDto);
 
         // When
         ResponseEntity<?> response = reportingController.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged());
 
         // Then
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(reports, response.getBody());
+        assertEquals(reportListResponseDto, response.getBody());
     }
 
     @Test

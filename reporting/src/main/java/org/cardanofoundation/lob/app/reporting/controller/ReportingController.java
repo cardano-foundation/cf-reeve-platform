@@ -43,6 +43,7 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStat
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
@@ -227,10 +228,10 @@ public class ReportingController {
                 .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
                 .body(problem);
         }
-        List<ReportResponseDto> reports = reportService.findAll(organisationId, years, intervalTypes, periods, ledgerStatus,
+        ReportListResponseDto reportListDto = reportService.findAll(organisationId, years, intervalTypes, periods, ledgerStatus,
                 reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageableE.get());
 
-        return ResponseEntity.ok(reports);
+        return ResponseEntity.ok(reportListDto);
     }
 
     @Operation(
