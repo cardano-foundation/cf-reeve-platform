@@ -632,8 +632,8 @@ public class ReportingService {
                 .reports(allFilteredReports.stream().map(reportMapper::toResponseDto).toList())
                 .total(allFilteredReports.getTotalElements())
                 .totalPages(allFilteredReports.getTotalPages())
-                .page(allFilteredReports.getNumber())
-                .size(allFilteredReports.getSize())
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
                 .build();
     }
 
