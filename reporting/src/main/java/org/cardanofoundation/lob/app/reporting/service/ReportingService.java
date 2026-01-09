@@ -1013,24 +1013,4 @@ public class ReportingService {
         }
     }
 
-    public void reprocessBasedOnStatusUpdates(Set<TxStatusUpdate> finalizedTransactions) {
-        List<ReportEntity> reportsToReprocess = reportRepository.findAffectedByTxId(
-                finalizedTransactions.stream()
-                        .map(TxStatusUpdate::getTxId)
-                        .toList()
-        );
-
-        log.info("Reprocessing {} report(s) based on finalized transactions", reportsToReprocess.size());
-
-        for (ReportEntity report : reportsToReprocess) {
-            Either<Problem, ReportResponseDto> reprocessResult = reprocess(report.getOrganisationId(), report.getId());
-            if (reprocessResult.isLeft()) {
-                log.error("Failed to reprocess report {}: {}", report.getId(), reprocessResult.getLeft().getDetail());
-            } else {
-                log.info("Successfully reprocessed report {}", report.getId());
-            }
-        }
-    }
-
-
 }
