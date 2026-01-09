@@ -30,11 +30,13 @@ public class ReprocessJob {
     private final ReportingRepository reportingRepository;
 
     @Scheduled(
-            fixedDelayString = "${lob.blockchain.dispatcher.fixed_delay:PT1M}",
-            initialDelayString = "${lob.blockchain.dispatcher.initial_delay:PT10S}")
+            fixedDelayString = "${lob.report_v2.reprocess.fixed_delay:PT1M}",
+            initialDelayString = "${lob.report_v2.reprocess.initial_delay:PT10S}")
     public void execute() {
         log.debug("Executing TransactionDispatcherJob...");
         Set<String> transactionsToProcess = new HashSet<>(finalizedTransactionsUpdates);
+        // Getting all transactions which are finalized and then removing them from the processing set to avoid duplicated processing
+        // but still ensuring this runs only for finalized transactions
         List<String> allFinalizedTransactions = transactionRepositoryGateway.findByAllId(transactionsToProcess)
                 .stream().filter(tx -> tx.getLedgerDispatchStatus().equals(LedgerDispatchStatus.FINALIZED))
                 .map(TransactionEntity::getId).toList();

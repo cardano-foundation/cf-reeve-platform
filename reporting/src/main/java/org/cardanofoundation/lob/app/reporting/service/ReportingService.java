@@ -25,7 +25,6 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
@@ -1012,25 +1011,5 @@ public class ReportingService {
             field.getChildFields().forEach(child -> setReportRecursively(child, report));
         }
     }
-
-    public void reprocessBasedOnStatusUpdates(Set<TxStatusUpdate> finalizedTransactions) {
-        List<ReportEntity> reportsToReprocess = reportRepository.findAffectedByTxId(
-                finalizedTransactions.stream()
-                        .map(TxStatusUpdate::getTxId)
-                        .toList()
-        );
-
-        log.info("Reprocessing {} report(s) based on finalized transactions", reportsToReprocess.size());
-
-        for (ReportEntity report : reportsToReprocess) {
-            Either<Problem, ReportResponseDto> reprocessResult = reprocess(report.getOrganisationId(), report.getId());
-            if (reprocessResult.isLeft()) {
-                log.error("Failed to reprocess report {}: {}", report.getId(), reprocessResult.getLeft().getDetail());
-            } else {
-                log.info("Successfully reprocessed report {}", report.getId());
-            }
-        }
-    }
-
 
 }
