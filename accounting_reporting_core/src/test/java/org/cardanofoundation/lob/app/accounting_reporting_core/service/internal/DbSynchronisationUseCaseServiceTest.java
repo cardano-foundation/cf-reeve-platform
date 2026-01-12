@@ -279,20 +279,16 @@ class DbSynchronisationUseCaseServiceTest {
                         .build())
                 .build();
 
-        // Mock repository responses
         when(accountingCoreTransactionRepository.findAllById(any()))
                 .thenReturn(List.of(tx));
         when(accountingCoreTransactionRepository.save(any(TransactionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        // Enable rollback
         ReflectionTestUtils.setField(service, "rollbackEnabled", Optional.of(true));
 
-        // When
         service.execute(batchId, new OrganisationTransactions(orgId, Set.of(tx)), 1,
                 new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
 
-        // Then - Verify the transaction was updated with rollback values
         ArgumentCaptor<TransactionEntity> savedTxCaptor = ArgumentCaptor.forClass(TransactionEntity.class);
         verify(accountingCoreTransactionRepository).save(savedTxCaptor.capture());
 
