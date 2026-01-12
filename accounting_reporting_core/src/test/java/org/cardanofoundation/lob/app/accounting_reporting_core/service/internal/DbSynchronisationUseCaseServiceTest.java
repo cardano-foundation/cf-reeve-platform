@@ -256,15 +256,10 @@ class DbSynchronisationUseCaseServiceTest {
         val txItem2 = new TransactionItemEntity();
         txItem.setId(TransactionItem.id(txId, "2"));
 
-        Set<TransactionItemEntity> txItems = new LinkedHashSet<>();
-        txItems.add(txItem);
-
-        Set<TransactionItemEntity> txItems2 = new LinkedHashSet<>();
-        txItems.add(txItem2);
         // Create the transaction with proper status
         val tx = TransactionEntity.builder()
                 .id(txId)
-                .items(txItems)
+                .items(new HashSet<>(Set.of(txItem)))
                 .accountingPeriod(YearMonth.of(2023, 1))
                 .processingStatus(TransactionProcessingStatus.ROLLBACK)
                 .ledgerDispatchApproved(true)
@@ -286,7 +281,7 @@ class DbSynchronisationUseCaseServiceTest {
 
         val txModified = TransactionEntity.builder()
                 .id(txId)
-                .items(txItems2)
+                .items(new HashSet<>(Set.of(txItem2)))
                 .accountingPeriod(YearMonth.of(2023, 1))
                 .processingStatus(TransactionProcessingStatus.ROLLBACK)
                 .ledgerDispatchApproved(true)
