@@ -67,6 +67,9 @@ class DbSynchronisationUseCaseServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private TransactionConverter transactionConverter;
+
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "eventPublisher", eventPublisher);
@@ -253,10 +256,35 @@ class DbSynchronisationUseCaseServiceTest {
         val txItem = new TransactionItemEntity();
         txItem.setId(TransactionItem.id(txId, "0"));
 
+        val txItem2 = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "2"));
+
         // Create the transaction with proper status
         val tx = TransactionEntity.builder()
                 .id(txId)
                 .items(Set.of(txItem))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .processingStatus(TransactionProcessingStatus.ROLLBACK)
+                .ledgerDispatchApproved(true)
+                .transactionApproved(true)
+                .ledgerDispatchReceipt(new LedgerDispatchReceipt("receipt-123", "success"))
+                .ledgerDispatchStatus(LedgerDispatchStatus.DISPATCHED)
+                .reconcilation(Reconcilation.builder()
+                        .source(ReconcilationCode.NOK)
+                        .sink(ReconcilationCode.NOK)
+                        .finalStatus(ReconcilationCode.NOK)
+                        .build())
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        val txModified = TransactionEntity.builder()
+                .id(txId)
+                .items(Set.of(txItem2))
                 .accountingPeriod(YearMonth.of(2023, 1))
                 .processingStatus(TransactionProcessingStatus.ROLLBACK)
                 .ledgerDispatchApproved(true)
@@ -283,7 +311,7 @@ class DbSynchronisationUseCaseServiceTest {
 
         ReflectionTestUtils.setField(service, "rollbackEnabled", Optional.of(true));
 
-        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(tx)), 1,
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(txModified)), 1,
                 new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
 
         ArgumentCaptor<TransactionEntity> savedTxCaptor = ArgumentCaptor.forClass(TransactionEntity.class);
