@@ -106,6 +106,4 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
             @Param("counterPartyTypes") List<Counterparty.Type> counterPartyTypes, @Param("eventCodes") List<String> eventCodes, @Param("reconciled") Boolean reconciled,
             @Param("parentCostcenters") List<String> parentCostcenters, @Param("parentProjects") List<String> parentProjects,
             @Param("accountCodesDebit") List<String> accountCodesDebit, @Param("accountCodesCredit") List<String> accountCodesCredit, Pageable pageable);
-
-
 }
