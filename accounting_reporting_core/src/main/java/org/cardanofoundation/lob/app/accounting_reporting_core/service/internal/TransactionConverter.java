@@ -301,7 +301,8 @@ public class TransactionConverter {
                 .build());
     }
 
-    private void rollbackTransaction(TransactionEntity txEntity, Transaction transaction) {
+
+    public void rollbackTransaction(TransactionEntity txEntity, Transaction transaction) {
         txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber() + "-" + transaction.getRollbackSuffix());
         txEntity.setProcessingStatus(TransactionProcessingStatus.ROLLBACK);
 

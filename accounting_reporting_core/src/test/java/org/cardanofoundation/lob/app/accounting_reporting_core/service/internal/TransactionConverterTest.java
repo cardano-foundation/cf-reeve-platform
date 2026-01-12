@@ -7,6 +7,7 @@ import java.time.YearMonth;
 import java.util.Optional;
 import java.util.Set;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -96,5 +97,24 @@ class TransactionConverterTest {
 
         transactionConverter.copyFields(attached, detached);
         Assertions.assertEquals(TransactionType.BillCredit, attached.getTransactionType());
+    }
+
+    @Test
+    void testRollbackTransaction() {
+        String originalTxNumber = "TX-123";
+        String rollbackSuffix = "RBK";
+        String expectedTxNumber = originalTxNumber + "-" + rollbackSuffix;
+        
+        Transaction transaction = Transaction.builder()
+                .internalTransactionNumber(originalTxNumber)
+                .rollbackSuffix(rollbackSuffix)
+                .build();
+        
+        TransactionEntity txEntity = new TransactionEntity();
+
+        transactionConverter.rollbackTransaction(txEntity, transaction);
+
+        Assertions.assertEquals(expectedTxNumber, txEntity.getInternalTransactionNumber());
+        Assertions.assertEquals(TransactionProcessingStatus.ROLLBACK, txEntity.getProcessingStatus().orElse(null));
     }
 }
