@@ -69,9 +69,6 @@ class DbSynchronisationUseCaseServiceTest {
 
     @BeforeEach
     void setUp() {
-        // ... existing setup code ...
-
-        // Add this line to inject the mock event publisher
         ReflectionTestUtils.setField(service, "eventPublisher", eventPublisher);
     }
 
