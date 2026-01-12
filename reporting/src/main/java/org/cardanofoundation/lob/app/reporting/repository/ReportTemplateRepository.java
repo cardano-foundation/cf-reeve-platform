@@ -45,7 +45,6 @@ public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEn
 
     @Query("""
         SELECT rt FROM ReportTemplateEntity rt
-        LEFT JOIN rt.reports r
         WHERE (:organisationId IS NULL OR rt.organisationId = :organisationId)
         AND (:name IS NULL OR LOWER(rt.name) LIKE LOWER(CONCAT('%', CAST(:name AS string), '%')))
         AND (:description IS NULL OR LOWER(rt.description) LIKE LOWER(CONCAT('%', CAST(:description AS string), '%')))
