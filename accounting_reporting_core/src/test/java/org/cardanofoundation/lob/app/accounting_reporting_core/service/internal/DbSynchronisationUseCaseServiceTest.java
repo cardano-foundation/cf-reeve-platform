@@ -1,9 +1,9 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.DISPATCHED;
 import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.NOT_DISPATCHED;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -18,6 +18,11 @@ import java.util.Set;
 
 import lombok.val;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
+
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -30,13 +35,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.LedgerDispatchReceipt;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @ExtendWith(MockitoExtension.class)
 class DbSynchronisationUseCaseServiceTest {
@@ -55,6 +63,17 @@ class DbSynchronisationUseCaseServiceTest {
 
     @InjectMocks
     private DbSynchronisationUseCaseService service;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @BeforeEach
+    void setUp() {
+        // ... existing setup code ...
+
+        // Add this line to inject the mock event publisher
+        ReflectionTestUtils.setField(service, "eventPublisher", eventPublisher);
+    }
 
     @Test
     void shouldDoNothingWithEmptyTransactions() {
@@ -226,6 +245,66 @@ class DbSynchronisationUseCaseServiceTest {
         verify(transactionBatchAssocRepository).saveAll(any(Set.class));
     }
 
+    @Test
+    void shouldRollbackTransactionWhenRollbackEnabled() {
+        // Given
+        val txId = "rollback-tx-123";
+        val orgId = "org1";
+        val batchId = "batch-rollback";
+
+        // Create a transaction that needs to be rolled back
+        val txItem = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "0"));
+
+        // Create the transaction with proper status
+        val tx = TransactionEntity.builder()
+                .id(txId)
+                .items(Set.of(txItem))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .processingStatus(TransactionProcessingStatus.ROLLBACK)
+                .ledgerDispatchApproved(true)
+                .transactionApproved(true)
+                .ledgerDispatchReceipt(new LedgerDispatchReceipt("receipt-123", "success"))
+                .ledgerDispatchStatus(LedgerDispatchStatus.DISPATCHED)
+                .reconcilation(Reconcilation.builder()
+                        .source(ReconcilationCode.NOK)
+                        .sink(ReconcilationCode.NOK)
+                        .finalStatus(ReconcilationCode.NOK)
+                        .build())
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        // Mock repository responses
+        when(accountingCoreTransactionRepository.findAllById(any()))
+                .thenReturn(List.of(tx));
+        when(accountingCoreTransactionRepository.save(any(TransactionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Enable rollback
+        ReflectionTestUtils.setField(service, "rollbackEnabled", Optional.of(true));
+
+        // When
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(tx)), 1,
+                new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        // Then - Verify the transaction was updated with rollback values
+        ArgumentCaptor<TransactionEntity> savedTxCaptor = ArgumentCaptor.forClass(TransactionEntity.class);
+        verify(accountingCoreTransactionRepository).save(savedTxCaptor.capture());
+
+        TransactionEntity savedTx = savedTxCaptor.getValue();
+        assertThat(savedTx.getLedgerDispatchApproved()).isFalse();
+        assertThat(savedTx.getTransactionApproved()).isFalse();
+        assertThat(savedTx.getLedgerDispatchReceipt()).isEmpty();
+        assertThat(savedTx.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.NOT_DISPATCHED);
+        assertThat(savedTx.getReconcilation()).isEmpty();
+    }
+
+    @Test
     void shouldExtractionFlagTest() {
         val batchId = "batch1";
         val txId = "tx1";
