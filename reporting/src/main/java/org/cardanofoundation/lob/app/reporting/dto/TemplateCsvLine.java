@@ -31,12 +31,8 @@ public class TemplateCsvLine {
     private String parent = "";
     @CsvBindByName(column = "Mapped Types")
     private  String types = "";
-    @CsvBindByName(column = "Accumulated")
-    private Boolean accumulated = false;
-    @CsvBindByName(column = "Accumulated Yearly")
-    private Boolean accumulatedYearly = false;
-    @CsvBindByName(column = "Accumulated Previous Year")
-    private Boolean accumulatedPreviousYear = false;
+    @CsvBindByName(column = "Date Range")
+    private String dateRange = "";
     @CsvBindByName(column = "Negated")
     private Boolean negated = false;
 

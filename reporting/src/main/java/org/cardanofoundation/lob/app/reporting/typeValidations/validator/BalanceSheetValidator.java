@@ -46,7 +46,7 @@ public class BalanceSheetValidator implements ReportTypeValidator {
         if (fields.isEmpty()) {
             return true;
         }
-        Optional<ReportTemplateFieldEntity> notAccumulated = fields.stream().filter(f -> !f.isAccumulated()).findAny();
+        Optional<ReportTemplateFieldEntity> notAccumulated = fields.stream().filter(f -> !f.getDateRange().name().startsWith("ACCUMULATED")).findAny();
         if (notAccumulated.isPresent()) {
             return false;
         }

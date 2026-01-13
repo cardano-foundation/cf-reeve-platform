@@ -148,6 +148,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("InvalidMapping");
+        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
@@ -156,6 +157,33 @@ class CsvReportTemplateServiceTest {
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
         assertEquals("Invalid chart of account mapping: InvalidMapping. Expected format 'TYPE_SUBTYPE' and semicolon seperated.", responseDtos.getFirst().getError().get().getDetail());
+    }
+
+    @Test
+    void createCsvTemplates_wrongDateRangeMapping() {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        Organisation organisation = new Organisation();
+        MultipartFile file = mock(MultipartFile.class);
+        TemplateCsvLine templateCsvLine = mock(TemplateCsvLine.class);
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(templateCsvLine)));
+        when(request.getFile()).thenReturn(file);
+        when(validator.validateObject(templateCsvLine)).thenReturn(errors);
+        when(templateCsvLine.getName()).thenReturn("Test Template");
+        when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
+        when(templateCsvLine.getDateRange()).thenReturn("InvalidMapping");
+        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isRight());
+        List<ReportTemplateResponseDto> responseDtos = result.get();
+        assertEquals(1, responseDtos.size());
+        assertTrue(responseDtos.getFirst().getError().isPresent());
+        assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
+        assertEquals("Invalid date range: InvalidMapping. Options are: PERIOD, ACCUMULATED_START_TO_PERIOD_END, ACCUMULATED_YEAR_TO_PERIOD_END, ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END, ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -175,6 +203,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
+        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.empty());
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
@@ -205,6 +234,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
+        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
         when(chartOfAccountType.getSubTypes()).thenReturn(Set.of());
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
@@ -239,6 +269,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
+        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
         when(chartOfAccountType.getSubTypes()).thenReturn(Set.of(chartOfAccountSubType));
         when(chartOfAccountSubType.getName()).thenReturn("subtype");
@@ -277,6 +308,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getTypes()).thenReturn("type_subtype");
+        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
         when(chartOfAccountType.getSubTypes()).thenReturn(Set.of(chartOfAccountSubType));
         when(chartOfAccountSubType.getName()).thenReturn("subtype");

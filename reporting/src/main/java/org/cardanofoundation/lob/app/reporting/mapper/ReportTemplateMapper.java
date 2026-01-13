@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.reporting.mapper;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,6 +22,7 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValida
 import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
@@ -126,9 +128,7 @@ public class ReportTemplateMapper {
             .reportTemplate(template)
             .parentField(parent)
             .name(dto.getFieldName())
-            .accumulated(dto.isAccumulated())
-            .accumulatedYearly(dto.isAccumulatedYearly())
-            .accumulatedPreviousYear(dto.isAccumulatedPreviousYear())
+            .dateRange(Optional.ofNullable(dto.getDateRange()).orElse(ReportFieldDateRange.PERIOD))
             .negated(dto.isNegated())
             .mappingTypes(mappingTypes)
             .build();
@@ -164,9 +164,7 @@ public class ReportTemplateMapper {
         return ReportTemplateFieldDto.builder()
             .id(entity.getId())
             .fieldName(entity.getName())
-            .accumulated(entity.isAccumulated())
-            .accumulatedYearly(entity.isAccumulatedYearly())
-            .accumulatedPreviousYear(entity.isAccumulatedPreviousYear())
+            .dateRange(entity.getDateRange())
             .negated(entity.isNegated())
             .mappingSubTypeIds(mappingSubTypeIds)
             .childFields(children)
