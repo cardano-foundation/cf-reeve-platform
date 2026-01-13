@@ -194,8 +194,8 @@ public class ReportingService {
         for (ValidationRuleTermEntity term : terms) {
             BigDecimal fieldValue = findFieldValueRecursively(entity.getFields(), term.getField().getId());
             switch (term.getOperation()) {
-                case ADD -> result = result.add(fieldValue);
-                case SUBTRACT -> result = result.subtract(fieldValue);
+                case ADD -> result = result.add(Optional.ofNullable(fieldValue).orElse(BigDecimal.ZERO));
+                case SUBTRACT -> result = result.subtract(Optional.ofNullable(fieldValue).orElse(BigDecimal.ZERO));
             }
         }
         return result;
