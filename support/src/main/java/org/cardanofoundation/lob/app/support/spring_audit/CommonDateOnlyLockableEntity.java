@@ -14,12 +14,14 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.hibernate.envers.Audited;
 import org.javers.core.metamodel.annotation.DiffIgnore;
 
 @Setter
 @Getter
 @MappedSuperclass
 @NoArgsConstructor
+@Audited
 public abstract class CommonDateOnlyLockableEntity extends CommonDateOnlyEntity {
 
     @Temporal(TemporalType.TIMESTAMP)

@@ -51,6 +51,8 @@ lob:
   blockchain-reader:
     enabled: false
   blockchain-publisher:
+    rollback:
+      enabled: false
     enabled: false
   organisation:
     enabled: false

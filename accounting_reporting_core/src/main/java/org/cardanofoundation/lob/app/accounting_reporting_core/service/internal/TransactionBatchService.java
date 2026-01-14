@@ -162,7 +162,7 @@ public class TransactionBatchService {
 
         if (txBatch.getStatus() == FINALIZED) {
             log.warn("Transaction batch already finalized or failed, batchId: {}", batchId);
-            return;
+            //return;
         }
         int totalTransactionsCount = totalTransactionsCountO.orElse(batchStatisticsView.getTotal());
         txBatch.setBatchStatistics(batchStatisticsView.toBatchStatistics(totalTransactionsCount));

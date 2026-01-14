@@ -337,7 +337,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
         }
 
         switch (getLedgerDispatchStatus()) {
-            case NOT_DISPATCHED, MARK_DISPATCH -> {
+            case NOT_DISPATCHED, MARK_DISPATCH, RETRYING, FAILED -> {
                 if (Boolean.TRUE.equals(getLedgerDispatchApproved())) {
                     this.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
                     return;
@@ -352,8 +352,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
             case DISPATCHED, COMPLETED, FINALIZED -> {
                 this.setProcessingStatus(TransactionProcessingStatus.PUBLISHED);
                 return;
-            }
-            case FAILED, RETRYING -> {
             }
         }
         this.setProcessingStatus(TransactionProcessingStatus.APPROVE);

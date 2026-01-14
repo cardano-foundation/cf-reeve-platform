@@ -25,6 +25,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.annotations.JdbcType;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+import org.hibernate.envers.Audited;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockableEntity;
@@ -34,6 +35,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockable
 @Entity(name = "blockchain_publisher.txs.TransactionEntity")
 @Table(name = "blockchain_publisher_transaction")
 @Builder
+@Audited
 @NoArgsConstructor
 @AllArgsConstructor
 @EntityListeners({ AuditingEntityListener.class })

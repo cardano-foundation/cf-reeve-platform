@@ -77,6 +77,8 @@ public class Transaction {
     @Builder.Default
     private Set<Violation> violations = new LinkedHashSet<>();
 
+    private String rollbackSuffix;
+
     public static String id(String organisationId,
                             String internalTransactionNumber) {
         return digestAsHex("%s::%s".formatted(
