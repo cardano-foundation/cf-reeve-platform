@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.config;
 
-import java.util.LinkedHashMap;
-import java.util.List;
+import java.util.Optional;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,10 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
-import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
-import org.cardanofoundation.signify.app.aiding.EventResult;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.core.States;
 
@@ -45,20 +41,14 @@ public class KeriConfig {
         @Value("${lob.blockchain-publisher.keri.identifier.name}") String identifierName,
         @Value("${lob.blockchain-publisher.keri.identifier.role}") String role, SignifyClient client) throws Exception {
     String prefix;
-    try {
-        States.HabState habState = client.identifiers().get(identifierName);
-        prefix = habState.getPrefix();
-    } catch (Exception e) {
-        EventResult eventResult = client.identifiers().create(identifierName, CreateIdentifierArgs.builder()
-            .build());
-        client.operations().wait(Operation.fromObject(eventResult.op()));
-        prefix = eventResult.serder().getPre();
-        EventResult endRole = client.identifiers().addEndRole(identifierName, role, client.getAgent().getPre(), null);
-        client.operations().wait(Operation.fromObject(endRole.op()));
+
+    Optional<States.HabState> habState = client.identifiers().get(identifierName);
+    if (habState.isPresent()) {
+        prefix = habState.get().getPrefix();
+    } else {
+        throw new RuntimeException("KERI Identifier with name " + identifierName + " not found");
     }
-    LinkedHashMap<String, Object> response = (LinkedHashMap<String, Object>)client.oobis().get(prefix, role);
-    List<String> oobis = (List<String>) response.get("oobis");
-    log.info("Created identifier oobis: {}", oobis);
+    log.info("Using KERI Identifier with name {} and prefix {}", identifierName, prefix);
     return IdentifierConfig.builder()
         .prefix(prefix)
         .name(identifierName)
