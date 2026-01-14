@@ -83,6 +83,7 @@ public class ReceiveCredentialWithIdentifier {
         return switch (NETWORK_TYPE.toLowerCase()) {
             case "mainnet" -> Networks.mainnet();
             case "preprod" -> Networks.preprod();
+            case "devnet" -> Networks.testnet();
             default -> Networks.testnet(); // preview is the default
         };
     }
@@ -91,6 +92,7 @@ public class ReceiveCredentialWithIdentifier {
         String baseUrl = switch (NETWORK_TYPE.toLowerCase()) {
             case "mainnet" -> "https://cardano-mainnet.blockfrost.io/api/v0/";
             case "preprod" -> "https://cardano-preprod.blockfrost.io/api/v0/";
+            case "devnet" -> "http://localhost:8081/api/v1/"; // Example for local devnet
             default -> "https://cardano-preview.blockfrost.io/api/v0/";
         };
         return new BFBackendService(baseUrl, blockfrostProjectId);
