@@ -20,6 +20,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.hibernate.annotations.SQLRestriction;
+
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.support.crypto.SHA3;
@@ -53,6 +55,7 @@ public class ReportTemplateEntity extends CommonEntity {
     private boolean active = true;
 
     @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
+    @SQLRestriction("parent_field_id IS NULL")
     @Builder.Default
     private List<ReportTemplateFieldEntity> fields = new ArrayList<>();
 
