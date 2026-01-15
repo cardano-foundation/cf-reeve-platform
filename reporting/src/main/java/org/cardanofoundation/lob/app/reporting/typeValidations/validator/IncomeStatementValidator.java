@@ -15,6 +15,7 @@ import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTypeValidator;
 
@@ -45,7 +46,7 @@ public class IncomeStatementValidator implements ReportTypeValidator {
         if (fields.isEmpty()) {
             return true;
         }
-        Optional<ReportTemplateFieldEntity> notAccumulatedYearly = fields.stream().filter(f -> !f.isAccumulatedYearly()).findAny();
+        Optional<ReportTemplateFieldEntity> notAccumulatedYearly = fields.stream().filter(f -> !f.getDateRange().equals(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END)).findAny();
         if (notAccumulatedYearly.isPresent()) {
             return false;
         }

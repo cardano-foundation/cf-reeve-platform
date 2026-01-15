@@ -123,9 +123,7 @@ The following columns are needed:
 - `Field Name`: Name of the field (e.g. `TOTAL_ASSETS`)
 - `Parent`: Name of the Parent field (e.g. `ASSETS`)
 - `Mapped Types`: A list of type and subtype names. The type and subtypes are separated by `-` and multiple entries are separated by `,` (e.g. `ASSET-BANK,ASSET-CASH_AND_CASH_EQUIVALENTS`)
-- `Accumulated`: A boolean if the field is accumulated (e.g. `True`)
-- `Accumulated Yearly`: A boolean if the field is accumulated yearly (e.g. `False`)
-- `Accumulated Previous Year`: A boolean if the field is accumulated for the previous year (e.g. `False`)
+- `Date Range`: Definition of the date range for the field. Possible values are: `PERIOD`, `ACCUMULATED_START_TO_PERIOD_END`, `ACCUMULATED_YEAR_TO_PERIOD_END`, `ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END`, `ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END`
 - `Negated`: A boolean if the field is negated (e.g. `False`)
 
 ### Report data structure

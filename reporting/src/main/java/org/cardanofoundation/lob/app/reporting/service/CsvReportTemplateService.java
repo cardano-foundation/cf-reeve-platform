@@ -38,6 +38,7 @@ import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
@@ -181,9 +182,18 @@ public class CsvReportTemplateService {
     private Either<Problem, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, TemplateCsvLine templateCsvLine) {
         ReportTemplateFieldDto fieldEntity = new ReportTemplateFieldDto();
         fieldEntity.setFieldName(templateCsvLine.getFieldName());
-        fieldEntity.setAccumulated(templateCsvLine.getAccumulated());
-        fieldEntity.setAccumulatedYearly(templateCsvLine.getAccumulatedYearly());
-        fieldEntity.setAccumulatedPreviousYear(templateCsvLine.getAccumulatedPreviousYear());
+        ReportFieldDateRange dateRange;
+        try {
+            dateRange = ReportFieldDateRange.valueOf(templateCsvLine.getDateRange());
+        } catch (IllegalArgumentException e) {
+            Problem problem = Problem.builder()
+                    .withTitle(Constants.CSV_PARSING_ERROR)
+                    .withDetail("Invalid date range: " + templateCsvLine.getDateRange() + ". Options are: " + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(Enum::name).toList()))
+                    .withStatus(Status.BAD_REQUEST)
+                    .build();
+            return Either.left(problem);
+        }
+        fieldEntity.setDateRange(dateRange);
         fieldEntity.setNegated(templateCsvLine.getNegated());
         String[] mappedAccounts = templateCsvLine.getTypes().split(";");
         List<ChartOfAccountSubType> mappedSubTypes = new ArrayList<>();

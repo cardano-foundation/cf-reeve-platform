@@ -1,10 +1,13 @@
 package org.cardanofoundation.lob.app.reporting.model.entity;
 
+import static jakarta.persistence.EnumType.STRING;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -23,6 +26,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @Entity
@@ -64,13 +68,12 @@ public class ReportTemplateFieldEntity extends CommonEntity {
     private List<ChartOfAccountSubType> mappingTypes = new ArrayList<>();
 
     private String name;
+
     // Additional properties for column behavior
+    @Enumerated(STRING)
     @Builder.Default
-    private boolean accumulated = false;
-    @Builder.Default
-    private boolean accumulatedYearly = false;
-    @Builder.Default
-    private boolean accumulatedPreviousYear = false;
+    private ReportFieldDateRange dateRange = ReportFieldDateRange.PERIOD;
+
     @Builder.Default
     private boolean negated = false;
 

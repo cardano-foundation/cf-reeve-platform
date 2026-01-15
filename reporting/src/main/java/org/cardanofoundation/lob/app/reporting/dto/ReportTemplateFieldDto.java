@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -27,14 +29,10 @@ public class ReportTemplateFieldDto {
     @NotNull(message = "Field name must not be null")
     private String fieldName;
 
-    @Schema(description = "Whether values should be accumulated", example = "false", defaultValue = "false")
-    private boolean accumulated;
-
-    @Schema(description = "Whether values should be accumulated yearly", example = "false", defaultValue = "false")
-    private boolean accumulatedYearly;
-
-    @Schema(description = "Whether values from previous year should be accumulated", example = "false", defaultValue = "false")
-    private boolean accumulatedPreviousYear;
+    @Schema(description = """
+            Date range of the specific field. Options are: PERIOD,ACCUMULATED_START_TO_PERIOD_END,ACCUMULATED_YEAR_TO_PERIOD_END,ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END,ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END
+            """, example = "PERIOD",  nullable = true)
+    private ReportFieldDateRange dateRange;
 
     @Schema(description = "Whether the value should be negated (for expenses)", example = "false", defaultValue = "false")
     private boolean negated;

@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
@@ -23,6 +24,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
@@ -104,9 +106,7 @@ class ReportingTemplateMapperTest {
         // Given
         ReportTemplateFieldDto fieldDto = ReportTemplateFieldDto.builder()
             .fieldName("Revenue")
-            .accumulated(true)
-            .accumulatedYearly(false)
-            .accumulatedPreviousYear(false)
+            .dateRange(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END)
             .negated(false)
             .build();
 
@@ -124,8 +124,7 @@ class ReportingTemplateMapperTest {
         assertThat(result.getFields()).hasSize(1);
         ReportTemplateFieldEntity field = result.getFields().get(0);
         assertThat(field.getName()).isEqualTo("Revenue");
-        assertThat(field.isAccumulated()).isTrue();
-        assertThat(field.isAccumulatedYearly()).isFalse();
+        assertEquals(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END, field.getDateRange());
         assertThat(field.isNegated()).isFalse();
         assertThat(field.getMappingTypes()).isEmpty();
         assertThat(field.getReportTemplate()).isSameAs(result);
@@ -175,12 +174,12 @@ class ReportingTemplateMapperTest {
         // Given
         ReportTemplateFieldDto childFieldDto = ReportTemplateFieldDto.builder()
             .fieldName("Current Assets")
-            .accumulated(false)
+            .dateRange(ReportFieldDateRange.PERIOD)
             .build();
 
         ReportTemplateFieldDto parentFieldDto = ReportTemplateFieldDto.builder()
             .fieldName("Total Assets")
-            .accumulated(true)
+            .dateRange(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END)
             .childFields(Collections.singletonList(childFieldDto))
             .build();
 
@@ -301,9 +300,7 @@ class ReportingTemplateMapperTest {
         ReportTemplateFieldEntity field = ReportTemplateFieldEntity.builder()
             .id(100L)
             .name("Revenue")
-            .accumulated(true)
-            .accumulatedYearly(true)
-            .accumulatedPreviousYear(false)
+            .dateRange(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END)
             .negated(true)
             .reportTemplate(entity)
             .mappingTypes(Collections.singletonList(subType))
@@ -319,9 +316,7 @@ class ReportingTemplateMapperTest {
         assertThat(result.getFields()).hasSize(1);
         ReportTemplateFieldDto fieldDto = result.getFields().get(0);
         assertThat(fieldDto.getFieldName()).isEqualTo("Revenue");
-        assertThat(fieldDto.isAccumulated()).isTrue();
-        assertThat(fieldDto.isAccumulatedYearly()).isTrue();
-        assertThat(fieldDto.isAccumulatedPreviousYear()).isFalse();
+        assertEquals(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END, fieldDto.getDateRange());
         assertThat(fieldDto.isNegated()).isTrue();
         assertThat(fieldDto.getMappingSubTypeIds()).containsExactly(10L);
         assertThat(fieldDto.getChildFields()).isEmpty();

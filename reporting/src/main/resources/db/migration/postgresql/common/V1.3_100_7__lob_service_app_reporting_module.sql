@@ -50,9 +50,7 @@ CREATE TABLE IF NOT EXISTS report_template_field (
     report_template_id VARCHAR(64) NOT NULL,
     parent_field_id BIGINT,
     name VARCHAR(255) NOT NULL,
-    accumulated BOOLEAN NOT NULL DEFAULT FALSE,
-    accumulated_yearly BOOLEAN NOT NULL DEFAULT FALSE,
-    accumulated_previous_year BOOLEAN NOT NULL DEFAULT FALSE,
+    date_range VARCHAR(255) NOT NULL,
     negated BOOLEAN NOT NULL DEFAULT FALSE,
     
     created_by VARCHAR(255),
@@ -79,8 +77,7 @@ CREATE TABLE IF NOT EXISTS report_template_field_aud (
     report_template_id BIGINT,
     parent_field_id BIGINT,
     name VARCHAR(255),
-    accumulated BOOLEAN,
-    accumulated_previous_year BOOLEAN,
+    date_range VARCHAR(255) NOT NULL,
     negated BOOLEAN,
     
     created_by VARCHAR(255),
