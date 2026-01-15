@@ -71,15 +71,7 @@ public class CsvReportService {
         List<ReportResponseDto> createdReports = new ArrayList<>();
         while(!reportLines.isEmpty()) {
             ReportCsvLine line = reportLines.get(0);
-            List<ReportCsvLine> sameReportLines = reportLines.stream()
-                    .filter(l -> l.getTemplateName().equals(line.getTemplateName())
-                            && l.getName().equals(line.getName())
-                            && l.getIntervalType().equals(line.getIntervalType())
-                            && l.getYear().equals(line.getYear())
-                            && ((l.getPeriod() == null && line.getPeriod() == null) || (l.getPeriod() != null && l.getPeriod().equals(line.getPeriod())))
-                    )
-                    .toList();
-            reportLines.removeAll(sameReportLines);
+
             Optional<ReportTemplateEntity> templateEntityO = reportTemplateRepository.findLatestByOrganisationIdAndName(csvTemplateRequest.getOrganisationId(), line.getTemplateName());
             if(templateEntityO.isEmpty()) {
                 createdReports.add(ReportResponseDto.builder()
@@ -109,6 +101,15 @@ public class CsvReportService {
                         .build());
                 continue;
             }
+            List<ReportCsvLine> sameReportLines = reportLines.stream()
+                    .filter(l -> l.getTemplateName().equals(line.getTemplateName())
+                            && l.getName().equals(line.getName())
+                            && l.getIntervalType().equals(line.getIntervalType())
+                            && l.getYear().equals(line.getYear())
+                            && ((l.getPeriod() == null && line.getPeriod() == null) || (l.getPeriod() != null && l.getPeriod().equals(line.getPeriod())))
+                    )
+                    .toList();
+            reportLines.removeAll(sameReportLines);
             if (dataMode == DataMode.USER) {
                 for (ReportCsvLine reportCsvLine : sameReportLines) {
                     if (reportCsvLine.getField() == null || reportCsvLine.getField().isBlank()) {

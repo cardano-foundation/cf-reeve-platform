@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -33,8 +35,11 @@ public class GlobalExceptionHandler {
                         fieldName,
                         Arrays.toString(invalidFormatException.getTargetType().getEnumConstants())
                 );
-
-                return ResponseEntity.badRequest().body(message);
+                return ResponseEntity.badRequest().body(Problem.builder()
+                        .withTitle("INVALID_ENUM_VALUE")
+                        .withDetail(message)
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
             }
         }
 
