@@ -44,9 +44,15 @@ allprojects {
         mavenLocal()
         mavenCentral()
         maven {
-            name = "sonatypeSnapshots"
-            url = uri("https://oss.sonatype.org/content/repositories/snapshots")
+            name = "Central Portal Snapshots"
+            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+
+            // Only search this repository for the specific dependency
+            content {
+                includeModule("org.cardanofoundation", "signify")
+            }
         }
+
         maven {
             name = "local"
             url = uri("file://${project.layout.buildDirectory}/repo")
@@ -75,19 +81,6 @@ subprojects {
             resources {
                 setSrcDirs(listOf("src/main/resources"))
             }
-        }
-    }
-
-    repositories {
-        //mavenLocal()
-        mavenCentral()
-        maven {
-            name = "sonatypeSnapshots"
-            url = uri("https://oss.sonatype.org/content/repositories/snapshots")
-        }
-        maven {
-            name = "local"
-            url = uri("file://${project.layout.buildDirectory}/repo")
         }
     }
 
