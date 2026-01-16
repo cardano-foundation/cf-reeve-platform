@@ -70,16 +70,8 @@ public class CsvReportService {
         }
         List<ReportResponseDto> createdReports = new ArrayList<>();
         while(!reportLines.isEmpty()) {
-            ReportCsvLine line = reportLines.get(0);
-            List<ReportCsvLine> sameReportLines = reportLines.stream()
-                    .filter(l -> l.getTemplateName().equals(line.getTemplateName())
-                            && l.getName().equals(line.getName())
-                            && l.getIntervalType().equals(line.getIntervalType())
-                            && l.getYear().equals(line.getYear())
-                            && ((l.getPeriod() == null && line.getPeriod() == null) || (l.getPeriod() != null && l.getPeriod().equals(line.getPeriod())))
-                    )
-                    .toList();
-            reportLines.removeAll(sameReportLines);
+            ReportCsvLine line = reportLines.getFirst();
+
             Optional<ReportTemplateEntity> templateEntityO = reportTemplateRepository.findLatestByOrganisationIdAndName(csvTemplateRequest.getOrganisationId(), line.getTemplateName());
             if(templateEntityO.isEmpty()) {
                 createdReports.add(ReportResponseDto.builder()
@@ -90,6 +82,7 @@ public class CsvReportService {
                                         .build()
                                 ))
                         .build());
+                reportLines.removeFirst(); // First line failed so removing it to prevent re-processing
                 continue;
             }
             ReportTemplateEntity reportTemplateEntity = templateEntityO.get();
@@ -107,8 +100,20 @@ public class CsvReportService {
                                 .build()
                         ))
                         .build());
+                reportLines.removeFirst(); // First line failed so removing it to prevent re-processing
                 continue;
             }
+            // Filtering all lines that belong to the same report
+            List<ReportCsvLine> sameReportLines = reportLines.stream()
+                    .filter(l -> l.getTemplateName().equals(line.getTemplateName())
+                            && l.getName().equals(line.getName())
+                            && l.getIntervalType().equals(line.getIntervalType())
+                            && l.getYear().equals(line.getYear())
+                            && ((l.getPeriod() == null && line.getPeriod() == null) || (l.getPeriod() != null && l.getPeriod().equals(line.getPeriod())))
+                    )
+                    .toList();
+            // Removing them from the main list to process the next report in the next iteration
+            reportLines.removeAll(sameReportLines);
             if (dataMode == DataMode.USER) {
                 for (ReportCsvLine reportCsvLine : sameReportLines) {
                     if (reportCsvLine.getField() == null || reportCsvLine.getField().isBlank()) {
