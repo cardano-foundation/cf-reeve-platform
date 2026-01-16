@@ -70,7 +70,7 @@ public class CsvReportService {
         }
         List<ReportResponseDto> createdReports = new ArrayList<>();
         while(!reportLines.isEmpty()) {
-            ReportCsvLine line = reportLines.get(0);
+            ReportCsvLine line = reportLines.getFirst();
 
             Optional<ReportTemplateEntity> templateEntityO = reportTemplateRepository.findLatestByOrganisationIdAndName(csvTemplateRequest.getOrganisationId(), line.getTemplateName());
             if(templateEntityO.isEmpty()) {
@@ -82,6 +82,7 @@ public class CsvReportService {
                                         .build()
                                 ))
                         .build());
+                reportLines.removeFirst(); // First line failed so removing it to prevent re-processing
                 continue;
             }
             ReportTemplateEntity reportTemplateEntity = templateEntityO.get();
@@ -99,8 +100,10 @@ public class CsvReportService {
                                 .build()
                         ))
                         .build());
+                reportLines.removeFirst(); // First line failed so removing it to prevent re-processing
                 continue;
             }
+            // Filtering all lines that belong to the same report
             List<ReportCsvLine> sameReportLines = reportLines.stream()
                     .filter(l -> l.getTemplateName().equals(line.getTemplateName())
                             && l.getName().equals(line.getName())
@@ -109,6 +112,7 @@ public class CsvReportService {
                             && ((l.getPeriod() == null && line.getPeriod() == null) || (l.getPeriod() != null && l.getPeriod().equals(line.getPeriod())))
                     )
                     .toList();
+            // Removing them from the main list to process the next report in the next iteration
             reportLines.removeAll(sameReportLines);
             if (dataMode == DataMode.USER) {
                 for (ReportCsvLine reportCsvLine : sameReportLines) {
