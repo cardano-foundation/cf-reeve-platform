@@ -95,7 +95,7 @@ public class CsvReportService {
                 createdReports.add(ReportResponseDto.builder()
                         .error(Optional.of(Problem.builder()
                                 .withTitle("INVALID_DATA_MODE")
-                                .withDetail("Data mode '" + line.getDataMode() + "' is not valid. Must be either GENERATED or USER.")
+                                .withDetail("Data mode '" + line.getDataMode() + "' is not valid. Must be either SYSTEM or USER.")
                                 .withStatus(Status.BAD_REQUEST)
                                 .build()
                         ))
@@ -130,7 +130,7 @@ public class CsvReportService {
                     }
                     BigDecimal amount;
                     try {
-                        amount = new BigDecimal(reportCsvLine.getAmount());
+                        amount = new BigDecimal(Optional.ofNullable(reportCsvLine.getAmount()).orElse("0"));
                     } catch (NumberFormatException e) {
                         fieldsSetupSuccessfully = false;
                         createdReports.add(ReportResponseDto.builder()
@@ -144,7 +144,7 @@ public class CsvReportService {
                         break;
                     }
                     String[] fieldNamesSplit = reportCsvLine.getField().split("\\."); // Since field is not null nor blank the array size must be at least 1
-                    Either<Problem, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getFields(), null);
+                    Either<Problem, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getFields(), null, reportTemplateEntity);
                     if (updateResult.isLeft()) {
                         fieldsSetupSuccessfully = false;
                         createdReports.add(ReportResponseDto.builder()
@@ -173,7 +173,7 @@ public class CsvReportService {
         return Either.right(createdReports);
     }
 
-    private Either<Problem, Void> updateFields(BigDecimal amount, List<String> fieldNames, List<ReportFieldDto> fields, List<ReportTemplateFieldEntity> entities, ReportTemplateFieldEntity parent) {
+    private Either<Problem, Void> updateFields(BigDecimal amount, List<String> fieldNames, List<ReportFieldDto> fields, List<ReportTemplateFieldEntity> entities, ReportTemplateFieldEntity parent, ReportTemplateEntity reportTemplateEntity) {
         if(fieldNames.isEmpty()) {
             return Either.right(null);
         }
@@ -182,7 +182,7 @@ public class CsvReportService {
         if(templateField.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("FIELD_NOT_FOUND")
-                    .withDetail("Field with name " + currentFieldName + " not found in template " + (parent != null ? "for parent field: " + parent.getName() : "at root level") + ".")
+                    .withDetail("Field with name " + currentFieldName + " not found in template " + reportTemplateEntity.getName() + " " + (parent != null ? "for parent field: " + parent.getName() : "at root level") + ".")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -203,7 +203,7 @@ public class CsvReportService {
             if (fieldDto.getChildFields() == null) {
                 fieldDto.setChildFields(new ArrayList<>());
             }
-            return updateFields(amount, fieldNames, fieldDto.getChildFields(), templateFieldEntity.getChildFields(), templateFieldEntity);
+            return updateFields(amount, fieldNames, fieldDto.getChildFields(), templateFieldEntity.getChildFields(), templateFieldEntity, reportTemplateEntity);
         }
     }
 

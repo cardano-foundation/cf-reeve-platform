@@ -250,6 +250,15 @@ public class ReportingService {
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
+        if(intervalType == IntervalType.YEAR) {
+            if (period != 1) {
+                return Either.left(Problem.builder()
+                        .withTitle(Constants.INVALID_PERIOD)
+                        .withDetail("Report period must be 1 for yearly reports")
+                        .withStatus(Status.BAD_REQUEST)
+                        .build());
+            }
+        }
         if (intervalType == IntervalType.MONTH) {
             if (period < 1 || period > 12) {
                 return Either.left(Problem.builder()

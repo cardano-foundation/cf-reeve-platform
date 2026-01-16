@@ -185,6 +185,7 @@ class CsvReportServiceTest {
         MultipartFile multipartFile = mock(MultipartFile.class);
         ReportCsvLine reportCsvLine = new ReportCsvLine("Template1", "Report1", "MONTH", (short)2024, (short)1, "USER", "Field1", "5");
         ReportTemplateEntity reportTemplateEntity = mock(ReportTemplateEntity.class);
+
         Errors errors = mock(Errors.class);
 
         when(request.getOrganisationId()).thenReturn("org123");
