@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -8,11 +9,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
 @Data
 @Builder
@@ -29,6 +32,9 @@ public class ReportResponseDto {
 
     @Schema(description = "Report template ID", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2", required = true)
     private String reportTemplateId;
+
+    @Schema(description = "Report template type", example = "BALANCE_SHEET")
+    private ReportTemplateType reportTemplateType;
 
     @Schema(description = "Report name", example = "Q1 2024 Financial Report", required = true)
     private String name;
@@ -70,6 +76,21 @@ public class ReportResponseDto {
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     @Schema(description = "List of validation rules that failed", nullable = true)
     private List<FailedValidationRuleDto> failedValidationRules;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime publishDate;
+
+    private String publishedBy;
+
+    private String createdBy;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
+
+    private LocalDateTime createdAt;
+
+    private String updatedBy;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
+
+    private LocalDateTime updatedAt;
 
     private Optional<Problem> error;
 }

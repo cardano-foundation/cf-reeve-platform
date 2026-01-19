@@ -108,6 +108,7 @@ public class ReportMapper {
                 .id(entity.getId())
                 .organisationId(entity.getOrganisationId())
                 .reportTemplateId(entity.getReportTemplate() != null ? entity.getReportTemplate().getId() : null)
+                .reportTemplateType(entity.getReportTemplate() != null ? entity.getReportTemplate().getReportTemplateType() : null)
                 .name(entity.getName())
                 .intervalType(entity.getIntervalType() != null ? entity.getIntervalType().name() : null)
                 .period(entity.getPeriod())
@@ -121,6 +122,12 @@ public class ReportMapper {
                 .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
                 .fields(topLevelFields)
                 .failedValidationRules(failedRuleDtos)
+                .createdAt(entity.getCreatedAt())
+                .createdBy(entity.getCreatedBy())
+                .updatedAt(entity.getUpdatedAt())
+                .updatedBy(entity.getUpdatedBy())
+                .publishDate(entity.getLedgerDispatchDate())
+                .publishedBy(entity.getPublishedBy())
                 .error(Optional.empty())
                 .build();
         return reportResponseConverter.convertResponse(responseDto, entity.getReportTemplate().getReportTemplateType());

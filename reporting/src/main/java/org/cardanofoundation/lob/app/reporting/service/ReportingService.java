@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportResponseStatisticView;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
@@ -638,12 +639,14 @@ public class ReportingService {
                                          Boolean ledgerDispatchApproved,
                                          Pageable pageable) {
         Page<ReportEntity> allFilteredReports = reportRepository.findAll(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageable);
+        ReportResponseStatisticView statistics = reportRepository.findStatistics(organisationId);
         return ReportListResponseDto.builder()
                 .reports(allFilteredReports.stream().map(reportMapper::toResponseDto).toList())
                 .total(allFilteredReports.getTotalElements())
                 .totalPages(allFilteredReports.getTotalPages())
                 .page(pageable.getPageNumber())
                 .size(pageable.getPageSize())
+                .reportStatistics(statistics)
                 .build();
     }
 

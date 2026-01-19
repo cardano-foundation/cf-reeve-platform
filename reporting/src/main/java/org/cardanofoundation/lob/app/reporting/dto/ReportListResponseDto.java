@@ -19,6 +19,9 @@ public class ReportListResponseDto {
     @Schema(description = "List of reports")
     private List<ReportResponseDto> reports;
 
+    @Schema(description = "Report statistics")
+    private ReportResponseStatisticView reportStatistics;
+
     @Schema(description = "Total number of report templates available", example = "100")
     private long total;
     @Schema(description = "Total number of pages available", example = "10")
