@@ -7,7 +7,9 @@ import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -15,6 +17,8 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Data
 @Builder
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "Report data transfer object for creating or updating reports")
