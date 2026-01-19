@@ -237,4 +237,30 @@ class CsvReportServiceTest {
         assertEquals(1, reportResponseDtos.size());
         assertEquals(reportResponseDto, reportResponseDtos.getFirst());
     }
+
+    @Test
+    void createCsvReports_invalidDataMode() {
+        CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
+        Organisation organisation = mock(Organisation.class);
+        MultipartFile multipartFile = mock(MultipartFile.class);
+        ReportCsvLine reportCsvLine = new ReportCsvLine("Template1", "Report1", "MONTH", (short)2024, (short)1, "USERAA", "Field1", "5");
+        ReportTemplateEntity reportTemplateEntity = mock(ReportTemplateEntity.class);
+        Errors errors = mock(Errors.class);
+
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(organisationPublicApiIF.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getFile()).thenReturn(multipartFile);
+        when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.right(List.of(reportCsvLine)));
+        when(validator.validateObject(reportCsvLine)).thenReturn(errors);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", reportCsvLine.getTemplateName())).thenReturn(Optional.of(reportTemplateEntity));
+
+        Either<Problem, List<ReportResponseDto>> result = service.createCsvReports(request);
+
+        assertTrue(result.isRight());
+        List<ReportResponseDto> reportResponseDtos = result.get();
+        assertEquals(1, reportResponseDtos.size());
+        assertTrue(reportResponseDtos.getFirst().getError().isPresent());
+        assertEquals("INVALID_DATA_MODE", reportResponseDtos.getFirst().getError().get().getTitle());
+    }
 }
