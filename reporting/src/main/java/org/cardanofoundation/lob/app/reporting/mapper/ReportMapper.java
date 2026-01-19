@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.mapper;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -130,7 +132,37 @@ public class ReportMapper {
                 .publishedBy(entity.getPublishedBy())
                 .error(Optional.empty())
                 .build();
+        responseDto.setFields(fillFieldsWithZero(responseDto.getFields(), entity.getReportTemplate().getFields()));
         return reportResponseConverter.convertResponse(responseDto, entity.getReportTemplate().getReportTemplateType());
+    }
+
+    private List<ReportFieldDto> fillFieldsWithZero(List<ReportFieldDto> fields, List<ReportTemplateFieldEntity> templateFields) {
+        fields = new ArrayList<>(fields); // Avoid having an immutable list
+        for(ReportTemplateFieldEntity fieldEntity : templateFields) {
+            Optional<ReportFieldDto> exists = fields.stream().filter(f -> f.getTemplateFieldName().equals(fieldEntity.getName())).findFirst();
+            if(exists.isEmpty()) {
+                ReportFieldDto newField = ReportFieldDto.builder()
+                        .templateFieldId(fieldEntity.getId())
+                        .templateFieldName(fieldEntity.getName())
+                        .value(BigDecimal.ZERO)
+                        .childFields(fieldEntity.getChildFields() != null ?
+                                fillFieldsWithZero(Collections.emptyList(), fieldEntity.getChildFields()) :
+                                null)
+                        .build();
+                fields.add(newField);
+            } else {
+                ReportFieldDto existingField = exists.get();
+                if(fieldEntity.getChildFields() != null && !fieldEntity.getChildFields().isEmpty()) {
+                    existingField.setChildFields(
+                            fillFieldsWithZero(
+                                    existingField.getChildFields() != null ? existingField.getChildFields() : Collections.emptyList(),
+                                    fieldEntity.getChildFields()
+                            )
+                    );
+                }
+            }
+        }
+        return fields;
     }
 
     public ReportFieldEntity toColumnEntity(ReportFieldDto dto) {
