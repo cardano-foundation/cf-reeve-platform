@@ -64,6 +64,7 @@ public class CsvReportService {
             return Either.left(parsedLines.getLeft());
         }
         List<ReportCsvLine> reportLines = new ArrayList<>(parsedLines.get());
+        List<ReportCsvLine> copyOfReportLines = new ArrayList<>(reportLines); // Creating a copy to keep track of original indexes for error reporting
         Either<List<Problem>, Void> voids = validateReportCsvLines(reportLines);
         if (voids.isLeft()) {
             return Either.left(voids.getLeft().getFirst());
@@ -71,13 +72,13 @@ public class CsvReportService {
         List<ReportResponseDto> createdReports = new ArrayList<>();
         while(!reportLines.isEmpty()) {
             ReportCsvLine line = reportLines.getFirst();
-
+            int index = copyOfReportLines.indexOf(line) + 2; // +2 to convert from 0-based to 1-based and to account for header line
             Optional<ReportTemplateEntity> templateEntityO = reportTemplateRepository.findLatestByOrganisationIdAndName(csvTemplateRequest.getOrganisationId(), line.getTemplateName());
             if(templateEntityO.isEmpty()) {
                 createdReports.add(ReportResponseDto.builder()
                                 .error(Optional.of(Problem.builder()
                                                 .withTitle("REPORT_TEMPLATE_NOT_FOUND")
-                                                .withDetail("Report template with name " + line.getTemplateName() + " not found.")
+                                                .withDetail("Line " + index + ": Report template with name " + line.getTemplateName() + " not found at line.")
                                                 .withStatus(Status.BAD_REQUEST)
                                         .build()
                                 ))
@@ -86,7 +87,6 @@ public class CsvReportService {
                 continue;
             }
             ReportTemplateEntity reportTemplateEntity = templateEntityO.get();
-            boolean fieldsSetupSuccessfully = true;
             List<ReportFieldDto> fields = new ArrayList<>();
             DataMode dataMode;
             try {
@@ -95,7 +95,7 @@ public class CsvReportService {
                 createdReports.add(ReportResponseDto.builder()
                         .error(Optional.of(Problem.builder()
                                 .withTitle("INVALID_DATA_MODE")
-                                .withDetail("Data mode '" + line.getDataMode() + "' is not valid. Must be either SYSTEM or USER.")
+                                .withDetail("Line " + index + ": Data mode '" + line.getDataMode() + "' is not valid. Must be either SYSTEM or USER at line.")
                                 .withStatus(Status.BAD_REQUEST)
                                 .build()
                         ))
@@ -112,52 +112,50 @@ public class CsvReportService {
                             && ((l.getPeriod() == null && line.getPeriod() == null) || (l.getPeriod() != null && l.getPeriod().equals(line.getPeriod())))
                     )
                     .toList();
-            // Removing them from the main list to process the next report in the next iteration
-            reportLines.removeAll(sameReportLines);
+
             if (dataMode == DataMode.USER) {
                 for (ReportCsvLine reportCsvLine : sameReportLines) {
+                    index = copyOfReportLines.indexOf(reportCsvLine) + 2; // +2 to convert from 0-based to 1-based and to account for header line
+                    reportLines.remove(reportCsvLine);
                     if (reportCsvLine.getField() == null || reportCsvLine.getField().isBlank()) {
-                        fieldsSetupSuccessfully = false;
                         createdReports.add(ReportResponseDto.builder()
                                 .error(Optional.of(Problem.builder()
                                         .withTitle("MISSING_FIELD_NAME")
-                                        .withDetail("Field name is missing in CSV line.")
+                                        .withDetail("Line " + index + ": Field name is missing in CSV line at line.")
                                         .withStatus(Status.BAD_REQUEST)
                                         .build()
                                 ))
                                 .build());
-                        break;
+                        continue;
                     }
                     BigDecimal amount;
                     try {
                         amount = new BigDecimal(Optional.ofNullable(reportCsvLine.getAmount()).orElse("0"));
                     } catch (NumberFormatException e) {
-                        fieldsSetupSuccessfully = false;
                         createdReports.add(ReportResponseDto.builder()
                                 .error(Optional.of(Problem.builder()
                                         .withTitle("INVALID_AMOUNT_FORMAT")
-                                        .withDetail("Amount '" + reportCsvLine.getAmount() + "' is not a valid number.")
+                                        .withDetail("Line " + index + ": Amount '" + reportCsvLine.getAmount() + "' is not a valid number at.")
                                         .withStatus(Status.BAD_REQUEST)
                                         .build()
                                 ))
                                 .build());
-                        break;
+                        continue;
                     }
                     String[] fieldNamesSplit = reportCsvLine.getField().split("\\."); // Since field is not null nor blank the array size must be at least 1
-                    Either<Problem, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getFields(), null, reportTemplateEntity);
+                    Either<Problem, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getFields(), null, reportTemplateEntity, index);
                     if (updateResult.isLeft()) {
-                        fieldsSetupSuccessfully = false;
                         createdReports.add(ReportResponseDto.builder()
                                 .error(Optional.of(updateResult.getLeft()))
                                 .build());
-                        break;
+                        continue;
                     }
                 }
-                if (!fieldsSetupSuccessfully) {
-                    continue;
-                }
             }
-
+            if(fields.isEmpty() && dataMode == DataMode.USER) {
+                // All lines for this report had errors, skipping report creation
+                continue;
+            }
             ReportDto reportDto = ReportDto.builder()
                     .reportTemplateId(reportTemplateEntity.getId())
                     .name(line.getName())
@@ -168,12 +166,23 @@ public class CsvReportService {
                     .fields(fields)
                     .build();
             reportDto.setOrganisationId(csvTemplateRequest.getOrganisationId());
-            createdReports.add(reportingService.create(reportDto));
+            ReportResponseDto reportResponseDto = reportingService.create(reportDto);
+            if(reportResponseDto.getError().isPresent()) {
+                Problem problem = reportResponseDto.getError().get();
+                // Adding the line number to the error detail for better traceability
+                reportResponseDto.setError(Optional.of(Problem.builder()
+                        .withDetail("Line " + index + ": " + problem.getDetail())
+                        .withStatus(problem.getStatus())
+                        .build()));
+                createdReports.add(reportResponseDto);
+            } else {
+                createdReports.add(reportResponseDto);
+            }
         }
         return Either.right(createdReports);
     }
 
-    private Either<Problem, Void> updateFields(BigDecimal amount, List<String> fieldNames, List<ReportFieldDto> fields, List<ReportTemplateFieldEntity> entities, ReportTemplateFieldEntity parent, ReportTemplateEntity reportTemplateEntity) {
+    private Either<Problem, Void> updateFields(BigDecimal amount, List<String> fieldNames, List<ReportFieldDto> fields, List<ReportTemplateFieldEntity> entities, ReportTemplateFieldEntity parent, ReportTemplateEntity reportTemplateEntity, int index) {
         if(fieldNames.isEmpty()) {
             return Either.right(null);
         }
@@ -182,7 +191,7 @@ public class CsvReportService {
         if(templateField.isEmpty()) {
             return Either.left(Problem.builder()
                     .withTitle("FIELD_NOT_FOUND")
-                    .withDetail("Field with name " + currentFieldName + " not found in template " + reportTemplateEntity.getName() + " " + (parent != null ? "for parent field: " + parent.getName() : "at root level") + ".")
+                    .withDetail("Line " + index + ": Field with name " + currentFieldName + " not found in template " + reportTemplateEntity.getName() + " " + (parent != null ? "for parent field: " + parent.getName() : "at root level") + ".")
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -203,7 +212,7 @@ public class CsvReportService {
             if (fieldDto.getChildFields() == null) {
                 fieldDto.setChildFields(new ArrayList<>());
             }
-            return updateFields(amount, fieldNames, fieldDto.getChildFields(), templateFieldEntity.getChildFields(), templateFieldEntity, reportTemplateEntity);
+            return updateFields(amount, fieldNames, fieldDto.getChildFields(), templateFieldEntity.getChildFields(), templateFieldEntity, reportTemplateEntity, index);
         }
     }
 
