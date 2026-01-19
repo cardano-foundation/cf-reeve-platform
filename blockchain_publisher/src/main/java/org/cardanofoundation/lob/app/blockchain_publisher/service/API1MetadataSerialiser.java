@@ -154,7 +154,8 @@ public class API1MetadataSerialiser {
         metadataMap.put("id", transactionItemEntity.getId());
         metadataMap.put("amount", BigDecimals.normaliseString(transactionItemEntity.getAmountFcy()));
         if(transactionItemEntity.getAmountLcy() != null){
-            metadataMap.put("amount_lcy", BigDecimals.normaliseString(transactionItemEntity.getAmountLcy()));
+            /** TODO: to be enabled after deployment */
+            //metadataMap.put("amount_lcy", BigDecimals.normaliseString(transactionItemEntity.getAmountLcy()));
         }
 
 

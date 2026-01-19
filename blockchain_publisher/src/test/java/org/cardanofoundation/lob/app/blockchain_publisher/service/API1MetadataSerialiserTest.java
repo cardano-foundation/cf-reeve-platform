@@ -163,7 +163,6 @@ class API1MetadataSerialiserTest {
 
             assertThat(itemMap.get("id")).isEqualTo(item.getId());
             assertThat(itemMap.get("amount")).isEqualTo(BigDecimals.normaliseString(item.getAmountFcy()));
-            assertThat(itemMap.get("amount_lcy")).isEqualTo(BigDecimals.normaliseString(item.getAmountLcy()));
             assertThat(itemMap.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(item.getFxRate()));
             assertThat(itemMap.get("document")).isInstanceOf(MetadataMap.class);
         }
@@ -174,7 +173,6 @@ class API1MetadataSerialiserTest {
 
         assertThat(itemMap1.get("id")).isEqualTo("item1");
         assertThat(itemMap1.get("amount")).isEqualTo(BigDecimals.normaliseString(item1.getAmountFcy()));
-        assertThat(itemMap1.get("amount_lcy")).isEqualTo(BigDecimals.normaliseString(item1.getAmountLcy()));
         assertThat(itemMap1.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(item1.getFxRate()));
         assertThat(itemMap1.get("document")).isInstanceOf(MetadataMap.class);
         assertThat(itemMap1.get("project")).isInstanceOf(MetadataMap.class); // only for item 1
