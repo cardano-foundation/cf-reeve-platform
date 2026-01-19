@@ -335,6 +335,14 @@ class ReportingServiceTest {
         assertTrue(response.getError().isPresent());
         assertEquals("INVALID_PERIOD", response.getError().get().getTitle());
 
+        reportDto.setIntervalType("YEAR");
+        reportDto.setPeriod((short) 2); // Invalid month
+
+        response = reportingService.create(reportDto);
+
+        assertTrue(response.getError().isPresent());
+        assertEquals("INVALID_PERIOD", response.getError().get().getTitle());
+
         reportDto.setIntervalType("MONTH");
         reportDto.setPeriod((short) 0); // Invalid month
 
