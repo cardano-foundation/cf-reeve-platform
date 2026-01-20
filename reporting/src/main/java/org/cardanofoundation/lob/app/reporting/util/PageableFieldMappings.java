@@ -11,6 +11,8 @@ public class PageableFieldMappings {
         "blockchainTxId", "blockchainHash",
             "intervalType", "intervalType",
             "reportTemplateId", "reportTemplate.id",
-            "isPublished", "ledgerDispatchApproved"
+            "isPublished", "ledgerDispatchApproved",
+            "reportTemplateType", "reportTemplate.reportTemplateType",
+            "publishDate", "ledgerDispatchDate"
     );
 }
