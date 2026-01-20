@@ -103,20 +103,24 @@ jobs:
         if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
         id: payload
         run: |
-          PAYLOAD=$(cat <<EOF
-            {
-              "version": "${VERSION_PUBLISH}",
-              "prName": "${{ github.event.pull_request.title }}",
-              "sourceBranch": "${{ github.event.pull_request.head.ref }}",
-              "targetBranch": "${{ github.event.pull_request.base.ref }}"
-            }
-          EOF)
+          PAYLOAD=$(jq -n \
+            --arg version "${VERSION_PUBLISH}" \
+            --arg prName "${{ github.event.pull_request.title }}" \
+            --arg sourceBranch "${{ github.event.pull_request.head.ref }}" \
+            --arg targetBranch "${{ github.event.pull_request.base.ref }}" \
+            '
+              {
+                "version": $version,
+                "prName": $prName,
+                "sourceBranch": $sourceBranch,
+                "targetBranch": $targetBranch 
+              }')
           echo 'PAYLOAD<<EOF' | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
           echo "$PAYLOAD" | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
           echo EOF | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
 
       - name: Dispatch successful build event to private repo
-        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@main
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@fix/sanitize-dispatch-event-input
         if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
         with:
           EVENT_TYPE: cf-reeve-platform-pr
