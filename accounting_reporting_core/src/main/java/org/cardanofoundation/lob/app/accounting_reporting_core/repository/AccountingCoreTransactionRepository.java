@@ -62,7 +62,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     Set<TransactionEntity> findAllByBatchId(String batchId);
 
     @Query("""
-        SELECT t FROM accounting_reporting_core.TransactionEntity t
+        SELECT DISTINCT t FROM accounting_reporting_core.TransactionEntity t
         JOIN t.batches b
         WHERE b.id = :batchId
         AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
