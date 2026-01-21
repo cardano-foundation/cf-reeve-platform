@@ -91,7 +91,17 @@ public class ProjectCodeService {
                             Problem.builder()
                                     .withStatus(Status.BAD_REQUEST)
                                     .withTitle("PARENT_PROJECT_CANNOT_BE_SELF")
-                                    .withDetail("The parent project cannot be the same as the project itself :%s".formatted(projectUpdate.getCustomerCode()))
+                                    .withDetail("The parent project cannot be the same as the project itself: %s".formatted(projectUpdate.getCustomerCode()))
+                                    .build()
+                    );
+                }
+                if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(projectUpdate.getCustomerCode())) {
+                    return ProjectView.createFail(
+                            projectUpdate,
+                            Problem.builder()
+                                    .withStatus(Status.BAD_REQUEST)
+                                    .withTitle("CIRCULAR_REFERENCE")
+                                    .withDetail("The parent project with customer code %s creates a circular reference.".formatted(projectUpdate.getParentCustomerCode()))
                                     .build()
                     );
                 }
@@ -125,19 +135,29 @@ public class ProjectCodeService {
             projectEntityUpdated.setActive(projectUpdate.getActive());
             // check if parent exists
             if (projectUpdate.getParentCustomerCode() != null) {
-                Optional<Project> project = getProject(orgId, projectUpdate.getParentCustomerCode());
-                if(project.isPresent()) {
-                    if (project.get().getId().getCustomerCode().equals(projectUpdate.getCustomerCode())) {
+                Optional<Project> parent = getProject(orgId, projectUpdate.getParentCustomerCode());
+                if(parent.isPresent()) {
+                    if (parent.get().getId().getCustomerCode().equals(projectUpdate.getCustomerCode())) {
                         return ProjectView.createFail(
                                 projectUpdate,
                                 Problem.builder()
                                         .withStatus(Status.BAD_REQUEST)
                                         .withTitle("PARENT_PROJECT_CANNOT_BE_SELF")
-                                        .withDetail("The parent project cannot be the same as the project itself :%s".formatted(projectUpdate.getCustomerCode()))
+                                        .withDetail("The parent project cannot be the same as the project itself: %s".formatted(projectUpdate.getCustomerCode()))
                                         .build()
                         );
                     }
-                    projectEntityUpdated.setParentCustomerCode(Objects.requireNonNull(project.get().getId()).getCustomerCode());
+                    if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(projectUpdate.getCustomerCode())) {
+                        return ProjectView.createFail(
+                                projectUpdate,
+                                Problem.builder()
+                                        .withStatus(Status.BAD_REQUEST)
+                                        .withTitle("CIRCULAR_REFERENCE")
+                                        .withDetail("The parent project with customer code %s creates a circular reference.".formatted(projectUpdate.getParentCustomerCode()))
+                                        .build()
+                        );
+                    }
+                    projectEntityUpdated.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
                 } else {
                     return ProjectView.createFail(
                             projectUpdate,

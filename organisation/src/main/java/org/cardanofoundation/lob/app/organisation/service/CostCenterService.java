@@ -62,8 +62,8 @@ public class CostCenterService {
 
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-                Optional<CostCenter> costCenterOptional = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
-                if (costCenterOptional.isEmpty()) {
+                Optional<CostCenter> parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
+                if (parent.isEmpty()) {
                     return CostCenterView.createFail(
                             costCenterUpdate,
                             Problem.builder()
@@ -73,13 +73,23 @@ public class CostCenterService {
                                     .build()
                     );
                 }
-                if (costCenterOptional.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
+                if (parent.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
                     return CostCenterView.createFail(
                             costCenterUpdate,
                             Problem.builder()
                                     .withStatus(Status.BAD_REQUEST)
                                     .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
-                                    .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
+                                    .withDetail("The parent cost center cannot be the same as the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
+                                    .build()
+                    );
+                }
+                if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(costCenterUpdate.getCustomerCode())) {
+                    return CostCenterView.createFail(
+                            costCenterUpdate,
+                            Problem.builder()
+                                    .withStatus(Status.BAD_REQUEST)
+                                    .withTitle("CIRCULAR_REFERENCE")
+                                    .withDetail("The parent cost center cannot have a circular reference with the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
                                     .build()
                     );
                 }
@@ -138,7 +148,17 @@ public class CostCenterService {
                         Problem.builder()
                                 .withStatus(Status.BAD_REQUEST)
                                 .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
-                                .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
+                                .withDetail("The parent cost center cannot be the same as the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
+                                .build()
+                );
+            }
+            if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(costCenterUpdate.getCustomerCode())) {
+                return CostCenterView.createFail(
+                        costCenterUpdate,
+                        Problem.builder()
+                                .withStatus(Status.BAD_REQUEST)
+                                .withTitle("CIRCULAR_REFERENCE")
+                                .withDetail("The parent cost center cannot have a circular reference with the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
                                 .build()
                 );
             }

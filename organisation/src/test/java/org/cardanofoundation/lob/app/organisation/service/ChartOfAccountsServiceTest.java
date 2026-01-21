@@ -437,6 +437,30 @@ class ChartOfAccountsServiceTest {
     }
 
     @Test
+    void testUpdateChartOfAccount_ParentCycle() {
+        chartOfAccountUpdate.setParentCustomerCode("PARENT001");
+        ChartOfAccount parentAccount = mock(ChartOfAccount.class);
+        when(parentAccount.getId()).thenReturn(new ChartOfAccount.Id(orgId, "PARENT001"));
+        when(parentAccount.getParentCustomerCode()).thenReturn(customerCode);
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId,
+                chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId,
+                chartOfAccountUpdate.getSubType())).thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId,
+                chartOfAccountUpdate.getParentCustomerCode()))
+                .thenReturn(Optional.of(parentAccount));
+
+        ChartOfAccountView response = chartOfAccountsService.updateChartOfAccount(orgId,
+                chartOfAccountUpdate);
+
+        assertNotNull(response);
+        assertFalse(response.getError().isEmpty());
+        assertEquals("CIRCULAR_REFERENCE", response.getError().get().getTitle());
+    }
+
+    @Test
     void testUpdateChartOfAccount_NoExist() {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))

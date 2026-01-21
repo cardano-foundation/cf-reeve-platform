@@ -89,7 +89,14 @@ public class ReferenceCodeService {
             if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
                 return ReferenceCodeView.createFail(Problem.builder()
                         .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
-                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withDetail("The parent reference code cannot be the same as the reference code itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
+            }
+            if (parentReferenceCode.get().getParentReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("CIRCULAR_REFERENCE")
+                        .withDetail("The parent reference code cannot have a cycle with itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), referenceCodeUpdate);
             }
@@ -149,7 +156,14 @@ public class ReferenceCodeService {
             if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
                 return ReferenceCodeView.createFail(Problem.builder()
                         .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
-                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withDetail("The parent reference code cannot be the same as the reference code itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
+            }
+            if (Optional.ofNullable(parentReferenceCode.get().getParentReferenceCode()).orElse("").equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("CIRCULAR_REFERENCE")
+                        .withDetail("The parent reference code cannot have a cycle with itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), referenceCodeUpdate);
             }

@@ -149,6 +149,29 @@ class CostCenterServiceTest {
     }
 
     @Test
+    void updateCostCenter_parentCycle() {
+        CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
+        CostCenter parentMock = mock(CostCenter.class);
+        when(parentMock.getId()).thenReturn(new CostCenter.Id(organisationId, "parentcode"));
+        when(parentMock.getParentCustomerCode()).thenReturn("customercode");
+
+        when(costCenterUpdate.getCustomerCode()).thenReturn("customercode");
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "customercode")))
+                .thenReturn(Optional.of(costCenter));
+        when(costCenterUpdate.getParentCustomerCode()).thenReturn("parentcode");
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, "parentcode")))
+                .thenReturn(Optional.of(parentMock));
+
+        CostCenterView costCenterView =
+                costCenterService.updateCostCenter(organisationId, costCenterUpdate);
+
+        assertNotNull(costCenterView);
+        assertEquals("customercode", costCenterView.getCustomerCode());
+        assertEquals("CIRCULAR_REFERENCE",
+                costCenterView.getError().get().getTitle());
+    }
+
+    @Test
     void updateCostCenter_success() {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
         CostCenter parentMock = mock(CostCenter.class);
