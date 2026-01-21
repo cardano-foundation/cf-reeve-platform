@@ -1,7 +1,9 @@
 package org.cardanofoundation.lob.app.reporting.dto;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import jakarta.validation.constraints.NotNull;
 
@@ -37,9 +39,9 @@ public class ReportTemplateFieldDto {
     @Schema(description = "Whether the value should be negated (for expenses)", example = "false", defaultValue = "false")
     private boolean negated;
 
-    @Schema(description = "List of chart of account subtype IDs to map to this field", example = "[1, 2, 3]", nullable = true)
+    @Schema(description = "List of chart of account customer codes to map to this field", example = "[1101100100, 1101100101]", nullable = true)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<Long> mappingSubTypeIds = new ArrayList<>();
+    private Set<String> mappingAccounts  = new HashSet<>();
 
     @Schema(description = "Child fields forming a hierarchical structure", nullable = true)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)

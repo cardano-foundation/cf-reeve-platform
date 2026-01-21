@@ -29,8 +29,8 @@ public class TemplateCsvLine {
     private String fieldName;
     @CsvBindByName(column = "Parent")
     private String parent = "";
-    @CsvBindByName(column = "Mapped Types")
-    private  String types = "";
+    @CsvBindByName(column = "Mapped accounts")
+    private  String accounts = "";
     @CsvBindByName(column = "Date Range")
     private String dateRange = "";
     @CsvBindByName(column = "Negated")

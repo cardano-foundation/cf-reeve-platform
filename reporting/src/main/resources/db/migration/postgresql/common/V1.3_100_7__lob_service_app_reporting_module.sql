@@ -88,20 +88,22 @@ CREATE TABLE IF NOT EXISTS report_template_field_aud (
     CONSTRAINT pk_report_template_field_aud PRIMARY KEY (id, rev)
 );
 
--- Organisation Report Setup Field SubType Mapping Table (Many-to-Many)
-CREATE TABLE IF NOT EXISTS report_field_subtype_mapping (
+-- Organisation Report Setup Field Account Mapping Table (Many-to-Many)
+CREATE TABLE IF NOT EXISTS report_field_account_mapping (
     field_id BIGINT NOT NULL,
-    sub_type_id BIGINT NOT NULL,
+    organisation_id VARCHAR(64) NOT NULL,
+    customer_code VARCHAR(255) NOT NULL,
     
-    CONSTRAINT pk_report_field_subtype_mapping PRIMARY KEY (field_id, sub_type_id),
+    CONSTRAINT pk_report_field_account_mapping PRIMARY KEY (field_id, organisation_id, customer_code),
     CONSTRAINT fk_report_field_mapping_field FOREIGN KEY (field_id)
         REFERENCES report_template_field(id) ON DELETE CASCADE,
-    CONSTRAINT fk_report_field_mapping_subtype FOREIGN KEY (sub_type_id)
-        REFERENCES organisation_chart_of_account_sub_type(id) ON DELETE CASCADE
+    CONSTRAINT fk_report_field_mapping_account FOREIGN KEY (organisation_id, customer_code)
+        REFERENCES organisation_chart_of_account(organisation_id, customer_code) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_report_field_subtype_mapping_field_id ON report_field_subtype_mapping(field_id);
-CREATE INDEX idx_report_field_subtype_mapping_subtype_id ON report_field_subtype_mapping(sub_type_id);
+CREATE INDEX idx_report_field_account_mapping_field_id ON report_field_account_mapping(field_id);
+CREATE INDEX idx_report_field_account_mapping_customer_code ON report_field_account_mapping(customer_code);
+CREATE INDEX idx_report_field_account_mapping_organisation_id ON report_field_account_mapping(organisation_id);
 
 -- Report Table
 CREATE TABLE IF NOT EXISTS report (

@@ -3,8 +3,10 @@ package org.cardanofoundation.lob.app.reporting.service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
@@ -24,10 +26,9 @@ import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
@@ -54,7 +55,7 @@ public class CsvReportTemplateService {
     private final ReportTemplateRepository reportTemplateRepository;
     private final ReportingRepository reportingRepository;
     private final ReportTemplateMapper reportTemplateMapper;
-    private final ChartOfAccountTypeRepository chartOfAccountTypeRepository;
+    private final ChartOfAccountRepository chartOfAccountRepository;
     private final Validator validator;
 
     public Either<Problem, List<ReportTemplateResponseDto>> createCsvTemplates(@Valid CreateCsvTemplateRequest csvTemplateRequest) {
@@ -195,43 +196,24 @@ public class CsvReportTemplateService {
         }
         fieldEntity.setDateRange(dateRange);
         fieldEntity.setNegated(templateCsvLine.getNegated());
-        String[] mappedAccounts = templateCsvLine.getTypes().split(";");
-        List<ChartOfAccountSubType> mappedSubTypes = new ArrayList<>();
+        String[] mappedAccounts = templateCsvLine.getAccounts().split(";");
+        Set<ChartOfAccount> mappendAccountTypes = new HashSet<>();
         for (String mappedAccount : mappedAccounts) {
-            String[] typeSubTypeSplit = mappedAccount.split("_");
             if (mappedAccount.isBlank()) {
                 continue;
-            } else if (typeSubTypeSplit.length != 2) {
+            }
+            Optional<ChartOfAccount> chartOfAccountO = chartOfAccountRepository.findById(new ChartOfAccount.Id(organisationId, mappedAccount));
+            if (chartOfAccountO.isEmpty()) {
                 Problem problem = Problem.builder()
                         .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail("Invalid chart of account mapping: " + mappedAccount + ". Expected format 'TYPE_SUBTYPE' and semicolon seperated.")
+                        .withDetail("Chart of account not found: " + mappedAccount)
                         .withStatus(Status.BAD_REQUEST)
                         .build();
                 return Either.left(problem);
             }
-            String typeName = typeSubTypeSplit[0];
-            String subTypeName = typeSubTypeSplit[1];
-            Optional<ChartOfAccountType> accountTypeO = chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(organisationId, typeName);
-            if (accountTypeO.isEmpty()) {
-                Problem problem = Problem.builder()
-                        .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail("Chart of account type not found: " + typeName)
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
-                return Either.left(problem);
-            }
-            Optional<ChartOfAccountSubType> subtypeO = accountTypeO.get().getSubTypes().stream().filter(subType -> subType.getName().equals(subTypeName)).findFirst();
-            if (subtypeO.isEmpty()) {
-                Problem problem = Problem.builder()
-                        .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail("Chart of account subtype not found: " + subTypeName + " for type: " + typeName)
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
-                return Either.left(problem);
-            }
-            mappedSubTypes.add(subtypeO.get());
+            mappendAccountTypes.add(chartOfAccountO.get());
         }
-        fieldEntity.setMappingSubTypeIds(mappedSubTypes.stream().map(ChartOfAccountSubType::getId).toList());
+        fieldEntity.setMappingAccounts(mappendAccountTypes.stream().map(coa -> coa.getId().getCustomerCode()).collect(Collectors.toSet()));
         return Either.right(fieldEntity);
     }
 

@@ -2,15 +2,18 @@ package org.cardanofoundation.lob.app.reporting.mapper;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Component;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
@@ -26,14 +29,12 @@ import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
-import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 @Component
 @RequiredArgsConstructor
 public class ReportTemplateMapper {
 
-    private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
-    private final ReportingRepository reportingRepository;
+    private final ChartOfAccountRepository chartOfAccountRepository;
 
     public ReportTemplateEntity toEntity(ReportTemplateDto dto, ReportTemplateEntity existingTemplate) {
         final ReportTemplateEntity template = existingTemplate != null ? existingTemplate : new ReportTemplateEntity();
@@ -115,13 +116,13 @@ public class ReportTemplateMapper {
         ReportTemplateFieldEntity parent
     ) {
         // Load mapping sub types if provided
-        List<ChartOfAccountSubType> mappingTypes = new ArrayList<>();
-        if (dto.getMappingSubTypeIds() != null && !dto.getMappingSubTypeIds().isEmpty()) {
+        Set<ChartOfAccount> mappingAccounts = new HashSet<>();
+        if (dto.getMappingAccounts() != null && !dto.getMappingAccounts().isEmpty()) {
             // Convert Long IDs to String and fetch
-            List<String> stringIds = dto.getMappingSubTypeIds().stream()
-                .map(String::valueOf)
-                .toList();
-            mappingTypes = chartOfAccountSubTypeRepository.findAllById(stringIds);
+            Set<ChartOfAccount.Id> ids = dto.getMappingAccounts().stream()
+                .map(id -> new ChartOfAccount.Id(template.getOrganisationId(), id))
+                .collect(Collectors.toSet());
+            mappingAccounts = new HashSet<>(chartOfAccountRepository.findAllById(ids));
         }
 
         ReportTemplateFieldEntity column = ReportTemplateFieldEntity.builder()
@@ -130,7 +131,7 @@ public class ReportTemplateMapper {
             .name(dto.getFieldName())
             .dateRange(Optional.ofNullable(dto.getDateRange()).orElse(ReportFieldDateRange.PERIOD))
             .negated(dto.isNegated())
-            .mappingTypes(mappingTypes)
+            .mappingAccounts(mappingAccounts)
             .build();
 
         if (dto.getChildFields() != null) {
@@ -155,18 +156,17 @@ public class ReportTemplateMapper {
             : Collections.emptyList();
 
         // Extract mapping sub type IDs
-        List<Long> mappingSubTypeIds = entity.getMappingTypes() != null
-            ? entity.getMappingTypes().stream()
-                .map(ChartOfAccountSubType::getId)
-                .toList()
-            : Collections.emptyList();
+        Set<String> mappingAccountTypes = entity.getMappingAccounts() != null
+            ? entity.getMappingAccounts().stream()
+                .map(r -> r.getId().getCustomerCode()).collect(Collectors.toSet())
+            : Collections.emptySet();
 
         return ReportTemplateFieldDto.builder()
             .id(entity.getId())
             .fieldName(entity.getName())
             .dateRange(entity.getDateRange())
             .negated(entity.isNegated())
-            .mappingSubTypeIds(mappingSubTypeIds)
+            .mappingAccounts(mappingAccountTypes)
             .childFields(children)
             .build();
     }

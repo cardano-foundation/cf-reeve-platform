@@ -3,7 +3,9 @@ package org.cardanofoundation.lob.app.reporting.model.entity;
 import static jakarta.persistence.EnumType.STRING;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
@@ -25,7 +27,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -60,12 +62,15 @@ public class ReportTemplateFieldEntity extends CommonEntity {
 
     @ManyToMany
     @JoinTable(
-            name = "report_field_subtype_mapping",
+            name = "report_field_account_mapping",
             joinColumns = @JoinColumn(name = "field_id"),
-            inverseJoinColumns = @JoinColumn(name = "sub_type_id")
+            inverseJoinColumns = {
+                    @JoinColumn(name = "organisation_id", referencedColumnName = "organisation_id"),
+                    @JoinColumn(name = "customer_code", referencedColumnName = "customer_code")
+            }
     )
     @Builder.Default
-    private List<ChartOfAccountSubType> mappingTypes = new ArrayList<>();
+    private Set<ChartOfAccount> mappingAccounts = new HashSet<>();
 
     private String name;
 

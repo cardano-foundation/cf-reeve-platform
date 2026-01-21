@@ -2,12 +2,14 @@ package org.cardanofoundation.lob.app.reporting.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -16,8 +18,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
@@ -26,21 +28,18 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
-import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ReportingTemplateMapperTest {
 
     @Mock
-    private ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
-    @Mock
-    private ReportingRepository reportingRepository;
+    private ChartOfAccountRepository chartOfAccountRepository;
 
     private ReportTemplateMapper mapper;
 
     @BeforeEach
     void setUp() {
-        mapper = new ReportTemplateMapper(chartOfAccountSubTypeRepository, reportingRepository);
+        mapper = new ReportTemplateMapper(chartOfAccountRepository);
     }
 
     @Test
@@ -126,7 +125,7 @@ class ReportingTemplateMapperTest {
         assertThat(field.getName()).isEqualTo("Revenue");
         assertEquals(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END, field.getDateRange());
         assertThat(field.isNegated()).isFalse();
-        assertThat(field.getMappingTypes()).isEmpty();
+        assertThat(field.getMappingAccounts()).isEmpty();
         assertThat(field.getReportTemplate()).isSameAs(result);
         assertThat(field.getParentField()).isNull();
     }
@@ -134,21 +133,19 @@ class ReportingTemplateMapperTest {
     @Test
     void toEntity_shouldMapFieldsWithMappingTypes() {
         // Given
-        ChartOfAccountSubType subType1 = ChartOfAccountSubType.builder()
-            .id(1L)
-            .name("SubType1")
+        ChartOfAccount account1 = ChartOfAccount.builder()
+            .id(new ChartOfAccount.Id("org123", "cust001"))
             .build();
-        ChartOfAccountSubType subType2 = ChartOfAccountSubType.builder()
-            .id(2L)
-            .name("SubType2")
+        ChartOfAccount account2 = ChartOfAccount.builder()
+            .id(new ChartOfAccount.Id("org123", "cust002"))
             .build();
 
-        when(chartOfAccountSubTypeRepository.findAllById(anyList()))
-            .thenReturn(Arrays.asList(subType1, subType2));
+        when(chartOfAccountRepository.findAllById(anySet()))
+            .thenReturn(List.of(account1, account2));
 
         ReportTemplateFieldDto fieldDto = ReportTemplateFieldDto.builder()
             .fieldName("Assets")
-            .mappingSubTypeIds(Arrays.asList(1L, 2L))
+            .mappingAccounts(Set.of("cust001", "cust002"))
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
@@ -165,8 +162,8 @@ class ReportingTemplateMapperTest {
         // Then
         assertThat(result.getFields()).hasSize(1);
         ReportTemplateFieldEntity field = result.getFields().get(0);
-        assertThat(field.getMappingTypes()).hasSize(2);
-        assertThat(field.getMappingTypes()).containsExactly(subType1, subType2);
+        assertThat(field.getMappingAccounts()).hasSize(2);
+        assertThat(field.getMappingAccounts()).containsOnly(account2, account1);
     }
 
     @Test
@@ -220,7 +217,7 @@ class ReportingTemplateMapperTest {
             .name("Old Field")
             .reportTemplate(existingTemplate)
             .childFields(new ArrayList<>())
-            .mappingTypes(new ArrayList<>())
+            .mappingAccounts(new HashSet<>())
             .build();
         existingTemplate.getFields().add(oldField);
 
@@ -292,9 +289,8 @@ class ReportingTemplateMapperTest {
             .fields(new ArrayList<>())
             .build();
 
-        ChartOfAccountSubType subType = ChartOfAccountSubType.builder()
-            .id(10L)
-            .name("SubType")
+        ChartOfAccount account = ChartOfAccount.builder()
+            .id(new ChartOfAccount.Id("org123", "cust001"))
             .build();
 
         ReportTemplateFieldEntity field = ReportTemplateFieldEntity.builder()
@@ -303,7 +299,7 @@ class ReportingTemplateMapperTest {
             .dateRange(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END)
             .negated(true)
             .reportTemplate(entity)
-            .mappingTypes(Collections.singletonList(subType))
+            .mappingAccounts(Set.of(account))
             .childFields(new ArrayList<>())
             .build();
 
@@ -318,7 +314,7 @@ class ReportingTemplateMapperTest {
         assertThat(fieldDto.getFieldName()).isEqualTo("Revenue");
         assertEquals(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END, fieldDto.getDateRange());
         assertThat(fieldDto.isNegated()).isTrue();
-        assertThat(fieldDto.getMappingSubTypeIds()).containsExactly(10L);
+        assertThat(fieldDto.getMappingAccounts()).containsExactly("cust001");
         assertThat(fieldDto.getChildFields()).isEmpty();
     }
 
@@ -339,7 +335,7 @@ class ReportingTemplateMapperTest {
             .name("Parent Field")
             .reportTemplate(entity)
             .childFields(new ArrayList<>())
-            .mappingTypes(new ArrayList<>())
+            .mappingAccounts(new HashSet<>())
             .build();
 
         ReportTemplateFieldEntity childField = ReportTemplateFieldEntity.builder()
@@ -348,7 +344,7 @@ class ReportingTemplateMapperTest {
             .parentField(parentField)
             .reportTemplate(entity)
             .childFields(new ArrayList<>())
-            .mappingTypes(new ArrayList<>())
+            .mappingAccounts(new HashSet<>())
             .build();
 
         parentField.getChildFields().add(childField);
@@ -386,7 +382,7 @@ class ReportingTemplateMapperTest {
             .reportTemplate(entity)
             .parentField(null)
             .childFields(new ArrayList<>())
-            .mappingTypes(new ArrayList<>())
+            .mappingAccounts(new HashSet<>())
             .build();
 
         ReportTemplateFieldEntity childField = ReportTemplateFieldEntity.builder()
@@ -395,7 +391,7 @@ class ReportingTemplateMapperTest {
             .reportTemplate(entity)
             .parentField(topLevelField)
             .childFields(new ArrayList<>())
-            .mappingTypes(new ArrayList<>())
+            .mappingAccounts(new HashSet<>())
             .build();
 
         // Add both to the columns list (simulating what JPA might do)

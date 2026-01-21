@@ -701,7 +701,7 @@ public class ReportingService {
 
         // Calculate value based on mapping types (if no children or if it's an accumulated field)
         BigDecimal value = null;
-        if (templateField.getMappingTypes() != null && !templateField.getMappingTypes().isEmpty()) {
+        if (templateField.getMappingAccounts() != null && !templateField.getMappingAccounts().isEmpty()) {
             value = calculateFieldValue(templateField, startDate, endDate, preview);
         }
 
@@ -720,8 +720,8 @@ public class ReportingService {
         BigDecimal totalAmount = BigDecimal.ZERO;
 
         // Get all chart of accounts mapped to this field's subtypes
-        if (field.getMappingTypes() != null && !field.getMappingTypes().isEmpty()) {
-            Set<ChartOfAccount> chartOfAccounts = getAllChartOfAccounts(field);
+        if (field.getMappingAccounts() != null && !field.getMappingAccounts().isEmpty()) {
+            Set<ChartOfAccount> chartOfAccounts = field.getMappingAccounts();
             totalAmount = addOpeningBalances(chartOfAccounts, effectiveStartDate, effectiveEndDate, totalAmount);
             // Get account codes for transaction lookup
             List<String> accountCodes = chartOfAccounts.stream()
@@ -761,14 +761,6 @@ public class ReportingService {
                     .findTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
         }
         return transactionItems;
-    }
-
-    private Set<ChartOfAccount> getAllChartOfAccounts(ReportTemplateFieldEntity field) {
-        List<Long> subTypeIds = field.getMappingTypes().stream()
-                .map(org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType::getId)
-                .collect(Collectors.toList());
-
-        return chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(subTypeIds);
     }
 
     private static LocalDate getEffectiveEndDate(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate) {
