@@ -156,7 +156,7 @@ class DocumentConversionTaskItemTest {
                         .build()));
 
         when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(organisationId, customerCurrencyCode))
-                .thenReturn(Optional.of(new Currency(new Currency.Id(organisationId, customerCurrencyCode), currencyId)));
+                .thenReturn(Optional.of(new Currency(new Currency.Id(organisationId, customerCurrencyCode), currencyId, true)));
 
         when(coreCurrencyRepository.findByCurrencyId(currencyId))
                 .thenReturn(Optional.of(CoreCurrency.builder()

@@ -37,6 +37,9 @@ public class Currency extends CommonEntity implements Persistable<Currency.Id> {
     @Column(name = "currency_id", nullable = false)
     private String currencyId;
 
+    @Column(name = "active")
+    private boolean active = true;
+
     @Embeddable
     @AllArgsConstructor
     @NoArgsConstructor
