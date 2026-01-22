@@ -17,13 +17,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class CurrencyUpdate {
 
     @Schema(example = "CHF")
-    @CsvBindByName(column = "Customer Code")
+    @CsvBindByName(column = "Code")
     @NotNull(message = "Customer Code is required")
-    private String customerCode;
+    private String code;
     @Schema(example = "ISO_4217:CHF")
-    @CsvBindByName(column = "Currency ID")
+    @CsvBindByName(column = "ISO Code")
     @NotNull(message = "Currency ID is required")
-    private String currencyId;
+    private String isoCode;
     @CsvBindByName(column = "Active")
     @NotNull(message = "Active is required")
     private Boolean active;

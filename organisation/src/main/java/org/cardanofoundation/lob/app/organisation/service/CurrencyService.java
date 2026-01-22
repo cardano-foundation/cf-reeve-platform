@@ -66,7 +66,7 @@ public class CurrencyService {
     }
 
     public CurrencyView updateCurrency(String orgId, @Valid CurrencyUpdate currencyUpdate) {
-        return currencyRepository.findById(new Currency.Id(orgId, currencyUpdate.getCustomerCode()))
+        return currencyRepository.findById(new Currency.Id(orgId, currencyUpdate.getCode()))
                 .map(currency -> {
                     if(currencyUpdate.getActive() != currency.isActive()) {
                         if(canUpdateCurrencyActive(currency)) {
@@ -75,12 +75,12 @@ public class CurrencyService {
                             Problem error = Problem.builder()
                                     .withStatus(Status.BAD_REQUEST)
                                     .withTitle("CURRENCY_IN_USE_CANNOT_DEACTIVATE")
-                                    .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " is in use and cannot be deactivated")
+                                    .withDetail("Currency with customer code " + currencyUpdate.getCode() + " is in use and cannot be deactivated")
                                     .build();
                             return CurrencyView.createFail(error, currencyUpdate);
                         }
                     }
-                    currency.setIsoCode(currencyUpdate.getCurrencyId());
+                    currency.setIsoCode(currencyUpdate.getIsoCode());
                     Currency updatedEntity = currencyRepository.save(currency);
                     return CurrencyView.createSuccess(updatedEntity.getId().getCode(), updatedEntity.getIsoCode(), currency.isActive());
                 })
@@ -88,7 +88,7 @@ public class CurrencyService {
                     Problem error = Problem.builder()
                             .withStatus(Status.NOT_FOUND)
                             .withTitle(ErrorTitleConstants.CURRENCY_NOT_FOUND)
-                            .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " not found")
+                            .withDetail("Currency with customer code " + currencyUpdate.getCode() + " not found")
                             .build();
                     return CurrencyView.createFail(error, currencyUpdate);
                 });
@@ -100,8 +100,8 @@ public class CurrencyService {
     }
 
     public CurrencyView insertCurrency(String orgId, @Valid CurrencyUpdate currencyUpdate, boolean isUpsert) {
-        Optional<Currency> currencyFound = currencyRepository.findById(new Currency.Id(orgId, currencyUpdate.getCustomerCode()));
-        Currency currency = new Currency(new Currency.Id(orgId, currencyUpdate.getCustomerCode()), currencyUpdate.getCurrencyId(), currencyUpdate.getActive());
+        Optional<Currency> currencyFound = currencyRepository.findById(new Currency.Id(orgId, currencyUpdate.getCode()));
+        Currency currency = new Currency(new Currency.Id(orgId, currencyUpdate.getCode()), currencyUpdate.getIsoCode(), currencyUpdate.getActive());
         if(currencyFound.isPresent()) {
             if(isUpsert) {
                 currency = currencyFound.get();
@@ -112,7 +112,7 @@ public class CurrencyService {
                         Problem error = Problem.builder()
                                 .withStatus(Status.BAD_REQUEST)
                                 .withTitle("CURRENCY_IN_USE_CANNOT_DEACTIVATE")
-                                .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " is in use and cannot be deactivated")
+                                .withDetail("Currency with customer code " + currencyUpdate.getCode() + " is in use and cannot be deactivated")
                                 .build();
                         return CurrencyView.createFail(error, currencyUpdate);
                     }
@@ -122,7 +122,7 @@ public class CurrencyService {
                 Problem error = Problem.builder()
                         .withStatus(Status.CONFLICT)
                         .withTitle(ErrorTitleConstants.CURRENCY_ALREADY_EXISTS)
-                        .withDetail("Currency with customer code " + currencyUpdate.getCustomerCode() + " already exists")
+                        .withDetail("Currency with customer code " + currencyUpdate.getCode() + " already exists")
                         .build();
                 return CurrencyView.createFail(error, currencyUpdate);
             }
