@@ -1,2 +1,2 @@
-Name,ReportType,DataMode,Field Name,Parent,Mapped Types,Date Range,Negated
-Income Statement Example,INCOME_STATEMENT,USER,Revenue,,,ACCUMULATED_START_TO_PERIOD_END,false
+Name,ReportType,DataMode,Field Name,Parent,Accounts,Date Range,Negated
+Income Statement Example,INCOME_STATEMENT,USER,Revenue,,1,ACCUMULATED_START_TO_PERIOD_END,false
