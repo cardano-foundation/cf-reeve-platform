@@ -81,7 +81,7 @@ class CurrencyServiceTest {
         Either<Problem, List<CurrencyView>> currencies = currencyService.getAllCurrencies("org123", null, null, Pageable.unpaged());
         assertTrue(currencies.isRight());
         assertEquals(1, currencies.get().size());
-        assertEquals("USD", currencies.get().getFirst().getCurrencyId());
+        assertEquals("USD", currencies.get().getFirst().getIsoCode());
     }
 
     @Test
@@ -112,8 +112,8 @@ class CurrencyServiceTest {
         verifyNoMoreInteractions(currencyRepository);
 
         assertNotNull(response);
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
@@ -133,8 +133,8 @@ class CurrencyServiceTest {
 
         assertNotNull(response);
         assertTrue(response.getError().isPresent());
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
@@ -154,8 +154,8 @@ class CurrencyServiceTest {
 
         assertNotNull(response);
         assertFalse(response.getError().isPresent());
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
@@ -186,8 +186,8 @@ class CurrencyServiceTest {
         verifyNoMoreInteractions(currencyRepository);
 
         assertNotNull(response);
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
@@ -207,8 +207,8 @@ class CurrencyServiceTest {
 
         assertNotNull(response);
         assertFalse(response.getError().isPresent());
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
@@ -227,8 +227,8 @@ class CurrencyServiceTest {
 
         assertNotNull(response);
         assertTrue(response.getError().isPresent());
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
@@ -239,8 +239,8 @@ class CurrencyServiceTest {
         Optional<CurrencyView> response = currencyService.getCurrency("org123", "USD");
 
         assertNotNull(response);
-        assertEquals("USD", response.get().getCustomerCode());
-        assertEquals("USD", response.get().getCurrencyId());
+        assertEquals("USD", response.get().getCode());
+        assertEquals("USD", response.get().getIsoCode());
     }
 
     @Test
@@ -274,8 +274,8 @@ class CurrencyServiceTest {
         assertNotNull(response);
         assertTrue(response.isRight());
         assertEquals(1, response.get().size());
-        assertEquals("USD", response.get().getFirst().getCustomerCode());
-        assertEquals("USD123", response.get().getFirst().getCurrencyId());
+        assertEquals("USD", response.get().getFirst().getCode());
+        assertEquals("USD123", response.get().getFirst().getIsoCode());
     }
 
     @Test

@@ -19,8 +19,8 @@ import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class CurrencyView {
 
-    private String customerCode;
-    private String currencyId;
+    private String code;
+    private String isoCode;
     private boolean active;
 
     private Optional<Problem> error;

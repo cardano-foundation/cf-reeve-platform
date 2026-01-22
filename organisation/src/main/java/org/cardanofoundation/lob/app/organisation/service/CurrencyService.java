@@ -52,7 +52,7 @@ public class CurrencyService {
         pageable = pageables.get();
         return Either.right(currencyRepository.findAllByOrganisationId(orgId, customerCode, currencyIds, pageable)
                 .stream()
-                .map(currency -> CurrencyView.createSuccess(currency.getId().getCustomerCode(), currency.getCurrencyId(), currency.isActive()))
+                .map(currency -> CurrencyView.createSuccess(currency.getId().getCode(), currency.getIsoCode(), currency.isActive()))
                 .toList());
     }
 
@@ -80,9 +80,9 @@ public class CurrencyService {
                             return CurrencyView.createFail(error, currencyUpdate);
                         }
                     }
-                    currency.setCurrencyId(currencyUpdate.getCurrencyId());
+                    currency.setIsoCode(currencyUpdate.getCurrencyId());
                     Currency updatedEntity = currencyRepository.save(currency);
-                    return CurrencyView.createSuccess(updatedEntity.getId().getCustomerCode(), updatedEntity.getCurrencyId(), currency.isActive());
+                    return CurrencyView.createSuccess(updatedEntity.getId().getCode(), updatedEntity.getIsoCode(), currency.isActive());
                 })
                 .orElseGet(() -> {
                     Problem error = Problem.builder()
@@ -96,7 +96,7 @@ public class CurrencyService {
 
     // A currency active can be update if it's inactive or if it's active and not used in any chart of account
     private boolean canUpdateCurrencyActive(Currency currency) {
-        return !currency.isActive() || currency.isActive() && chartOfAccountRepository.findTopByCurrencyIdAndIdOrganisationId(currency.getId().getCustomerCode(), currency.getId().getOrganisationId()).isEmpty();
+        return !currency.isActive() || currency.isActive() && chartOfAccountRepository.findTopByCurrencyIdAndIdOrganisationId(currency.getId().getCode(), currency.getId().getOrganisationId()).isEmpty();
     }
 
     public CurrencyView insertCurrency(String orgId, @Valid CurrencyUpdate currencyUpdate, boolean isUpsert) {
@@ -117,7 +117,7 @@ public class CurrencyService {
                         return CurrencyView.createFail(error, currencyUpdate);
                     }
                 }
-                currency.setCurrencyId(currency.getCurrencyId());
+                currency.setIsoCode(currency.getIsoCode());
             } else {
                 Problem error = Problem.builder()
                         .withStatus(Status.CONFLICT)
@@ -128,12 +128,12 @@ public class CurrencyService {
             }
         }
         Currency save = currencyRepository.save(currency);
-        return CurrencyView.createSuccess(save.getId().getCustomerCode(), save.getCurrencyId(), currency.isActive());
+        return CurrencyView.createSuccess(save.getId().getCode(), save.getIsoCode(), currency.isActive());
     }
 
     public Optional<CurrencyView> getCurrency(String orgId, String customerCode) {
         return currencyRepository.findById(new Currency.Id(orgId, customerCode))
-                .map(currency -> CurrencyView.createSuccess(currency.getId().getCustomerCode(), currency.getCurrencyId(), currency.isActive()));
+                .map(currency -> CurrencyView.createSuccess(currency.getId().getCode(), currency.getIsoCode(), currency.isActive()));
     }
 
     public Either<Problem, List<CurrencyView>> insertViaCsv(String orgId, MultipartFile file) {

@@ -19,15 +19,15 @@ public interface CurrencyRepository extends JpaRepository<Currency, Currency.Id>
 
     @Query("""
             SELECT t FROM Currency t WHERE t.id.organisationId = :organisationId
-            AND (:customerCode IS NULL OR LOWER(t.id.customerCode) LIKE LOWER(CONCAT('%', CAST(:customerCode AS string), '%')))
-            AND (:currencyIds IS NULL OR t.currencyId IN :currencyIds)
+            AND (:code IS NULL OR LOWER(t.id.code) LIKE LOWER(CONCAT('%', CAST(:code AS string), '%')))
+            AND (:isoCodes IS NULL OR t.isoCode IN :isoCodes)
             """)
-    Page<Currency> findAllByOrganisationId(@Param("organisationId") String organisationId, @Param("customerCode") String customerCode, @Param("currencyIds") List<String> currencyIds, Pageable pageable);
+    Page<Currency> findAllByOrganisationId(@Param("organisationId") String organisationId, @Param("code") String customerCode, @Param("isoCodes") List<String> isoCodes, Pageable pageable);
 
-    @Query("SELECT t FROM Currency t WHERE t.id.organisationId = :organisationId AND t.currencyId = :currencyId")
+    @Query("SELECT t FROM Currency t WHERE t.id.organisationId = :organisationId AND t.isoCode = :isoCode")
     Optional<Currency> findByCurrencyId(
         @Param("organisationId") String organisationId,
-        @Param("currencyId") String currencyId
+        @Param("isoCode") String isoCode
     );
 
 }
