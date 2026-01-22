@@ -120,7 +120,7 @@ jobs:
           echo EOF | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
 
       - name: Dispatch successful build event to private repo
-        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@fix/sanitize-dispatch-event-input
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@main
         if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
         with:
           EVENT_TYPE: cf-reeve-platform-pr
