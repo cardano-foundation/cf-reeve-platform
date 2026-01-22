@@ -39,9 +39,9 @@ public class ReportTemplateFieldDto {
     @Schema(description = "Whether the value should be negated (for expenses)", example = "false", defaultValue = "false")
     private boolean negated;
 
-    @Schema(description = "List of chart of account customer codes to map to this field", example = "[1101100100, 1101100101]", nullable = true)
+    @Schema(description = "List of chart of account customer codes to map to this field. Only applicable if the template type is SYSTEM.", example = "[1101100100, 1101100101]", nullable = true)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private Set<String> mappingAccounts  = new HashSet<>();
+    private Set<String> accounts = new HashSet<>();
 
     @Schema(description = "Child fields forming a hierarchical structure", nullable = true)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)

@@ -29,7 +29,7 @@ public class TemplateCsvLine {
     private String fieldName;
     @CsvBindByName(column = "Parent")
     private String parent = "";
-    @CsvBindByName(column = "Mapped accounts")
+    @CsvBindByName(column = "Accounts")
     private  String accounts = "";
     @CsvBindByName(column = "Date Range")
     private String dateRange = "";

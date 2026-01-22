@@ -117,9 +117,9 @@ public class ReportTemplateMapper {
     ) {
         // Load mapping sub types if provided
         Set<ChartOfAccount> mappingAccounts = new HashSet<>();
-        if (dto.getMappingAccounts() != null && !dto.getMappingAccounts().isEmpty()) {
+        if (dto.getAccounts() != null && !dto.getAccounts().isEmpty()) {
             // Convert Long IDs to String and fetch
-            Set<ChartOfAccount.Id> ids = dto.getMappingAccounts().stream()
+            Set<ChartOfAccount.Id> ids = dto.getAccounts().stream()
                 .map(id -> new ChartOfAccount.Id(template.getOrganisationId(), id))
                 .collect(Collectors.toSet());
             mappingAccounts = new HashSet<>(chartOfAccountRepository.findAllById(ids));
@@ -166,7 +166,7 @@ public class ReportTemplateMapper {
             .fieldName(entity.getName())
             .dateRange(entity.getDateRange())
             .negated(entity.isNegated())
-            .mappingAccounts(mappingAccountTypes)
+            .accounts(mappingAccountTypes)
             .childFields(children)
             .build();
     }

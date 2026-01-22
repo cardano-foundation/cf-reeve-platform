@@ -145,7 +145,7 @@ class ReportingTemplateMapperTest {
 
         ReportTemplateFieldDto fieldDto = ReportTemplateFieldDto.builder()
             .fieldName("Assets")
-            .mappingAccounts(Set.of("cust001", "cust002"))
+            .accounts(Set.of("cust001", "cust002"))
             .build();
 
         ReportTemplateDto dto = ReportTemplateDto.builder()
@@ -314,7 +314,7 @@ class ReportingTemplateMapperTest {
         assertThat(fieldDto.getFieldName()).isEqualTo("Revenue");
         assertEquals(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END, fieldDto.getDateRange());
         assertThat(fieldDto.isNegated()).isTrue();
-        assertThat(fieldDto.getMappingAccounts()).containsExactly("cust001");
+        assertThat(fieldDto.getAccounts()).containsExactly("cust001");
         assertThat(fieldDto.getChildFields()).isEmpty();
     }
 

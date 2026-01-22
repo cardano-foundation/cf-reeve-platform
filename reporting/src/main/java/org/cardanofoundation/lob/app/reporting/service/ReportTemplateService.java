@@ -76,7 +76,7 @@ public class ReportTemplateService {
         }
 
         // Validate subtypes exist
-        Either<Problem, Void> subtypeValidation = validateSubTypes(dto.getFields(), dto.getOrganisationId());
+        Either<Problem, Void> subtypeValidation = validateAccounts(dto.getFields(), dto.getOrganisationId());
         if (subtypeValidation.isLeft()) {
             return Either.left(subtypeValidation.getLeft());
         }
@@ -172,7 +172,7 @@ public class ReportTemplateService {
     private boolean hasMappings(List<ReportTemplateFieldDto> fields) {
         boolean hasMappings = false;
         for (ReportTemplateFieldDto field : fields) {
-            if(!field.getMappingAccounts().isEmpty()) {
+            if(!field.getAccounts().isEmpty()) {
                 hasMappings = true;
                 break;
             }
@@ -189,7 +189,7 @@ public class ReportTemplateService {
     private boolean hasAllMappings(List<ReportTemplateFieldDto> fields) {
         boolean hasAllMappings = true;
         for (ReportTemplateFieldDto field : fields) {
-            if(field.getMappingAccounts().isEmpty() && field.getChildFields().isEmpty()) {
+            if(field.getAccounts().isEmpty() && field.getChildFields().isEmpty()) {
                 hasAllMappings = false;
                 break;
             }
@@ -388,7 +388,7 @@ public class ReportTemplateService {
         return Either.right(null);
     }
 
-    private Either<Problem, Void> validateSubTypes(List<ReportTemplateFieldDto> fields, String orgId) {
+    private Either<Problem, Void> validateAccounts(List<ReportTemplateFieldDto> fields, String orgId) {
         if (fields == null || fields.isEmpty()) {
             return Either.right(null);
         }
@@ -413,14 +413,14 @@ public class ReportTemplateService {
                 .toList();
 
         // Find missing subtypes
-        Set<String> missingSubTypeIds = chartOfAccountIds.stream().map(ChartOfAccount.Id::getCustomerCode)
+        Set<String> missingAccounts = chartOfAccountIds.stream().map(ChartOfAccount.Id::getCustomerCode)
                 .filter(id -> !existingSubTypeIds.contains(id))
                 .collect(Collectors.toSet());
 
-        if (!missingSubTypeIds.isEmpty()) {
+        if (!missingAccounts.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("Invalid SubType IDs")
-                    .withDetail("The following subtype IDs do not exist: " + missingSubTypeIds)
+                    .withTitle("INVALID_ACCOUNTS")
+                    .withDetail("The following chart of account do not exist: " + missingAccounts)
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -434,8 +434,8 @@ public class ReportTemplateService {
         }
 
         for (ReportTemplateFieldDto field : fields) {
-            if (field.getMappingAccounts() != null) {
-                subTypeIds.addAll(field.getMappingAccounts());
+            if (field.getAccounts() != null) {
+                subTypeIds.addAll(field.getAccounts());
             }
             if (field.getChildFields() != null) {
                 collectSubTypeIds(field.getChildFields(), subTypeIds);

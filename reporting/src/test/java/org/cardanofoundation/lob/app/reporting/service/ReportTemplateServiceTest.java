@@ -135,7 +135,7 @@ class ReportTemplateServiceTest {
     @Test
     void create_NewTemplate_INVALID_FIELD_MAPPINGS() {
         templateDto.setDataMode("SYSTEM");
-        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().childFields(List.of()).mappingAccounts(Set.of()).build()));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().childFields(List.of()).accounts(Set.of()).build()));
         // Given
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
@@ -148,7 +148,7 @@ class ReportTemplateServiceTest {
         assertEquals("INVALID_FIELD_MAPPINGS", result.getLeft().getTitle());
 
         templateDto.setDataMode("USER");
-        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().mappingAccounts(Set.of("12345")).build()));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().accounts(Set.of("12345")).build()));
         result = reportTemplateService.create(templateDto);
 
         // Then

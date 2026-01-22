@@ -213,7 +213,7 @@ public class CsvReportTemplateService {
             }
             mappendAccountTypes.add(chartOfAccountO.get());
         }
-        fieldEntity.setMappingAccounts(mappendAccountTypes.stream().map(coa -> coa.getId().getCustomerCode()).collect(Collectors.toSet()));
+        fieldEntity.setAccounts(mappendAccountTypes.stream().map(coa -> coa.getId().getCustomerCode()).collect(Collectors.toSet()));
         return Either.right(fieldEntity);
     }
 
