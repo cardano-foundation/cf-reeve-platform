@@ -2,6 +2,9 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.ACCOUNT_EVENT_MAPPINGS;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -10,6 +13,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +22,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -197,5 +202,26 @@ public class AccountEventService {
     public boolean isActive(ReferenceCode debitReference, ReferenceCode creditReference) {
         return debitReference.isActive() && creditReference.isActive();
 
+    }
+
+    public void downloadCsv(String orgId, String customerCode, String name, List<String> creditRefCodes, List<String> debitRefCodes, Boolean active, OutputStream outputStream) {
+        Page<AccountEvent> accountEvents = accountEventRepository.findAllByOrganisationId(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Debit Reference Code", "Credit Reference Code", "Name", "Active"};
+            csvWriter.writeNext(header, false);
+            for (AccountEvent accountEvent : accountEvents) {
+                String[] data = {
+                        accountEvent.getId().getDebitReferenceCode(),
+                        accountEvent.getId().getCreditReferenceCode(),
+                        accountEvent.getName(),
+                        String.valueOf(accountEvent.getActive())
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing Account Events to CSV for organisationId {}: {}", orgId, e.getMessage());
+        }
     }
 }

@@ -1,9 +1,12 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.COST_CENTER_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
@@ -289,5 +292,43 @@ class CostCenterServiceTest {
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals("Default Message", result.get().get(0).getError().get().getDetail());
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+
+        String orgId = "org123";
+        CostCenter costCenter1 = mock(CostCenter.class);
+        when(costCenter1.getId()).thenReturn(new CostCenter.Id(organisationId, "customercode"));
+        when(costCenter1.getName()).thenReturn("CostCenter1");
+        when(costCenter1.getParentCustomerCode()).thenReturn("Parent1");
+        when(costCenter1.isActive()).thenReturn(true);
+        CostCenter costCenter2 = mock(CostCenter.class);
+        when(costCenter2.getId()).thenReturn(new CostCenter.Id(organisationId, "customercode2"));
+        when(costCenter2.getName()).thenReturn("CostCenter2");
+        when(costCenter2.getParentCustomerCode()).thenReturn(null);
+        when(costCenter2.isActive()).thenReturn(false);
+
+        Page<CostCenter> page = new PageImpl<>(List.of(costCenter1, costCenter2));
+
+        when(costCenterRepository.findAllByOrganisationId(
+                any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        costCenterService.downloadCsv(orgId, null, null, null,null ,outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Customer code,Name,Parent customer code,Active");
+        assertThat(lines[1]).isEqualTo("customercode,CostCenter1,Parent1,true");
+        assertThat(lines[2]).isEqualTo("customercode2,CostCenter2,,false");
+
     }
 }

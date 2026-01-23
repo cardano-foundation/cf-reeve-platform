@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -69,6 +71,22 @@ public class CostCenterController {
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
     }
+
+    @Operation(summary = "Download cost centers CSV file", description = "Download cost centers as a CSV file")
+    @GetMapping(value = "/organisations/{orgId}/cost-centers/download", produces = "test/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<StreamingResponseBody> downloadCostCentersCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                    @RequestParam(value = "customerCode", required = false) String customerCode,
+                                                    @RequestParam(value = "name", required = false) String name,
+                                                    @RequestParam(value = "parentCustomerCodes", required = false) List<String> parentCustomerCodes,
+                                                    @RequestParam(value = "active", required = false) Boolean active) {
+        StreamingResponseBody responseBody = outputStream -> costCenterService.downloadCsv(orgId, customerCode, name, parentCustomerCodes, active, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"cost-centers_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
+    }
+
 
     @Operation(description = "Organisation cost center creation", responses = {
             @ApiResponse(content =

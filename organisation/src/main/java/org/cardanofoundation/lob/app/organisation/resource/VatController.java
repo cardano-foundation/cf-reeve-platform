@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -62,6 +63,23 @@ public class VatController {
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
 
+    }
+
+    @Operation(summary = "Download vat CSV file", description = "Download vat codes as a CSV file")
+    @GetMapping(value = "/organisations/{orgId}/vat-codes/download", produces = "test/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<StreamingResponseBody> downloadVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                     @RequestParam(value = "customerCode", required = false) String customerCode,
+                                                                     @RequestParam(value = "minRate", required = false) Double minRate,
+                                                                     @RequestParam(value = "maxRate", required = false) Double maxRate,
+                                                                     @RequestParam(value = "description", required = false) String description,
+                                                                     @RequestParam(value = "countryCodes", required = false) List<String> countryCodes,
+                                                                     @RequestParam(value = "active", required = false) Boolean active) {
+        StreamingResponseBody responseBody = outputStream -> vatService.downloadCsv(orgId, customerCode, minRate, maxRate, description, countryCodes, active, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"vat-codes_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
     }
 
     @Operation(description = "Vat code insert", responses = {

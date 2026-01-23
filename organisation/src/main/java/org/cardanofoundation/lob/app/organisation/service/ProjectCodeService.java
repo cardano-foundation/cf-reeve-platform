@@ -2,6 +2,9 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.PROJECT_MAPPINGS;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -10,6 +13,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +22,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -203,5 +208,26 @@ public class ProjectCodeService {
                     return insertProject(orgId, projectUpdate, true);
                 }).toList())
         );
+    }
+
+    public void downloadCsv(String orgId, String customerCode, String name, String parentCustomerCode, OutputStream outputStream) {
+        Page<Project> allProjects = projectRepository.findAllByOrganisationId(orgId, customerCode, name, parentCustomerCode, Pageable.unpaged());
+        try(Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Customer code", "Name", "Parent customer code", "Active"};
+            csvWriter.writeNext(header, false);
+            for (Project project : allProjects) {
+                String[] data = {
+                        project.getId().getCustomerCode(),
+                        project.getName(),
+                        project.getParentCustomerCode(),
+                        String.valueOf(project.isActive())
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing currencies to CSV", e);
+        }
     }
 }
