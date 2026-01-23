@@ -1,13 +1,18 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.PROJECT_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
@@ -286,6 +291,44 @@ class ProjectCodeServiceTest {
         assertEquals(1, result.get().size());
         assertNotNull(result.get().get(0).getError());
         assertEquals("Default Message", result.get().get(0).getError().get().getDetail());
+
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+
+        String orgId = "org123";
+        Project project1 = mock(Project.class);
+        when(project1.getId()).thenReturn(new Project.Id(organisationId, "customercode"));
+        when(project1.getName()).thenReturn("Project1");
+        when(project1.getParentCustomerCode()).thenReturn("Parent1");
+        when(project1.isActive()).thenReturn(true);
+        Project project2 = mock(Project.class);
+        when(project2.getId()).thenReturn(new Project.Id(organisationId, "customercode2"));
+        when(project2.getName()).thenReturn("Project2");
+        when(project2.getParentCustomerCode()).thenReturn(null);
+        when(project2.isActive()).thenReturn(false);
+
+        Page<Project> page = new PageImpl<>(List.of(project1, project2));
+
+        when(projectRepository.findAllByOrganisationId(
+                any(), any(), any(), any(), any())).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        projectCodeService.downloadCsv(orgId, null, null, null, outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Customer code,Name,Parent customer code,Active");
+        assertThat(lines[1]).isEqualTo("customercode,Project1,Parent1,true");
+        assertThat(lines[2]).isEqualTo("customercode2,Project2,,false");
 
     }
 
