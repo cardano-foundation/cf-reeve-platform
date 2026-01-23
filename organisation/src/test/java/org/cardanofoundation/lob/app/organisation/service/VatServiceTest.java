@@ -82,6 +82,21 @@ class VatServiceTest {
     }
 
     @Test
+    void insert_rateMustNotBeNegative() {
+        VatUpdate update = mock(VatUpdate.class);
+
+        when(update.getCustomerCode()).thenReturn("customerCode");
+        when(update.getCountryCode()).thenReturn("CH");
+        when(update.getRate()).thenReturn(BigDecimal.valueOf(-1));
+        when(vatRepository.findById(any())).thenReturn(Optional.empty());
+
+        VatView result = vatService.insert("organisationId", update, false);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("VAT_RATE_CANNOT_BE_NEGATIVE", result.getError().get().getTitle());
+    }
+
+    @Test
     void insert_success() {
         VatUpdate update = mock(VatUpdate.class);
         Vat saved = mock(Vat.class);
@@ -131,6 +146,21 @@ class VatServiceTest {
         VatView result = vatService.update("organisationId", update);
         assertTrue(result.getError().isPresent());
         assertEquals("COUNTRY_CODE_NOT_FOUND", result.getError().get().getTitle());
+
+    }
+
+    @Test
+    void update_rateMustNotBeNegative() {
+        VatUpdate update = mock(VatUpdate.class);
+        Vat mock = mock(Vat.class);
+        when(update.getCustomerCode()).thenReturn("customerCode");
+        when(update.getCountryCode()).thenReturn("CH");
+        when(update.getRate()).thenReturn(BigDecimal.valueOf(-1));
+        when(vatRepository.findById(new Vat.Id("organisationId", "customerCode"))).thenReturn(Optional.of(mock));
+
+        VatView result = vatService.update("organisationId", update);
+        assertTrue(result.getError().isPresent());
+        assertEquals("VAT_RATE_CANNOT_BE_NEGATIVE", result.getError().get().getTitle());
 
     }
 
