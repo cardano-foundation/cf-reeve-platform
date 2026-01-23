@@ -253,10 +253,10 @@ public class ChartOfAccountsService {
             }
             Organisation organisation = organisationService.findById(chartOfAccount.getId().getOrganisationId()).orElseThrow();
             Currency organisationCurrency = currencyRepository.findByCurrencyId(chartOfAccount.getId().getOrganisationId(), organisation.getCurrencyId()).orElseThrow(() -> new RuntimeException("Organisation currency not found"));
-            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisationCurrency.getId().getCustomerCode())) {
+            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisationCurrency.getId().getCode())) {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
-                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCustomerCode()))
+                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), chartOfAccountUpdate);
             }

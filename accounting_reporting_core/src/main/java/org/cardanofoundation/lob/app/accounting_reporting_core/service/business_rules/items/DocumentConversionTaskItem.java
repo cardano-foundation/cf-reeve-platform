@@ -96,9 +96,9 @@ public class DocumentConversionTaskItem implements PipelineTaskItem {
         }
 
         return organisationCurrencyM.flatMap(orgCurrency -> {
-            return coreCurrencyRepository.findByCurrencyId(orgCurrency.getCurrencyId())
+            return coreCurrencyRepository.findByCurrencyId(orgCurrency.getIsoCode())
                     .or(() -> {
-                        addViolation(tx, txItem, CORE_CURRENCY_NOT_FOUND, Map.of("currencyId", orgCurrency.getCurrencyId(), "transactionNumber", tx.getInternalTransactionNumber()));
+                        addViolation(tx, txItem, CORE_CURRENCY_NOT_FOUND, Map.of("currencyId", orgCurrency.getIsoCode(), "transactionNumber", tx.getInternalTransactionNumber()));
 
                         return Optional.empty();
                     });

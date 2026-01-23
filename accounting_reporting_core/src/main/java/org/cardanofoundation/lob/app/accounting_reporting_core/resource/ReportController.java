@@ -92,7 +92,7 @@ public class ReportController {
 
         HashMap<String, String> currencyOrg = new HashMap<>();
         currencyService.findByOrganisationIdAndCode(orgId, "CHF").ifPresent(organisationCurrency ->
-                currencyOrg.put(organisationCurrency.getCurrencyId(), organisationCurrency.getId().getCustomerCode()));
+                currencyOrg.put(organisationCurrency.getIsoCode(), organisationCurrency.getId().getCode()));
         return ResponseEntity.ok().body(
                 new ReportingParametersView(
                         Arrays.stream(ReportType.values()).collect(Collectors.toSet()),
