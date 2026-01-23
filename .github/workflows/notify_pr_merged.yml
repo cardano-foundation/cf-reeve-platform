@@ -30,7 +30,7 @@ jobs:
           TRIGGERING_GHRUNID: ${{ github.run_id }}
           TRIGGERING_PAYLOAD: >
             {
-              "sourceBranch": "${{ github.event.pull_request.head.ref }}",
-              "prNumber": "${{ github.event.pull_request.number }}",
-              "repo": "${{ github.repository }}"
+              "SOURCE_BRANCH": "${{ github.event.pull_request.head.ref }}",
+              "PR_NUMBER": "${{ github.event.pull_request.number }}",
+              "SOURCE_REPOSITORY": "${{ github.repository }}"
             }
