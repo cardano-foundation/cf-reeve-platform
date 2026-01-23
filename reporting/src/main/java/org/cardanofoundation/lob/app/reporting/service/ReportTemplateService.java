@@ -23,7 +23,8 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountSubTypeRepository;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateListResponseDto;
@@ -51,7 +52,7 @@ public class ReportTemplateService {
 
     private final ReportTemplateRepository reportTemplateRepository;
     private final ReportTemplateMapper reportTemplateMapper;
-    private final ChartOfAccountSubTypeRepository chartOfAccountSubTypeRepository;
+    private final ChartOfAccountRepository chartOfAccountRepository;
     private final ReportingRepository reportingRepository;
     private final Validator validator;
     private final ReportTemplateTypeValidator reportTemplateTypeValidator;
@@ -69,13 +70,18 @@ public class ReportTemplateService {
             return Either.left(duplicateValidation.getLeft());
         }
 
+        Either<Problem, Void> duplicateAccountMappings = validateNoDuplicateAccountMappings(dto.getFields());
+        if (duplicateAccountMappings.isLeft()) {
+            return Either.left(duplicateAccountMappings.getLeft());
+        }
+
         Either<Problem, Void> forbiddenCharacters = validateForbiddenCharacters(dto.getFields());
         if (forbiddenCharacters.isLeft()) {
             return Either.left(forbiddenCharacters.getLeft());
         }
 
         // Validate subtypes exist
-        Either<Problem, Void> subtypeValidation = validateSubTypes(dto.getFields());
+        Either<Problem, Void> subtypeValidation = validateAccounts(dto.getFields(), dto.getOrganisationId());
         if (subtypeValidation.isLeft()) {
             return Either.left(subtypeValidation.getLeft());
         }
@@ -87,6 +93,27 @@ public class ReportTemplateService {
         }
 
         return Either.right(null);
+    }
+
+    private Either<Problem, Void> validateNoDuplicateAccountMappings(List<ReportTemplateFieldDto> fields) {
+        Set<String> seenAccountMappings = new HashSet<>();
+        boolean hasDuplicates = fields.stream().anyMatch(f -> hasDuplicate(f, seenAccountMappings));
+        if (hasDuplicates) {
+            return Either.left(Problem.builder()
+                    .withTitle("DUPLICATE_ACCOUNT_MAPPINGS")
+                    .withDetail("Duplicate account mappings found in the report template fields. Each account can only be mapped once.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        } else {
+            return Either.right(null);
+        }
+    }
+
+    private boolean hasDuplicate(ReportTemplateFieldDto field, Set<String> seenAccountMappings) {
+        if(field.getAccounts().stream().anyMatch(s -> !seenAccountMappings.add(s))) {
+            return true;
+        }
+        return field.getChildFields().stream().anyMatch(f -> hasDuplicate(f, seenAccountMappings));
     }
 
     private Either<Problem, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
@@ -171,7 +198,7 @@ public class ReportTemplateService {
     private boolean hasMappings(List<ReportTemplateFieldDto> fields) {
         boolean hasMappings = false;
         for (ReportTemplateFieldDto field : fields) {
-            if(!field.getMappingSubTypeIds().isEmpty()) {
+            if(!field.getAccounts().isEmpty()) {
                 hasMappings = true;
                 break;
             }
@@ -188,7 +215,7 @@ public class ReportTemplateService {
     private boolean hasAllMappings(List<ReportTemplateFieldDto> fields) {
         boolean hasAllMappings = true;
         for (ReportTemplateFieldDto field : fields) {
-            if(field.getMappingSubTypeIds().isEmpty() && field.getChildFields().isEmpty()) {
+            if(field.getAccounts().isEmpty() && field.getChildFields().isEmpty()) {
                 hasAllMappings = false;
                 break;
             }
@@ -387,38 +414,39 @@ public class ReportTemplateService {
         return Either.right(null);
     }
 
-    private Either<Problem, Void> validateSubTypes(List<ReportTemplateFieldDto> fields) {
+    private Either<Problem, Void> validateAccounts(List<ReportTemplateFieldDto> fields, String orgId) {
         if (fields == null || fields.isEmpty()) {
             return Either.right(null);
         }
 
         // Collect all subtype IDs from all fields (including nested)
-        Set<Long> allSubTypeIds = new HashSet<>();
-        collectSubTypeIds(fields, allSubTypeIds);
+        Set<String> allChartOfAccountCustomerCodes = new HashSet<>();
+        collectSubTypeIds(fields, allChartOfAccountCustomerCodes);
 
-        if (allSubTypeIds.isEmpty()) {
+        if (allChartOfAccountCustomerCodes.isEmpty()) {
             return Either.right(null);
         }
 
-        // Convert Long IDs to String for repository lookup
-        List<String> stringIds = allSubTypeIds.stream()
-                .map(String::valueOf)
+        // Convert String customer codes to Chart of Account IDs
+        List<ChartOfAccount.Id> chartOfAccountIds = allChartOfAccountCustomerCodes.stream()
+                .map(cc -> new ChartOfAccount.Id(orgId, cc))
                 .toList();
 
         // Fetch existing subtypes
-        List<String> existingSubTypeIds = chartOfAccountSubTypeRepository.findAllById(stringIds).stream()
-                .map(subType -> String.valueOf(subType.getId()))
+
+        List<String> existingSubTypeIds = chartOfAccountRepository.findAllById(chartOfAccountIds).stream()
+                .map(coa -> coa.getId().getCustomerCode())
                 .toList();
 
         // Find missing subtypes
-        Set<String> missingSubTypeIds = stringIds.stream()
+        Set<String> missingAccounts = chartOfAccountIds.stream().map(ChartOfAccount.Id::getCustomerCode)
                 .filter(id -> !existingSubTypeIds.contains(id))
                 .collect(Collectors.toSet());
 
-        if (!missingSubTypeIds.isEmpty()) {
+        if (!missingAccounts.isEmpty()) {
             return Either.left(Problem.builder()
-                    .withTitle("Invalid SubType IDs")
-                    .withDetail("The following subtype IDs do not exist: " + missingSubTypeIds)
+                    .withTitle("INVALID_ACCOUNTS")
+                    .withDetail("The following chart of account do not exist: " + missingAccounts)
                     .withStatus(Status.BAD_REQUEST)
                     .build());
         }
@@ -426,14 +454,14 @@ public class ReportTemplateService {
         return Either.right(null);
     }
 
-    private void collectSubTypeIds(List<ReportTemplateFieldDto> fields, Set<Long> subTypeIds) {
+    private void collectSubTypeIds(List<ReportTemplateFieldDto> fields, Set<String> subTypeIds) {
         if (fields == null) {
             return;
         }
 
         for (ReportTemplateFieldDto field : fields) {
-            if (field.getMappingSubTypeIds() != null) {
-                subTypeIds.addAll(field.getMappingSubTypeIds());
+            if (field.getAccounts() != null) {
+                subTypeIds.addAll(field.getAccounts());
             }
             if (field.getChildFields() != null) {
                 collectSubTypeIds(field.getChildFields(), subTypeIds);

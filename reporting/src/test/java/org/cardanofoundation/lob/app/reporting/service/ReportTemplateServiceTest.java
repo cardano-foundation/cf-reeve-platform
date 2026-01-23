@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -134,7 +135,7 @@ class ReportTemplateServiceTest {
     @Test
     void create_NewTemplate_INVALID_FIELD_MAPPINGS() {
         templateDto.setDataMode("SYSTEM");
-        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().childFields(List.of()).mappingSubTypeIds(List.of()).build()));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().childFields(List.of()).accounts(Set.of()).build()));
         // Given
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
@@ -147,7 +148,7 @@ class ReportTemplateServiceTest {
         assertEquals("INVALID_FIELD_MAPPINGS", result.getLeft().getTitle());
 
         templateDto.setDataMode("USER");
-        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().mappingSubTypeIds(List.of(1L)).build()));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().accounts(Set.of("12345")).build()));
         result = reportTemplateService.create(templateDto);
 
         // Then
@@ -237,6 +238,31 @@ class ReportTemplateServiceTest {
         // Then
         assertTrue(result.isLeft());
         assertEquals("Duplicate field name 'sameName' under parent 'parentName'. Field names must be unique within the same parent.", result.getLeft().getDetail());
+    }
+
+    @Test
+    void create_NewTemplate_duplicateAccounts() {
+        ReportTemplateDto dto = mock(ReportTemplateDto.class);
+        ReportTemplateFieldDto parentDtoField = mock(ReportTemplateFieldDto.class);
+        ReportTemplateFieldDto fieldDto1 = mock(ReportTemplateFieldDto.class);
+        Errors errors = mock(Errors.class);
+
+        when(dto.getFields()).thenReturn(List.of(parentDtoField));
+        when(dto.getDataMode()).thenReturn("SYSTEM");
+        when(parentDtoField.getChildFields()).thenReturn(List.of(fieldDto1));
+        when(parentDtoField.getAccounts()).thenReturn(Set.of("acc1", "acc2"));
+        when(parentDtoField.getFieldName()).thenReturn("parentName");
+        when(fieldDto1.getFieldName()).thenReturn("sameName");
+        when(fieldDto1.getAccounts()).thenReturn(Set.of("acc1", "acc3"));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        // When
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(dto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("Duplicate account mappings found in the report template fields. Each account can only be mapped once.", result.getLeft().getDetail());
     }
 
     @Test

@@ -42,12 +42,12 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
     @Query("""
             SELECT DISTINCT r FROM ReportEntity r
             JOIN r.reportTemplate.fields rf
-            JOIN rf.mappingTypes stm
-            WHERE stm.type.id IN (
-                SELECT coa.subType.id
-                FROM ChartOfAccount coa
+            JOIN rf.mappingAccounts coa
+            WHERE coa.id.customerCode IN (
+                SELECT coa.id.customerCode
+                FROM ChartOfAccount coa2
                 JOIN accounting_reporting_core.TransactionItemEntity item
-                ON (coa.id.customerCode = item.accountDebit.code OR coa.id.customerCode = item.accountCredit.code)
+                ON (coa2.id.customerCode = item.accountDebit.code OR coa2.id.customerCode = item.accountCredit.code)
                 WHERE item.transaction.id IN :txIds
             )
         """)

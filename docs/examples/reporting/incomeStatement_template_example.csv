@@ -1,23 +1,23 @@
-Name,ReportType,DataMode,Field Name,Parent,Mapped Types,Date Range,Negated
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Revenues,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Other Income,Revenues,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Building of long term provisions,Revenues,Revenues_Build of long term provision,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Cost of goods and services,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,External Services,Cost of goods and services,COGS_External services,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Operating Expenses,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Personnel Expenses,Operating Expenses,Expenses_Personnel expenses,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,General administrative expenses,Operating Expenses,Expenses_General and Administrative expenses,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Depreciation and impairment losses on tangible Assets,Operating Expenses,Expenses_Depreciation and impairment losses on movable tangible assets,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Amortization on intangible assets,Operating Expenses,Expenses_Amortization on intangible assets,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Rent Expenses,Operating Expenses,Expenses_Rent expenses,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Financial Income,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Financial Revenues,Financial Income,Expenses_Financial income,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Financial Expenses,Financial Income,Expenses_Financial expenses,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Realised Gains on Sale of Cryptocurrencies,Financial Income,Expenses_Realised gains on sale of crypto currencies,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Staking Rewards income,Financial Income,Expenses_Staking rewards income,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Net Income options sale,Financial Income,Expenses_Net income option sales,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Extraordinary income,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Extraordinary Expenses,Extraordinary income,"Expenses_Extraordinary, non-recurring or prior period expenses",ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Tax Expense,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Direct Taxes,Tax Expense,Expenses_Direct taxes,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,SYSTEM,Profit for the year,,Expenses_Net income option sales,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Name,ReportType,DataMode,Field Name,Parent,Accounts,Date Range,Negated
+Income Statement Example,INCOME_STATEMENT,USER,Revenues,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Other Income,Revenues,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Building of long term provisions,Revenues,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Cost of goods and services,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,External Services,Cost of goods and services,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Operating Expenses,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Personnel Expenses,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,General administrative expenses,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Depreciation and impairment losses on tangible Assets,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Amortization on intangible assets,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Rent Expenses,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Financial Income,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Financial Revenues,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Financial Expenses,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Realised Gains on Sale of Cryptocurrencies,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Staking Rewards income,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Net Income options sale,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Extraordinary income,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Extraordinary Expenses,Extraordinary income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Tax Expense,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Direct Taxes,Tax Expense,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Income Statement Example,INCOME_STATEMENT,USER,Profit for the year,,,ACCUMULATED_YEAR_TO_PERIOD_END,true

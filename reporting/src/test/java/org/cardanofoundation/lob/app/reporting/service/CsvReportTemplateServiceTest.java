@@ -8,7 +8,6 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -25,16 +24,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
-import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountType;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountTypeRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.TemplateCsvLine;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
-import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,7 +46,7 @@ class CsvReportTemplateServiceTest {
     @Mock
     private ReportTemplateMapper reportTemplateMapper;
     @Mock
-    private ChartOfAccountTypeRepository chartOfAccountTypeRepository;
+    private ChartOfAccountRepository chartOfAccountRepository;
     @Mock
     private Validator validator;
     @InjectMocks
@@ -147,7 +144,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
-        when(templateCsvLine.getTypes()).thenReturn("InvalidMapping");
+        when(templateCsvLine.getAccounts()).thenReturn("InvalidMapping");
         when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
@@ -156,7 +153,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Invalid chart of account mapping: InvalidMapping. Expected format 'TYPE_SUBTYPE' and semicolon seperated.", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Chart of account not found: InvalidMapping", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -202,9 +199,9 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
-        when(templateCsvLine.getTypes()).thenReturn("type_subtype");
+        when(templateCsvLine.getAccounts()).thenReturn("1233");
         when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
-        when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.empty());
+        when(chartOfAccountRepository.findById(any(ChartOfAccount.Id.class))).thenReturn(Optional.empty());
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
@@ -212,39 +209,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Chart of account type not found: type", responseDtos.getFirst().getError().get().getDetail());
-    }
-
-    @Test
-    void createCsvTemplates_subTypeNotFound() {
-        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
-        Organisation organisation = new Organisation();
-        MultipartFile file = mock(MultipartFile.class);
-        TemplateCsvLine templateCsvLine = mock(TemplateCsvLine.class);
-        Errors errors = mock(Errors.class);
-        ChartOfAccountType chartOfAccountType = mock(ChartOfAccountType.class);
-
-        when(errors.getAllErrors()).thenReturn(List.of());
-        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
-        when(request.getOrganisationId()).thenReturn("org123");
-        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(templateCsvLine)));
-        when(request.getFile()).thenReturn(file);
-        when(validator.validateObject(templateCsvLine)).thenReturn(errors);
-        when(templateCsvLine.getName()).thenReturn("Test Template");
-        when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
-        when(templateCsvLine.getDataMode()).thenReturn("USER");
-        when(templateCsvLine.getTypes()).thenReturn("type_subtype");
-        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
-        when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
-        when(chartOfAccountType.getSubTypes()).thenReturn(Set.of());
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
-
-        assertTrue(result.isRight());
-        List<ReportTemplateResponseDto> responseDtos = result.get();
-        assertEquals(1, responseDtos.size());
-        assertTrue(responseDtos.getFirst().getError().isPresent());
-        assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Chart of account subtype not found: subtype for type: type", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Chart of account not found: 1233", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -254,11 +219,9 @@ class CsvReportTemplateServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         TemplateCsvLine templateCsvLine = mock(TemplateCsvLine.class);
         Errors errors = mock(Errors.class);
-        ChartOfAccountType chartOfAccountType = mock(ChartOfAccountType.class);
-        ChartOfAccountSubType chartOfAccountSubType = mock(ChartOfAccountSubType.class);
-        ReportTemplateEntity saved = mock(ReportTemplateEntity.class);
-        ReportTemplateResponseDto responseDto = mock(ReportTemplateResponseDto.class);
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
 
+        when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
         when(errors.getAllErrors()).thenReturn(List.of());
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
         when(request.getOrganisationId()).thenReturn("org123");
@@ -268,12 +231,9 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
-        when(templateCsvLine.getTypes()).thenReturn("type_subtype");
+        when(templateCsvLine.getAccounts()).thenReturn("1234");
         when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
-        when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
-        when(chartOfAccountType.getSubTypes()).thenReturn(Set.of(chartOfAccountSubType));
-        when(chartOfAccountSubType.getName()).thenReturn("subtype");
-        when(chartOfAccountSubType.getId()).thenReturn(1L);
+        when(chartOfAccountRepository.findById(any(ChartOfAccount.Id.class))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("Parent");
 
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
@@ -294,8 +254,7 @@ class CsvReportTemplateServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         TemplateCsvLine templateCsvLine = mock(TemplateCsvLine.class);
         Errors errors = mock(Errors.class);
-        ChartOfAccountType chartOfAccountType = mock(ChartOfAccountType.class);
-        ChartOfAccountSubType chartOfAccountSubType = mock(ChartOfAccountSubType.class);
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
         ReportTemplateResponseDto responseDto = mock(ReportTemplateResponseDto.class);
 
         when(errors.getAllErrors()).thenReturn(List.of());
@@ -307,13 +266,11 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
-        when(templateCsvLine.getTypes()).thenReturn("type_subtype");
+        when(templateCsvLine.getAccounts()).thenReturn("1234");
         when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
-        when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName("org123", "type")).thenReturn(Optional.of(chartOfAccountType));
-        when(chartOfAccountType.getSubTypes()).thenReturn(Set.of(chartOfAccountSubType));
-        when(chartOfAccountSubType.getName()).thenReturn("subtype");
-        when(chartOfAccountSubType.getId()).thenReturn(1L);
+        when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("");
+        when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
         when(reportTemplateMapper.toResponseDto(any())).thenReturn(responseDto);
 
         Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
