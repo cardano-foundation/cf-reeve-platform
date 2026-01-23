@@ -91,7 +91,7 @@ public class CsvParser<T> {
         Set<String> requiredHeaders = new HashSet<>();
         for (Field field : type.getDeclaredFields()) {
             CsvBindByName bind = field.getAnnotation(CsvBindByName.class);
-            if (bind != null) {
+            if (bind != null && Arrays.stream(bind.profiles()).noneMatch(s -> s.equals("optional"))) {
                 String header = bind.column().isEmpty() ? field.getName() : bind.column();
                 requiredHeaders.add(header);
             }
