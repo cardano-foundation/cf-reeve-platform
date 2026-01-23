@@ -138,6 +138,24 @@ class ProjectCodeServiceTest {
     }
 
     @Test
+    void insertProject_cycle() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        Project parent = mock(Project.class);
+        when(parent.getId()).thenReturn(new Project.Id(organisationId, "parentCode"));
+        when(parent.getParentCustomerCode()).thenReturn(customerCode);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+        when(update.getParentCustomerCode()).thenReturn("parentCode");
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode)))
+                .thenReturn(Optional.empty());
+        when(projectRepository.findById(new Project.Id(organisationId, "parentCode")))
+                .thenReturn(Optional.of(parent));
+
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
+
+        assertEquals("CIRCULAR_REFERENCE", projectView.getError().get().getTitle());
+    }
+
+    @Test
     void insertProject_success() {
         ProjectUpdate update = mock(ProjectUpdate.class);
         Project parent = mock(Project.class);

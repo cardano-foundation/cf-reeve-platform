@@ -230,6 +230,33 @@ class ReferenceCodeServiceTest {
         assertTrue(result.getError().isPresent());
     }
 
+    @Test
+    void testUpdateReferenceCode_sameReference() {
+        ReferenceCode parent = mock(ReferenceCode.class);
+        when(parent.getId()).thenReturn(new ReferenceCode.Id(ORG_ID, REF_CODE));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, "0102")).thenReturn(Optional.of(parent));
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+
+        referenceCodeUpdate.setParentReferenceCode("0102");
+        ReferenceCodeView result = referenceCodeService.updateReferenceCode(ORG_ID, referenceCodeUpdate);
+
+        assertTrue(result.getError().isPresent());
+    }
+
+    @Test
+    void testUpdateReferenceCode_cycle() {
+        ReferenceCode parent = mock(ReferenceCode.class);
+        when(parent.getId()).thenReturn(new ReferenceCode.Id(ORG_ID, "12345"));
+        when(parent.getParentReferenceCode()).thenReturn(REF_CODE);
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, "0102")).thenReturn(Optional.of(parent));
+
+        referenceCodeUpdate.setParentReferenceCode("0102");
+        ReferenceCodeView result = referenceCodeService.updateReferenceCode(ORG_ID, referenceCodeUpdate);
+
+        assertTrue(result.getError().isPresent());
+    }
+
     // NEW
 
     @Test
