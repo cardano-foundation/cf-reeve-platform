@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.validation.Errors;
