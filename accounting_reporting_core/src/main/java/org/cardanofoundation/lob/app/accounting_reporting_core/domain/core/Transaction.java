@@ -12,9 +12,15 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.annotations.LOBVersionSourceRelevant;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @Builder(toBuilder = true)
 @AllArgsConstructor
@@ -70,6 +76,8 @@ public class Transaction {
 
     @Builder.Default
     private Set<Violation> violations = new LinkedHashSet<>();
+
+    private String rollbackSuffix;
 
     public static String id(String organisationId,
                             String internalTransactionNumber) {

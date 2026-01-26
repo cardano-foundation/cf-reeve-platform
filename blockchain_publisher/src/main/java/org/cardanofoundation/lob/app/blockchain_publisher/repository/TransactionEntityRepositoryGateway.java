@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.google.common.collect.Sets;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 
 @Service
@@ -38,6 +39,9 @@ public class TransactionEntityRepositoryGateway {
 
     @Value("${lob.blockchain_publisher.dispatcher.lock_timeout:PT3H}") // Default grace period to 3 hours
     private Duration lockTimeoutDuration;
+
+    @Value("${lob.blockchain-publisher.rollback.enabled:false}")
+    private Optional<Boolean> rollbackEnabled;
 
     public Optional<TransactionEntity> findById(String txId) {
         return transactionEntityRepository.findById(txId);
@@ -85,15 +89,53 @@ public class TransactionEntityRepositoryGateway {
 
         Sets.SetView<TransactionEntity> newTransactions = Sets.difference(transactionEntities, existingTransactions);
 
-        Set<TransactionEntity> newTxs = Stream.concat(transactionEntityRepository.saveAll(newTransactions)
-                        .stream(), existingTransactions.stream())
-                .collect(toSet());
+        if (rollbackEnabled.orElse(false)) {
+            existingTransactions = updateExistingTransactions(existingTransactions, transactionEntities);
+            transactionEntityRepository.saveAll(existingTransactions);
+        }
 
-        for (TransactionEntity tx : newTxs) {
+        Set<TransactionEntity> savedNewTransactions = new HashSet<>(transactionEntityRepository.saveAll(newTransactions));
+
+        // Save transaction items only for new transactions (not for updated existing ones)
+        for (TransactionEntity tx : savedNewTransactions) {
             transactionItemEntityRepository.saveAll(tx.getItems());
         }
 
-        return newTxs;
+        Set<TransactionEntity> allTransactions = Stream.concat(savedNewTransactions.stream(), existingTransactions.stream())
+                .collect(toSet());
+
+        return allTransactions;
+    }
+
+    @Transactional
+    private Set<TransactionEntity> updateExistingTransactions(Set<TransactionEntity> existingTransactions, Set<TransactionEntity> transactionEntities) {
+        log.info("updateExistingTransactions..., updateExistingTransactions:{}", transactionEntities.size());
+
+        for (TransactionEntity existingEntity : existingTransactions) {
+            // Find the corresponding incoming transaction
+            TransactionEntity incomingTx = transactionEntities.stream()
+                    .filter(tx -> tx.getId().equals(existingEntity.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Matching transaction not found"));
+
+            // Update the existing entity with new values
+            existingEntity.setInternalNumber(incomingTx.getInternalNumber());
+            existingEntity.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+                    .publishStatus(BlockchainPublishStatus.ROLLBACKED)
+                    .build()));
+
+            // Handle items collection properly
+            existingEntity.getItems().clear();
+            if (incomingTx.getItems() != null) {
+                // Set the transaction reference for each item and add to the existing collection
+                incomingTx.getItems().forEach(item -> {
+                    item.setTransaction(existingEntity);
+                    existingEntity.getItems().add(item);
+                });
+            }
+        }
+
+        return existingTransactions;
     }
 
     public void storeTransaction(TransactionEntity transactionEntity) {
@@ -114,5 +156,19 @@ public class TransactionEntityRepositoryGateway {
         transactionsBatch.forEach(transactionEntity ->
                 transactionEntity.setLockedAt(LocalDateTime.now(clock)));
         transactionEntityRepository.saveAll(transactionsBatch);
+    }
+
+    @Transactional
+    public void removePublishedTransactions(String id) {
+        TransactionEntity transaction = transactionEntityRepository.findById(id).orElse(null);
+        if (transaction == null) {
+            return;
+        }
+
+        transaction.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+                .publishStatus(BlockchainPublishStatus.ERROR)
+                .build()));
+        transactionEntityRepository.save(transaction);
+        //transactionEntityRepository.deleteById(id);
     }
 }

@@ -24,7 +24,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.config.JaversConf
 import org.cardanofoundation.lob.app.accounting_reporting_core.config.JpaConfig;
 import org.cardanofoundation.lob.app.accounting_reporting_core.config.TimeConfig;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus;
@@ -53,6 +52,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Accoun
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @SpringBootTest(classes = {JaversConfig.class, TimeConfig.class, JpaConfig.class})

@@ -1,0 +1,37 @@
+name: Notify application repo to close PR
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  dispatch-pr-merged:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Skip protected branches
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if [[ "$BRANCH" == "main" || "$BRANCH" == release/* ]]; then
+            echo "Protected branch $BRANCH – skipping dispatch"
+            exit 0
+          fi
+
+      - name: Dispatch PR merged event
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@main
+        with:
+          EVENT_TYPE: cf-reeve-platform-pr-merged
+          GITHUB_TOKEN: ${{ secrets.CF_REEVE_APPLICATION_REPO_PAT }}
+          GITHUB_REPO: cardano-foundation/cf-reeve-application
+          TRIGGERING_REF: pr
+          TRIGGERING_EVENT: pull_request
+          TRIGGERING_BRANCH: ${{ github.event.pull_request.head.ref }}
+          TRIGGERING_GHRUNID: ${{ github.run_id }}
+          TRIGGERING_PAYLOAD: >
+            {
+              "SOURCE_BRANCH": "${{ github.event.pull_request.head.ref }}",
+              "PR_NUMBER": "${{ github.event.pull_request.number }}",
+              "SOURCE_REPOSITORY": "${{ github.repository }}"
+            }

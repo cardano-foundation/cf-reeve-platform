@@ -36,6 +36,10 @@ public class Project extends CommonEntity implements Persistable<Project.Id> {
     @Column(name = "name", nullable = false)
     private String name;
 
+    @Column(name = "active")
+    @Builder.Default
+    private boolean active = true;
+
     @ManyToOne
     @JoinColumns({
             @JoinColumn(name = "organisation_id", referencedColumnName = "organisation_id", insertable = false, updatable = false),

@@ -3,10 +3,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.domain.core;
 import java.util.Arrays;
 import java.util.Objects;
 
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
-
-public record API3BlockchainTransaction(ReportEntity report,
-                                        long creationSlot,
+public record API3BlockchainTransaction(long creationSlot,
                                         byte[] serialisedTxData,
                                         String receiverAddress) {
 
@@ -17,14 +14,13 @@ public record API3BlockchainTransaction(ReportEntity report,
         API3BlockchainTransaction that = (API3BlockchainTransaction) o;
 
         return creationSlot == that.creationSlot &&
-                Objects.equals(report, that.report) &&
                 Arrays.equals(serialisedTxData, that.serialisedTxData)
                 && Objects.equals(receiverAddress, that.receiverAddress);
     }
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(report, creationSlot);
+        int result = Objects.hash(creationSlot);
         result = 31 * result + Arrays.hashCode(serialisedTxData);
         result = 31 * result + Objects.hashCode(receiverAddress);
 

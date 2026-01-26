@@ -38,7 +38,6 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
@@ -60,7 +59,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Re
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.csv.CsvReportMapper;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.core.OperationType;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
@@ -69,12 +68,14 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeFieldEntity;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ReportTypeRepository;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.AuthenticationUserService;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+@Deprecated
 public class ReportService {
 
 
@@ -85,7 +86,7 @@ public class ReportService {
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final ReportTypeRepository reportTypeRepository;
     private final TransactionItemRepository transactionItemRepository;
-    private final SortFieldMappings sortFieldMappings;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
     private final CsvReportMapper csvReportMapper;
 
     @Transactional
@@ -383,7 +384,7 @@ public class ReportService {
     }
 
     public Either<Problem, ReportResponseView> findAllByOrgId(String organisationId, List<ReportType> reportType, List<String> currencyCode, List<IntervalType> intervalType, List<Short> year, List<Short> period, LedgerDispatchStatus status, String txHash,Boolean readyToPublish,Boolean ledgerDispatchApproved, Pageable pageable) {
-        return sortFieldMappings.convertPageable(pageable, REPORT_MAPPINGS, ReportEntity.class).fold(
+        return jpaSortFieldValidator.convertPageable(pageable, REPORT_MAPPINGS, ReportEntity.class).fold(
                 problem -> Either.left(problem),
                 adjustedPageable -> {
                     ReportResponseStatisticView statisticView = reportRepository.findStatistics(organisationId);

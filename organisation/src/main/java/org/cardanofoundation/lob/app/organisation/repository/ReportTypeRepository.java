@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReportTypeEntity;
 
+@Deprecated
 public interface ReportTypeRepository extends JpaRepository<ReportTypeEntity, Long> {
 
     @Query("""

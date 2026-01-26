@@ -2,12 +2,15 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.cardanofoundation.lob.app.blockchain_publisher.service.API3MetadataSerialiser.VERSION;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Map;
 import java.util.Optional;
 
 import lombok.val;
@@ -17,15 +20,21 @@ import com.bloxbean.cardano.client.metadata.MetadataMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.BalanceSheetData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.IncomeStatementData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
 class API3MetadataSerialiserTest {
 
+
+    private OrganisationPublicApi organisationPublicApi;
     private API3MetadataSerialiser serialiser;
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2024-06-01T10:15:30Z"), ZoneId.of("UTC"));
@@ -33,7 +42,8 @@ class API3MetadataSerialiserTest {
 
     @BeforeEach
     void setUp() {
-        serialiser = new API3MetadataSerialiser(FIXED_CLOCK);
+        organisationPublicApi = mock(OrganisationPublicApi.class);
+        serialiser = new API3MetadataSerialiser(organisationPublicApi, FIXED_CLOCK);
     }
 
     @Test
@@ -76,7 +86,7 @@ class API3MetadataSerialiserTest {
         val reportEntity = new ReportEntity();
         reportEntity.setVer(1);
         reportEntity.setType(ReportType.BALANCE_SHEET);
-        reportEntity.setIntervalType(IntervalType.MONTH);
+        reportEntity.setIntervalType(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType.MONTH);
         reportEntity.setYear((short) 2024);
         reportEntity.setPeriod(Optional.of((short) 6));
         reportEntity.setMode(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode.USER);
@@ -156,10 +166,10 @@ class API3MetadataSerialiserTest {
                 .profitForTheYear(BigDecimal.valueOf(7000))
                 .build();
 
-        val reportEntity = new ReportEntity();
+        ReportEntity reportEntity = new ReportEntity();
         reportEntity.setVer(1);
         reportEntity.setType(ReportType.INCOME_STATEMENT);
-        reportEntity.setIntervalType(IntervalType.YEAR);
+        reportEntity.setIntervalType(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType.YEAR);
         reportEntity.setYear((short) 2024);
         reportEntity.setMode(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode.SYSTEM);
         reportEntity.setOrganisation(organisation);
@@ -182,9 +192,10 @@ class API3MetadataSerialiserTest {
 
 
         // Data Section Validation
-        val data = (MetadataMap) metadataMap.get("data");
+        MetadataMap data;
+        data = (MetadataMap) metadataMap.get("data");
 
-        val revenues = (MetadataMap) data.get("revenues");
+        MetadataMap revenues = (MetadataMap) data.get("revenues");
         assertThat(revenues.get("other_income")).isEqualTo("10000");
         assertThat(revenues.get("build_of_long_term_provision")).isEqualTo("5000");
 
@@ -192,6 +203,40 @@ class API3MetadataSerialiserTest {
         assertThat(costOfGoodsAndServices.get("external_services")).isEqualTo("2000");
 
         assertThat(data.get("profit_for_the_year")).isEqualTo("17000");
+    }
+
+    @Test
+    void serializeReportV2Entity_shouldSerializeCorrectly() {
+        org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = mock(org.cardanofoundation.lob.app.organisation.domain.entity.Organisation.class);
+        when(organisationPublicApi.findByOrganisationId("org123"))
+                .thenReturn(Optional.of(org));
+
+        ReportV2Entity reportV2Entity = new ReportV2Entity();
+        reportV2Entity.setId("report-v2-001");
+        reportV2Entity.setPeriod((short) 1);
+        reportV2Entity.setOrganisationId("org123");
+        reportV2Entity.setReportData(Map.of("Test123", 5));
+        reportV2Entity.setYear((short) 2024);
+        reportV2Entity.setIntervalType(IntervalType.YEAR);
+        reportV2Entity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
+        reportV2Entity.setDataMode(DataMode.SYSTEM);
+        reportV2Entity.setReportVer(1L);
+
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportV2Entity, CREATION_SLOT);
+
+        assertThat(metadataMap).isNotNull();
+        assertThat(metadataMap.get("metadata")).isNotNull();
+        assertThat(metadataMap.get("org")).isNotNull();
+        assertThat(metadataMap.get("type")).isEqualTo("REPORT");
+        assertThat(metadataMap.get("subType")).isEqualTo("BALANCE_SHEET");
+        assertThat(metadataMap.get("interval")).isEqualTo("YEAR");
+        assertThat(metadataMap.get("year")).isEqualTo("2024");
+        assertThat(metadataMap.get("mode")).isEqualTo("SYSTEM");
+        assertThat(metadataMap.get("ver")).isEqualTo(BigInteger.valueOf(1));
+        assertThat(metadataMap.get("period")).isEqualTo(BigInteger.valueOf(1));
+        assertThat(metadataMap.get("data")).isNotNull();
+        MetadataMap data = (MetadataMap) metadataMap.get("data");
+        assertThat(data.get("test123")).isEqualTo("5");
     }
 
 }

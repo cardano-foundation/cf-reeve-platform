@@ -91,7 +91,7 @@ public class CsvParser<T> {
         Set<String> requiredHeaders = new HashSet<>();
         for (Field field : type.getDeclaredFields()) {
             CsvBindByName bind = field.getAnnotation(CsvBindByName.class);
-            if (bind != null) {
+            if (bind != null && Arrays.stream(bind.profiles()).noneMatch(s -> s.equals("optional"))) {
                 String header = bind.column().isEmpty() ? field.getName() : bind.column();
                 requiredHeaders.add(header);
             }
@@ -137,7 +137,7 @@ public class CsvParser<T> {
             return Either.left(Problem.builder()
                     .withTitle("CSV_PARSING_ERROR")
                     .withStatus(Status.BAD_REQUEST)
-                    .withDetail(e.getMessage())
+                    .withDetail(e.getMessage() + ". " + e.getCause().getMessage())
                     .build());
         }
     }

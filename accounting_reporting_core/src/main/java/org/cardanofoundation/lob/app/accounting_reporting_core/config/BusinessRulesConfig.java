@@ -22,7 +22,7 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 public class BusinessRulesConfig {
 
     private final Validator validator;
-    private final OrganisationPublicApi organisationPublicApi;
+    protected final OrganisationPublicApi organisationPublicApi;
     private final CoreCurrencyRepository currencyRepository;
 
     @Bean
@@ -74,7 +74,7 @@ public class BusinessRulesConfig {
         ));
     }
 
-    private PipelineTask preValidationPipelineTask() {
+    protected PipelineTask preValidationPipelineTask() {
         return new DefaultPipelineTask(List.of(
                 new AmountsFcyCheckTaskItem(),
                 new AmountsLcyCheckTaskItem(),
@@ -97,7 +97,8 @@ public class BusinessRulesConfig {
     private PipelineTask postCleansingPipelineTask() {
         return new DefaultPipelineTask(List.of(
                 new DiscardSameAccountCodeTaskItem(),
-                new TxItemsAmountsSummingTaskItem()
+                new TxItemsAmountsSummingTaskItem(),
+                new AmountsLcyAfterSummingCheckTaskItem()
         ));
     }
 

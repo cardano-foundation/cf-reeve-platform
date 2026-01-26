@@ -93,7 +93,7 @@ class TransactionReconcilationServiceTest {
         transactionReconcilationService.createReconcilation(reconcilationId, organisationId, fromDate, toDate, ExtractorType.NETSUITE);
 
         ArgumentCaptor<ReconcilationEntity> reconcilationCaptor = ArgumentCaptor.forClass(ReconcilationEntity.class);
-        verify(transactionReconcilationRepository).save(reconcilationCaptor.capture());
+        verify(transactionReconcilationRepository).saveAndFlush(reconcilationCaptor.capture());
 
         assertThat(reconcilationCaptor.getValue().getId()).isEqualTo(reconcilationId);
         assertThat(reconcilationCaptor.getValue().getOrganisationId()).isEqualTo(organisationId);
@@ -120,7 +120,7 @@ class TransactionReconcilationServiceTest {
         assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.FAILED);
         assertThat(reconcilationEntity.getDetails().get().getCode()).isEqualTo(fatalError.getCode().name());
 
-        verify(transactionReconcilationRepository).save(reconcilationEntity);
+        verify(transactionReconcilationRepository).saveAndFlush(reconcilationEntity);
     }
 
     @Test
@@ -195,7 +195,7 @@ class TransactionReconcilationServiceTest {
         transactionReconcilationService.failReconcilation(reconcilationId, organisationId, Optional.of(fromDate), Optional.of(toDate), fatalError);
 
         ArgumentCaptor<ReconcilationEntity> captor = ArgumentCaptor.forClass(ReconcilationEntity.class);
-        verify(transactionReconcilationRepository).save(captor.capture());
+        verify(transactionReconcilationRepository).saveAndFlush(captor.capture());
 
         assertThat(captor.getValue().getId()).isEqualTo(reconcilationId);
         assertThat(captor.getValue().getStatus()).isEqualTo(ReconcilationStatus.FAILED);

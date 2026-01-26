@@ -33,4 +33,5 @@ public interface TransactionEntityRepository extends JpaRepository<TransactionEn
     Set<TransactionEntity> findDispatchedTransactionsThatAreNotFinalizedYet(@Param("organisationId") String organisationId,
                                                                             @Param("publishStatuses") Set<BlockchainPublishStatus> publishStatuses,
                                                                             Limit limit);
+
 }

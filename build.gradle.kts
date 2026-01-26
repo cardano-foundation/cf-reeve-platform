@@ -44,9 +44,15 @@ allprojects {
         mavenLocal()
         mavenCentral()
         maven {
-            name = "sonatypeSnapshots"
-            url = uri("https://oss.sonatype.org/content/repositories/snapshots")
+            name = "Central Portal Snapshots"
+            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+
+            // Only search this repository for the specific dependency
+            content {
+                includeModule("org.cardanofoundation", "signify")
+            }
         }
+
         maven {
             name = "local"
             url = uri("file://${project.layout.buildDirectory}/repo")
@@ -78,23 +84,14 @@ subprojects {
         }
     }
 
-    repositories {
-        //mavenLocal()
-        mavenCentral()
-        maven {
-            name = "sonatypeSnapshots"
-            url = uri("https://oss.sonatype.org/content/repositories/snapshots")
-        }
-        maven {
-            name = "local"
-            url = uri("file://${project.layout.buildDirectory}/repo")
-        }
-    }
-
     java {
         sourceCompatibility = VERSION_21
         withJavadocJar()
         withSourcesJar()
+    }
+
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
     }
 
     configurations {
@@ -224,6 +221,8 @@ subprojects {
                     "**/entity/**, " +
                     "**/config/**, " +
                     "**/domain/**, " +
+                    "**/dto/**, " +
+                    "**/enums/**, " +
                     "**/repository/**, " +
                     "**/spring_web/**," +
                     "**/spring_audit/**")

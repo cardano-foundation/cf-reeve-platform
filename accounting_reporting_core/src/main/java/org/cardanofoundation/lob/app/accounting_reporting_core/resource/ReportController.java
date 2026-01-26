@@ -21,20 +21,32 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ReportViewService;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.CreateCsvReportRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportPublishRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportReprocessRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReportSearchRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReportingParametersView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 
 @RestController
@@ -42,6 +54,7 @@ import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
+@Deprecated
 public class ReportController {
     private final ReportViewService reportViewService;
     private final CurrencyService currencyService;
@@ -79,7 +92,7 @@ public class ReportController {
 
         HashMap<String, String> currencyOrg = new HashMap<>();
         currencyService.findByOrganisationIdAndCode(orgId, "CHF").ifPresent(organisationCurrency ->
-                currencyOrg.put(organisationCurrency.getCurrencyId(), organisationCurrency.getId().getCustomerCode()));
+                currencyOrg.put(organisationCurrency.getIsoCode(), organisationCurrency.getId().getCode()));
         return ResponseEntity.ok().body(
                 new ReportingParametersView(
                         Arrays.stream(ReportType.values()).collect(Collectors.toSet()),

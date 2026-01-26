@@ -130,7 +130,7 @@ public class OrganisationService {
                 currencyService.findAllByOrganisationId(organisation.getId())
                         .stream()
                         .map(organisationCurrency ->
-                                organisationCurrency.getId() != null ? organisationCurrency.getId().getCustomerCode() : null
+                                organisationCurrency.getId() != null ? organisationCurrency.getId().getCode() : null
                         ).collect(Collectors.toSet()),
                 organisation.getWebsiteUrl(),
                 organisation.getLogo()

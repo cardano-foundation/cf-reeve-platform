@@ -138,6 +138,24 @@ class ProjectCodeServiceTest {
     }
 
     @Test
+    void insertProject_cycle() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        Project parent = mock(Project.class);
+        when(parent.getId()).thenReturn(new Project.Id(organisationId, "parentCode"));
+        when(parent.getParentCustomerCode()).thenReturn(customerCode);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+        when(update.getParentCustomerCode()).thenReturn("parentCode");
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode)))
+                .thenReturn(Optional.empty());
+        when(projectRepository.findById(new Project.Id(organisationId, "parentCode")))
+                .thenReturn(Optional.of(parent));
+
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
+
+        assertEquals("CIRCULAR_REFERENCE", projectView.getError().get().getTitle());
+    }
+
+    @Test
     void insertProject_success() {
         ProjectUpdate update = mock(ProjectUpdate.class);
         Project parent = mock(Project.class);
@@ -152,6 +170,25 @@ class ProjectCodeServiceTest {
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
         assertEquals(customerCode, projectView.getCustomerCode());
+        assertEquals(Optional.empty(), projectView.getError());
+        assertEquals("Test Project", projectView.getName());
+        verify(projectRepository).save(any(Project.class));
+    }
+
+    @Test
+    void insertProject_UpsertUnlinkParent() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.empty());
+        when(projectRepository.save(any(Project.class))).thenReturn(project);
+
+        project.setParentCustomerCode("parentCode");
+
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, true);
+
+        assertEquals(customerCode, projectView.getCustomerCode());
+        assertNull(projectView.getParentCustomerCode());
         assertEquals(Optional.empty(), projectView.getError());
         assertEquals("Test Project", projectView.getName());
         verify(projectRepository).save(any(Project.class));
@@ -198,6 +235,26 @@ class ProjectCodeServiceTest {
         assertEquals(customerCode, projectView.getCustomerCode());
         assertEquals(Optional.empty(), projectView.getError());
         verify(projectRepository).save(any(Project.class));
+    }
+
+    @Test
+    void updateProject_unlinkParent() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+
+        project.setParentCustomerCode("parentCode");
+
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
+        when(projectRepository.save(any(Project.class))).thenReturn(project);
+
+        ProjectView projectView = projectCodeService.updateProject(organisationId, update);
+
+        project.setParentCustomerCode(null);
+
+        assertEquals(customerCode, projectView.getCustomerCode());
+        assertEquals(Optional.empty(), projectView.getError());
+        assertNull(projectView.getParentCustomerCode());
+        verify(projectRepository).save(project);
     }
 
     @Test

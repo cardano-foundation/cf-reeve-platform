@@ -12,6 +12,8 @@ public enum TransactionProcessingStatus {
 
     PUBLISHED, /** Sent to the published */
 
-    DISPATCHED ; /** DISPATCHED, COMPLETED or FINALIZED status */
+    DISPATCHED , /** DISPATCHED, COMPLETED or FINALIZED status */
+
+    ROLLBACK ; /** Reset Tx to APPROVE */
 
 }

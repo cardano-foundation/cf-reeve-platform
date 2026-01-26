@@ -14,6 +14,7 @@ import org.zalando.problem.Problem;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Deprecated
 public class ReportResponseView {
 
     private boolean success;

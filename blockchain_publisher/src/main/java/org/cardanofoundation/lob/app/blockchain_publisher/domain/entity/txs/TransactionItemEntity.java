@@ -18,13 +18,16 @@ import lombok.Setter;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import org.hibernate.envers.Audited;
+
 import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyEntity;
 
 @Getter
 @Setter
-@Entity(name = "blockchain_publisher.TransactionItemEntity")
+@Entity(name = "blockchain_publisher.txs.TransactionItemEntity")
 @Table(name = "blockchain_publisher_transaction_item")
 @NoArgsConstructor
+@Audited
 @AllArgsConstructor
 @EntityListeners({ AuditingEntityListener.class })
 public class TransactionItemEntity extends CommonDateOnlyEntity implements Persistable<String> {
@@ -39,6 +42,9 @@ public class TransactionItemEntity extends CommonDateOnlyEntity implements Persi
 
     @Column(name = "amount_fcy", nullable = false)
     private BigDecimal amountFcy;
+
+    @Column(name = "amount_lcy", nullable = true)
+    private BigDecimal amountLcy;
 
     @Nullable
     @AttributeOverrides({

@@ -3,7 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.present
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
-import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -44,11 +44,11 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.javers.BagParser;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
@@ -72,7 +72,7 @@ public class AccountingCorePresentationViewService {
     private final TransactionItemRepository transactionItemRepository;
     private final ReconcilationRepository reconcilationRepository;
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;
-    private final SortFieldMappings sortFieldMappings;
+    private final JpaSortFieldValidator jpaSortFieldValidator;
 
     private static final Map<String, String> RV_FIELD_MAP =
             Map.of("id", "transactionId",
@@ -201,7 +201,7 @@ public class AccountingCorePresentationViewService {
                                                             List<TransactionProcessingStatus> txStatus, Pageable page,
                                                             BatchFilterRequest batchFilterRequest) {
         Either<Problem, Pageable> pageableEither =
-                sortFieldMappings.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
+                jpaSortFieldValidator.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return Either.left(pageableEither.getLeft());
         }

@@ -64,7 +64,7 @@
     },
     "subType": {
       "type": "string",
-      "enum": ["INCOME_STATEMENT", "BALANCE_SHEET"]
+      "enum": ["INCOME_STATEMENT", "BALANCE_SHEET", "CUSTOM"]
     },
     "interval": {
       "type": "string",

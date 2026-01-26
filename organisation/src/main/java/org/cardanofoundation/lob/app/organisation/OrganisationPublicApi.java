@@ -46,7 +46,7 @@ public class OrganisationPublicApi implements OrganisationPublicApiIF {
     }
 
     public Optional<Project> findProject(String organisationId, String customerCode) {
-        return projectCodeService.getProject(organisationId, customerCode);
+        return projectCodeService.findActiveProjectById(organisationId, customerCode);
     }
 
     public Optional<ChartOfAccount> getChartOfAccounts(String organisationId, String customerCode) {
