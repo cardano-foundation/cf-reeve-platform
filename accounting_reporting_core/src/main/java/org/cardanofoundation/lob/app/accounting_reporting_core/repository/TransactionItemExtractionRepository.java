@@ -1,15 +1,9 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 
 import lombok.RequiredArgsConstructor;
@@ -19,7 +13,6 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemAggregateView;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @Slf4j
