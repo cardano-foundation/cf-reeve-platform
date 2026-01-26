@@ -21,7 +21,7 @@ import org.cardanofoundation.lob.app.reporting.service.ReportingService;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.reporting_v2.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(value = "lob.reporting.enabled", havingValue = "true", matchIfMissing = true)
 public class ReprocessJob {
 
     private final ReportingService reportingService;

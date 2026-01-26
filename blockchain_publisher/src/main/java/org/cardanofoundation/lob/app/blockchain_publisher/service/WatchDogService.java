@@ -26,7 +26,6 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.OnChainTxDetails;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.OnChainStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
@@ -60,46 +59,12 @@ public class WatchDogService {
         log.info("TransactionsWatchDogService started");
     }
 
-    public void checkReportStatusForOrganisations(int txStatusInspectionLimitPerOrgPullSize) {
-        organisationPublicApiIF.listAll().forEach(org -> {
-            log.debug("Checking report statuses for organisation: {}", org.getName());
-            checkReportStatusForOrganisation(org, txStatusInspectionLimitPerOrgPullSize);
-        });
-    }
-
     @Transactional
     public void checkTransactionStatusForOrganisations(int txStatusInspectionLimitPerOrgPullSize) {
         organisationPublicApiIF.listAll().forEach(org -> {
             log.debug("Checking transaction statuses for organisation: {}", org.getName());
             checkTransactionStatusesForOrganisation(org, txStatusInspectionLimitPerOrgPullSize);
         });
-    }
-
-    private void checkReportStatusForOrganisation(Organisation org, int txStatusInspectionLimitPerOrgPullSize) {
-        ChainTip chainTip = getChainTip();
-        if (!chainTip.isSynced()) {
-            log.info("Chain is not synced, skipping transaction status check for organisation: {}", org.getName());
-            return;
-        }
-
-        Set<ReportEntity> reportEntities = reportEntityRepositoryGateway.findDispatchedReportsThatAreNotFinalizedYet(org.getId(), Limit.of(txStatusInspectionLimitPerOrgPullSize));
-        if(reportEntities.isEmpty()) {
-            log.debug("No reports found for status update for organisation: {}", org.getName());
-            return;
-        }
-        reportEntities.forEach(report -> {
-            log.info("Checking transaction status for report: {}", report.getId());
-            L1SubmissionData l1SubmissionData = report.getL1SubmissionData().orElseThrow(() -> new RuntimeException("Failed to get L1 submission data"));
-            report.setL1SubmissionData(Optional.of(updateL1SubmissionData(l1SubmissionData, chainTip)));
-
-            reportEntityRepositoryGateway.storeReport(report);
-            log.info("Status updated for report: {}", report.getId());
-        });
-        // notify accounting core about updated report
-        // collect to set of pairs of reportId and l1SubmissionData
-        Set<Pair<String, L1SubmissionData>> reports = reportEntities.stream().filter(r -> r.getL1SubmissionData().isPresent()).map(report -> Pair.of(report.getId(), report.getL1SubmissionData().get())).collect(Collectors.toSet());
-        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(org.getId(), reports);
-
     }
 
     private void checkTransactionStatusesForOrganisation(Organisation org, int txStatusInspectionLimitPerOrgPullSize) {
@@ -192,7 +157,7 @@ public class WatchDogService {
             return;
         }
 
-        Set<ReportV2Entity> reportEntities = reportEntityRepositoryGateway.findDispatchedReportsV2ThatAreNotFinalizedYet(org.getId(), Limit.of(txStatusInspectionLimitPerOrgPullSize));
+        Set<ReportEntity> reportEntities = reportEntityRepositoryGateway.findDispatchedReportsV2ThatAreNotFinalizedYet(org.getId(), Limit.of(txStatusInspectionLimitPerOrgPullSize));
         if(reportEntities.isEmpty()) {
             log.debug("No reports found for status update for organisation: {}", org.getName());
             return;

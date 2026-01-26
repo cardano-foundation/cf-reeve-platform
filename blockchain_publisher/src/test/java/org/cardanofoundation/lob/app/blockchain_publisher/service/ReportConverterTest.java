@@ -12,18 +12,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
 @ExtendWith(MockitoExtension.class)
-class ReportV2ConverterTest {
+class ReportConverterTest {
 
     @Mock
     private BlockchainPublishStatusMapper blockchainPublishStatusMapper;
 
     @InjectMocks
-    private ReportV2Converter reportV2Converter;
+    private ReportConverter reportConverter;
 
     @Test
     void convertToDbDetached() {
@@ -40,15 +40,15 @@ class ReportV2ConverterTest {
         when(event.getReportData()).thenReturn(null);
         when(event.getDispatchStatus()).thenReturn(LedgerDispatchStatus.DISPATCHED);
 
-        ReportV2Entity reportV2Entity = reportV2Converter.convertToDbDetached(event);
+        ReportEntity reportEntity = reportConverter.convertToDbDetached(event);
 
-        assertEquals("id123", reportV2Entity.getId());
-        assertEquals("org123", reportV2Entity.getOrganisationId());
-        assertEquals(ReportTemplateType.BALANCE_SHEET, reportV2Entity.getReportTemplateType());
-        assertEquals(1L, reportV2Entity.getReportTemplateVer());
-        assertEquals(1L, reportV2Entity.getReportVer());
-        assertEquals((short)1, reportV2Entity.getPeriod());
-        assertEquals((short)2023, reportV2Entity.getYear());
+        assertEquals("id123", reportEntity.getId());
+        assertEquals("org123", reportEntity.getOrganisationId());
+        assertEquals(ReportTemplateType.BALANCE_SHEET, reportEntity.getReportTemplateType());
+        assertEquals(1L, reportEntity.getReportTemplateVer());
+        assertEquals(1L, reportEntity.getReportVer());
+        assertEquals((short)1, reportEntity.getPeriod());
+        assertEquals((short)2023, reportEntity.getYear());
 
     }
 

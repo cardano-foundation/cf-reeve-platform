@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.accounting_reporting_core.domain.core;
+package org.cardanofoundation.lob.app.reporting.model;
 
 import java.util.Set;
 
@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @Getter

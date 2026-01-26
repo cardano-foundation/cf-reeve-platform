@@ -38,21 +38,12 @@ public class WatchDogJob {
         watchDogService.checkTransactionStatusForOrganisations(txStatusInspectionLimitPerOrgPullSize);
     }
 
+
     @Scheduled(
             fixedDelayString = "${lob.blockchain_publisher.watchdog.report.fixed_delay:PT1M}",
             initialDelayString = "${lob.blockchain_publisher.watchdog.report.initial_delay:PT1M}"
     )
     public void executeReportStatusCheck() {
-        log.debug("Inspecting all organisations for on chain report status changes...");
-
-        watchDogService.checkReportStatusForOrganisations(txStatusInspectionLimitPerOrgPullSize);
-    }
-
-    @Scheduled(
-            fixedDelayString = "${lob.blockchain_publisher.watchdog.report.fixed_delay:PT1M}",
-            initialDelayString = "${lob.blockchain_publisher.watchdog.report.initial_delay:PT1M}"
-    )
-    public void executeReportV2StatusCheck() {
         log.debug("Inspecting all organisations for on chain report status changes...");
 
         watchDogService.checkReportV2StatusForOrganisations(txStatusInspectionLimitPerOrgPullSize);

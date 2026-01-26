@@ -4,7 +4,6 @@ import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -17,13 +16,10 @@ import java.util.Set;
 import org.springframework.data.domain.Limit;
 
 import io.vavr.control.Either;
-import org.apache.commons.lang3.tuple.Pair;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +28,6 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
 import org.cardanofoundation.lob.app.blockchain_common.domain.FinalityScore;
 import org.cardanofoundation.lob.app.blockchain_common.domain.OnChainTxDetails;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
@@ -257,147 +252,6 @@ class WatchDogServiceTest {
         verifyNoInteractions(blockchainPublishStatusMapper);
         verifyNoMoreInteractions(blockchainReaderPublicApi);
         verifyNoMoreInteractions(transactionEntityRepositoryGateway);
-    }
-
-    @Test
-    void updateReportStatusFinalTransaction() {
-        ReportEntity reportEntity = ReportEntity.builder()
-                .reportId("reportId")
-                .l1SubmissionData(L1SubmissionData.builder()
-                        .creationSlot(1L)
-                        .transactionHash("txHash")
-                        .build())
-                .build();
-
-
-        when(organisationPublicApiIF.listAll()).thenReturn(List.of(new Organisation()));
-        when(reportEntityRepositoryGateway.findDispatchedReportsThatAreNotFinalizedYet(isNull(), any())).thenReturn(Set.of(reportEntity));
-        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(ChainTip.builder().isSynced(true).absoluteSlot(2L).build()));
-        when(blockchainReaderPublicApi.getTxDetails(anyString())).thenReturn(Either.right(Optional.of(OnChainTxDetails.builder().finalityScore(FinalityScore.FINAL).build())));
-        when(blockchainPublishStatusMapper.convert(FinalityScore.FINAL)).thenReturn(BlockchainPublishStatus.FINALIZED);
-
-        watchDogService.checkReportStatusForOrganisations(1);
-
-        verify(ledgerUpdatedEventPublisher).sendReportLedgerUpdatedEvents(null,Set.of(Pair.of(reportEntity.getId(), reportEntity.getL1SubmissionData().get())));
-        verify(organisationPublicApiIF).listAll();
-        verify(blockchainReaderPublicApi).getChainTip();
-        verify(reportEntityRepositoryGateway).findDispatchedReportsThatAreNotFinalizedYet(null, Limit.of(1));
-        verify(blockchainReaderPublicApi).getTxDetails(anyString());
-        verify(blockchainPublishStatusMapper).convert(FinalityScore.FINAL);
-        reportEntity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
-                .creationSlot(1L)
-                .transactionHash("txHash")
-                .finalityScore(FinalityScore.FINAL)
-                .publishStatus(BlockchainPublishStatus.FINALIZED)
-                .build()));
-        verify(reportEntityRepositoryGateway).storeReport(reportEntity);
-
-        verifyNoMoreInteractions(organisationPublicApiIF);
-        verifyNoMoreInteractions(blockchainPublishStatusMapper);
-        verifyNoMoreInteractions(blockchainReaderPublicApi);
-        verifyNoMoreInteractions(reportEntityRepositoryGateway);
-    }
-
-    @Test
-    void emptyTxHashSubmissionDataTest() {
-        ReportEntity reportEntity = ReportEntity.builder()
-                .l1SubmissionData(L1SubmissionData.builder()
-                        .creationSlot(1L)
-                        .build())
-                .build();
-
-
-        when(organisationPublicApiIF.listAll()).thenReturn(List.of(new Organisation()));
-        when(reportEntityRepositoryGateway.findDispatchedReportsThatAreNotFinalizedYet(isNull(), any())).thenReturn(Set.of(reportEntity));
-        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(ChainTip.builder().isSynced(true).absoluteSlot(2L).build()));
-
-        assertThrows(RuntimeException.class, () -> watchDogService.checkReportStatusForOrganisations(1));
-
-        verify(organisationPublicApiIF).listAll();
-        verify(blockchainReaderPublicApi).getChainTip();
-
-        verify(reportEntityRepositoryGateway).findDispatchedReportsThatAreNotFinalizedYet(null, Limit.of(1));
-        verifyNoMoreInteractions(organisationPublicApiIF);
-        verifyNoInteractions(blockchainPublishStatusMapper);
-        verifyNoMoreInteractions(blockchainReaderPublicApi);
-        verifyNoMoreInteractions(reportEntityRepositoryGateway);
-    }
-
-    @Test
-    void emptyCreationSlotSubmissionDataTest() {
-        ReportEntity reportEntity = ReportEntity.builder()
-                .l1SubmissionData(L1SubmissionData.builder()
-                        .transactionHash("txHash")
-                        .build())
-                .build();
-
-
-        when(organisationPublicApiIF.listAll()).thenReturn(List.of(new Organisation()));
-        when(reportEntityRepositoryGateway.findDispatchedReportsThatAreNotFinalizedYet(isNull(), any())).thenReturn(Set.of(reportEntity));
-        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(ChainTip.builder().isSynced(true).absoluteSlot(2L).build()));
-
-        assertThrows(RuntimeException.class, () -> watchDogService.checkReportStatusForOrganisations(1));
-
-        verify(organisationPublicApiIF).listAll();
-        verify(blockchainReaderPublicApi).getChainTip();
-
-        verify(reportEntityRepositoryGateway).findDispatchedReportsThatAreNotFinalizedYet(null, Limit.of(1));
-        verifyNoMoreInteractions(organisationPublicApiIF);
-        verifyNoInteractions(blockchainPublishStatusMapper);
-        verifyNoMoreInteractions(blockchainReaderPublicApi);
-        verifyNoMoreInteractions(reportEntityRepositoryGateway);
-    }
-
-    @Test
-    void gracePeriodTest() {
-        long creationSlot = 100L;
-        int gracePeriod = 1;
-
-        ReportEntity reportEntity = ReportEntity.builder()
-                .l1SubmissionData(L1SubmissionData.builder()
-                        .transactionHash("txHash")
-                        .creationSlot(creationSlot)
-                        .build())
-                .build();
-
-        when(organisationPublicApiIF.listAll()).thenReturn(List.of(new Organisation()));
-        when(reportEntityRepositoryGateway.findDispatchedReportsThatAreNotFinalizedYet(isNull(), any()))
-                .thenReturn(Set.of(reportEntity));
-        when(blockchainReaderPublicApi.getTxDetails(anyString())).thenReturn(Either.right(Optional.empty()));
-        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(
-                ChainTip.builder()
-                        .isSynced(true)
-                        .absoluteSlot(creationSlot + (gracePeriod * 60L))
-                        .build()));
-
-        // Set the rollback grace period and invoke the method
-        watchDogService.setRollbackGracePeriodMinutes(gracePeriod);
-        watchDogService.checkReportStatusForOrganisations(1);
-
-        // Verify the updated state after the first invocation
-        ArgumentCaptor<ReportEntity> captor1 = ArgumentCaptor.forClass(ReportEntity.class);
-        verify(reportEntityRepositoryGateway).storeReport(captor1.capture());
-        ReportEntity capturedEntity1 = captor1.getValue();
-        Assertions.assertEquals(Optional.of(BlockchainPublishStatus.SUBMITTED), capturedEntity1.getL1SubmissionData().orElseThrow().getPublishStatus());
-        Assertions.assertEquals(Optional.of(creationSlot), capturedEntity1.getL1SubmissionData().orElseThrow().getCreationSlot());
-
-        // Simulate chain tip advancement
-        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(
-                ChainTip.builder()
-                        .isSynced(true)
-                        .absoluteSlot(creationSlot + (gracePeriod * 60L) + 1) // Adding one slot
-                        .build()));
-
-        // Second invocation of the method
-        watchDogService.checkReportStatusForOrganisations(1);
-
-        // Verify the updated state after the second invocation
-        ArgumentCaptor<ReportEntity> captor2 = ArgumentCaptor.forClass(ReportEntity.class);
-        verify(reportEntityRepositoryGateway, times(2)).storeReport(captor2.capture());
-        ReportEntity capturedEntity2 = captor2.getAllValues().get(1);
-        Assertions.assertEquals(Optional.of(BlockchainPublishStatus.ROLLBACKED), capturedEntity2.getL1SubmissionData().orElseThrow().getPublishStatus());
-        Assertions.assertEquals(Optional.empty(), capturedEntity2.getL1SubmissionData().orElseThrow().getTransactionHash());
-        Assertions.assertEquals(Optional.empty(), capturedEntity2.getL1SubmissionData().orElseThrow().getCreationSlot());
     }
 
 }
