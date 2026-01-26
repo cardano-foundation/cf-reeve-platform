@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -67,6 +68,20 @@ public class ProjectCodeController {
         return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
+    }
+
+    @Operation(summary = "Download projects CSV file", description = "Download projects as a CSV file")
+    @GetMapping(value = "/organisations/{orgId}/projects/download", produces = "test/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<StreamingResponseBody> downloadProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                     @RequestParam(value = "customerCode", required = false) String customerCode,
+                                                                     @RequestParam(value = "name", required = false) String name,
+                                                                     @RequestParam(value = "parentCustomerCodes", required = false) String parentCustomerCodes) {
+        StreamingResponseBody responseBody = outputStream -> projectCodeService.downloadCsv(orgId, customerCode, name, parentCustomerCodes, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"projects_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
     }
 
     @Operation(description = "Organisation project creation", responses = {

@@ -1,12 +1,16 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
@@ -305,6 +309,44 @@ class ReferenceCodeServiceTest {
         ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate, false);
 
         assertTrue(result.getError().isPresent());
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+
+        String orgId = "org123";
+        ReferenceCode project1 = mock(ReferenceCode.class);
+        when(project1.getId()).thenReturn(new ReferenceCode.Id(orgId, "refcode1"));
+        when(project1.getName()).thenReturn("refcode1");
+        when(project1.getParentReferenceCode()).thenReturn("Parent1");
+        when(project1.isActive()).thenReturn(true);
+        ReferenceCode project2 = mock(ReferenceCode.class);
+        when(project2.getId()).thenReturn(new ReferenceCode.Id(orgId, "refcode2"));
+        when(project2.getName()).thenReturn("refcode2");
+        when(project2.getParentReferenceCode()).thenReturn(null);
+        when(project2.isActive()).thenReturn(false);
+
+        Page<ReferenceCode> page = new PageImpl<>(List.of(project1, project2));
+
+        when(referenceCodeRepository.findAllByOrgId(
+                any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        referenceCodeService.downloadCsv(orgId, null, null, null, null,outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Reference Code,Name,Parent Reference Code,Active");
+        assertThat(lines[1]).isEqualTo("refcode1,refcode1,Parent1,true");
+        assertThat(lines[2]).isEqualTo("refcode2,refcode2,,false");
+
     }
 
 }

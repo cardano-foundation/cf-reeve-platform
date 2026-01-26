@@ -1,18 +1,22 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CHART_OF_ACCOUNT_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
@@ -649,5 +653,39 @@ class ChartOfAccountsServiceTest {
 
         assertNotNull(response);
         assertTrue(response.getError().isPresent());
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+
+        String orgId = "org123";
+        ChartOfAccount account1 = mock(ChartOfAccount.class);
+        when(account1.getId()).thenReturn(new ChartOfAccount.Id(orgId, "code1"));
+        when(account1.getSubType()).thenReturn(new ChartOfAccountSubType(1L, orgId, "", new ChartOfAccountType(1L, orgId, "", Set.of())));
+        ChartOfAccount account2 = mock(ChartOfAccount.class);
+        when(account2.getId()).thenReturn(new ChartOfAccount.Id(orgId, "code2"));
+        when(account2.getSubType()).thenReturn(new ChartOfAccountSubType(1L, orgId, "", new ChartOfAccountType(1L, orgId, "", Set.of())));
+
+        Page<ChartOfAccount> page = new PageImpl<>(List.of(account1, account2));
+
+        when(chartOfAccountRepository.findAllByOrganisationIdFiltered(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(),any())).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        chartOfAccountsService.downloadCsv(orgId, null, null, null, null, null, null, null, null, outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Customer Code,Reference Code,Name,Type,Sub Type,Currency,CounterParty,Parent Customer Code,Active,Open Balance FCY,Open Balance LCY,Open Balance Currency ID FCY,Open Balance Currency ID LCY,Open Balance Type,Open Balance Date");
+        assertThat(lines[1]).isEqualTo("code1,,,,,,,,false,,,,,,");
+        assertThat(lines[2]).isEqualTo("code2,,,,,,,,false,,,,,,");
+
     }
 }

@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CURRENCY_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -12,10 +13,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
@@ -333,5 +337,44 @@ class CurrencyServiceTest {
         assertEquals(1, result.size());
         assertTrue(result.contains(currency));
         verify(currencyRepository).findAllByOrganisationId(organisationId);
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+        String orgId = "org-1";
+        String code = "EUR";
+        List<String> isoCodes = List.of("EUR", "USD");
+
+        Currency eur = new Currency(new Currency.Id(orgId,"EUR"), "EUR", true);
+        Currency usd = new Currency(new Currency.Id(orgId,"USD"), "USD", false);
+
+        Page<Currency> page = new PageImpl<>(List.of(eur, usd));
+
+        when(currencyRepository.findAllByOrganisationId(
+                eq(orgId),
+                eq(code),
+                eq(isoCodes),
+                eq(Pageable.unpaged())
+        )).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        currencyService.downloadCsv(orgId, code, isoCodes, outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Code,ISO Code,Active");
+        assertThat(lines[1]).isEqualTo("EUR,EUR,true");
+        assertThat(lines[2]).isEqualTo("USD,USD,false");
+
+        verify(currencyRepository).findAllByOrganisationId(
+                orgId, code, isoCodes, Pageable.unpaged()
+        );
     }
 }

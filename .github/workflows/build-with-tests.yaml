@@ -21,13 +21,12 @@ jobs:
         with:
           java-version: '21'
           distribution: 'corretto'
-
+      - name: Spotless
+        run: |
+          ./gradlew spotlessCheck
       - name: Test
         run: |
           ./gradlew clean test jacocoTestReport
-      - name: Spotless
-        run : |
-          ./gradlew spotlessCheck
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
         env:

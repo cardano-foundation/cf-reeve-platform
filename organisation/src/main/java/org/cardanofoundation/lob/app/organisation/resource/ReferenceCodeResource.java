@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -67,6 +68,21 @@ public class ReferenceCodeResource {
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok
         );
+    }
+
+    @Operation(summary = "Download projects CSV file", description = "Download projects as a CSV file")
+    @GetMapping(value = "/organisations/{orgId}/reference-codes/download", produces = "test/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<StreamingResponseBody> downloadRefCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                     @RequestParam(value = "refCode", required = false) String referenceCode,
+                                                                     @RequestParam(value = "name", required = false) String name,
+                                                                     @RequestParam(value = "parentCodes", required = false) List<String> parentCodes,
+                                                                     @RequestParam(value = "active", required = false) Boolean active) {
+        StreamingResponseBody responseBody = outputStream -> referenceCodeService.downloadCsv(orgId, referenceCode, name, parentCodes, active,outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"ref-codes_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
     }
 
     @Operation(description = "Reference Code insert", responses = {
