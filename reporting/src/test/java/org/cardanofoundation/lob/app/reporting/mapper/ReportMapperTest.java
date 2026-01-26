@@ -37,6 +37,8 @@ class ReportMapperTest {
     private ReportTemplateFieldRepository reportTemplateFieldRepository;
     @Mock
     private ReportResponseConverter reportResponseConverter;
+    @Mock
+    private ReportTemplateMapper reportTemplateMapper;
 
     @InjectMocks
     private ReportMapper reportMapper;
@@ -493,7 +495,6 @@ class ReportMapperTest {
                 .ledgerDispatchStatus(LedgerDispatchStatus.DISPATCHED)
                 .fields(new ArrayList<>())
                 .build();
-
         when(reportResponseConverter.convertResponse(any(), any())).thenAnswer(invocationOnMock -> invocationOnMock.getArguments()[0]);
         // When
         ReportResponseDto result = reportMapper.toResponseDto(publishedReport);
