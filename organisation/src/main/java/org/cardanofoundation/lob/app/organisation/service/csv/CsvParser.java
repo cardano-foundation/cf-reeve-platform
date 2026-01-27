@@ -129,6 +129,7 @@ public class CsvParser<T> {
                     .withType(type)
                     .withSeparator(delimiter.charAt(0))
                     .withIgnoreEmptyLine(true)
+                    .withProfile("optional")
                     .withFieldAsNull(CSVReaderNullFieldIndicator.BOTH)
                     .build().parse()
                     .stream().map(CsvParser::sanitizeBean).toList() // Sanitize each bean and removing malicious prefixes
