@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger;
+package org.cardanofoundation.lob.app.reporting.dto.events;
 
 import java.util.Map;
 import java.util.Set;
@@ -13,7 +13,7 @@ import lombok.*;
 
 import org.jmolecules.event.annotation.DomainEvent;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
+import org.cardanofoundation.lob.app.reporting.model.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @NoArgsConstructor

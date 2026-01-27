@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.reporting.dto.events.ReportsLedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.reporting.model.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
