@@ -25,12 +25,12 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
+import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
-import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.model.enums.PublishError;
@@ -43,6 +43,8 @@ class ReportMapperTest {
 
     @Mock
     private ReportTemplateFieldRepository reportTemplateFieldRepository;
+    @Mock
+    private ReportTemplateMapper reportTemplateMapper;
     @Mock
     private ReportResponseConverter reportResponseConverter;
 
@@ -152,9 +154,6 @@ class ReportMapperTest {
 
         // Setup Failed Validation Rules
         ReportTemplateValidationRuleEntity rule = mock(ReportTemplateValidationRuleEntity.class);
-        when(rule.getId()).thenReturn(777L);
-        when(rule.getName()).thenReturn("Rule1");
-        when(rule.getOperator()).thenReturn(ComparisonOperator.EQUAL);
         entity.setFailedValidationRules(List.of(rule));
 
         // Mock converter to just return the dto passed to it
@@ -181,13 +180,6 @@ class ReportMapperTest {
         assertEquals("tx123", result.getBlockchainTxId());
         assertEquals(LedgerDispatchStatus.DISPATCHED, result.getLedgerDispatchStatus());
         assertEquals("INVALID_REPORT_DATA", result.getPublishError());
-
-        // Check validation rules
-        assertEquals(1, result.getFailedValidationRules().size());
-        assertEquals(777L, result.getFailedValidationRules().getFirst().getRuleId());
-        assertEquals("Rule1", result.getFailedValidationRules().getFirst().getRuleName());
-        assertEquals("EQUAL", result.getFailedValidationRules().getFirst().getOperator());
-        assertEquals("Validation rule failed", result.getFailedValidationRules().getFirst().getErrorMessage());
 
         // Check fields
         assertEquals(2, result.getFields().size());

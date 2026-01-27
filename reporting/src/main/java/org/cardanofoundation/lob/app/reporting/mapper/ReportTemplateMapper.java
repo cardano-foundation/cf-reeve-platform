@@ -273,7 +273,7 @@ public class ReportTemplateMapper {
         return null;
     }
 
-    private ValidationRuleDto toValidationRuleDto(ReportTemplateValidationRuleEntity entity) {
+    public ValidationRuleDto toValidationRuleDto(ReportTemplateValidationRuleEntity entity) {
         if (entity == null) {
             return null;
         }

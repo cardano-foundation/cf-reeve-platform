@@ -75,7 +75,7 @@ public class ReportResponseDto {
 
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     @Schema(description = "List of validation rules that failed", nullable = true)
-    private List<FailedValidationRuleDto> failedValidationRules;
+    private List<ValidationRuleDto> failedValidationRules;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime publishDate;
