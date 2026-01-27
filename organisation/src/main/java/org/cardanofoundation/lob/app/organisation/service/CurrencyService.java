@@ -2,6 +2,9 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CURRENCY_MAPPINGS;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -12,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Service;
@@ -20,6 +24,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -152,5 +157,25 @@ public class CurrencyService {
                         return insertCurrency(orgId, currencyUpdate, true);
                     }).toList())
         );
+    }
+
+    public void downloadCsv(String orgId, String code, List<String> isoCodes, OutputStream outputStream) {
+        Page<Currency> allCurrencies = currencyRepository.findAllByOrganisationId(orgId, code, isoCodes, Pageable.unpaged());
+        try(Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Code", "ISO Code", "Active"};
+            csvWriter.writeNext(header, false);
+            for (Currency currency : allCurrencies) {
+                String[] data = {
+                        currency.getId().getCode(),
+                        currency.getIsoCode(),
+                        String.valueOf(currency.isActive())
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing currencies to CSV", e);
+        }
     }
 }

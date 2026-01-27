@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 
 import org.springframework.stereotype.Component;
 
-import org.cardanofoundation.lob.app.reporting.dto.FailedValidationRuleDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
@@ -29,6 +28,7 @@ public class ReportMapper {
 
     private final ReportTemplateFieldRepository reportTemplateFieldRepository;
     private final ReportResponseConverter reportResponseConverter;
+    private final ReportTemplateMapper reportTemplateMapper;
 
     public ReportEntity toEntity(ReportDto dto, ReportEntity existingReport, ReportTemplateEntity template) {
         final ReportEntity report = existingReport != null ? existingReport : new ReportEntity();
@@ -93,19 +93,6 @@ public class ReportMapper {
                 .toList()
             : Collections.emptyList();
 
-        // Convert failed validation rules to DTOs
-        List<FailedValidationRuleDto> failedRuleDtos = null;
-        if (entity.getFailedValidationRules() != null && !entity.getFailedValidationRules().isEmpty()) {
-            failedRuleDtos = entity.getFailedValidationRules().stream()
-                .map(rule -> FailedValidationRuleDto.builder()
-                    .ruleId(rule.getId())
-                    .ruleName(rule.getName())
-                    .operator(rule.getOperator().name())
-                    .errorMessage("Validation rule failed")
-                    .build())
-                .toList();
-        }
-
         ReportResponseDto responseDto = ReportResponseDto.builder()
                 .id(entity.getId())
                 .organisationId(entity.getOrganisationId())
@@ -123,7 +110,7 @@ public class ReportMapper {
                 .ledgerDispatchStatus(entity.getLedgerDispatchStatus())
                 .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
                 .fields(topLevelFields)
-                .failedValidationRules(failedRuleDtos)
+                .failedValidationRules(Optional.ofNullable(entity.getFailedValidationRules()).orElse(List.of()).stream().map(reportTemplateMapper::toValidationRuleDto).toList())
                 .createdAt(entity.getCreatedAt())
                 .createdBy(entity.getCreatedBy())
                 .updatedAt(entity.getUpdatedAt())

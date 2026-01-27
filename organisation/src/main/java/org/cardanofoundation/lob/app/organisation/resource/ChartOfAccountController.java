@@ -17,6 +17,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -92,6 +93,25 @@ public class ChartOfAccountController {
                         ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
 
+    }
+
+    @Operation(summary = "Download chart of accounts CSV file", description = "Download chart of accounts as a CSV file")
+    @GetMapping(value = "/organisations/{orgId}/chart-of-accounts/download", produces = "test/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    public ResponseEntity<StreamingResponseBody> downloadChartOfAccountsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                            @RequestParam(value = "customerCode", required = false) String customerCode,
+                                                                            @RequestParam(value = "name", required = false) String name,
+                                                                            @RequestParam(value = "currencies", required = false) List<String> currencies,
+                                                                            @RequestParam(value = "counterPartyIds", required = false) List<String> counterPartyIds,
+                                                                            @RequestParam(value = "types", required = false) List<String> types,
+                                                                            @RequestParam(value = "subTypes", required = false) List<String> subTypes,
+                                                                            @RequestParam(value = "refCodes", required = false) List<String> referenceCodes,
+                                                                            @RequestParam(value = "active" ,required = false) Boolean active) {
+        StreamingResponseBody responseBody = outputStream -> chartOfAccountsService.downloadCsv(orgId, customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, active, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"chart-of-accounts_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
     }
 
     @Operation(description = "Chart Of Account insert", responses = {

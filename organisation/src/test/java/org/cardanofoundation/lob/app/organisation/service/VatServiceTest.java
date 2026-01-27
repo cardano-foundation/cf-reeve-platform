@@ -1,14 +1,19 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -250,5 +255,45 @@ class VatServiceTest {
         assertTrue(response.isRight());
         assertEquals(1, response.get().size());
         assertEquals("Default Message", response.get().get(0).getError().get().getDetail());
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+
+        String orgId = "org123";
+        Vat vat1 = mock(Vat.class);
+        when(vat1.getId()).thenReturn(new Vat.Id(orgId, "vat1"));
+        when(vat1.getRate()).thenReturn(BigDecimal.ONE);
+        when(vat1.getDescription()).thenReturn("description1");
+        when(vat1.getCountryCode()).thenReturn("DE");
+        when(vat1.getActive()).thenReturn(true);
+        Vat vat2 = mock(Vat.class);
+        when(vat2.getId()).thenReturn(new Vat.Id(orgId, "vat2"));
+        when(vat2.getRate()).thenReturn(BigDecimal.TWO);
+        when(vat2.getDescription()).thenReturn("description2");
+        when(vat2.getCountryCode()).thenReturn("DE");
+        when(vat2.getActive()).thenReturn(true);
+
+        Page<Vat> page = new PageImpl<>(List.of(vat1, vat2));
+
+        when(vatRepository.findAllByOrganisationId(
+                any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        vatService.downloadCsv(orgId, null, null, null, null, null, null,outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Code,Rate,Description,Country,Active");
+        assertThat(lines[1]).isEqualTo("vat1,1,description1,DE,true");
+        assertThat(lines[2]).isEqualTo("vat2,2,description2,DE,true");
+
     }
 }

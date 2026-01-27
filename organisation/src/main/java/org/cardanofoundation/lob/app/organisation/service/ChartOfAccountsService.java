@@ -4,6 +4,10 @@ import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstant
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CHART_OF_ACCOUNT_MAPPINGS;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +20,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +29,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -358,5 +364,39 @@ public class ChartOfAccountsService {
         chartOfAccountType.setSubTypes(Set.of(chartOfAccountSubType));
         ChartOfAccountType save = chartOfAccountTypeRepository.save(chartOfAccountType);
         return save.getSubTypes().stream().iterator().next();
+    }
+
+    public void downloadCsv(String orgId, String customerCode, String name, List<String> currencies, List<String> counterPartyIds, List<String> types, List<String> subTypes, List<String> referenceCodes, Boolean active, OutputStream outputStream) {
+        Page<ChartOfAccount> chartOfAccounts = chartOfAccountRepository.findAllByOrganisationIdFiltered(orgId, customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, active, Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Customer Code","Reference Code","Name","Type","Sub Type","Currency","CounterParty","Parent Customer Code","Active","Open Balance FCY","Open Balance LCY","Open Balance Currency ID FCY","Open Balance Currency ID LCY","Open Balance Type","Open Balance Date"};
+            csvWriter.writeNext(header, false);
+            for (ChartOfAccount coa : chartOfAccounts) {
+                OpeningBalance openingBalance = Optional.ofNullable(coa.getOpeningBalance()).orElse(new OpeningBalance());
+                String[] data = {
+                        coa.getId().getCustomerCode(),
+                        coa.getEventRefCode(),
+                        coa.getName(),
+                        coa.getSubType().getType().getName(),
+                        coa.getSubType().getName(),
+                        coa.getCurrencyId(),
+                        coa.getCounterParty(),
+                        coa.getParentCustomerCode(),
+                        String.valueOf(coa.getActive()),
+                        openingBalance.getBalanceFCY() != null ? openingBalance.getBalanceFCY().toString() : null,
+                        openingBalance.getBalanceLCY() != null ? openingBalance.getBalanceLCY().toString() : null,
+                        openingBalance.getOriginalCurrencyIdFCY(),
+                        openingBalance.getOriginalCurrencyIdLCY(),
+                        openingBalance.getBalanceType() != null ? openingBalance.getBalanceType().name() : "",
+                        openingBalance.getDate() != null ? openingBalance.getDate().toString() : ""
+
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (IOException e) {
+            log.error("Failed to download chart of account csv.", e);
+        }
     }
 }

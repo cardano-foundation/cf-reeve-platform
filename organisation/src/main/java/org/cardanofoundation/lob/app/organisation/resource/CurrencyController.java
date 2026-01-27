@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -56,10 +57,10 @@ public class CurrencyController {
     })
     @GetMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getAllCurrencies(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                              @RequestParam(value = "customerCode", required = false) String customerCode,
-                                              @RequestParam(value = "currencyIds", required = false) List<String> currencyIds,
+                                              @RequestParam(value = "code", required = false) String code,
+                                              @RequestParam(value = "isoCode", required = false) List<String> isoCodes,
                                               @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return currencyService.getAllCurrencies(orgId, customerCode, currencyIds, pageable).fold(
+        return currencyService.getAllCurrencies(orgId, code, isoCodes, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
     }
@@ -116,5 +117,25 @@ public class CurrencyController {
                 problem -> ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(problem),
                 ResponseEntity::ok
         );
+    }
+
+    @Operation(
+            summary = "Download organisation currencies as CSV",
+            description = """
+                    Downloads all currency data for the given organisation
+                    as a single CSV file.
+                    """
+    )
+    @GetMapping(value = "/{orgId}/currencies/download", produces = "text/csv"
+    )
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<StreamingResponseBody> downloadCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                       @RequestParam(value = "code", required = false) String code,
+                                                                       @RequestParam(value = "isoCode", required = false) List<String> isoCodes) {
+        StreamingResponseBody responseBody = outputStream -> currencyService.downloadCsv(orgId, code, isoCodes, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"currencies_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
     }
 }
