@@ -146,7 +146,7 @@ public class ReportTemplateService {
         if (existingTemplateOpt.isPresent()) {
             return Either.left(Problem.builder()
                     .withTitle("Template Already Exists")
-                    .withDetail("A template with name '" + dto.getName() + "' already exists for this organisation. Use PUT to update.")
+                    .withDetail("A template with name '" + dto.getName() + "' already exists for this organisation.")
                     .withStatus(Status.CONFLICT)
                     .build());
         }
@@ -503,7 +503,7 @@ public class ReportTemplateService {
             if (rule.getLeftSideTerms() == null || rule.getLeftSideTerms().isEmpty()) {
                 return Either.left(Problem.builder()
                         .withTitle(Constants.INVALID_VALIDATION_RULE)
-                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_LEFT_SIDE.formatted(rule.getName()))
+                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_S_SIDE.formatted(rule.getName(), "left"))
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
@@ -512,7 +512,7 @@ public class ReportTemplateService {
             if (rule.getRightSideTerms() == null || rule.getRightSideTerms().isEmpty()) {
                 return Either.left(Problem.builder()
                         .withTitle(Constants.INVALID_VALIDATION_RULE)
-                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_LEFT_SIDE.formatted(rule.getName()))
+                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_S_SIDE.formatted(rule.getName(), "right"))
                         .withStatus(Status.BAD_REQUEST)
                         .build());
             }
@@ -526,7 +526,7 @@ public class ReportTemplateService {
                 if (term.getFieldName() == null || term.getFieldName().trim().isEmpty()) {
                     return Either.left(Problem.builder()
                             .withTitle(Constants.INVALID_VALIDATION_RULE)
-                            .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_LEFT_SIDE.formatted(rule.getName()))
+                            .withDetail("Validation Rule term must have names.")
                             .withStatus(Status.BAD_REQUEST)
                             .build());
                 }
@@ -550,6 +550,16 @@ public class ReportTemplateService {
                             .build());
                 }
             }
+        }
+
+        Set<String> validationRuleNames = new HashSet<>();
+        Optional<ValidationRuleDto> duplicateName = dto.getValidationRules().stream().filter(rule -> !validationRuleNames.add(rule.getName())).findFirst();
+        if(duplicateName.isPresent()) {
+            return Either.left(Problem.builder()
+                    .withTitle(Constants.INVALID_VALIDATION_RULE)
+                    .withDetail("Duplicate validation rule name found: '" + duplicateName.get().getName() + "'. Each validation rule must have a unique name.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
         }
 
         return Either.right(null);

@@ -31,12 +31,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
+import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
+import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
@@ -55,6 +60,8 @@ class ReportTemplateServiceTest {
     private Validator validator;
     @Mock
     private ReportTemplateTypeValidator reportTemplateTypeValidator;
+    @Mock
+    private ChartOfAccountRepository chartOfAccountRepository;
 
     @InjectMocks
     private ReportTemplateService reportTemplateService;
@@ -154,6 +161,320 @@ class ReportTemplateServiceTest {
         // Then
         assertTrue(result.isLeft());
         assertEquals("INVALID_FIELD_MAPPINGS", result.getLeft().getTitle());
+    }
+
+    @Test
+    void createNewTemplate_validateForbiddenCharactersFail() {
+
+        Errors errors = mock(Errors.class);
+        templateDto.setDataMode(DataMode.USER.name());
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder().accounts(Set.of()).childFields(List.of()).fieldName("name$").build()));
+
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_FIELD_NAME", reportTemplateResponseDtos.getLeft().getTitle());
+    }
+
+    @Test
+    void createNewTemplate_validateAccountsFailed() {
+
+        Errors errors = mock(Errors.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                            .build()
+                )
+        );
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of());
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_ACCOUNTS", reportTemplateResponseDtos.getLeft().getTitle());
+    }
+
+    @Test
+    void createNewTemplate_validateValidationRules() {
+
+        Errors errors = mock(Errors.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                                .build()
+                )
+        );
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("")
+                        .build()
+        ));
+        ChartOfAccount mock = mock(ChartOfAccount.class);
+        when(mock.getId()).thenReturn(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1"));
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of(mock));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Validation rule must have a name", reportTemplateResponseDtos.getLeft().getDetail());
+
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("INVALID_OPERATOR")
+                        .build()
+        ));
+    }
+
+    @Test
+    void createNewTemplate_validateValidationInvalidOperator() {
+
+        Errors errors = mock(Errors.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                                .build()
+                )
+        );
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("INVALID_OPERATOR")
+                        .leftSideTerms(List.of(mock(ValidationRuleTermDto.class)))
+                        .build()
+        ));
+        ChartOfAccount mock = mock(ChartOfAccount.class);
+        when(mock.getId()).thenReturn(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1"));
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of(mock));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Invalid comparison operator: INVALID_OPERATOR. Must be one of: GREATER_THAN_OR_EQUAL, EQUAL, LESS_THAN_OR_EQUAL", reportTemplateResponseDtos.getLeft().getDetail());
+    }
+
+    @Test
+    void createNewTemplate_validateValidationOneSideIsEmpty() {
+
+        Errors errors = mock(Errors.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                                .build()
+                )
+        );
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("GREATER_THAN_OR_EQUAL")
+                        .build()
+        ));
+        ChartOfAccount mock = mock(ChartOfAccount.class);
+        when(mock.getId()).thenReturn(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1"));
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of(mock));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Validation rule 'valid1' must have at least one term on the left side", reportTemplateResponseDtos.getLeft().getDetail());
+
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("GREATER_THAN_OR_EQUAL")
+                        .leftSideTerms(List.of(mock(ValidationRuleTermDto.class)))
+                        .build()
+        ));
+
+        reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Validation rule 'valid1' must have at least one term on the right side", reportTemplateResponseDtos.getLeft().getDetail());
+    }
+
+    @Test
+    void createNewTemplate_validateValidationFieldNameIsEmpty() {
+
+        Errors errors = mock(Errors.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                                .build()
+                )
+        );
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("GREATER_THAN_OR_EQUAL")
+                        .leftSideTerms(List.of(mock(ValidationRuleTermDto.class)))
+                        .rightSideTerms(List.of(mock(ValidationRuleTermDto.class)))
+                        .build()
+        ));
+        ChartOfAccount mock = mock(ChartOfAccount.class);
+        when(mock.getId()).thenReturn(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1"));
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of(mock));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Validation Rule term must have names.", reportTemplateResponseDtos.getLeft().getDetail());
+    }
+
+    @Test
+    void createNewTemplate_validateValidationFieldNotExists() {
+
+        Errors errors = mock(Errors.class);
+        ValidationRuleTermDto ruleTermDto = mock(ValidationRuleTermDto.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                                .build()
+                )
+        );
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("GREATER_THAN_OR_EQUAL")
+                        .leftSideTerms(List.of(ruleTermDto))
+                        .rightSideTerms(List.of(ruleTermDto))
+                        .build()
+        ));
+        ChartOfAccount mock = mock(ChartOfAccount.class);
+        when(ruleTermDto.getFieldName()).thenReturn("ruleTermDto");
+        when(mock.getId()).thenReturn(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1"));
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of(mock));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Validation rule 'valid1' references field names '[ruleTermDto]' which do not exist in the template", reportTemplateResponseDtos.getLeft().getDetail());
+    }
+
+    @Test
+    void createNewTemplate_validateValidationWrongOperator() {
+
+        Errors errors = mock(Errors.class);
+        ValidationRuleTermDto ruleTermDto = mock(ValidationRuleTermDto.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                                .build()
+                )
+        );
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("GREATER_THAN_OR_EQUAL")
+                        .leftSideTerms(List.of(ruleTermDto))
+                        .rightSideTerms(List.of(ruleTermDto))
+                        .build()
+        ));
+        ChartOfAccount mock = mock(ChartOfAccount.class);
+        when(ruleTermDto.getFieldName()).thenReturn("name");
+        when(ruleTermDto.getOperation()).thenReturn("INVALID_OPERATION");
+        when(mock.getId()).thenReturn(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1"));
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of(mock));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Invalid term operation: INVALID_OPERATION. Must be one of: ADD, SUBTRACT", reportTemplateResponseDtos.getLeft().getDetail());
+    }
+
+    @Test
+    void createNewTemplate_validateValidationDuplicateName() {
+
+        Errors errors = mock(Errors.class);
+        ValidationRuleTermDto ruleTermDto = mock(ValidationRuleTermDto.class);
+        templateDto.setFields(
+                List.of(
+                        ReportTemplateFieldDto.builder()
+                                .accounts(Set.of("acc1"))
+                                .childFields(List.of())
+                                .fieldName("name")
+                                .build()
+                )
+        );
+        templateDto.setValidationRules(List.of(
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("GREATER_THAN_OR_EQUAL")
+                        .leftSideTerms(List.of(ruleTermDto))
+                        .rightSideTerms(List.of(ruleTermDto))
+                        .build(),
+                ValidationRuleDto.builder()
+                        .name("valid1")
+                        .operator("GREATER_THAN_OR_EQUAL")
+                        .leftSideTerms(List.of(ruleTermDto))
+                        .rightSideTerms(List.of(ruleTermDto))
+                        .build()
+        ));
+        ChartOfAccount mock = mock(ChartOfAccount.class);
+        when(ruleTermDto.getFieldName()).thenReturn("name");
+        when(ruleTermDto.getOperation()).thenReturn("ADD");
+        when(mock.getId()).thenReturn(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1"));
+        when(chartOfAccountRepository.findAllById(eq(List.of(new ChartOfAccount.Id(templateDto.getOrganisationId(), "acc1")))))
+                .thenReturn(List.of(mock));
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+
+        assertTrue(reportTemplateResponseDtos.isLeft());
+        assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
+        assertEquals("Duplicate validation rule name found: 'valid1'. Each validation rule must have a unique name.", reportTemplateResponseDtos.getLeft().getDetail());
     }
 
     @Test
