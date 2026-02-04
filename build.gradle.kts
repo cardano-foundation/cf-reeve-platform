@@ -103,6 +103,7 @@ subprojects {
     extra["springBootVersion"] = "3.3.3"
     extra["springCloudVersion"] = "2023.0.0"
     extra["jMoleculesVersion"] = "2023.1.0"
+    extra["flyway.version"] = "10.20.1"
 
     dependencies {
         implementation("org.springframework.data:spring-data-envers")
@@ -306,6 +307,10 @@ subprojects {
             maven {
                 name = "localM2"
                 url = uri("${System.getProperty("user.home")}/.m2/repository")
+            }
+            maven {
+                name = "localApplicationM2"
+                url = uri("${System.getenv("APPLICATION_PATH")}/.m2/repository")
             }
             maven {
                 name = "gitlabPrivate"
