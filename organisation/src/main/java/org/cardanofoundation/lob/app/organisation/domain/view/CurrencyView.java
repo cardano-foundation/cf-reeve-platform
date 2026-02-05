@@ -26,7 +26,7 @@ public class CurrencyView {
     private Optional<Problem> error;
 
     public static CurrencyView createFail(Problem error, CurrencyUpdate currencyUpdate) {
-        return new CurrencyView(currencyUpdate.getCode(), currencyUpdate.getIsoCode(), currencyUpdate.getActive(),Optional.of(error));
+        return new CurrencyView(currencyUpdate.getCode(), currencyUpdate.getIsoCode(), Optional.ofNullable(currencyUpdate.getActive()).orElse(false),Optional.of(error));
     }
 
     public static CurrencyView createSuccess(String customerCode, String currencyId, boolean active) {

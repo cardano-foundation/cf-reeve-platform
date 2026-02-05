@@ -32,6 +32,5 @@ jobs:
           TRIGGERING_PAYLOAD: >
             {
               "SOURCE_BRANCH": "${{ github.event.pull_request.head.ref }}",
-              "PR_NUMBER": "${{ github.event.pull_request.number }}",
               "SOURCE_REPOSITORY": "${{ github.repository }}"
             }
