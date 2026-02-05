@@ -263,7 +263,7 @@ public class ReportTemplateService {
         Either<Problem, Void> validateReport = validateReport(dto);
         if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
 
-        // Check if a template with the same name exists for this organisation
+        // Check if the template to be updated exists
         Optional<ReportTemplateEntity> existingTemplateOpt =
                 reportTemplateRepository.findLatestByOrganisationIdAndId(dto.getOrganisationId(), dto.getId());
 
@@ -274,6 +274,19 @@ public class ReportTemplateService {
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
+
+        // Check if a template with the same name already exists for this organisation
+        Optional<ReportTemplateEntity> templateEntityWithSameName =
+                reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
+        if (templateEntityWithSameName.isPresent()) {
+            return Either.left(Problem.builder()
+                    .withTitle("Template Already Exists")
+                    .withDetail("A template with name '" + dto.getName() + "' already exists for this organisation.")
+                    .withStatus(Status.CONFLICT)
+                    .build());
+        }
+
+
 
         ReportTemplateEntity existing = existingTemplateOpt.get();
         ReportTemplateEntity templateToSave;
