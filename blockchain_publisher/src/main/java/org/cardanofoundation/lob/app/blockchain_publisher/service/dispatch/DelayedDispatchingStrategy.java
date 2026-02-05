@@ -59,11 +59,11 @@ public class DelayedDispatchingStrategy<T extends CommonDateOnlyEntity> implemen
             // prioritise expired transactions first since tail may not be even included in the blockchain in this run
             return new LinkedHashSet<>(Stream.concat(prioritisedTransactions.stream(), txs.stream()).toList());
         }
-
-        log.info("Extracted {} passedTransactions for organisationId:{}", txs.size(), organisationId);
-
+        if(!txs.isEmpty()) {
+            log.info("Extracted {} passedTransactions for organisationId:{}", txs.size(), organisationId);
+        }
         if (txs.size() < minTxCount) {
-            log.warn("Not enough passedTransactions to dispatch for organisationId:{}", organisationId);
+            log.warn("Not enough passedTransactions to dispatch for organisationId:{}. Got {} need at least {} waiting for more transactions or max delay reached.", organisationId, txs.size(), minTxCount);
 
             return Set.of();
         }
