@@ -100,6 +100,35 @@ class TransactionConverterTest {
     }
 
     @Test
+    void testCopyFields_shouldCopyExtractorType() {
+        TransactionEntity attached = new TransactionEntity();
+        TransactionEntity detached = new TransactionEntity();
+        detached.setExtractorType("CSV");
+
+        transactionConverter.copyFields(attached, detached);
+        Assertions.assertEquals("CSV", attached.getExtractorType());
+    }
+
+    @Test
+    void testCopyFields_shouldCopyAllFields() {
+        TransactionEntity attached = new TransactionEntity();
+        TransactionEntity detached = new TransactionEntity();
+        detached.setId("tx-123");
+        detached.setBatchId("batch-456");
+        detached.setTransactionType(TransactionType.BillCredit);
+        detached.setExtractorType("NETSUITE");
+        detached.setInternalTransactionNumber("INT-789");
+
+        transactionConverter.copyFields(attached, detached);
+
+        Assertions.assertEquals("tx-123", attached.getId());
+        Assertions.assertEquals("batch-456", attached.getBatchId());
+        Assertions.assertEquals(TransactionType.BillCredit, attached.getTransactionType());
+        Assertions.assertEquals("NETSUITE", attached.getExtractorType());
+        Assertions.assertEquals("INT-789", attached.getInternalTransactionNumber());
+    }
+
+    @Test
     void testRollbackTransaction() {
         String originalTxNumber = "TX-123";
         String rollbackSuffix = "RBK";
