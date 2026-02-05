@@ -62,7 +62,7 @@ public class DelayedDispatchingStrategy<T extends CommonDateOnlyEntity> implemen
         if(!txs.isEmpty()) {
             log.info("Extracted {} passedTransactions for organisationId:{}", txs.size(), organisationId);
         }
-        if (txs.size() < minTxCount) {
+        if (!txs.isEmpty() && txs.size() < minTxCount) {
             log.warn("Not enough passedTransactions to dispatch for organisationId:{}. Got {} need at least {} waiting for more transactions or max delay reached.", organisationId, txs.size(), minTxCount);
 
             return Set.of();
