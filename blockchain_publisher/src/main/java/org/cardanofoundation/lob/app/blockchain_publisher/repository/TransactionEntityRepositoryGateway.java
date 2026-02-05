@@ -89,27 +89,27 @@ public class TransactionEntityRepositoryGateway {
 
         Sets.SetView<TransactionEntity> newTransactions = Sets.difference(transactionEntities, existingTransactions);
 
-        if (rollbackEnabled.orElse(false)) {
-            existingTransactions = updateExistingTransactions(existingTransactions, transactionEntities);
-            transactionEntityRepository.saveAll(existingTransactions);
-        }
+        Set<TransactionEntity> newTxs = Stream.concat(transactionEntityRepository.saveAll(newTransactions)
+                        .stream(), existingTransactions.stream())
+                .collect(toSet());
 
-        Set<TransactionEntity> savedNewTransactions = new HashSet<>(transactionEntityRepository.saveAll(newTransactions));
-
-        // Save transaction items only for new transactions (not for updated existing ones)
-        for (TransactionEntity tx : savedNewTransactions) {
+        for (TransactionEntity tx : newTxs) {
             transactionItemEntityRepository.saveAll(tx.getItems());
         }
 
-        Set<TransactionEntity> allTransactions = Stream.concat(savedNewTransactions.stream(), existingTransactions.stream())
-                .collect(toSet());
-
-        return allTransactions;
+        return newTxs;
     }
 
     @Transactional
-    private Set<TransactionEntity> updateExistingTransactions(Set<TransactionEntity> existingTransactions, Set<TransactionEntity> transactionEntities) {
-        log.info("updateExistingTransactions..., updateExistingTransactions:{}", transactionEntities.size());
+    public Set<TransactionEntity> updateErrorRollbackTransactions(Set<TransactionEntity> transactionEntities) {
+        Set<String> txIds = transactionEntities.stream()
+                .map(TransactionEntity::getId)
+                .collect(toSet());
+
+        Set<TransactionEntity> existingTransactions = new HashSet<>(transactionEntityRepository
+                .findByIdsAndPublishStatus(txIds, BlockchainPublishStatus.ERROR));
+
+        log.info("updateErrorRollbackTransactions..., updateErrorRollbackTransactions:{}", transactionEntities.size());
 
         for (TransactionEntity existingEntity : existingTransactions) {
             // Find the corresponding incoming transaction
@@ -134,7 +134,7 @@ public class TransactionEntityRepositoryGateway {
                 });
             }
         }
-
+        transactionEntityRepository.saveAll(existingTransactions);
         return existingTransactions;
     }
 

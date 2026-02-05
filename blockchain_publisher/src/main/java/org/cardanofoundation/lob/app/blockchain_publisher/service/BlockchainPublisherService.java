@@ -45,7 +45,10 @@ public class BlockchainPublisherService {
 
         Set<TransactionEntity> storedTransactions = transactionEntityRepositoryGateway.storeOnlyNew(txEntities);
 
+        Set<TransactionEntity> rollbackTransaction = transactionEntityRepositoryGateway.updateErrorRollbackTransactions(txEntities);
+
         ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, storedTransactions);
+        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, rollbackTransaction);
     }
 
     @Transactional
