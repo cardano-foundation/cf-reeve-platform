@@ -152,6 +152,20 @@ public class CsvReportService {
                     }
                 }
             }
+            if(sameReportLines.size() > 1 && dataMode == DataMode.SYSTEM) {
+                // Multiple lines for the same report in SYSTEM mode is not allowed
+                createdReports.add(ReportResponseDto.builder()
+                        .error(Optional.of(Problem.builder()
+                                .withTitle("MULTIPLE_LINES_FOR_SYSTEM_REPORT")
+                                .withDetail("Line " + index + ": Multiple lines for the same report are not allowed in SYSTEM data mode.")
+                                .withStatus(Status.BAD_REQUEST)
+                                .build()
+                        ))
+                        .build());
+                // Removing all lines for this report to prevent re-processing
+                reportLines.removeAll(sameReportLines);
+                continue;
+            }
             if(fields.isEmpty() && dataMode == DataMode.USER) {
                 // All lines for this report had errors, skipping report creation
                 continue;
