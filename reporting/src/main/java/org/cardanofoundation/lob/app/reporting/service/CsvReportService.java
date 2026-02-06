@@ -181,6 +181,8 @@ public class CsvReportService {
                     .build();
             reportDto.setOrganisationId(csvTemplateRequest.getOrganisationId());
             ReportResponseDto reportResponseDto = reportingService.create(reportDto);
+            // Removing all lines for this report to prevent re-processing
+            reportLines.removeAll(sameReportLines);
             if(reportResponseDto.getError().isPresent()) {
                 Problem problem = reportResponseDto.getError().get();
                 // Adding the line number to the error detail for better traceability
