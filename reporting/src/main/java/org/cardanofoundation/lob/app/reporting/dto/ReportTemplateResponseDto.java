@@ -42,6 +42,9 @@ public class ReportTemplateResponseDto {
     @Schema(description = "Whether the template is active", example = "true")
     private Boolean active;
 
+    @Schema(description = "Whether the template is editable", example = "false")
+    private Boolean editable;
+
     @Schema(description = "Number of reports generated from this template", example = "42")
     private int reportCount;
 

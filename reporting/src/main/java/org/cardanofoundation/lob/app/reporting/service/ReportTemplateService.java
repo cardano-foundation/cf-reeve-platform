@@ -275,19 +275,6 @@ public class ReportTemplateService {
                     .build());
         }
 
-        // Check if a template with the same name already exists for this organisation
-        Optional<ReportTemplateEntity> templateEntityWithSameName =
-                reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
-        if (templateEntityWithSameName.isPresent()) {
-            return Either.left(Problem.builder()
-                    .withTitle("Template Already Exists")
-                    .withDetail("A template with name '" + dto.getName() + "' already exists for this organisation.")
-                    .withStatus(Status.CONFLICT)
-                    .build());
-        }
-
-
-
         ReportTemplateEntity existing = existingTemplateOpt.get();
         ReportTemplateEntity templateToSave;
 
@@ -321,6 +308,12 @@ public class ReportTemplateService {
         }
 
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
+        // Setting "old" version to inactive after save
+        if(saved.getVer() > existing.getVer()) {
+            existing.setActive(false);
+            existing.setEditable(false);
+            reportTemplateRepository.save(existing);
+        }
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
