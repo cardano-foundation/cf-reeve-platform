@@ -12,10 +12,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +35,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
@@ -42,6 +50,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 
 @ExtendWith(MockitoExtension.class)
@@ -178,6 +187,56 @@ class AccountingCorePresentationViewServiceTest {
         verifyNoMoreInteractions(transactionItemRepository);
         verifyNoMoreInteractions(organisationPublicApiIF);
 
+    }
+
+    @Test
+    void downloadCsvTransaction_emptyData() {
+
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+
+        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, Pageable.unpaged())).thenReturn(List.of());
+        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, outputStream);
+
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+        String[] lines = csv.split("\n");
+
+        assertEquals(1, lines.length); // Only header line should be present
+        assertEquals("Transaction Number,Transaction Date,Transaction Type,Fx Rate,AmountLCY Debit,AmountLCY Credit,AmountFCY Debit,AmountFCY Credit,Debit Code,Debit Name,Credit Code,Credit Name,Project Code,Document Name,Currency,VAT Rate,VAT Code,Cost Center Code,Counterparty Code,Counterparty Name,Extractor Type,Ledger Dispatch Status,Blockchain Hash", lines[0]);
+    }
+
+    @Test
+    void downloadCsvTransaction_success() {
+
+        TransactionEntity transactionEntity = mock(TransactionEntity.class);
+        TransactionItemEntity itemEntity = mock(TransactionItemEntity.class);
+        when(transactionEntity.getInternalTransactionNumber()).thenReturn("TXN123");
+        when(transactionEntity.getEntryDate()).thenReturn(LocalDate.of(2026, 1,1));
+        when(transactionEntity.getExtractorType()).thenReturn("ERP");
+        when(transactionEntity.getLedgerDispatchStatus()).thenReturn(LedgerDispatchStatus.FINALIZED);
+        when(transactionEntity.getLedgerDispatchReceipt()).thenReturn(Optional.empty());
+        when(transactionEntity.getItems()).thenReturn(Set.of(itemEntity));
+        when(itemEntity.getFxRate()).thenReturn(BigDecimal.ONE);
+        when(itemEntity.getOperationType()).thenReturn(OperationType.CREDIT);
+        when(itemEntity.getAmountLcy()).thenReturn(BigDecimal.valueOf(100));
+        when(itemEntity.getAmountFcy()).thenReturn(BigDecimal.valueOf(100));
+        when(itemEntity.getAccountDebit()).thenReturn(Optional.empty());
+        when(itemEntity.getAccountCredit()).thenReturn(Optional.empty());
+        when(itemEntity.getProject()).thenReturn(Optional.empty());
+        when(itemEntity.getDocument()).thenReturn(Optional.empty());
+
+        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, Pageable.unpaged())).thenReturn(List.of(transactionEntity));
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, outputStream);
+
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+        String[] lines = csv.split("\n");
+
+        assertEquals(2, lines.length); // Only header line should be present
+        assertEquals("Transaction Number,Transaction Date,Transaction Type,Fx Rate,AmountLCY Debit,AmountLCY Credit,AmountFCY Debit,AmountFCY Credit,Debit Code,Debit Name,Credit Code,Credit Name,Project Code,Document Name,Currency,VAT Rate,VAT Code,Cost Center Code,Counterparty Code,Counterparty Name,Extractor Type,Ledger Dispatch Status,Blockchain Hash", lines[0]);
+        assertEquals("TXN123,2026-01-01,1,,100,,100,,,,,,,,0,,,,ERP,FINALIZED,", lines[1]);
     }
 
 }
