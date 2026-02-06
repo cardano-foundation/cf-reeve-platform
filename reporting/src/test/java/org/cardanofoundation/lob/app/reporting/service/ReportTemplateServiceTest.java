@@ -665,7 +665,10 @@ class ReportTemplateServiceTest {
         // Then
         assertTrue(result.isRight());
         assertEquals(2L, newVersion.getVer());
+        assertFalse(existing.isActive());
         verify(reportTemplateRepository).save(newVersion);
+        verify(reportTemplateRepository).save(existing);
+
     }
 
     @Test

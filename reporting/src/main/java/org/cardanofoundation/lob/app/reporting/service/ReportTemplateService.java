@@ -321,6 +321,11 @@ public class ReportTemplateService {
         }
 
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
+        // Setting "old" version to inactive after save
+        if(saved.getVer() > existing.getVer()) {
+            existing.setActive(false);
+            reportTemplateRepository.save(existing);
+        }
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
