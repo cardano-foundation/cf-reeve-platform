@@ -639,9 +639,11 @@ class ReportTemplateServiceTest {
         // Given
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
+        existing.setName("name");
         existing.setVer(1L);
 
         ReportEntity report = new ReportEntity();
+        existing.setName("name");
         report.setId("abc");
 
         ReportTemplateEntity newVersion = new ReportTemplateEntity();
@@ -680,6 +682,26 @@ class ReportTemplateServiceTest {
         // Then
         assertTrue(result.isLeft());
         assertEquals("Template Not Found", result.getLeft().getTitle());
+        verify(reportTemplateRepository, never()).save(any());
+    }
+
+    @Test
+    void update_TemplateNotFound_sameNameExists() {
+        ReportTemplateEntity mock = mock(ReportTemplateEntity.class);
+        // Given
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
+                .thenReturn(Optional.of(mock));
+        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
+                .thenReturn(Optional.of(mock));
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        // When
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("Template Already Exists", result.getLeft().getTitle());
         verify(reportTemplateRepository, never()).save(any());
     }
 
