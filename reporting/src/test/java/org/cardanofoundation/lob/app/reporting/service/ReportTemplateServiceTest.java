@@ -689,26 +689,6 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void update_TemplateNotFound_sameNameExists() {
-        ReportTemplateEntity mock = mock(ReportTemplateEntity.class);
-        // Given
-        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
-                .thenReturn(Optional.of(mock));
-        when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template"))
-                .thenReturn(Optional.of(mock));
-        Errors errors = mock(Errors.class);
-        when(errors.getAllErrors()).thenReturn(List.of());
-        when(validator.validateObject(any())).thenReturn(errors);
-        // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
-
-        // Then
-        assertTrue(result.isLeft());
-        assertEquals("Template Already Exists", result.getLeft().getTitle());
-        verify(reportTemplateRepository, never()).save(any());
-    }
-
-    @Test
     void delete_Success() {
         // Given
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));

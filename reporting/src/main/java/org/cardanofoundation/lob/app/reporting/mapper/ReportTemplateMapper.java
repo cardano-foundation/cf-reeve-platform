@@ -103,6 +103,7 @@ public class ReportTemplateMapper {
             .reportTemplateType(entity.getReportTemplateType())
             .ver(entity.getVer())
             .active(entity.isActive())
+            .editable(entity.isEditable())
             .fields(topLevelColumns)
             .validationRules(validationRules)
             .reportCount(entity.getReportCount())

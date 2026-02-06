@@ -54,6 +54,9 @@ public class ReportTemplateEntity extends CommonEntity {
     @Builder.Default
     private boolean active = true;
 
+    @Builder.Default
+    private boolean editable = true;
+
     @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
     @SQLRestriction("parent_field_id IS NULL")
     @Builder.Default
