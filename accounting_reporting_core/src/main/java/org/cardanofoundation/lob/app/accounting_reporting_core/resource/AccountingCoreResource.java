@@ -20,9 +20,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,6 +45,7 @@ import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
@@ -83,6 +86,32 @@ public class AccountingCoreResource {
         List<TransactionView> transactions = accountingCorePresentationService.allTransactions(body);
         return ResponseEntity.ok().body(transactions);
     }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @Operation(description = "Download transactions as a CSV file with possible filtering", summary = "Download transactions as a CSV file")
+    @GetMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<StreamingResponseBody> downloadTransactionsCsv(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                         @RequestParam(name = "status", required = false) List<TxValidationStatus> txStatusList,
+                                                                         @RequestParam(name = "transactionType", required = false) List<TransactionType> transactionTypes) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(UNAUTHORIZED.getStatusCode()).body(outputStream -> {
+                ObjectNode response = objectMapper.createObjectNode();
+                response.put("title", "NO_ACCESS_TO_ORG");
+                response.put("detail", "The user doesn't have access to this org");
+                response.put("status", UNAUTHORIZED.getStatusCode());
+                outputStream.write(objectMapper.writeValueAsBytes(response));
+            });
+        }
+        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"transactions_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
+    }
+
+
+
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "List all Document Numbers in transactions", responses = {
