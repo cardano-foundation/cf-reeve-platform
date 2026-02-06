@@ -20,7 +20,7 @@ public class FlexibleDateParser {
             DateTimeFormatter.ofPattern("dd.MM.yyyy")
     );
 
-    public static LocalDate parse(String input) {
+    public static LocalDate parse(String input) throws IllegalArgumentException {
         if (input == null || input.isEmpty()) {
             throw new IllegalArgumentException("Input date string cannot be null or empty");
         }

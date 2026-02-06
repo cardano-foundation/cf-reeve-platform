@@ -818,8 +818,9 @@ public class AccountingCorePresentationViewService {
 
     }
 
-    public void downloadCsvTransactions(@Valid String orgId, List<TxValidationStatus> txStatusList, List<TransactionType> transactionTypes, OutputStream outputStream) {
-        List<TransactionEntity> allFilteredTxEntities = accountingCoreTransactionRepository.findAllByStatus(orgId, txStatusList, transactionTypes, Pageable.unpaged());
+    public void downloadCsvTransactions(@Valid String orgId, List<TxValidationStatus> txStatusList, List<TransactionType> transactionTypes, LocalDate dateFrom, LocalDate dateTo, OutputStream outputStream) {
+        List<TransactionEntity> allFilteredTxEntities = accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange(orgId, txStatusList, transactionTypes,
+                dateFrom, dateTo,Pageable.unpaged());
         try (Writer writer = new OutputStreamWriter(outputStream)) {
             CSVWriter csvWriter = new CSVWriter(writer);
             String[] header = {"Transaction Number",

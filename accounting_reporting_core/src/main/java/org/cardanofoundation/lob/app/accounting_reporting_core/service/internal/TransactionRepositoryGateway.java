@@ -229,7 +229,7 @@ public class TransactionRepositoryGateway {
                                                    List<TxValidationStatus> validationStatuses,
                                                    List<TransactionType> transactionType, PageRequest pageRequest) {
         // TODO add Pagerequest once the frontend is ready
-        return accountingCoreTransactionRepository.findAllByStatus(organisationId, validationStatuses, transactionType, pageRequest);
+        return accountingCoreTransactionRepository.findAllByStatusAndType(organisationId, validationStatuses, transactionType, pageRequest);
     }
 
     public List<TransactionEntity> listAll() {

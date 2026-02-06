@@ -2,10 +2,12 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
+import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
 import static org.zalando.problem.Status.UNAUTHORIZED;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,6 +60,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -93,7 +96,9 @@ public class AccountingCoreResource {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<StreamingResponseBody> downloadTransactionsCsv(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                          @RequestParam(name = "status", required = false) List<TxValidationStatus> txStatusList,
-                                                                         @RequestParam(name = "transactionType", required = false) List<TransactionType> transactionTypes) {
+                                                                         @RequestParam(name = "transactionType", required = false) List<TransactionType> transactionTypes,
+                                                                         @RequestParam(name = "dateFrom", required = false) String dateFrom,
+                                                                         @RequestParam(name = "dateTo", required = false) String dateTo){
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return ResponseEntity.status(UNAUTHORIZED.getStatusCode()).body(outputStream -> {
                 ObjectNode response = objectMapper.createObjectNode();
@@ -103,15 +108,32 @@ public class AccountingCoreResource {
                 outputStream.write(objectMapper.writeValueAsBytes(response));
             });
         }
-        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, outputStream);
+        LocalDate dateFromD = null;
+        LocalDate dateToD = null;
+        try {
+            if(dateFrom != null) {
+                dateFromD = FlexibleDateParser.parse(dateFrom);
+            }
+            if(dateTo != null) {
+                dateToD = FlexibleDateParser.parse(dateTo);
+            }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(BAD_REQUEST.getStatusCode()).body(outputStream -> {
+                ObjectNode response = objectMapper.createObjectNode();
+                response.put("title", "INVALID_DATE_FORMAT");
+                response.put("detail", "One or both of the provided dates are in an invalid format. Please use one of the following formats: dd/MM/yyyy, MM-dd-yyyy, yyyy-MM-dd, dd.MM.yyyy");
+                response.put("status", BAD_REQUEST.getStatusCode());
+                outputStream.write(objectMapper.writeValueAsBytes(response));
+            });
+        }
+        LocalDate finalDateFromD = dateFromD;
+        LocalDate finalDateToD = dateToD;
+        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, finalDateFromD, finalDateToD, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"transactions_%s.csv\"".formatted(orgId))
                 .contentType(MediaType.TEXT_PLAIN)
                 .body(responseBody);
     }
-
-
-
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "List all Document Numbers in transactions", responses = {

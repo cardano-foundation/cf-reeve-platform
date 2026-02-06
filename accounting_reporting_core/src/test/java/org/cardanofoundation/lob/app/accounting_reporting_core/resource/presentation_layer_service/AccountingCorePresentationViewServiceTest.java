@@ -196,8 +196,8 @@ class AccountingCorePresentationViewServiceTest {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
 
-        when(accountingCoreTransactionRepository.findAllByStatus("org123", List.of(), List.of(), Pageable.unpaged())).thenReturn(List.of());
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), outputStream);
+        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, Pageable.unpaged())).thenReturn(List.of());
+        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -226,10 +226,10 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByStatus("org123", List.of(), List.of(), Pageable.unpaged())).thenReturn(List.of(transactionEntity));
+        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, Pageable.unpaged())).thenReturn(List.of(transactionEntity));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
