@@ -17,6 +17,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -397,5 +399,38 @@ public class ReportingController {
         }
 
         return ResponseEntity.ok(result.get());
+    }
+
+    @Operation(summary = "Download report as CSV", description = "Downloads the report data as a CSV file. Only available for published reports.")
+    @GetMapping(value = "/download", produces = "text/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<StreamingResponseBody> downloadReports(@RequestParam(value = "organisationId", required = true)
+                                                                    @Parameter(
+                                                                            description = "Filter by organisation ID",
+                                                                            example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
+                                                                    ) String organisationId,
+                                                                @RequestParam(value = "year", required = false) List<Short> years,
+                                                                @RequestParam(value = "intervalType", required = false) List<IntervalType> intervalTypes,
+                                                                @RequestParam(value = "period", required = false) List<Short> periods,
+                                                                @RequestParam(value = "ledgerStatus", required = false) LedgerDispatchStatus ledgerStatus,
+                                                                @RequestParam(value = "reportType", required = false) List<ReportTemplateType> reportTypes,
+                                                                @RequestParam(value = "templateId", required = false) List<String> reportTemplateIds,
+                                                                @RequestParam(value = "txHash", required = false) String txHash,
+                                                                @RequestParam(value = "isReadyToPublish", required = false) Boolean isReadyToPublish,
+                                                                @RequestParam(value = "ledgerDispatchApproved", required = false) Boolean ledgerDispatchApproved) {
+        log.debug("GET /api/reports/{}/download - organisationId: {}", organisationId);
+
+        // Check organisation access
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(null);
+        }
+
+        StreamingResponseBody result = outputstream -> csvReportService.downloadReportAsCsv(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, outputstream);
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=reports_" + organisationId + ".csv")
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(result);
     }
 }
