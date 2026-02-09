@@ -34,7 +34,7 @@ public class IncomeStatementConverter implements ResponseConverter {
     private List<ReportFieldDto> convertFields(List<ReportFieldDto> fields) {
         for (int i = 0; i < fields.size(); i++) {
             ReportFieldDto field = fields.get(i);
-            if(i > 0) {
+            if(i > 0 && !field.getChildFields().isEmpty()) {
                 field.setValue(fields.get(i-1).getValue().add(field.getValue()));
             }
             // Recursively convert child fields
