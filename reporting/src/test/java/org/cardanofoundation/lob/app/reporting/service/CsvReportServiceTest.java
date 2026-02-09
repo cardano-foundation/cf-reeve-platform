@@ -6,9 +6,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -29,9 +36,14 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportCsvLine;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
+import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 @ExtendWith(MockitoExtension.class)
 class CsvReportServiceTest {
@@ -47,7 +59,8 @@ class CsvReportServiceTest {
     private ReportingService reportingService;
     @Mock
     private ReportTemplateRepository reportTemplateRepository;
-
+    @Mock
+    private ReportingRepository reportingRepository;
     @InjectMocks
     private CsvReportService service;
 
@@ -289,5 +302,55 @@ class CsvReportServiceTest {
         ReportResponseDto first = reportResponseDtos.getFirst();
         assertTrue(first.getError().isPresent());
         assertEquals("MULTIPLE_LINES_FOR_SYSTEM_REPORT", first.getError().get().getTitle());
+    }
+
+    @Test
+    void downloadReportsAsCsv_emptyList() {
+        when(reportingRepository.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(Page.empty());
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        service.downloadReportAsCsv("org123", null, null, null, null, null, null, null, null, null, outputStream);
+
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+        String[] lines = csv.split("\n");
+
+        assertEquals(1, lines.length); // Only header line should be present
+        assertEquals("Template name,Name,Interval type,Period,Year,Data mode,Field name,Amount", lines[0]);
+    }
+
+    @Test
+    void downloadReportsAsCsv_withData() {
+        ReportEntity reportEntity = mock(ReportEntity.class);
+        ReportFieldEntity field1 = mock(ReportFieldEntity.class);
+        ReportFieldEntity field2 = mock(ReportFieldEntity.class);
+
+        when(field1.getChildFields()).thenReturn(List.of(field2));
+        when(field2.getChildFields()).thenReturn(List.of());
+        when(reportEntity.getReportTemplate()).thenReturn(mock(ReportTemplateEntity.class));
+        when(reportEntity.getReportTemplate().getName()).thenReturn("Template1");
+        when(reportEntity.getName()).thenReturn("Report1");
+        when(reportEntity.getIntervalType()).thenReturn(IntervalType.MONTH);
+        when(reportEntity.getPeriod()).thenReturn((short) 2024);
+        when(reportEntity.getYear()).thenReturn((short) 1);
+        when(reportEntity.getDataMode()).thenReturn(DataMode.USER);
+        when(field1.getFieldTemplate()).thenReturn(mock(ReportTemplateFieldEntity.class));
+        when(field1.getFieldTemplate().getName()).thenReturn("Field1");
+        when(field2.getFieldTemplate()).thenReturn(mock(ReportTemplateFieldEntity.class));
+        when(field2.getFieldTemplate().getName()).thenReturn("Field2");
+        when(field2.getValue()).thenReturn(BigDecimal.valueOf(5));
+
+
+        when(reportEntity.getFields()).thenReturn(List.of(field1));
+        when(reportingRepository.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(reportEntity), PageRequest.of(0,1), 1));
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        service.downloadReportAsCsv("org123", null, null, null, null, null, null, null, null, null, outputStream);
+
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+        String[] lines = csv.split("\n");
+
+        assertEquals(2, lines.length); // Header + 1 data line
+        assertEquals("Template name,Name,Interval type,Period,Year,Data mode,Field name,Amount", lines[0]);
+        assertEquals("Template1,Report1,MONTH,2024,1,USER,Field1.Field2,5", lines[1]);
     }
 }
