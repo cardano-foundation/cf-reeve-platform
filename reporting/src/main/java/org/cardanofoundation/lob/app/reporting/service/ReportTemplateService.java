@@ -278,6 +278,11 @@ public class ReportTemplateService {
         ReportTemplateEntity existing = existingTemplateOpt.get();
         ReportTemplateEntity templateToSave;
 
+        Either<Problem, Void> prohibitedFieldChanged = checkIfProhibitedFieldChanged(existing, dto);
+        if(prohibitedFieldChanged.isLeft()) {
+            return Either.left(prohibitedFieldChanged.getLeft());
+        }
+
         // Check if there are any reports using this template
         List<ReportEntity> existingReports =
                 reportingRepository.findByReportTemplateId(existing.getId());
@@ -315,6 +320,31 @@ public class ReportTemplateService {
             reportTemplateRepository.save(existing);
         }
         return Either.right(reportTemplateMapper.toResponseDto(saved));
+    }
+
+    private Either<Problem, Void> checkIfProhibitedFieldChanged(ReportTemplateEntity existing, ReportTemplateDto dto) {
+        if(!existing.getName().equals(dto.getName())) {
+            return Either.left(Problem.builder()
+                    .withTitle("NAME_CHANGE_NOT_ALLOWED")
+                    .withDetail("Changing the name of a report template is not allowed. Please create a new template if you want a different name.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        if(!existing.getDataMode().name().equals(dto.getDataMode())) {
+            return Either.left(Problem.builder()
+                    .withTitle("DATA_MODE_CHANGE_NOT_ALLOWED")
+                    .withDetail("Changing the data mode of a report template is not allowed. Please create a new template if you want a different data mode.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        if(!existing.getReportTemplateType().name().equals(dto.getReportTemplateType())) {
+            return Either.left(Problem.builder()
+                    .withTitle("REPORT_TEMPLATE_TYPE_CHANGE_NOT_ALLOWED")
+                    .withDetail("Changing the report template type of a report template is not allowed. Please create a new template if you want a different report template type.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        return Either.right(null);
     }
 
     @Transactional(readOnly = true)

@@ -613,6 +613,9 @@ class ReportTemplateServiceTest {
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
         existing.setVer(1L);
+        existing.setName(templateDto.getName());
+        existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
@@ -639,14 +642,18 @@ class ReportTemplateServiceTest {
         // Given
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
-        existing.setName("name");
         existing.setVer(1L);
+        existing.setName(templateDto.getName());
+        existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
 
         ReportEntity report = new ReportEntity();
-        existing.setName("name");
         report.setId("abc");
 
         ReportTemplateEntity newVersion = new ReportTemplateEntity();
+        newVersion.setName(templateDto.getName());
+        newVersion.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
+        newVersion.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
@@ -668,6 +675,39 @@ class ReportTemplateServiceTest {
         assertFalse(existing.isActive());
         verify(reportTemplateRepository).save(newVersion);
         verify(reportTemplateRepository).save(existing);
+
+    }
+
+    @Test
+    void update_CreateNewVersionParameterChangeNotAllowed() {
+        // Given
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setName("name");
+        existing.setReportTemplateType(ReportTemplateType.CUSTOM);
+        existing.setDataMode(DataMode.SYSTEM);
+
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
+                .thenReturn(Optional.of(existing));
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        // When
+        templateDto.setName("name1");
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+        assertTrue(result.isLeft());
+        assertEquals("NAME_CHANGE_NOT_ALLOWED", result.getLeft().getTitle());
+
+        templateDto.setName("name");
+        templateDto.setDataMode("USER");
+        result = reportTemplateService.update(templateDto);
+        assertTrue(result.isLeft());
+        assertEquals("DATA_MODE_CHANGE_NOT_ALLOWED", result.getLeft().getTitle());
+
+        templateDto.setDataMode("SYSTEM");
+        templateDto.setReportTemplateType("BALANCE_SHEET");
+        result = reportTemplateService.update(templateDto);
+        assertTrue(result.isLeft());
+        assertEquals("REPORT_TEMPLATE_TYPE_CHANGE_NOT_ALLOWED", result.getLeft().getTitle());
 
     }
 
