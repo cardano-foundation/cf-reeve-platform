@@ -35,8 +35,10 @@ class IncomeStatementConverterTest {
     @Test
     void convertResponse_aggregateValues() {
         ReportFieldDto child1 = new ReportFieldDto(3L, "Child 1", BigDecimal.TEN, List.of());
-        ReportFieldDto field1 = new ReportFieldDto(1L, "Field 1", BigDecimal.ONE, List.of(child1));
-        ReportFieldDto field2 = new ReportFieldDto(2L, "Field 2", BigDecimal.ONE, List.of());
+        ReportFieldDto field1 = new ReportFieldDto(1L, "Field 2", BigDecimal.ONE, List.of(child1));
+        ReportFieldDto field3 = new ReportFieldDto(3L, "Field 3", BigDecimal.ONE, List.of());
+        ReportFieldDto field4 = new ReportFieldDto(4L, "Field 4", BigDecimal.ONE, List.of());
+        ReportFieldDto field2 = new ReportFieldDto(2L, "Field 5", BigDecimal.TWO, List.of(field3, field4));
 
         ReportResponseDto response = mock(ReportResponseDto.class);
         when(response.getError()).thenReturn(Optional.empty());
@@ -48,7 +50,7 @@ class IncomeStatementConverterTest {
         List<ReportFieldDto> resultFields = result.getFields();
         assertEquals(2, resultFields.size());
         assertEquals(BigDecimal.ONE, resultFields.getFirst().getValue());
-        assertEquals(BigDecimal.valueOf(2), resultFields.get(1).getValue());
+        assertEquals(BigDecimal.valueOf(3), resultFields.get(1).getValue());
         List<ReportFieldDto> childFields = resultFields.getFirst().getChildFields();
         assertEquals(1, childFields.size());
         assertEquals(BigDecimal.TEN, childFields.getFirst().getValue());
