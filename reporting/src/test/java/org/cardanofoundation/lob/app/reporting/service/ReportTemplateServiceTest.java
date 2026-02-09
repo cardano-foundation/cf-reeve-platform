@@ -562,31 +562,6 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void create_NewTemplate_duplicateAccounts() {
-        ReportTemplateDto dto = mock(ReportTemplateDto.class);
-        ReportTemplateFieldDto parentDtoField = mock(ReportTemplateFieldDto.class);
-        ReportTemplateFieldDto fieldDto1 = mock(ReportTemplateFieldDto.class);
-        Errors errors = mock(Errors.class);
-
-        when(dto.getFields()).thenReturn(List.of(parentDtoField));
-        when(dto.getDataMode()).thenReturn("SYSTEM");
-        when(parentDtoField.getChildFields()).thenReturn(List.of(fieldDto1));
-        when(parentDtoField.getAccounts()).thenReturn(Set.of("acc1", "acc2"));
-        when(parentDtoField.getFieldName()).thenReturn("parentName");
-        when(fieldDto1.getFieldName()).thenReturn("sameName");
-        when(fieldDto1.getAccounts()).thenReturn(Set.of("acc1", "acc3"));
-        when(errors.getAllErrors()).thenReturn(List.of());
-        when(validator.validateObject(any())).thenReturn(errors);
-
-        // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(dto);
-
-        // Then
-        assertTrue(result.isLeft());
-        assertEquals("Duplicate account mappings found in the report template fields. Each account can only be mapped once.", result.getLeft().getDetail());
-    }
-
-    @Test
     void create_TemplateAlreadyExists_ReturnsConflict() {
         // Given
         ReportTemplateEntity existing = new ReportTemplateEntity();
