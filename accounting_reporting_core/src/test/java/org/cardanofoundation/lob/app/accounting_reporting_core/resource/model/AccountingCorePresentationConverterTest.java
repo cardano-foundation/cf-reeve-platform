@@ -17,7 +17,9 @@ import java.util.*;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -289,6 +291,124 @@ class AccountingCorePresentationConverterTest {
         assertEquals(List.of("somestring"), result.get().getFilteringParameters().getTransactionNumbers());
         assertEquals("txItemId", resultTx1.getItems().stream().findFirst().get().getId());
         assertEquals("txItemId", resultTx1.getViolations().stream().findFirst().get().getTransactionItemId().get());
+    }
+
+    @Test
+    void testBatchDetail_convertPageableReturnsError() {
+        Problem problem = Problem.builder()
+                .withStatus(Status.BAD_REQUEST)
+                .withTitle("Invalid Sort Property")
+                .withDetail("Invalid sort: invalidField")
+                .build();
+
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
+                .thenReturn(Either.left(problem));
+
+        Pageable pageable = PageRequest.of(0, 10, Sort.by("invalidField"));
+        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("batch-id", null, pageable, new BatchFilterRequest());
+
+        assertTrue(resultE.isLeft());
+        assertEquals("Invalid sort: invalidField", resultE.getLeft().getDetail());
+    }
+
+    @Test
+    void testBatchDetail_batchNotFound() {
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
+                .thenReturn(Either.right(Pageable.unpaged()));
+        when(transactionBatchRepositoryGateway.findById("nonexistent-batch")).thenReturn(Optional.empty());
+
+        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("nonexistent-batch", null, Pageable.unpaged(), new BatchFilterRequest());
+
+        assertTrue(resultE.isRight());
+        assertTrue(resultE.get().isEmpty());
+    }
+
+    @Test
+    void testBatchDetail_withSortedPageable() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build();
+
+        Pageable sortedPageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "transactionType"));
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
+                .thenReturn(Either.right(sortedPageable));
+
+        String batchId = "batch-sorted";
+        TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
+        transactionBatchEntity.setId(batchId);
+        transactionBatchEntity.setCreatedAt(LocalDateTime.now());
+        transactionBatchEntity.setUpdatedAt(LocalDateTime.now());
+        transactionBatchEntity.setFilteringParameters(new FilteringParameters("pros", List.of(TransactionType.CardCharge), LocalDate.now(), LocalDate.now(), LocalDate.now(), LocalDate.now(), Collections.singletonList("somestring")));
+        transactionBatchEntity.setBatchStatistics(BatchStatistics.builder().total(2).readyToApproveTransactions(2).build());
+        transactionBatchEntity.setStatus(TransactionBatchStatus.CREATED);
+        transactionBatchEntity.setExtractorType("NETSUITE");
+
+        TransactionEntity transaction1 = new TransactionEntity();
+        transaction1.setOrganisation(organisation);
+        transaction1.setId("tx-sorted-1");
+        transaction1.setTransactionType(TransactionType.CardCharge);
+        transaction1.setExtractorType("NETSUITE");
+        transaction1.setBatchId(batchId);
+
+        TransactionEntity transaction2 = new TransactionEntity();
+        transaction2.setOrganisation(organisation);
+        transaction2.setId("tx-sorted-2");
+        transaction2.setTransactionType(TransactionType.VendorBill);
+        transaction2.setExtractorType("NETSUITE");
+        transaction2.setBatchId(batchId);
+
+        Set<TransactionEntity> txSet = new LinkedHashSet<>();
+        txSet.add(transaction1);
+        txSet.add(transaction2);
+        transactionBatchEntity.setTransactions(txSet);
+
+        when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(transaction1, transaction2), sortedPageable, 2));
+
+        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, sortedPageable, new BatchFilterRequest());
+
+        assertTrue(resultE.isRight());
+        assertTrue(resultE.get().isPresent());
+        BatchView batchView = resultE.get().get();
+        assertEquals(batchId, batchView.getId());
+        assertEquals(2, batchView.getTransactions().size());
+    }
+
+    @Test
+    void testBatchDetail_withFilteredStatus() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder().id("123").build();
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
+                .thenReturn(Either.right(Pageable.unpaged()));
+
+        String batchId = "batch-filtered";
+        TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
+        transactionBatchEntity.setId(batchId);
+        transactionBatchEntity.setCreatedAt(LocalDateTime.now());
+        transactionBatchEntity.setUpdatedAt(LocalDateTime.now());
+        transactionBatchEntity.setFilteringParameters(new FilteringParameters("pros", List.of(TransactionType.CardCharge), LocalDate.now(), LocalDate.now(), LocalDate.now(), LocalDate.now(), Collections.singletonList("somestring")));
+        transactionBatchEntity.setBatchStatistics(BatchStatistics.builder().total(1).readyToApproveTransactions(1).build());
+        transactionBatchEntity.setStatus(TransactionBatchStatus.CREATED);
+        transactionBatchEntity.setExtractorType("NETSUITE");
+
+        TransactionEntity transaction1 = new TransactionEntity();
+        transaction1.setOrganisation(organisation);
+        transaction1.setId("tx-filtered-1");
+        transaction1.setTransactionType(TransactionType.CardCharge);
+        transaction1.setExtractorType("NETSUITE");
+        transaction1.setBatchId(batchId);
+        transaction1.setProcessingStatus(TransactionProcessingStatus.PUBLISH);
+
+        transactionBatchEntity.setTransactions(Set.of(transaction1));
+
+        List<TransactionProcessingStatus> txStatus = List.of(TransactionProcessingStatus.PUBLISH);
+        when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(transaction1)));
+
+        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, txStatus, Pageable.unpaged(), new BatchFilterRequest());
+
+        assertTrue(resultE.isRight());
+        assertTrue(resultE.get().isPresent());
+        assertEquals(1, resultE.get().get().getTransactions().size());
     }
 
     @Test

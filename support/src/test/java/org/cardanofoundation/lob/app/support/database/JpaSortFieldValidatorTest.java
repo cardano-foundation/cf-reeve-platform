@@ -116,6 +116,88 @@ class JpaSortFieldValidatorTest {
         assertNull(notAvailable);
     }
 
+    @Test
+    void convertPageable_enumDescDirection() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "status"));
+
+        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        Sort.Order orderFor = converted.getSort().getOrderFor("function('enum_to_text', status)");
+        assertTrue(orderFor.isDescending());
+    }
+
+    @Test
+    void convertPageable_unsortedPageable() {
+        PageRequest pageable = PageRequest.of(0, 10);
+
+        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        assertTrue(converted.getSort().isUnsorted());
+    }
+
+    @Test
+    void convertPageable_mixedEnumAndNonEnumSort() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by(
+                        Sort.Order.asc("status"),
+                        Sort.Order.desc("name")
+                ));
+
+        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        Sort.Order enumOrder = converted.getSort().getOrderFor("function('enum_to_text', status)");
+        assertTrue(enumOrder.isAscending());
+        Sort.Order nameOrder = converted.getSort().getOrderFor("name");
+        assertTrue(nameOrder.isDescending());
+    }
+
+    @Test
+    void convertPageable_enumWithFieldMapping() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by("mappedStatus"));
+
+        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of("mappedStatus", "status"), TestRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        Sort.Order orderFor = converted.getSort().getOrderFor("function('enum_to_text', status)");
+        assertTrue(orderFor.isAscending());
+        assertNull(converted.getSort().getOrderFor("mappedStatus"));
+    }
+
+    @Test
+    void convertPageable_nonEnumPreservesDirection() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "name"));
+
+        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        Sort.Order nameOrder = converted.getSort().getOrderFor("name");
+        assertTrue(nameOrder.isDescending());
+    }
+
+    @Test
+    void convertPageable_preservesPageInfo() {
+        PageRequest pageable = PageRequest.of(3, 25,
+                Sort.by("name"));
+
+        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        assertEquals(3, converted.getPageNumber());
+        assertEquals(25, converted.getPageSize());
+    }
+
 }
 
 // ---------- Test JPA Entities ----------
