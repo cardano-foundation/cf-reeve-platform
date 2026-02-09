@@ -70,11 +70,6 @@ public class ReportTemplateService {
             return Either.left(duplicateValidation.getLeft());
         }
 
-        Either<Problem, Void> duplicateAccountMappings = validateNoDuplicateAccountMappings(dto.getFields());
-        if (duplicateAccountMappings.isLeft()) {
-            return Either.left(duplicateAccountMappings.getLeft());
-        }
-
         Either<Problem, Void> forbiddenCharacters = validateForbiddenCharacters(dto.getFields());
         if (forbiddenCharacters.isLeft()) {
             return Either.left(forbiddenCharacters.getLeft());
@@ -93,20 +88,6 @@ public class ReportTemplateService {
         }
 
         return Either.right(null);
-    }
-
-    private Either<Problem, Void> validateNoDuplicateAccountMappings(List<ReportTemplateFieldDto> fields) {
-        Set<String> seenAccountMappings = new HashSet<>();
-        boolean hasDuplicates = fields.stream().anyMatch(f -> hasDuplicate(f, seenAccountMappings));
-        if (hasDuplicates) {
-            return Either.left(Problem.builder()
-                    .withTitle("DUPLICATE_ACCOUNT_MAPPINGS")
-                    .withDetail("Duplicate account mappings found in the report template fields. Each account can only be mapped once.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
-        } else {
-            return Either.right(null);
-        }
     }
 
     private boolean hasDuplicate(ReportTemplateFieldDto field, Set<String> seenAccountMappings) {
