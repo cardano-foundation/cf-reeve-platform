@@ -12,21 +12,12 @@ import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconciliationStatisticProjection;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
 
 public interface ReconcilationRepository extends JpaRepository<ReconcilationEntity, String> {
-
-    interface ReconciliationStatisticProjection {
-        Integer getYear();
-
-        Integer getMonth();
-
-        Long getReconciledCount();
-
-        Long getUnreconciledCount();
-    }
 
     @Query("""
             SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto(tr, rv)

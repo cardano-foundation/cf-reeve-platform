@@ -35,9 +35,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconciliationStatisticProjection;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
@@ -244,8 +245,8 @@ class AccountingCorePresentationViewServiceTest {
 
     // --- getReconciliationStatisticByDateRange tests ---
 
-    private ReconcilationRepository.ReconciliationStatisticProjection createProjection(int year, int month, long reconciled, long unreconciled) {
-        ReconcilationRepository.ReconciliationStatisticProjection projection = mock(ReconcilationRepository.ReconciliationStatisticProjection.class);
+    private ReconciliationStatisticProjection createProjection(int year, int month, long reconciled, long unreconciled) {
+        ReconciliationStatisticProjection projection = mock(ReconciliationStatisticProjection.class);
         when(projection.getYear()).thenReturn(year);
         when(projection.getMonth()).thenReturn(month);
         when(projection.getReconciledCount()).thenReturn(reconciled);
