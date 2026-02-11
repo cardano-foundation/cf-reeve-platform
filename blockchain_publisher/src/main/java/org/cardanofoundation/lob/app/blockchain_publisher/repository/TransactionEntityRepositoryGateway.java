@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -45,6 +46,10 @@ public class TransactionEntityRepositoryGateway {
 
     public Optional<TransactionEntity> findById(String txId) {
         return transactionEntityRepository.findById(txId);
+    }
+
+    public List<TransactionEntity> findAllById(Set<String> txIds) {
+        return transactionEntityRepository.findAllById(txIds);
     }
 
     public Set<TransactionEntity> findTransactionsReadyToBeDispatched(String organisationId, int pullTransactionsBatchSize) {

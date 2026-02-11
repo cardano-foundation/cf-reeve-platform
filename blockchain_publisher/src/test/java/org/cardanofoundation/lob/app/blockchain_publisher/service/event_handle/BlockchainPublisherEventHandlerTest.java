@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublisherService;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 
@@ -31,6 +32,16 @@ class BlockchainPublisherEventHandlerTest {
         blockchainPublisherEventHandler.handleReportPublishingEvent(event);
 
         verify(blockchainPublisherService, times(1)).storeReportsForDispatchLater(event);
+        verifyNoMoreInteractions(blockchainPublisherService);
+    }
+
+    @Test
+    void handleTransactionStatusRequestEvent() {
+        TransactionStatusRequestEvent event = mock(TransactionStatusRequestEvent.class);
+
+        blockchainPublisherEventHandler.handleTransactionStatusRequestEvent(event);
+
+        verify(blockchainPublisherService, times(1)).handleTxStatusRequest(event);
         verifyNoMoreInteractions(blockchainPublisherService);
     }
 }
