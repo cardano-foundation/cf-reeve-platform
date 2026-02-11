@@ -10,6 +10,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -31,7 +32,9 @@ import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReconciliationStatisticDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
@@ -593,7 +596,7 @@ public class AccountingCorePresentationViewService {
                 (Integer) ((Long) result[4]).intValue(),
                 (Long) result[5],
                 (Integer) ((Long) result[6]).intValue(),
-                 (Long) result[7],
+                (Long) result[7],
                 (Integer) (((Long) result[5]).intValue()
                         + ((Long) result[6]).intValue())
                         + ((Integer) ((Long) result[7]).intValue()));
@@ -695,7 +698,7 @@ public class AccountingCorePresentationViewService {
 
     private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(
             TransactionWithViolationDto violations) {
-        // All of the needed data is within the Transaction. The violation is just a
+        // All the needed data is within the Transaction. The violation is just a
         // fallback, if the transaction doesn't exist in Reeve
         if (Optional.ofNullable(violations.tx()).isPresent()) {
             return getTransactionReconciliationView(violations.tx());
@@ -704,6 +707,111 @@ public class AccountingCorePresentationViewService {
             return getTransactionReconciliationViolationView(violations.violation());
         }
         return getTransactionReconciliationViolationView();
+    }
+
+    public Map<String, ReconciliationStatisticView> getReconciliationStatisticByDateRange(ReconciliationStatisticRequest request) {
+        List<ReconciliationStatisticDto> rows = reconcilationRepository.findReconciliationStatisticByDateRange(
+                        request.getOrganisationId(),
+                        request.getDateFrom(),
+                        request.getDateTo())
+                .stream()
+                .map(p -> new ReconciliationStatisticDto(
+                        p.getYear(),
+                        p.getMonth(),
+                        p.getReconciledCount(),
+                        p.getUnreconciledCount()))
+                .toList();
+
+        IntervalType aggregate = request.getAggregate();
+        if (aggregate == null) {
+            return aggregateTotal(rows);
+        }
+
+        boolean multiYear = spansMultipleYears(rows);
+
+        return switch (aggregate) {
+            case MONTH -> aggregateByMonth(rows, multiYear);
+            case QUARTER -> aggregateByQuarter(rows, multiYear);
+            case YEAR -> aggregateByYear(rows);
+        };
+    }
+
+    private boolean spansMultipleYears(List<ReconciliationStatisticDto> rows) {
+        if (rows.isEmpty()) {
+            return false;
+        }
+        int firstYear = rows.getFirst().year();
+        int lastYear = rows.getLast().year();
+        return firstYear != lastYear;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateTotal(List<ReconciliationStatisticDto> rows) {
+        long totalReconciled = 0;
+        long totalUnreconciled = 0;
+        for (ReconciliationStatisticDto row : rows) {
+            totalReconciled += row.reconciledCount();
+            totalUnreconciled += row.unreconciledCount();
+        }
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        result.put("STATISTICS", new ReconciliationStatisticView(totalReconciled, totalUnreconciled));
+        return result;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateByMonth(List<ReconciliationStatisticDto> rows, boolean multiYear) {
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        for (ReconciliationStatisticDto row : rows) {
+            int year = row.year();
+            int month = row.month();
+            long reconciled = row.reconciledCount();
+            long unreconciled = row.unreconciledCount();
+
+            String key = Month.of(month).name();
+            if (multiYear) {
+                key = key + "_" + year;
+            }
+            result.put(key, new ReconciliationStatisticView(reconciled, unreconciled));
+        }
+        return result;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateByQuarter(List<ReconciliationStatisticDto> rows, boolean multiYear) {
+        Map<String, long[]> quarterMap = new LinkedHashMap<>();
+        for (ReconciliationStatisticDto row : rows) {
+            int year = row.year();
+            int month = row.month();
+            int quarter = (month - 1) / 3 + 1;
+
+            String key = "Q" + quarter;
+            if (multiYear) {
+                key = key + "_" + year;
+            }
+            long[] counts = quarterMap.computeIfAbsent(key, k -> new long[2]);
+            counts[0] += row.reconciledCount();
+            counts[1] += row.unreconciledCount();
+        }
+
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        for (Map.Entry<String, long[]> entry : quarterMap.entrySet()) {
+            result.put(entry.getKey(), new ReconciliationStatisticView(entry.getValue()[0], entry.getValue()[1]));
+        }
+        return result;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateByYear(List<ReconciliationStatisticDto> rows) {
+        Map<String, long[]> yearMap = new LinkedHashMap<>();
+        for (ReconciliationStatisticDto row : rows) {
+            int year = row.year();
+            String key = String.valueOf(year);
+            long[] counts = yearMap.computeIfAbsent(key, k -> new long[2]);
+            counts[0] += row.reconciledCount();
+            counts[1] += row.unreconciledCount();
+        }
+
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        for (Map.Entry<String, long[]> entry : yearMap.entrySet()) {
+            result.put(entry.getKey(), new ReconciliationStatisticView(entry.getValue()[0], entry.getValue()[1]));
+        }
+        return result;
     }
 
     public Map<FilterOptions, List<FilteringOptionsListResponse>> getFilterOptions(
