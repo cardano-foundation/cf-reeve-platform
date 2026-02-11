@@ -5,11 +5,16 @@ import static java.util.stream.Collectors.toSet;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +27,7 @@ import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 
@@ -30,8 +36,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Opera
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReconciliationStatisticDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
@@ -917,5 +924,69 @@ public class AccountingCorePresentationViewService {
         details.setBag(BagParser.parse(details.getBag()));
         return details;
 
+    }
+
+    public void downloadCsvTransactions(@Valid String orgId, List<TxValidationStatus> txStatusList, List<TransactionType> transactionTypes, LocalDate dateFrom, LocalDate dateTo, OutputStream outputStream) {
+        List<TransactionEntity> allFilteredTxEntities = accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange(orgId, txStatusList, transactionTypes,
+                dateFrom, dateTo,Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Transaction Number",
+                    "Transaction Date",
+                    "Transaction Type",
+                    "Fx Rate",
+                    "AmountLCY Debit",
+                    "AmountLCY Credit",
+                    "AmountFCY Debit",
+                    "AmountFCY Credit",
+                    "Debit Code",
+                    "Debit Name",
+                    "Credit Code",
+                    "Credit Name",
+                    "Project Code",
+                    "Document Name",
+                    "Currency",
+                    "VAT Rate",
+                    "VAT Code",
+                    "Cost Center Code",
+                    "Counterparty Code",
+                    "Counterparty Name",
+                    "Extractor Type",
+                    "Ledger Dispatch Status",
+                    "Blockchain Hash"};
+            csvWriter.writeNext(header, false);
+            for (TransactionEntity transactionEntity : allFilteredTxEntities) {
+                for (TransactionItemEntity item : transactionEntity.getItems()) {
+                    boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
+                    String [] data = {
+                        transactionEntity.getInternalTransactionNumber(),
+                        transactionEntity.getEntryDate().toString(),
+                        item.getFxRate().stripTrailingZeros().toPlainString(),
+                        isCredit ? "" : item.getAmountLcy().stripTrailingZeros().toPlainString(),
+                        isCredit ? item.getAmountLcy().stripTrailingZeros().toPlainString() : "",
+                        isCredit ? "" : item.getAmountFcy().stripTrailingZeros().toPlainString(),
+                        isCredit ? item.getAmountFcy().stripTrailingZeros().toPlainString() : "",
+                        item.getAccountDebit().map(Account::getCode).orElse(""),
+                        item.getAccountDebit().flatMap(Account::getName).orElse(""),
+                        item.getAccountCredit().map(Account::getCode).orElse(""),
+                        item.getAccountCredit().flatMap(Account::getName).orElse(""),
+                        item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                        item.getDocument().map(Document::getNum).orElse(""),
+                        item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
+                        item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
+                        item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
+                        item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
+                        item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
+                        transactionEntity.getExtractorType(),
+                        transactionEntity.getLedgerDispatchStatus().name(),
+                        transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
+                    };
+                    csvWriter.writeNext(data, false);
+                }
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing transactions to CSV for orgId {}: {}", orgId, e.getMessage(), e);
+        }
     }
 }

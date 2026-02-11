@@ -17,13 +17,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.apache.commons.lang3.tuple.Pair;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublishStatusMapper;
+import org.cardanofoundation.lob.app.reporting.dto.events.ReportsLedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.reporting.model.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 

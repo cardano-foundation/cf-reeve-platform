@@ -12,7 +12,7 @@ import lombok.Setter;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
 import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter

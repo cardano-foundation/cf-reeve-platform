@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode.SYSTEM;
+import static org.cardanofoundation.lob.app.reporting.model.enums.ReportMode.SYSTEM;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

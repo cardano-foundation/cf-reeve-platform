@@ -1,8 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -16,16 +14,13 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
@@ -69,19 +64,6 @@ public class AccountingCoreEventHandler {
 
         String correlationId = event.getCorrelationId();
         validateIngestionResponseWaiter.complete(correlationId, event);
-    }
-
-    @EventListener
-    @Async
-    public void handleReportsLedgerUpdated(ReportsLedgerUpdatedEvent event) {
-        log.info("Received handleReportsLedgerUpdated, event: {}", event);
-
-        Map<String, ReportStatusUpdate> reportStatusUpdatesMap = event.statusUpdatesMap();
-
-        List<ReportEntity> reportEntities = ledgerService.updateReportsWithNewStatuses(reportStatusUpdatesMap);
-        ledgerService.saveAllReports(reportEntities);
-
-        log.info("Finished processing handleReportsLedgerUpdated, event: {}", event);
     }
 
     @EventListener

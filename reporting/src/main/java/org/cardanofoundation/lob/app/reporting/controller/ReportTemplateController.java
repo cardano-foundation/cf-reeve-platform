@@ -59,7 +59,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "Reports", description = "Manage reports based on templates with column data")
-@ConditionalOnProperty(value = "lob.reporting_v2.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(value = "lob.reporting.enabled", havingValue = "true", matchIfMissing = true)
 public class ReportTemplateController {
 
     private final ReportTemplateService reportTemplateService;

@@ -12,12 +12,14 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.
 
 public interface ReportEntityRepository extends JpaRepository<ReportEntity, String> {
 
-    @Query("SELECT r FROM blockchain_publisher.report.ReportEntity r WHERE r.organisation.id = :organisationId AND r.l1SubmissionData.publishStatus IN :publishStatuses ORDER BY r.createdAt ASC, r.id ASC")
+    @Query("SELECT r FROM blockchain_publisher.report.ReportEntityV2 r WHERE r.organisationId = :organisationId AND r.l1SubmissionData.publishStatus IN :publishStatuses ORDER BY r.createdAt ASC, r.id ASC")
     Set<ReportEntity> findReportsByStatus(@Param("organisationId") String organisationId,
-                                          @Param("publishStatuses") Set<BlockchainPublishStatus> publishStatuses,
-                                          Limit limit);
+                                          @Param("publishStatuses") Set<BlockchainPublishStatus> publishStatuses, Limit limit);
 
-    @Query("SELECT r FROM blockchain_publisher.report.ReportEntity r WHERE r.organisation.id = :organisationId AND r.l1SubmissionData.publishStatus IN :publishStatuses AND r.l1SubmissionData IS NOT NULL ORDER BY r.createdAt ASC, r.id ASC")
-    Set<ReportEntity> findDispatchedReportsThatAreNotFinalizedYet(@Param("organisationId") String organisationId, @Param("publishStatuses") Set<BlockchainPublishStatus> notFinalisedButVisibleOnChain, Limit limit);
+    @Query("SELECT r FROM blockchain_publisher.report.ReportEntityV2 r WHERE r.organisationId = :organisationId AND r.l1SubmissionData.publishStatus IN :publishStatuses AND r.l1SubmissionData IS NOT NULL ORDER BY r.createdAt ASC, r.id ASC")
+    Set<ReportEntity> findDispatchedReportsThatAreNotFinalizedYet(
+            @Param("organisationId") String organisationId,
+            @Param("publishStatuses") Set<BlockchainPublishStatus> notFinalisedButVisibleOnChain,
+            Limit limit);
 
 }

@@ -23,15 +23,10 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.Report;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.blockchain_publisher.config.JaversConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.config.JpaConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.config.TimeConfig;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepository;
@@ -100,33 +95,6 @@ class BlockchainPublisherServiceDuplicateEventsTest {
 
         List<TransactionEntity> allEntities = transactionEntityRepository.findAll();
         Assertions.assertEquals(1, allEntities.size());
-    }
-
-    @Test
-    void testHandleLedgerUpdateCommandReport_duplicateEvents() {
-        ReportLedgerUpdateCommand command = ReportLedgerUpdateCommand.create(EventMetadata.create("test", "test"), "orgId",
-                Set.of(Report.builder()
-                                .reportId("reportId")
-                                .idReport("reportId")
-                                .organisation(Organisation.builder()
-                                        .id("orgId")
-                                        .name(Optional.of("orgName"))
-                                        .countryCode(Optional.of("CH"))
-                                        .taxIdNumber(Optional.of("taxIDNumber"))
-                                        .currencyId("ISO_4217:CHF")
-                                        .build())
-                                .type(ReportType.BALANCE_SHEET)
-                                .intervalType(IntervalType.MONTH)
-                                .year((short) 2025)
-                                .ver(1)
-                                .date(LocalDate.now())
-                                .build()));
-
-        blockchainPublisherEventHandler.handleLedgerUpdateCommand(command);
-        blockchainPublisherEventHandler.handleLedgerUpdateCommand(command);
-
-        List<ReportEntity> all = reportEntityRepository.findAll();
-        Assertions.assertEquals(1, all.size());
     }
 
 }

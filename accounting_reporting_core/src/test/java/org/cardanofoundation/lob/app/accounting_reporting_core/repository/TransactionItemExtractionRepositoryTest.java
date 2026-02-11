@@ -1,18 +1,14 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Month;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 
 import org.mockito.ArgumentCaptor;
@@ -95,25 +91,5 @@ class TransactionItemExtractionRepositoryTest {
         return input
                 .replaceAll("\\s+", " ") // replaces all kinds of whitespace (tabs, newlines) with single space
                 .trim();
-    }
-
-    @Test
-    void findByItemAccountDate() {
-        jakarta.persistence.Query queryResult = Mockito.mock(Query.class);
-        TransactionItemExtractionRepository transactionItemExtractionRepository = new TransactionItemExtractionRepository(em, transactionItemRepository);
-
-        Mockito.when(em.createQuery(anyString())).thenReturn(queryResult);
-        transactionItemExtractionRepository.findByItemAccountDateAggregated(
-                "OrgId",
-                LocalDate.of(2023, Month.JANUARY, 1),
-                LocalDate.of(2023, Month.JANUARY, 31),
-                Set.of("EventCode2", "EventCode1"),
-                Set.of("Currency2", "Currency1"),
-                Optional.of(BigDecimal.valueOf(100)),
-                Optional.of(BigDecimal.valueOf(1000)),
-                Set.of("TheHast2", "TheHast1"),
-                0, 10
-        );
-        Mockito.verify(em, Mockito.times(1)).createQuery(anyString());
     }
 }
