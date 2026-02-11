@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.present
 
 import static java.math.BigDecimal.ZERO;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
@@ -55,6 +57,9 @@ public class ExtractionItemService {
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
         Optional<CostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(null));
         Optional<Project> project = organisationPublicApi.findProject(item.getTransaction().getOrganisation().getId(), item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(null));
+        BigDecimal amountLcy = Optional.ofNullable(item.getOperationType()).orElse(OperationType.DEBIT).equals(OperationType.DEBIT) ? Optional.ofNullable(item.getAmountLcy()).orElse(ZERO) : Optional.ofNullable(item.getAmountLcy()).orElse(ZERO) .negate();
+        BigDecimal amountFcy = Optional.ofNullable(item.getOperationType()).orElse(OperationType.DEBIT).equals(OperationType.DEBIT) ? Optional.ofNullable(item.getAmountFcy()).orElse(ZERO)  : Optional.ofNullable(item.getAmountFcy()).orElse(ZERO) .negate();
+
         return new ExtractionTransactionItemView(
                 item.getId(),
                 item.getTransaction().getInternalTransactionNumber(),
@@ -69,8 +74,8 @@ public class ExtractionItemService {
                 item.getAccountCredit().map(Account::getCode).orElse(null),
                 item.getAccountCredit().flatMap(Account::getName).orElse(null),
                 item.getAccountCredit().flatMap(Account::getRefCode).orElse(null),
-                item.getTransaction().getTransactionType().equals(TransactionType.FxRevaluation) ? item.getAmountLcy() : item.getAmountFcy(),
-                item.getAmountLcy(),
+                item.getTransaction().getTransactionType().equals(TransactionType.FxRevaluation) ? amountLcy : amountFcy,
+                amountLcy,
                 item.getFxRate(),
                 item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(null),
                 item.getCostCenter().flatMap(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getName).orElse(null),

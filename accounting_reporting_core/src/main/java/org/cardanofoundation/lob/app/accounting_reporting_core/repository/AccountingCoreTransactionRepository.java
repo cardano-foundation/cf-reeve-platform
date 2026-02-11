@@ -62,7 +62,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     Set<TransactionEntity> findAllByBatchId(String batchId);
 
     @Query("""
-        SELECT DISTINCT t FROM accounting_reporting_core.TransactionEntity t
+        SELECT t FROM accounting_reporting_core.TransactionEntity t
         JOIN t.batches b
         WHERE b.id = :batchId
         AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
@@ -171,4 +171,12 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             WHERE t.organisation.id = :organisationId
             """)
         List<String> findAllTransactionNumbers(@Param("organisationId") String organisationId);
+
+        @Query("""
+        SELECT t FROM accounting_reporting_core.TransactionEntity t
+        WHERE t.ledgerDispatchStatus != 'NOT_DISPATCHED'
+        AND t.ledgerDispatchStatus != 'FINALIZED'
+        AND t.updatedAt < :cutoffTime
+        """)
+        List<TransactionEntity> findStuckTransactions(@Param("cutoffTime") LocalDateTime cutoffTime);
 }

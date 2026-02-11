@@ -37,6 +37,8 @@ class TransactionEntityRepositoryGatewayTest {
     @Mock
     private TransactionEntityRepository transactionEntityRepository;
     @Mock
+    private TransactionItemEntityRepository transactionItemEntityRepository;
+    @Mock
     private Clock clock;
 
     @InjectMocks
@@ -161,6 +163,94 @@ class TransactionEntityRepositoryGatewayTest {
         transactionEntityRepositoryGateway.storeTransaction(transactionEntity);
 
         verify(transactionEntityRepository).save(transactionEntity);
+    }
+
+    @Test
+    void updateErrorRollbackTransactions_shouldUpdateErrorTransactionsToRollbacked() {
+        // Create incoming transaction
+        TransactionEntity incomingTx = new TransactionEntity();
+        incomingTx.setId("tx1");
+        incomingTx.setInternalNumber("INT-001");
+        incomingTx.setItems(new HashSet<>());
+
+        // Create existing transaction with ERROR status
+        TransactionEntity existingTx = new TransactionEntity();
+        existingTx.setId("tx1");
+        existingTx.setInternalNumber("INT-001-OLD");
+        existingTx.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
+                .publishStatus(BlockchainPublishStatus.ERROR)
+                .build()));
+        existingTx.setItems(new HashSet<>());
+
+        Set<TransactionEntity> incomingTransactions = Set.of(incomingTx);
+        Set<TransactionEntity> existingTransactions = new HashSet<>();
+        existingTransactions.add(existingTx);
+
+        when(transactionEntityRepository.findByIdsAndPublishStatus(Set.of("tx1"), BlockchainPublishStatus.ERROR))
+                .thenReturn(existingTransactions);
+
+        Set<TransactionEntity> result = transactionEntityRepositoryGateway.updateErrorRollbackTransactions(incomingTransactions);
+
+        assertEquals(1, result.size());
+        TransactionEntity updatedTx = result.iterator().next();
+        assertEquals("INT-001", updatedTx.getInternalNumber());
+        Assertions.assertTrue(updatedTx.getL1SubmissionData().isPresent());
+        Assertions.assertTrue(updatedTx.getL1SubmissionData().get().getPublishStatus().isPresent());
+        assertEquals(BlockchainPublishStatus.ROLLBACKED, updatedTx.getL1SubmissionData().get().getPublishStatus().get());
+
+        verify(transactionEntityRepository).findByIdsAndPublishStatus(Set.of("tx1"), BlockchainPublishStatus.ERROR);
+        verify(transactionEntityRepository).saveAll(existingTransactions);
+    }
+
+    @Test
+    void updateErrorRollbackTransactions_shouldReturnEmptySetWhenNoErrorTransactionsExist() {
+        TransactionEntity incomingTx = new TransactionEntity();
+        incomingTx.setId("tx1");
+        incomingTx.setInternalNumber("INT-001");
+
+        Set<TransactionEntity> incomingTransactions = Set.of(incomingTx);
+
+        when(transactionEntityRepository.findByIdsAndPublishStatus(Set.of("tx1"), BlockchainPublishStatus.ERROR))
+                .thenReturn(new HashSet<>());
+
+        Set<TransactionEntity> result = transactionEntityRepositoryGateway.updateErrorRollbackTransactions(incomingTransactions);
+
+        assertEquals(0, result.size());
+        verify(transactionEntityRepository).findByIdsAndPublishStatus(Set.of("tx1"), BlockchainPublishStatus.ERROR);
+        verify(transactionEntityRepository).saveAll(new HashSet<>());
+    }
+
+    @Test
+    void storeOnlyNew_shouldStoreOnlyNewTransactionsAndReturnAllWithExisting() {
+        // Create new transaction
+        TransactionEntity newTx = new TransactionEntity();
+        newTx.setId("tx1");
+        newTx.setItems(new HashSet<>());
+
+        // Create existing transaction
+        TransactionEntity existingTx = new TransactionEntity();
+        existingTx.setId("tx2");
+        existingTx.setItems(new HashSet<>());
+
+        Set<TransactionEntity> incomingTransactions = new HashSet<>();
+        incomingTransactions.add(newTx);
+        incomingTransactions.add(existingTx);
+
+        when(transactionEntityRepository.findAllById(Set.of("tx1", "tx2")))
+                .thenReturn(java.util.List.of(existingTx));
+
+        // saveAll is called with the new transactions only (tx1), and should return them as a List
+        when(transactionEntityRepository.saveAll(any()))
+                .thenAnswer(invocation -> {
+                    Iterable<TransactionEntity> arg = invocation.getArgument(0);
+                    return java.util.stream.StreamSupport.stream(arg.spliterator(), false)
+                            .collect(java.util.stream.Collectors.toList());
+                });
+
+        Set<TransactionEntity> result = transactionEntityRepositoryGateway.storeOnlyNew(incomingTransactions);
+
+        assertEquals(2, result.size());
+        verify(transactionEntityRepository).findAllById(Set.of("tx1", "tx2"));
     }
 
 }

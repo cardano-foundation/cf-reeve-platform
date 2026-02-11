@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublisherService;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 
@@ -38,6 +39,13 @@ public class BlockchainPublisherEventHandler {
         log.info("Received ReportPublishEvent: {}", event);
 
         blockchainPublisherService.storeReportsForDispatchLater(event);
+    }
+
+    @EventListener
+    @Async
+    public void handleTransactionStatusRequestEvent(TransactionStatusRequestEvent event) {
+        log.info("Received TransactionStatusRequestEvent: {}", event);
+        blockchainPublisherService.handleTxStatusRequest(event);
     }
 
 }

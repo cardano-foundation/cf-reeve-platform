@@ -50,7 +50,6 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValida
 import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
-import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
@@ -765,8 +764,9 @@ public class ReportingService {
 
     private static LocalDate getEffectiveEndDate(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate) {
         LocalDate effectiveEndDate = endDate;
-        if (field.getDateRange().equals(ReportFieldDateRange.ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END)) {
-            effectiveEndDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
+        switch (field.getDateRange()) {
+            case ACCUMULATED_START_TO_PREVIOUS_YEAR_END -> effectiveEndDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
+            case ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END -> effectiveEndDate = LocalDate.of(startDate.getYear() - 1, 12, 31);
         }
         return effectiveEndDate;
     }
@@ -776,6 +776,7 @@ public class ReportingService {
         LocalDate effectiveStartDate = startDate;
         switch(field.getDateRange()) {
             case ACCUMULATED_START_TO_PERIOD_END -> effectiveStartDate = LocalDate.EPOCH;
+            case ACCUMULATED_START_TO_PREVIOUS_YEAR_END ->  effectiveStartDate = LocalDate.EPOCH;
             case ACCUMULATED_YEAR_TO_PERIOD_END -> effectiveStartDate = LocalDate.of(startDate.getYear(), 1, 1);
             case ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END -> effectiveStartDate = LocalDate.of(startDate.getYear() - 1, 1, 1);
             case ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END -> effectiveStartDate = LocalDate.of(startDate.getYear() - 1, 1, 1);

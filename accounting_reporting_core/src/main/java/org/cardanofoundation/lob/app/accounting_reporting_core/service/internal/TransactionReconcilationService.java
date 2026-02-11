@@ -222,13 +222,14 @@ public class TransactionReconcilationService {
         for (TransactionEntity attachedTx : attachedTxEntities) {
             attachedTx.setLastReconcilation(Optional.empty()); // To avoid cyclical references when a new version exist in the ERP
             TransactionEntity detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
+            detachedTx.setLastReconcilation(Optional.empty()); // Also clear on detached to prevent Javers null ID issues with Hibernate proxies
 
             String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
             String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
             log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",
                     attachedTx.getId(), attachedTx.getInternalTransactionNumber(), attachedTxHash, detachedTxHash);
 
-            ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash)
+            ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash) || attachedTx.getExtractorType().equals(ExtractorType.CSV.name())
                     ? ReconcilationCode.OK : ReconcilationCode.NOK;
 
             if (sourceReconcilationStatus == ReconcilationCode.NOK) {
@@ -344,7 +345,17 @@ public class TransactionReconcilationService {
         log.info("Missing txs in ERP but found in LOB, size: {}", missingTxs.size());
 
         for (TransactionEntity missingTx : missingTxs) {
-            log.error("Transaction missing in ERP but was found in the DB, transactionId: {}", missingTx.getId());
+
+            if (ExtractorType.CSV.name().equals(missingTx.getExtractorType()) || (missingTx.getReconcilation().isPresent() && missingTx.getReconcilation().get().getSource().filter(code -> code == ReconcilationCode.OK).isPresent())) {
+                missingTx.setLastReconcilation(Optional.of(reconcilationEntity));
+                missingTx.setReconcilation(Optional.of(Reconcilation.builder()
+                        .source(ReconcilationCode.OK)
+                        .build())
+                );
+                continue;
+            }
+
+            log.error("Transaction missing in ERP but was found in the DB, transactionId: {} ({})", missingTx.getInternalTransactionNumber(), missingTx.getId());
 
             missingTx.setReconcilation(Optional.of(Reconcilation.builder()
                     .source(ReconcilationCode.NOK)

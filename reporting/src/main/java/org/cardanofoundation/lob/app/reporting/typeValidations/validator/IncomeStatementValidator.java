@@ -46,7 +46,7 @@ public class IncomeStatementValidator implements ReportTypeValidator {
         if (fields.isEmpty()) {
             return true;
         }
-        Optional<ReportTemplateFieldEntity> notAccumulatedYearly = fields.stream().filter(f -> !f.getDateRange().equals(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END)).findAny();
+        Optional<ReportTemplateFieldEntity> notAccumulatedYearly = fields.stream().filter(f -> !f.getDateRange().equals(ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END) && f.getChildFields().isEmpty()).findAny();
         if (notAccumulatedYearly.isPresent()) {
             return false;
         }

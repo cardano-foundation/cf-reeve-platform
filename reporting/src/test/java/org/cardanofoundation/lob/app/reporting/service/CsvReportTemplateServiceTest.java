@@ -180,7 +180,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Invalid date range: InvalidMapping. Options are: PERIOD, ACCUMULATED_START_TO_PERIOD_END, ACCUMULATED_YEAR_TO_PERIOD_END, ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END, ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Invalid date range: InvalidMapping. Options are: PERIOD, ACCUMULATED_START_TO_PERIOD_END, ACCUMULATED_YEAR_TO_PERIOD_END, ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END, ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END, ACCUMULATED_START_TO_PREVIOUS_YEAR_END", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test

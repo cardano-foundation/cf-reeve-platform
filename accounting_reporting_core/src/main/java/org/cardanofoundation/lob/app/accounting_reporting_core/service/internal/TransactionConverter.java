@@ -321,6 +321,7 @@ public class TransactionConverter {
         attached.setLedgerDispatchStatus(detached.getLedgerDispatchStatus());
         attached.setAccountingPeriod(detached.getAccountingPeriod());
         attached.setInternalTransactionNumber(detached.getInternalTransactionNumber());
+        attached.setExtractorType(detached.getExtractorType());
 
         attached.getViolations().clear();
         attached.getViolations().addAll(detached.getViolations());

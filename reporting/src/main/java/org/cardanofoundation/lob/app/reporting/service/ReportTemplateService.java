@@ -70,11 +70,6 @@ public class ReportTemplateService {
             return Either.left(duplicateValidation.getLeft());
         }
 
-        Either<Problem, Void> duplicateAccountMappings = validateNoDuplicateAccountMappings(dto.getFields());
-        if (duplicateAccountMappings.isLeft()) {
-            return Either.left(duplicateAccountMappings.getLeft());
-        }
-
         Either<Problem, Void> forbiddenCharacters = validateForbiddenCharacters(dto.getFields());
         if (forbiddenCharacters.isLeft()) {
             return Either.left(forbiddenCharacters.getLeft());
@@ -93,20 +88,6 @@ public class ReportTemplateService {
         }
 
         return Either.right(null);
-    }
-
-    private Either<Problem, Void> validateNoDuplicateAccountMappings(List<ReportTemplateFieldDto> fields) {
-        Set<String> seenAccountMappings = new HashSet<>();
-        boolean hasDuplicates = fields.stream().anyMatch(f -> hasDuplicate(f, seenAccountMappings));
-        if (hasDuplicates) {
-            return Either.left(Problem.builder()
-                    .withTitle("DUPLICATE_ACCOUNT_MAPPINGS")
-                    .withDetail("Duplicate account mappings found in the report template fields. Each account can only be mapped once.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
-        } else {
-            return Either.right(null);
-        }
     }
 
     private boolean hasDuplicate(ReportTemplateFieldDto field, Set<String> seenAccountMappings) {
@@ -263,7 +244,7 @@ public class ReportTemplateService {
         Either<Problem, Void> validateReport = validateReport(dto);
         if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
 
-        // Check if a template with the same name exists for this organisation
+        // Check if the template to be updated exists
         Optional<ReportTemplateEntity> existingTemplateOpt =
                 reportTemplateRepository.findLatestByOrganisationIdAndId(dto.getOrganisationId(), dto.getId());
 
@@ -277,6 +258,11 @@ public class ReportTemplateService {
 
         ReportTemplateEntity existing = existingTemplateOpt.get();
         ReportTemplateEntity templateToSave;
+
+        Either<Problem, Void> prohibitedFieldChanged = checkIfProhibitedFieldChanged(existing, dto);
+        if(prohibitedFieldChanged.isLeft()) {
+            return Either.left(prohibitedFieldChanged.getLeft());
+        }
 
         // Check if there are any reports using this template
         List<ReportEntity> existingReports =
@@ -308,7 +294,38 @@ public class ReportTemplateService {
         }
 
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
+        // Setting "old" version to inactive after save
+        if(saved.getVer() > existing.getVer()) {
+            existing.setActive(false);
+            existing.setEditable(false);
+            reportTemplateRepository.save(existing);
+        }
         return Either.right(reportTemplateMapper.toResponseDto(saved));
+    }
+
+    private Either<Problem, Void> checkIfProhibitedFieldChanged(ReportTemplateEntity existing, ReportTemplateDto dto) {
+        if(!existing.getName().equals(dto.getName())) {
+            return Either.left(Problem.builder()
+                    .withTitle("NAME_CHANGE_NOT_ALLOWED")
+                    .withDetail("Changing the name of a report template is not allowed. Please create a new template if you want a different name.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        if(!existing.getDataMode().name().equals(dto.getDataMode())) {
+            return Either.left(Problem.builder()
+                    .withTitle("DATA_MODE_CHANGE_NOT_ALLOWED")
+                    .withDetail("Changing the data mode of a report template is not allowed. Please create a new template if you want a different data mode.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        if(!existing.getReportTemplateType().name().equals(dto.getReportTemplateType())) {
+            return Either.left(Problem.builder()
+                    .withTitle("REPORT_TEMPLATE_TYPE_CHANGE_NOT_ALLOWED")
+                    .withDetail("Changing the report template type of a report template is not allowed. Please create a new template if you want a different report template type.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+        return Either.right(null);
     }
 
     @Transactional(readOnly = true)

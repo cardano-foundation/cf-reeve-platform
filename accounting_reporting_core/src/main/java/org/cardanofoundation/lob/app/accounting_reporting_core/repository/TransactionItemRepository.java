@@ -62,6 +62,8 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
     @Query("""
         SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
         JOIN ti.transaction transaction
+        LEFT JOIN FETCH ti.mappedProject mappedProject
+        LEFT JOIN FETCH ti.mappedCostCenter mappedCostCenter
         WHERE ti.status = 'OK'
         AND ti.transaction.ledgerDispatchStatus = 'FINALIZED'
         AND ti.transaction.entryDate >= :dateFrom

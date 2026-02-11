@@ -562,31 +562,6 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void create_NewTemplate_duplicateAccounts() {
-        ReportTemplateDto dto = mock(ReportTemplateDto.class);
-        ReportTemplateFieldDto parentDtoField = mock(ReportTemplateFieldDto.class);
-        ReportTemplateFieldDto fieldDto1 = mock(ReportTemplateFieldDto.class);
-        Errors errors = mock(Errors.class);
-
-        when(dto.getFields()).thenReturn(List.of(parentDtoField));
-        when(dto.getDataMode()).thenReturn("SYSTEM");
-        when(parentDtoField.getChildFields()).thenReturn(List.of(fieldDto1));
-        when(parentDtoField.getAccounts()).thenReturn(Set.of("acc1", "acc2"));
-        when(parentDtoField.getFieldName()).thenReturn("parentName");
-        when(fieldDto1.getFieldName()).thenReturn("sameName");
-        when(fieldDto1.getAccounts()).thenReturn(Set.of("acc1", "acc3"));
-        when(errors.getAllErrors()).thenReturn(List.of());
-        when(validator.validateObject(any())).thenReturn(errors);
-
-        // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(dto);
-
-        // Then
-        assertTrue(result.isLeft());
-        assertEquals("Duplicate account mappings found in the report template fields. Each account can only be mapped once.", result.getLeft().getDetail());
-    }
-
-    @Test
     void create_TemplateAlreadyExists_ReturnsConflict() {
         // Given
         ReportTemplateEntity existing = new ReportTemplateEntity();
@@ -613,6 +588,9 @@ class ReportTemplateServiceTest {
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
         existing.setVer(1L);
+        existing.setName(templateDto.getName());
+        existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
@@ -640,11 +618,17 @@ class ReportTemplateServiceTest {
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
         existing.setVer(1L);
+        existing.setName(templateDto.getName());
+        existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
 
         ReportEntity report = new ReportEntity();
         report.setId("abc");
 
         ReportTemplateEntity newVersion = new ReportTemplateEntity();
+        newVersion.setName(templateDto.getName());
+        newVersion.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
+        newVersion.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
@@ -663,7 +647,43 @@ class ReportTemplateServiceTest {
         // Then
         assertTrue(result.isRight());
         assertEquals(2L, newVersion.getVer());
+        assertFalse(existing.isActive());
         verify(reportTemplateRepository).save(newVersion);
+        verify(reportTemplateRepository).save(existing);
+
+    }
+
+    @Test
+    void update_CreateNewVersionParameterChangeNotAllowed() {
+        // Given
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setName("name");
+        existing.setReportTemplateType(ReportTemplateType.CUSTOM);
+        existing.setDataMode(DataMode.SYSTEM);
+
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
+                .thenReturn(Optional.of(existing));
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        // When
+        templateDto.setName("name1");
+        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+        assertTrue(result.isLeft());
+        assertEquals("NAME_CHANGE_NOT_ALLOWED", result.getLeft().getTitle());
+
+        templateDto.setName("name");
+        templateDto.setDataMode("USER");
+        result = reportTemplateService.update(templateDto);
+        assertTrue(result.isLeft());
+        assertEquals("DATA_MODE_CHANGE_NOT_ALLOWED", result.getLeft().getTitle());
+
+        templateDto.setDataMode("SYSTEM");
+        templateDto.setReportTemplateType("BALANCE_SHEET");
+        result = reportTemplateService.update(templateDto);
+        assertTrue(result.isLeft());
+        assertEquals("REPORT_TEMPLATE_TYPE_CHANGE_NOT_ALLOWED", result.getLeft().getTitle());
+
     }
 
     @Test
