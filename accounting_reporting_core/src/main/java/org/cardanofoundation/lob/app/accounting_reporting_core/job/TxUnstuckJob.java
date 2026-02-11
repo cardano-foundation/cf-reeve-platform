@@ -47,7 +47,7 @@ public class TxUnstuckJob {
             log.debug("No stuck transactions found");
             return;
         }
-        log.info("Found {} stuck transactions, updating their status to PENDING", stuckTransactions.size());
+        log.info("Found {} stuck transactions, requesting an status update from the publisher.", stuckTransactions.size());
         Map<String, List<String>> organisationTransactionIdMap = stuckTransactions.stream()
                 .collect(Collectors.groupingBy(
                         o -> o.getOrganisation().getId(),
