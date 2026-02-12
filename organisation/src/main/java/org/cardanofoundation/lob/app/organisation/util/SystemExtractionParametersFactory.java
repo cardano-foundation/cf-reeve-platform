@@ -6,6 +6,8 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.stereotype.Service;
+
 import io.vavr.control.Either;
 import org.apache.commons.lang3.Range;
 import org.zalando.problem.Problem;
@@ -17,6 +19,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @Slf4j
 @RequiredArgsConstructor
+@Service
 public class SystemExtractionParametersFactory {
 
     private final OrganisationPublicApiIF organisationPublicApi;

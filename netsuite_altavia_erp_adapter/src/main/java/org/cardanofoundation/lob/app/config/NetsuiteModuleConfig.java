@@ -6,6 +6,6 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @ConditionalOnProperty(name = "lob.netsuite.enabled", havingValue = "true", matchIfMissing = false)
-@ComponentScan(basePackages = "org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter")
+@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.organisation", "org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter"})
 public class NetsuiteModuleConfig {
 }
