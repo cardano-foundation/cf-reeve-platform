@@ -4,7 +4,6 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.event
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 
@@ -21,7 +20,6 @@ import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.Constants
 @Slf4j
 @RequiredArgsConstructor
 //@Service  // Service not needed since it will be defined in the config of the implementing application
-@ConditionalOnProperty(value = "lob.netsuite.enabled", havingValue = "true", matchIfMissing = true)
 public class NetSuiteEventHandler {
 
     private final NetSuiteExtractionService netSuiteExtractionService;

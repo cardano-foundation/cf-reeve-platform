@@ -14,7 +14,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatusCode;
@@ -51,8 +50,6 @@ import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true",
-                matchIfMissing = true)
 @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAuditorRole())")
 public class ExtractionController {
 

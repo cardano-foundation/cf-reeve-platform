@@ -7,7 +7,6 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
@@ -34,7 +33,6 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
 public class AccountingCoreEventHandler {
 
     private final ERPIncomingDataProcessor erpIncomingDataProcessor;
