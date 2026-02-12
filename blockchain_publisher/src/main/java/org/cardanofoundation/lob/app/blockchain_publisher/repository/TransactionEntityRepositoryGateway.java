@@ -132,6 +132,7 @@ public class TransactionEntityRepositoryGateway {
 
             // Handle items collection properly
             Set<TransactionItemEntity> items = incomingTx.getItems();
+            transactionItemEntityRepository.deleteAll(existingEntity.getItems());
             items.stream().forEach(item -> item.setTransaction(existingEntity));
             existingEntity.setItems(items);
             transactionItemEntityRepository.saveAll(items);
