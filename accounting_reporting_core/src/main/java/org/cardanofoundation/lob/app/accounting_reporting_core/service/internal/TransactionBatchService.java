@@ -20,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.BatchStatistics;
@@ -35,6 +34,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Transa
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView;
+import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 import org.cardanofoundation.lob.app.support.reactive.DebouncerManager;
 import org.cardanofoundation.lob.app.support.spring_audit.internal.AuditorContext;

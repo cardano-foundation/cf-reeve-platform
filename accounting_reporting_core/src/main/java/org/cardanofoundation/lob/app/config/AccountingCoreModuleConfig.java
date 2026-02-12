@@ -6,6 +6,6 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @ConditionalOnProperty(name = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = false)
-@ComponentScan(basePackages = "org.cardanofoundation.lob.app.accounting_reporting_core")
+@ComponentScan(basePackages = {"org.cardanofoundation.lob.app.accounting_reporting_core", "org.cardanofoundation.lob.app.organisation"})
 public class AccountingCoreModuleConfig {
 }

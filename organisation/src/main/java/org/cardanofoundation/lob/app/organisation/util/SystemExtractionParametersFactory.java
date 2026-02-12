@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
+package org.cardanofoundation.lob.app.organisation.util;
 
 import java.time.LocalDate;
 import java.util.Optional;
@@ -11,9 +11,8 @@ import org.apache.commons.lang3.Range;
 import org.zalando.problem.Problem;
 import org.zalando.problem.ThrowableProblem;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.assistance.AccountingPeriodCalculator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @Slf4j
@@ -23,7 +22,7 @@ public class SystemExtractionParametersFactory {
     private final OrganisationPublicApiIF organisationPublicApi;
     private final AccountingPeriodCalculator accountingPeriodCalculator;
 
-    public Either<Problem, SystemExtractionParameters> createSystemExtractionParameters(String organisationId) {
+    public Either<Problem, org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters> createSystemExtractionParameters(String organisationId) {
         Optional<Organisation> organisationM = organisationPublicApi.findByOrganisationId(organisationId);
 
         if (organisationM.isEmpty()) {

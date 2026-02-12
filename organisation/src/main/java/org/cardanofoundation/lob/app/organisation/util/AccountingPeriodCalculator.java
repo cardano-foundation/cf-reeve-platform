@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.accounting_reporting_core.service.assistance;
+package org.cardanofoundation.lob.app.organisation.util;
 
 import java.time.Clock;
 import java.time.LocalDate;
