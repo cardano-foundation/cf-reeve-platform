@@ -26,6 +26,7 @@ import com.google.common.collect.Sets;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
 
 @Service
 @RequiredArgsConstructor
@@ -130,14 +131,10 @@ public class TransactionEntityRepositoryGateway {
                     .build()));
 
             // Handle items collection properly
-            existingEntity.getItems().clear();
-            if (incomingTx.getItems() != null) {
-                // Set the transaction reference for each item and add to the existing collection
-                incomingTx.getItems().forEach(item -> {
-                    item.setTransaction(existingEntity);
-                    existingEntity.getItems().add(item);
-                });
-            }
+            Set<TransactionItemEntity> items = incomingTx.getItems();
+            items.stream().forEach(item -> item.setTransaction(existingEntity));
+            existingEntity.setItems(items);
+            transactionItemEntityRepository.saveAll(items);
         }
         transactionEntityRepository.saveAll(existingTransactions);
         return existingTransactions;
