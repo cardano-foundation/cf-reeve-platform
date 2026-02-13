@@ -8,7 +8,7 @@ on:
 jobs:
 
   test:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -44,7 +44,7 @@ jobs:
           -Dsonar.pullrequest.base=$SONAR_PR_BASE
   mutation-test-organisation:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
@@ -76,7 +76,7 @@ jobs:
 
   mutation-test-blockchain_publisher:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
@@ -108,7 +108,7 @@ jobs:
 
   mutation-test-blockchain_common:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
@@ -140,7 +140,7 @@ jobs:
 
   mutation-test-accounting_reporting_core:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
