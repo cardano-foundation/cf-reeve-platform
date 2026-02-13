@@ -95,6 +95,7 @@ public class NetSuiteEventHandler {
         log.info("Handled handleScheduledReconciliationEvent.");
     }
 
+    //@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Async
     @EventListener
     public void handleCreatedReconciliationEvent(ReconcilationCreatedEvent reconcilationCreatedEvent) {

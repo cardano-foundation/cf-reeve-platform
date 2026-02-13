@@ -56,7 +56,7 @@ public class TransactionRepositoryGateway {
         List<TransactionEntity> sortedTxs = txs.stream()
                 .sorted(Comparator.comparing(TransactionEntity::getId))
                 .toList();
-        accountingCoreTransactionRepository.saveAll(sortedTxs);
+        accountingCoreTransactionRepository.saveAllAndFlush(sortedTxs);
     }
 
     @Transactional

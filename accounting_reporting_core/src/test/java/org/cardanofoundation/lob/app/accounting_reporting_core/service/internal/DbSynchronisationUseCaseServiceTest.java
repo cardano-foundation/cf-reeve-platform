@@ -810,4 +810,251 @@ class DbSynchronisationUseCaseServiceTest {
         verify(transactionBatchAssocRepository).findById(any());
         verify(transactionBatchAssocRepository).saveAll(any(Set.class));
     }
+
+    // ============== NEW: ERP violation tests (LOB-1332) ==============
+
+    @Test
+    void shouldConsiderTransactionChangedWhenExistingHasErpViolation() {
+        // Given: existing TX in DB with an ERP violation and SAME data as incoming
+        val batchId = "batch-erp-violation";
+        val txId = "3112ec27094335dd858948b3086817d7e290586d235c529be21f03ba5d583503";
+        val orgId = "org1";
+
+        val txItem = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "0"));
+
+        val erpViolation = TransactionViolation.builder()
+                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                .severity(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR)
+                .source(Source.ERP)
+                .processorModule("reconciliation")
+                .txItemId(txId)
+                .build();
+
+        // Existing TX has an ERP violation — even if hashes match, it must be treated as changed
+        val existingTx = TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .internalTransactionNumber("txn-same")
+                .transactionApproved(false)
+                .ledgerDispatchApproved(false)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .violations(new LinkedHashSet<>(Set.of(erpViolation)))
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        // Incoming TX is identical (same hash) — but because of ERP violation, should be processed
+        val incomingTx = TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .internalTransactionNumber("txn-same")
+                .transactionApproved(false)
+                .ledgerDispatchApproved(false)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        when(accountingCoreTransactionRepository.findAllById(any())).thenReturn(List.of(existingTx));
+        when(accountingCoreTransactionRepository.save(any(TransactionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(incomingTx)), 1,
+                new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        // Then: transaction IS saved (because existing has ERP violation → always "changed")
+        verify(accountingCoreTransactionRepository).save(any(TransactionEntity.class));
+    }
+
+    @Test
+    void shouldClearErpViolationsWhenUpdatingExistingTransaction() {
+        // Given: existing TX with an ERP violation, incoming TX has different data
+        val batchId = "batch-clear-erp";
+        val txId = "44f7f0e32ca04ad46b1d6a0a1dbf14a6aac6f5fb96067725de5f0345d3619afe";
+        val orgId = "org1";
+
+        val txItem = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "0"));
+
+        val erpViolation = TransactionViolation.builder()
+                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                .severity(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR)
+                .source(Source.ERP)
+                .processorModule("reconciliation")
+                .txItemId(txId)
+                .build();
+
+        val existingTx = Mockito.spy(TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .internalTransactionNumber("txn-old")
+                .transactionApproved(false)
+                .ledgerDispatchApproved(false)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .violations(new LinkedHashSet<>(Set.of(erpViolation)))
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build());
+
+        val incomingTx = TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 2)) // Different period → hash mismatch
+                .internalTransactionNumber("txn-new")
+                .transactionApproved(false)
+                .ledgerDispatchApproved(false)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        when(accountingCoreTransactionRepository.findAllById(any())).thenReturn(List.of(existingTx));
+        when(accountingCoreTransactionRepository.save(any(TransactionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(incomingTx)), 1,
+                new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        // Then: ERP violations are cleared from the attached entity before re-import
+        verify(existingTx).clearAllViolations(Source.ERP);
+    }
+
+    @Test
+    void shouldNotSaveWhenErpViolatedTxIsDispatchApproved() {
+        // Given: existing TX with an ERP violation AND both approvals set (dispatch-marked)
+        val batchId = "batch-erp-dispatch-approved";
+        val txId = "44f7f0e32ca04ad46b1d6a0a1dbf14a6aac6f5fb96067725de5f0345d3619af0";
+        val orgId = "org1";
+
+        val txItem = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "0"));
+
+        val erpViolation = TransactionViolation.builder()
+                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                .severity(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR)
+                .source(Source.ERP)
+                .processorModule("reconciliation")
+                .txItemId(txId)
+                .build();
+
+        // Existing TX: ERP violation + both approvals → allApprovalsPassedForTransactionDispatch() = true
+        val existingTx = TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .internalTransactionNumber("txn-approved")
+                .transactionApproved(true)
+                .ledgerDispatchApproved(true)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .violations(new LinkedHashSet<>(Set.of(erpViolation)))
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        val incomingTx = TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .internalTransactionNumber("txn-approved")
+                .transactionApproved(false)
+                .ledgerDispatchApproved(false)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        when(accountingCoreTransactionRepository.findAllById(any())).thenReturn(List.of(existingTx));
+
+        // When
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(incomingTx)), 1,
+                new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        // Then: isChanged=true (ERP violation forces re-check) but isDispatchMarked=true → NOT saved
+        verify(accountingCoreTransactionRepository, never()).save(any(TransactionEntity.class));
+    }
+
+    @Test
+    void shouldCallClearErpViolationsEvenWithoutPreviousErpViolations() {
+        // Given: existing TX with NO ERP violations but a hash mismatch (different accountingPeriod)
+        val batchId = "batch-no-erp";
+        val txId = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+        val orgId = "org1";
+
+        val txItem = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "0"));
+
+        val existingTx = Mockito.spy(TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .internalTransactionNumber("txn-old")
+                .transactionApproved(false)
+                .ledgerDispatchApproved(false)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build());
+
+        val incomingTx = TransactionEntity.builder()
+                .id(txId)
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 2)) // Different period → hash mismatch → isChanged
+                .internalTransactionNumber("txn-new")
+                .transactionApproved(false)
+                .ledgerDispatchApproved(false)
+                .ledgerDispatchStatus(NOT_DISPATCHED)
+                .organisation(Organisation.builder()
+                        .id(orgId)
+                        .name("Test Org")
+                        .countryCode("CH")
+                        .currencyId("ISO_4217:CHF")
+                        .build())
+                .build();
+
+        when(accountingCoreTransactionRepository.findAllById(any())).thenReturn(List.of(existingTx));
+        when(accountingCoreTransactionRepository.save(any(TransactionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(incomingTx)), 1,
+                new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        // Then: clearAllViolations(ERP) is always called when updating an existing TX, even without prior ERP violations
+        verify(existingTx).clearAllViolations(Source.ERP);
+        verify(accountingCoreTransactionRepository).save(any(TransactionEntity.class));
+    }
 }

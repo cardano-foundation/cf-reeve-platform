@@ -2,6 +2,8 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -663,6 +665,139 @@ class OnChainIndexerReconcilationServiceTest {
         assertThat(results).hasSize(1);
         assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
         assertThat(results.get("tx-1").mismatchReason()).contains("found in indexer but not in database");
+    }
+
+    // ============== NEW: Caching tests (LOB-1332) ==============
+
+    @Test
+    void reconcileWithIndexer_shouldUseCachedResultForSameDateRange() {
+        // Given - same organisationId + dateRange on two consecutive calls
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of()
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When - two consecutive calls with the same key
+        service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+        service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then - the indexer API should only be called once (second call uses cache)
+        verify(indexerService, times(1)).retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldFetchFreshDataForDifferentDateRange() {
+        // Given - different date ranges on two consecutive calls
+        String organisationId = "test-org";
+        LocalDate dateFromFirst = LocalDate.of(2024, 1, 1);
+        LocalDate dateToFirst = LocalDate.of(2024, 1, 31);
+        LocalDate dateFromSecond = LocalDate.of(2024, 2, 1);
+        LocalDate dateToSecond = LocalDate.of(2024, 2, 29);
+
+        TransactionEntity dbTx1 = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+        TransactionEntity dbTx2 = createDbTransaction("tx-2", "VENDPYMT-002", "VendorPayment", "2024-02-15", "batch-1");
+
+        TransformedTransaction transformedTx1 = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        TransformedTransaction transformedTx2 = TransformedTransaction.builder()
+                .id("tx-2")
+                .internalNumber("VENDPYMT-002")
+                .transactionType("VendorPayment")
+                .entryDate("2024-02-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenAnswer(invocation -> {
+                    TransactionEntity tx = invocation.getArgument(0);
+                    return "tx-1".equals(tx.getId()) ? transformedTx1 : transformedTx2;
+                });
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFromFirst, dateToFirst))
+                .thenReturn(Either.right(List.of(new OnChainTransactionDto(
+                        "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                        "VendorPayment", "2024-01-15", organisationId, List.of()
+                ))));
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFromSecond, dateToSecond))
+                .thenReturn(Either.right(List.of(new OnChainTransactionDto(
+                        "tx-2", "hash-2", "VENDPYMT-002", "2024-02", "batch-1",
+                        "VendorPayment", "2024-02-15", organisationId, List.of()
+                ))));
+
+        // When - two calls with different date ranges
+        Either<Problem, Map<String, IndexerReconcilationResult>> result1 =
+                service.reconcileWithIndexer(organisationId, dateFromFirst, dateToFirst, Set.of(dbTx1));
+        Either<Problem, Map<String, IndexerReconcilationResult>> result2 =
+                service.reconcileWithIndexer(organisationId, dateFromSecond, dateToSecond, Set.of(dbTx2));
+
+        // Then - the indexer API is called twice (once per unique key)
+        verify(indexerService, times(1)).retrieveTransactionsByDateRange(organisationId, dateFromFirst, dateToFirst);
+        verify(indexerService, times(1)).retrieveTransactionsByDateRange(organisationId, dateFromSecond, dateToSecond);
+        assertThat(result1.isRight()).isTrue();
+        assertThat(result2.isRight()).isTrue();
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldUseCachedFailureForSameDateRange() {
+        // Given - first call fails; second call with same key should use cached failure
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 3, 1);
+        LocalDate dateTo = LocalDate.of(2024, 3, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-03-15", "batch-1");
+
+        Problem problem = Problem.builder()
+                .withStatus(Status.SERVICE_UNAVAILABLE)
+                .withDetail("Indexer down")
+                .build();
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.left(problem));
+
+        // When - two consecutive calls with the same key, first call returns error
+        Either<Problem, Map<String, IndexerReconcilationResult>> result1 =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+        Either<Problem, Map<String, IndexerReconcilationResult>> result2 =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then - API called only once; second call uses cached (failed) result
+        verify(indexerService, times(1)).retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
+        assertThat(result1.isLeft()).isTrue();
+        assertThat(result2.isLeft()).isTrue();
+        assertThat(result2.getLeft().getDetail()).isEqualTo("Indexer down");
     }
 
     private TransactionItemEntity createDbTransactionItem(String id, BigDecimal amount, String fxRate, String costCenterCode, String projectCode) {
