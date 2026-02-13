@@ -77,7 +77,8 @@ jobs:
               ;;
             tag)
               VERSION_PUBLISH=${TAG_NAME}
-              GRADLE_TARGETS="$GRADLE_TARGETS jreleaserDeploy"
+              # do not release until we fixed signify java snapshot dependency
+              # GRADLE_TARGETS="$GRADLE_TARGETS jreleaserDeploy"
               ;;
           esac
           ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test 
