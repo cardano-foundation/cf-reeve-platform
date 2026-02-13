@@ -24,11 +24,6 @@ jobs:
       - name: Spotless
         run: |
           ./gradlew spotlessCheck
-      - name: Debug Docker
-        run: |
-          docker version
-          docker info
-          docker pull postgres:15
       - name: Test
         env:
           TESTCONTAINERS_RYUK_DISABLED: true
