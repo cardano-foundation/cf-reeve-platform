@@ -34,11 +34,11 @@ docker-publish:
       END
       RUN echo docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH} && \
         docker tag ${IMAGE_NAME}:latest ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
-      RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
+      RUN if [ "$PUSH" = "true" ]; then docker push --platform linux/amd64 ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}; fi
     END
   END
 
 follower-app:
    ARG EARTHLY_TARGET_NAME
-   FROM DOCKERFILE -f _backend-services/cf-reeve-ledger-follower-app/Dockerfile --target ${EARTHLY_TARGET_NAME} ./_backend-services/cf-reeve-ledger-follower-app
+   FROM DOCKERFILE -f _backend-services/cf-reeve-ledger-follower-app/Dockerfile --platform linux/amd64 --target ${EARTHLY_TARGET_NAME} ./_backend-services/cf-reeve-ledger-follower-app
    SAVE IMAGE ${DOCKER_IMAGE_PREFIX}-${EARTHLY_TARGET_NAME}:latest
