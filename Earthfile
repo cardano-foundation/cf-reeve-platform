@@ -29,9 +29,9 @@ docker-publish:
 follower-app:
    ARG EARTHLY_TARGET_NAME
    ARG EARTHLY_GIT_SHORT_HASH=""
-   ARG DOCKER_REGISTRIES
-   ARG DOCKER_IMAGES_EXTRA_TAGS
-   ARG PUSH
+   ARG DOCKER_REGISTRIES=""
+   ARG DOCKER_IMAGES_EXTRA_TAGS=""
+   ARG PUSH="false"
    
    FROM DOCKERFILE -f _backend-services/cf-reeve-ledger-follower-app/Dockerfile --target ${EARTHLY_TARGET_NAME} ./_backend-services/cf-reeve-ledger-follower-app
    
