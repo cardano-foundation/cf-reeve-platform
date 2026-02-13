@@ -26,6 +26,7 @@ import com.google.common.collect.Sets;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
 
 @Service
 @RequiredArgsConstructor
@@ -129,18 +130,50 @@ public class TransactionEntityRepositoryGateway {
                     .publishStatus(BlockchainPublishStatus.ROLLBACKED)
                     .build()));
 
-            // Handle items collection properly
-            existingEntity.getItems().clear();
+            // Update or add items
             if (incomingTx.getItems() != null) {
-                // Set the transaction reference for each item and add to the existing collection
-                incomingTx.getItems().forEach(item -> {
-                    item.setTransaction(existingEntity);
-                    existingEntity.getItems().add(item);
-                });
+                Set<String> incomingItemIds = incomingTx.getItems().stream()
+                        .map(TransactionItemEntity::getId)
+                        .collect(toSet());
+
+                // Remove items that are not in the incoming set
+                existingEntity.getItems().removeIf(item -> !incomingItemIds.contains(item.getId()));
+
+                // Update existing items or add new ones
+                for (var incomingItem : incomingTx.getItems()) {
+                    TransactionItemEntity existingItem = existingEntity.getItems().stream()
+                            .filter(item -> item.getId().equals(incomingItem.getId()))
+                            .findFirst()
+                            .orElse(null);
+
+                    if (existingItem != null) {
+                        // Update existing item fields
+                        updateItemFields(existingItem, incomingItem);
+                    } else {
+                        // Create new item and add to collection
+                        TransactionItemEntity newItem = new TransactionItemEntity();
+                        newItem.setId(incomingItem.getId());
+                        newItem.setTransaction(existingEntity);
+                        updateItemFields(newItem, incomingItem);
+                        existingEntity.getItems().add(newItem);
+                    }
+                }
+            } else {
+                existingEntity.getItems().clear();
             }
         }
         transactionEntityRepository.saveAll(existingTransactions);
         return existingTransactions;
+    }
+
+    private void updateItemFields(TransactionItemEntity target, TransactionItemEntity source) {
+        target.setAmountFcy(source.getAmountFcy());
+        target.setAmountLcy(source.getAmountLcy());
+        target.setAccountEvent(source.getAccountEvent().orElse(null));
+        target.setFxRate(source.getFxRate());
+        target.setProject(source.getProject().orElse(null));
+        target.setCostCenter(source.getCostCenter().orElse(null));
+        target.setDocument(source.getDocument());
     }
 
     public void storeTransaction(TransactionEntity transactionEntity) {
