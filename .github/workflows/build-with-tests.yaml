@@ -25,6 +25,8 @@ jobs:
         run: |
           ./gradlew spotlessCheck
       - name: Test
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: true
         run: |
           ./gradlew clean test jacocoTestReport
       - name: SonarCloud Scan
