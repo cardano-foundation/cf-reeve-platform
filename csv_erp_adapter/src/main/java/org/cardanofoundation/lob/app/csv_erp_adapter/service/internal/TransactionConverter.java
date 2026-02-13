@@ -105,6 +105,7 @@ public class TransactionConverter {
 
             transactions.add(Transaction.builder()
                     .id(transactionId)
+                    .rollbackSuffix(transactionLines.getFirst().getRollbackSuffix())
                     .internalTransactionNumber(entry.getKey())
                     .batchId(batchId)
                     .organisation(Organisation.builder().id(organisationId).build())

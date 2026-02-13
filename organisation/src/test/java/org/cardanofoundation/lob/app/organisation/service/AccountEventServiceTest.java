@@ -1,12 +1,16 @@
 package org.cardanofoundation.lob.app.organisation.service;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.ACCOUNT_EVENT_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
@@ -332,5 +336,41 @@ class AccountEventServiceTest {
 
         assertTrue(result.getError().isPresent());
         verify(accountEventRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+
+        String orgId = "org123";
+        AccountEvent event1 = mock(AccountEvent.class);
+        when(event1.getId()).thenReturn(new AccountEvent.Id(orgId, "event1", "event1"));
+        when(event1.getName()).thenReturn("event1");
+        when(event1.getActive()).thenReturn(true);
+        AccountEvent event2 = mock(AccountEvent.class);
+        when(event2.getId()).thenReturn(new AccountEvent.Id(orgId, "event2", "event2"));
+        when(event2.getName()).thenReturn("event2");
+        when(event2.getActive()).thenReturn(true);
+
+        Page<AccountEvent> page = new PageImpl<>(List.of(event1, event2));
+
+        when(accountEventRepository.findAllByOrganisationId(
+                any(), any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        accountEventService.downloadCsv(orgId, null, null, null, null, null, outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Debit Reference Code,Credit Reference Code,Name,Active");
+        assertThat(lines[1]).isEqualTo("event1,event1,event1,true");
+        assertThat(lines[2]).isEqualTo("event2,event2,event2,true");
+
     }
 }

@@ -2,6 +2,9 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.COST_CENTER_MAPPINGS;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -9,6 +12,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +21,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -62,8 +67,8 @@ public class CostCenterService {
 
             // check if parent exists
             if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-                Optional<CostCenter> costCenterOptional = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
-                if (costCenterOptional.isEmpty()) {
+                Optional<CostCenter> parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
+                if (parent.isEmpty()) {
                     return CostCenterView.createFail(
                             costCenterUpdate,
                             Problem.builder()
@@ -73,13 +78,23 @@ public class CostCenterService {
                                     .build()
                     );
                 }
-                if (costCenterOptional.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
+                if (parent.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
                     return CostCenterView.createFail(
                             costCenterUpdate,
                             Problem.builder()
                                     .withStatus(Status.BAD_REQUEST)
                                     .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
-                                    .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
+                                    .withDetail("The parent cost center cannot be the same as the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
+                                    .build()
+                    );
+                }
+                if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(costCenterUpdate.getCustomerCode())) {
+                    return CostCenterView.createFail(
+                            costCenterUpdate,
+                            Problem.builder()
+                                    .withStatus(Status.BAD_REQUEST)
+                                    .withTitle("CIRCULAR_REFERENCE")
+                                    .withDetail("The parent cost center cannot have a circular reference with the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
                                     .build()
                     );
                 }
@@ -138,7 +153,17 @@ public class CostCenterService {
                         Problem.builder()
                                 .withStatus(Status.BAD_REQUEST)
                                 .withTitle("PARENT_COST_CENTER_CANNOT_BE_SELF")
-                                .withDetail("The parent cost center cannot be the same as the cost center itself :%s".formatted(costCenterUpdate.getCustomerCode()))
+                                .withDetail("The parent cost center cannot be the same as the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
+                                .build()
+                );
+            }
+            if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(costCenterUpdate.getCustomerCode())) {
+                return CostCenterView.createFail(
+                        costCenterUpdate,
+                        Problem.builder()
+                                .withStatus(Status.BAD_REQUEST)
+                                .withTitle("CIRCULAR_REFERENCE")
+                                .withDetail("The parent cost center cannot have a circular reference with the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()))
                                 .build()
                 );
             }
@@ -167,4 +192,24 @@ public class CostCenterService {
         );
     }
 
+    public void downloadCsv(String orgId, String customerCode, String name, List<String> parentCustomerCodes, Boolean active, OutputStream outputStream) {
+        Page<CostCenter> allCostCenters = costCenterRepository.findAllByOrganisationId(orgId, customerCode, name, parentCustomerCodes, active, Pageable.unpaged());
+        try(Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Customer code", "Name", "Parent customer code", "Active"};
+            csvWriter.writeNext(header, false);
+            for (CostCenter costCenter : allCostCenters) {
+                String[] data = {
+                        costCenter.getId().getCustomerCode(),
+                        costCenter.getName(),
+                        costCenter.getParentCustomerCode(),
+                        String.valueOf(costCenter.isActive())
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing currencies to CSV", e);
+        }
+    }
 }

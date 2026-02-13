@@ -26,7 +26,7 @@ public class VatUpdate {
     @NotNull(message = "Customer Code is required")
     private String customerCode;
 
-    @Schema(example = "0000")
+    @Schema(description = "Only positive values are allowed", example = "0000")
     @CsvBindByName(column = "Rate")
     @NotNull(message = "Rate is required")
     private BigDecimal rate;

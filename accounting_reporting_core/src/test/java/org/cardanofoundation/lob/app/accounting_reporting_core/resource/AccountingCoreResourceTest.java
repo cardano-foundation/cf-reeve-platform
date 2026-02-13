@@ -42,9 +42,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemsProcessRejectView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.utils.SortFieldMappings;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,7 +57,7 @@ class AccountingCoreResourceTest {
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
     @Mock
-    private SortFieldMappings sortFieldMappings;
+    private JpaSortFieldValidator jpaSortFieldValidator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
@@ -65,7 +65,7 @@ class AccountingCoreResourceTest {
 
     @BeforeEach
     void setUp() {
-        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi, keycloakSecurityHelper, sortFieldMappings);
+        accountingCoreResource = new AccountingCoreResource(accountingCorePresentationViewService, objectMapper, organisationPublicApi, keycloakSecurityHelper, jpaSortFieldValidator);
     }
 
     @Test
@@ -159,7 +159,7 @@ class AccountingCoreResourceTest {
         BatchSearchRequest body = mock(BatchSearchRequest.class);
         BatchsDetailView batchsDetailView = mock(BatchsDetailView.class);
         Pageable pageable = Pageable.ofSize(10).withPage(0);
-        when(sortFieldMappings.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));
+        when(jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));
         when(accountingCorePresentationViewService.listAllBatch(body, pageable)).thenReturn(Either.right(batchsDetailView));
 
         ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);

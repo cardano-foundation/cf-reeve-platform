@@ -22,6 +22,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.FilteringParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionConverterTest {
@@ -96,5 +97,53 @@ class TransactionConverterTest {
 
         transactionConverter.copyFields(attached, detached);
         Assertions.assertEquals(TransactionType.BillCredit, attached.getTransactionType());
+    }
+
+    @Test
+    void testCopyFields_shouldCopyExtractorType() {
+        TransactionEntity attached = new TransactionEntity();
+        TransactionEntity detached = new TransactionEntity();
+        detached.setExtractorType("CSV");
+
+        transactionConverter.copyFields(attached, detached);
+        Assertions.assertEquals("CSV", attached.getExtractorType());
+    }
+
+    @Test
+    void testCopyFields_shouldCopyAllFields() {
+        TransactionEntity attached = new TransactionEntity();
+        TransactionEntity detached = new TransactionEntity();
+        detached.setId("tx-123");
+        detached.setBatchId("batch-456");
+        detached.setTransactionType(TransactionType.BillCredit);
+        detached.setExtractorType("NETSUITE");
+        detached.setInternalTransactionNumber("INT-789");
+
+        transactionConverter.copyFields(attached, detached);
+
+        Assertions.assertEquals("tx-123", attached.getId());
+        Assertions.assertEquals("batch-456", attached.getBatchId());
+        Assertions.assertEquals(TransactionType.BillCredit, attached.getTransactionType());
+        Assertions.assertEquals("NETSUITE", attached.getExtractorType());
+        Assertions.assertEquals("INT-789", attached.getInternalTransactionNumber());
+    }
+
+    @Test
+    void testRollbackTransaction() {
+        String originalTxNumber = "TX-123";
+        String rollbackSuffix = "RBK";
+        String expectedTxNumber = originalTxNumber + "-" + rollbackSuffix;
+
+        Transaction transaction = Transaction.builder()
+                .internalTransactionNumber(originalTxNumber)
+                .rollbackSuffix(rollbackSuffix)
+                .build();
+
+        TransactionEntity txEntity = new TransactionEntity();
+
+        transactionConverter.rollbackTransaction(txEntity, transaction);
+
+        Assertions.assertEquals(expectedTxNumber, txEntity.getInternalTransactionNumber());
+        Assertions.assertEquals(TransactionProcessingStatus.ROLLBACK, txEntity.getProcessingStatus().orElse(null));
     }
 }

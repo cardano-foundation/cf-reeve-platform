@@ -72,6 +72,7 @@ public class TransactionRepositoryGateway {
         if (tx.getAutomatedValidationStatus() == FAILED) {
             return transactionFailedResponse(transactionId);
         }
+
         if (tx.hasAnyRejection()) {
             return transactionRejectedResponse(transactionId);
         }

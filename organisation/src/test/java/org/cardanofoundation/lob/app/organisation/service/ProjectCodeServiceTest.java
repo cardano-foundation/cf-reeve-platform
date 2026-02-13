@@ -1,13 +1,17 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.PROJECT_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
@@ -138,6 +142,24 @@ class ProjectCodeServiceTest {
     }
 
     @Test
+    void insertProject_cycle() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        Project parent = mock(Project.class);
+        when(parent.getId()).thenReturn(new Project.Id(organisationId, "parentCode"));
+        when(parent.getParentCustomerCode()).thenReturn(customerCode);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+        when(update.getParentCustomerCode()).thenReturn("parentCode");
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode)))
+                .thenReturn(Optional.empty());
+        when(projectRepository.findById(new Project.Id(organisationId, "parentCode")))
+                .thenReturn(Optional.of(parent));
+
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
+
+        assertEquals("CIRCULAR_REFERENCE", projectView.getError().get().getTitle());
+    }
+
+    @Test
     void insertProject_success() {
         ProjectUpdate update = mock(ProjectUpdate.class);
         Project parent = mock(Project.class);
@@ -152,6 +174,25 @@ class ProjectCodeServiceTest {
         ProjectView projectView = projectCodeService.insertProject(organisationId, update, false);
 
         assertEquals(customerCode, projectView.getCustomerCode());
+        assertEquals(Optional.empty(), projectView.getError());
+        assertEquals("Test Project", projectView.getName());
+        verify(projectRepository).save(any(Project.class));
+    }
+
+    @Test
+    void insertProject_UpsertUnlinkParent() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.empty());
+        when(projectRepository.save(any(Project.class))).thenReturn(project);
+
+        project.setParentCustomerCode("parentCode");
+
+        ProjectView projectView = projectCodeService.insertProject(organisationId, update, true);
+
+        assertEquals(customerCode, projectView.getCustomerCode());
+        assertNull(projectView.getParentCustomerCode());
         assertEquals(Optional.empty(), projectView.getError());
         assertEquals("Test Project", projectView.getName());
         verify(projectRepository).save(any(Project.class));
@@ -201,6 +242,26 @@ class ProjectCodeServiceTest {
     }
 
     @Test
+    void updateProject_unlinkParent() {
+        ProjectUpdate update = mock(ProjectUpdate.class);
+        when(update.getCustomerCode()).thenReturn(customerCode);
+
+        project.setParentCustomerCode("parentCode");
+
+        when(projectRepository.findById(new Project.Id(organisationId, customerCode))).thenReturn(Optional.of(project));
+        when(projectRepository.save(any(Project.class))).thenReturn(project);
+
+        ProjectView projectView = projectCodeService.updateProject(organisationId, update);
+
+        project.setParentCustomerCode(null);
+
+        assertEquals(customerCode, projectView.getCustomerCode());
+        assertEquals(Optional.empty(), projectView.getError());
+        assertNull(projectView.getParentCustomerCode());
+        verify(projectRepository).save(project);
+    }
+
+    @Test
     void createProjectCodeFromCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
 
@@ -229,6 +290,44 @@ class ProjectCodeServiceTest {
         assertEquals(1, result.get().size());
         assertNotNull(result.get().get(0).getError());
         assertEquals("Default Message", result.get().get(0).getError().get().getDetail());
+
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+
+        String orgId = "org123";
+        Project project1 = mock(Project.class);
+        when(project1.getId()).thenReturn(new Project.Id(organisationId, "customercode"));
+        when(project1.getName()).thenReturn("Project1");
+        when(project1.getParentCustomerCode()).thenReturn("Parent1");
+        when(project1.isActive()).thenReturn(true);
+        Project project2 = mock(Project.class);
+        when(project2.getId()).thenReturn(new Project.Id(organisationId, "customercode2"));
+        when(project2.getName()).thenReturn("Project2");
+        when(project2.getParentCustomerCode()).thenReturn(null);
+        when(project2.isActive()).thenReturn(false);
+
+        Page<Project> page = new PageImpl<>(List.of(project1, project2));
+
+        when(projectRepository.findAllByOrganisationId(
+                any(), any(), any(), any(), any())).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        projectCodeService.downloadCsv(orgId, null, null, null, outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Customer code,Name,Parent customer code,Active");
+        assertThat(lines[1]).isEqualTo("customercode,Project1,Parent1,true");
+        assertThat(lines[2]).isEqualTo("customercode2,Project2,,false");
 
     }
 

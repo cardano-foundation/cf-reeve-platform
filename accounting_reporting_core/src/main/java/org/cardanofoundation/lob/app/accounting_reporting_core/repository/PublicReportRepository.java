@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.repository;
 
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.LedgerDispatchStatus.FINALIZED;
+import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.FINALIZED;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -20,6 +20,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rep
 @RequiredArgsConstructor
 @Service
 @Transactional(readOnly = true)
+@Deprecated
 public class PublicReportRepository {
     private final EntityManager em;
 

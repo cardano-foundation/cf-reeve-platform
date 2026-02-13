@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -7,6 +10,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +19,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -89,7 +94,14 @@ public class ReferenceCodeService {
             if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
                 return ReferenceCodeView.createFail(Problem.builder()
                         .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
-                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withDetail("The parent reference code cannot be the same as the reference code itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
+            }
+            if (Optional.ofNullable(parentReferenceCode.get().getParentReferenceCode()).orElse("").equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("CIRCULAR_REFERENCE")
+                        .withDetail("The parent reference code cannot have a cycle with itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), referenceCodeUpdate);
             }
@@ -149,7 +161,14 @@ public class ReferenceCodeService {
             if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
                 return ReferenceCodeView.createFail(Problem.builder()
                         .withTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF")
-                        .withDetail("The parent reference code cannot be the same as the reference code itself :%s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withDetail("The parent reference code cannot be the same as the reference code itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), referenceCodeUpdate);
+            }
+            if (Optional.ofNullable(parentReferenceCode.get().getParentReferenceCode()).orElse("").equals(referenceCodeUpdate.getReferenceCode())) {
+                return ReferenceCodeView.createFail(Problem.builder()
+                        .withTitle("CIRCULAR_REFERENCE")
+                        .withDetail("The parent reference code cannot have a cycle with itself: %s".formatted(referenceCodeUpdate.getReferenceCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), referenceCodeUpdate);
             }
@@ -198,4 +217,24 @@ public class ReferenceCodeService {
         );
     }
 
+    public void downloadCsv(String orgId, String referenceCode, String name, List<String> parentCodes, Boolean active, OutputStream outputStream) {
+        Page<ReferenceCode> allRefCodes = referenceCodeRepository.findAllByOrgId(orgId, referenceCode, name, parentCodes, active, Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Reference Code", "Name", "Parent Reference Code", "Active"};
+            csvWriter.writeNext(header, false);
+            for (ReferenceCode refCode : allRefCodes) {
+                String[] data = {
+                        refCode.getId().getReferenceCode(),
+                        refCode.getName(),
+                        refCode.getParentReferenceCode(),
+                        String.valueOf(refCode.isActive())
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing reference codes to CSV for orgId {}: {}", orgId, e.getMessage());
+        }
+    }
 }

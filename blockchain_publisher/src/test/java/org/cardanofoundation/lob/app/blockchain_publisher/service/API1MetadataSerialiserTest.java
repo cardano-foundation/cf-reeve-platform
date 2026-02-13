@@ -56,6 +56,7 @@ class API1MetadataSerialiserTest {
         TransactionItemEntity item1 = new TransactionItemEntity();
         item1.setId("item1");
         item1.setAmountFcy(new BigDecimal("100.00"));
+        item1.setAmountLcy(new BigDecimal("100.00"));
         item1.setFxRate(new BigDecimal("1.0"));
         item1.setDocument(Document.builder()
                 .num("doc1")
@@ -88,6 +89,7 @@ class API1MetadataSerialiserTest {
         TransactionItemEntity item2 = new TransactionItemEntity();
         item2.setId("item2");
         item2.setAmountFcy(new BigDecimal("200.00"));
+        item2.setAmountLcy(new BigDecimal("200.00"));
         item2.setFxRate(new BigDecimal("1.0"));
         item2.setDocument(Document.builder()
                 .num("doc2")
@@ -99,6 +101,7 @@ class API1MetadataSerialiserTest {
         TransactionItemEntity item3 = new TransactionItemEntity();
         item3.setId("item3");
         item3.setAmountFcy(new BigDecimal("300.00"));
+        item3.setAmountLcy(new BigDecimal("300.00"));
         item3.setFxRate(new BigDecimal("1.0"));
         item3.setDocument(Document.builder()
                 .num("doc3")

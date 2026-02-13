@@ -24,12 +24,15 @@ public class ProjectView {
 
     private String parentCustomerCode;
 
+    private Boolean active;
+
     private Optional<Problem> error;
 
     public static ProjectView fromEntity(Project project) {
         ProjectView.ProjectViewBuilder builder = ProjectView.builder()
                 .customerCode(project.getId() == null ? null : project.getId().getCustomerCode())
                 .name(project.getName())
+                .active(project.isActive())
                 .error(Optional.empty());
         if (project.getParent().isPresent()) {
             builder.parent(ProjectView.fromEntity(project.getParent().get()));
@@ -41,6 +44,7 @@ public class ProjectView {
         return ProjectView.builder()
                 .customerCode(projectUpdate.getCustomerCode())
                 .name(projectUpdate.getName())
+                .active(projectUpdate.getActive())
                 .parentCustomerCode(projectUpdate.getParentCustomerCode())
                 .error(Optional.of(error))
                 .build();

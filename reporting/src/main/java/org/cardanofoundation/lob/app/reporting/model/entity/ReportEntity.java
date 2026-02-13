@@ -1,0 +1,134 @@
+package org.cardanofoundation.lob.app.reporting.model.entity;
+
+import static jakarta.persistence.EnumType.STRING;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.PostPersist;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreRemove;
+import jakarta.persistence.Table;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.PublishError;
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
+import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
+
+@Entity
+@Table(name = "report")
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+@Getter
+@Setter
+@EntityListeners(AuditingEntityListener.class)
+public class ReportEntity extends CommonEntity {
+
+    @Id
+    private String id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "report_template_id", nullable = false)
+    private ReportTemplateEntity reportTemplate;
+
+    @Builder.Default
+    private long ver = 1;
+
+    private String organisationId;
+    private String name;
+    @Enumerated(STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
+    private IntervalType intervalType;
+    private short period;
+    private short year;
+
+    @Enumerated(STRING)
+    private DataMode dataMode;
+
+
+    @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
+    @SQLRestriction("parent_field_id IS NULL")
+    @Builder.Default
+    private List<ReportFieldEntity> fields = new ArrayList<>();
+
+    @Builder.Default
+    private boolean ledgerDispatchApproved = false;
+    @Builder.Default
+    @Enumerated(STRING)
+    private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;
+    private String blockchainType;
+    private String blockchainHash;
+    @Builder.Default
+    private boolean isReadyToPublish = false;
+    @Enumerated(STRING)
+    private PublishError publishError;
+    private String ledgerDispatchStatusErrorReason;
+    private LocalDateTime ledgerDispatchDate;
+    private String publishedBy;
+
+    @ManyToMany
+    @JoinTable(
+        name = "report_failed_validation_rule",
+        joinColumns = @JoinColumn(name = "report_id"),
+        inverseJoinColumns = @JoinColumn(name = "validation_rule_id")
+    )
+    @Builder.Default
+    private List<ReportTemplateValidationRuleEntity> failedValidationRules = new ArrayList<>();
+
+    @PrePersist
+    private void generateId() {
+        if (this.id == null) {
+            String hashInput = String.format("%s:%s:%s:%s:%s:%s:%s",
+                organisationId,
+                reportTemplate != null ? reportTemplate.getId() : "",
+                name,
+                intervalType,
+                period,
+                year,
+                ver
+            );
+            this.id = SHA3.digestAsHex(hashInput);
+        }
+    }
+
+    @PostPersist
+    private void syncParentReportCounter() {
+        if(reportTemplate != null) {
+            reportTemplate.updateReportCount();
+        }
+    }
+
+    @PreRemove
+    private void preRemove() {
+        if(reportTemplate != null) {
+            reportTemplate.setReportCount(reportTemplate.getReportCount() - 1);
+        }
+    }
+}

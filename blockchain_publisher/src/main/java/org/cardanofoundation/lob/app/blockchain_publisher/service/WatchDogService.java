@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.annotation.PostConstruct;
 
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
+import org.apache.commons.lang3.tuple.Pair;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
@@ -24,6 +26,7 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.OnChainTxDetails;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.OnChainStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
@@ -93,7 +96,9 @@ public class WatchDogService {
             log.info("Status updated for report: {}", report.getId());
         });
         // notify accounting core about updated report
-        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(org.getId(), reportEntities);
+        // collect to set of pairs of reportId and l1SubmissionData
+        Set<Pair<String, L1SubmissionData>> reports = reportEntities.stream().filter(r -> r.getL1SubmissionData().isPresent()).map(report -> Pair.of(report.getId(), report.getL1SubmissionData().get())).collect(Collectors.toSet());
+        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(org.getId(), reports);
 
     }
 
@@ -170,5 +175,39 @@ public class WatchDogService {
             log.error("Failed to get chain tip");
             return new RuntimeException("Failed to get chain tip");
         });
+    }
+
+    @Transactional
+    public void checkReportV2StatusForOrganisations(int txStatusInspectionLimitPerOrgPullSize) {
+        organisationPublicApiIF.listAll().forEach(org -> {
+            log.debug("Checking transaction statuses for organisation: {}", org.getName());
+            checkReportV2StatusForOrganisation(org, txStatusInspectionLimitPerOrgPullSize);
+        });
+    }
+
+    private void checkReportV2StatusForOrganisation(Organisation org, int txStatusInspectionLimitPerOrgPullSize) {
+        ChainTip chainTip = getChainTip();
+        if (!chainTip.isSynced()) {
+            log.info("Chain is not synced, skipping transaction status check for organisation: {}", org.getName());
+            return;
+        }
+
+        Set<ReportV2Entity> reportEntities = reportEntityRepositoryGateway.findDispatchedReportsV2ThatAreNotFinalizedYet(org.getId(), Limit.of(txStatusInspectionLimitPerOrgPullSize));
+        if(reportEntities.isEmpty()) {
+            log.debug("No reports found for status update for organisation: {}", org.getName());
+            return;
+        }
+        reportEntities.forEach(report -> {
+            log.info("Checking transaction status for report: {}", report.getId());
+            L1SubmissionData l1SubmissionData = report.getL1SubmissionData().orElseThrow(() -> new RuntimeException("Failed to get L1 submission data"));
+            report.setL1SubmissionData(Optional.of(updateL1SubmissionData(l1SubmissionData, chainTip)));
+
+            reportEntityRepositoryGateway.storeReport(report);
+            log.info("Status updated for report: {}", report.getId());
+        });
+        // notify accounting core about updated report
+        // collect to set of pairs of reportId and l1SubmissionData
+        Set<Pair<String, L1SubmissionData>> reports = reportEntities.stream().filter(r -> r.getL1SubmissionData().isPresent()).map(report -> Pair.of(report.getId(), report.getL1SubmissionData().get())).collect(Collectors.toSet());
+        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(org.getId(), reports);
     }
 }

@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @RequiredArgsConstructor
@@ -69,16 +70,25 @@ public class API3L1TransactionCreator {
 
     public Either<Problem, API3BlockchainTransaction> pullBlockchainTransaction(ReportEntity reportEntity) {
         return blockchainReaderPublicApi.getChainTip()
-                .flatMap(chainTip -> handleTransactionCreation(reportEntity, chainTip.getAbsoluteSlot()));
+                .flatMap(chainTip -> {
+                    MetadataMap metadataMap = api3MetadataSerialiser
+                            .serialiseToMetadataMap(reportEntity, chainTip.getAbsoluteSlot());
+                    return handleTransactionCreation(metadataMap, chainTip.getAbsoluteSlot());
+                });
     }
 
-    private Either<Problem, API3BlockchainTransaction> handleTransactionCreation(ReportEntity reportEntity,
+    public Either<Problem, API3BlockchainTransaction> pullBlockchainTransaction(
+            ReportV2Entity reportEntity) {
+        return blockchainReaderPublicApi.getChainTip().flatMap(chainTip -> {
+            MetadataMap metadataMap = api3MetadataSerialiser.serialiseToMetadataMap(reportEntity,
+                    chainTip.getAbsoluteSlot());
+            return handleTransactionCreation(metadataMap, chainTip.getAbsoluteSlot());
+        });
+    }
+
+    private Either<Problem, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,
                                                                                  long creationSlot) {
         try {
-            MetadataMap metadataMap =
-                    api3MetadataSerialiser.serialiseToMetadataMap(reportEntity, creationSlot);
-
-
             Map data = metadataMap.getMap();
             byte[] bytes = CborSerializationUtil.serialize(data);
 
@@ -115,7 +125,7 @@ public class API3L1TransactionCreator {
 
             potentiallyStoreTxs(creationSlot, serializedTx);
 
-            return Either.right(new API3BlockchainTransaction(reportEntity, creationSlot, serialisedTxBytes, organiserAccount.baseAddress()));
+            return Either.right(new API3BlockchainTransaction(creationSlot, serialisedTxBytes, organiserAccount.baseAddress()));
         } catch (Exception e) {
             log.error("Error serialising metadata to cbor", e);
             return Either.left(Problem.builder()

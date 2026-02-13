@@ -20,6 +20,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rep
 
 @Getter
 @Setter
+@Deprecated
 public class ReportView {
 
     private String organisationId;

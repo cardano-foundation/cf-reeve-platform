@@ -154,7 +154,12 @@ public class NetSuiteReconcilationService {
     ) {
         try {
             log.info("Continue reconcilation..., reconcilationId: {}", reconcilationId);
-
+            log.info("\n\n\nCheat time\n\n");
+            try {
+                Thread.sleep(4000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             Optional<NetSuiteIngestionEntity> netsuiteIngestionM = ingestionRepository.findById(reconcilationId);
             if (netsuiteIngestionM.isEmpty()) {
                 log.error("NetSuite ingestion not found, reconcilationId: {}", reconcilationId);

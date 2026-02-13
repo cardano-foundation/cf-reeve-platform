@@ -19,6 +19,7 @@ import org.hibernate.annotations.JoinFormula;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.hibernate.envers.Audited;
 import org.hibernate.envers.NotAudited;
+import org.javers.core.metamodel.annotation.DiffIgnore;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
@@ -113,6 +114,7 @@ public class TransactionItemEntity extends CommonEntity implements Persistable<S
     @JoinColumnOrFormula(column = @JoinColumn(name = "project_customer_code", referencedColumnName = "customer_code", insertable = false, updatable = false))
     @JoinColumnOrFormula(formula = @JoinFormula(value = "(SELECT t.organisation_id FROM accounting_core_transaction t WHERE t.transaction_id = transaction_id)", referencedColumnName = "organisation_id"))
     @NotAudited
+    @DiffIgnore
     @Nullable
     @Setter
     private org.cardanofoundation.lob.app.organisation.domain.entity.Project mappedProject;
@@ -130,6 +132,7 @@ public class TransactionItemEntity extends CommonEntity implements Persistable<S
     @JoinColumnOrFormula(column = @JoinColumn(name = "cost_center_customer_code", referencedColumnName = "customer_code", insertable = false, updatable = false))
     @JoinColumnOrFormula(formula = @JoinFormula(value = "(SELECT t.organisation_id FROM accounting_core_transaction t WHERE t.transaction_id = transaction_id)", referencedColumnName = "organisation_id"))
     @NotAudited
+    @DiffIgnore
     @Nullable
     @Setter
     private org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter mappedCostCenter;

@@ -10,7 +10,9 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublisherService;
+import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 
 @Service
 @Slf4j
@@ -41,6 +43,21 @@ public class BlockchainPublisherEventHandler {
                 command.getOrganisationId(),
                 command.getReports()
         );
+    }
+
+    @EventListener
+    @Async
+    public void handleReportPublishingEvent(PublishReportEvent event) {
+        log.info("Received ReportPublishEvent: {}", event);
+
+        blockchainPublisherService.storeReportsForDispatchLater(event);
+    }
+
+    @EventListener
+    @Async
+    public void handleTransactionStatusRequestEvent(TransactionStatusRequestEvent event) {
+        log.info("Received TransactionStatusRequestEvent: {}", event);
+        blockchainPublisherService.handleTxStatusRequest(event);
     }
 
 }

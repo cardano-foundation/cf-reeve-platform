@@ -1,20 +1,25 @@
 package org.cardanofoundation.lob.app.organisation.service;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CURRENCY_MAPPINGS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.validation.Errors;
@@ -33,9 +38,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
+import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.repository.CurrencyRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
@@ -51,6 +58,8 @@ class CurrencyServiceTest {
     private Validator validator;
     @Mock
     private JpaSortFieldValidator jpaSortFieldValidator;
+    @Mock
+    private ChartOfAccountRepository chartOfAccountRepository;
 
     @InjectMocks
     private CurrencyService currencyService;
@@ -63,20 +72,20 @@ class CurrencyServiceTest {
     @BeforeEach
     void setUp() {
         currencyId = new Currency.Id(organisationId, customerCode);
-        currency = new Currency(currencyId, "USD");
+        currency = new Currency(currencyId, "USD", true);
 
     }
 
     @Test
     void getAllCurrencies() {
         when(currencyRepository.findAllByOrganisationId("org123", null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(
-                new Currency(new Currency.Id("org123", "USD"), "USD")
+                new Currency(new Currency.Id("org123", "USD"), "USD", true)
         )));
         when(jpaSortFieldValidator.validateEntity(Currency.class, Pageable.unpaged(), CURRENCY_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
         Either<Problem, List<CurrencyView>> currencies = currencyService.getAllCurrencies("org123", null, null, Pageable.unpaged());
         assertTrue(currencies.isRight());
         assertEquals(1, currencies.get().size());
-        assertEquals("USD", currencies.get().getFirst().getCurrencyId());
+        assertEquals("USD", currencies.get().getFirst().getIsoCode());
     }
 
     @Test
@@ -93,10 +102,10 @@ class CurrencyServiceTest {
 
     @Test
     void updateCurrency_success() {
-        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD");
+        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD", true);
         when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
         when(currencyRepository.save(any(Currency.class)))
-                .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123"));
+                .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123", true));
 
         CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
@@ -107,13 +116,55 @@ class CurrencyServiceTest {
         verifyNoMoreInteractions(currencyRepository);
 
         assertNotNull(response);
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
+    }
+
+    @Test
+    void updateCurrency_cannotSetInactive() {
+        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD", true);
+        when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
+
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
+        when(chartOfAccountRepository.findTopByCurrencyIdAndIdOrganisationId(eq("USD"), eq("org123"))).thenReturn(Optional.of(chartOfAccount));
+
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", false);
+
+        CurrencyView response = currencyService.updateCurrency("org123", currencyUpdate);
+
+        verify(currencyRepository).findById(new Currency.Id("org123", "USD"));
+        verifyNoMoreInteractions(currencyRepository);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isPresent());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
+    }
+
+    @Test
+    void updateCurrency_updateInactiveSuccess() {
+        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD", true);
+        when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
+        when(currencyRepository.save(any(Currency.class)))
+                .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123", true));
+        when(chartOfAccountRepository.findTopByCurrencyIdAndIdOrganisationId(eq("USD"), eq("org123"))).thenReturn(Optional.empty());
+
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", false);
+
+        CurrencyView response = currencyService.updateCurrency("org123", currencyUpdate);
+
+        verify(currencyRepository).findById(new Currency.Id("org123", "USD"));
+        verifyNoMoreInteractions(currencyRepository);
+
+        assertNotNull(response);
+        assertFalse(response.getError().isPresent());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
     void insertCurrency_alreadyExists() {
-        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD");
+        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD", true);
         when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
 
         CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
@@ -128,7 +179,7 @@ class CurrencyServiceTest {
     void insertCurrency_success() {
         when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.empty());
         when(currencyRepository.save(any(Currency.class)))
-                .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123"));
+                .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123", true));
 
         CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", true);
 
@@ -139,20 +190,61 @@ class CurrencyServiceTest {
         verifyNoMoreInteractions(currencyRepository);
 
         assertNotNull(response);
-        assertEquals("USD", response.getCustomerCode());
-        assertEquals("USD123", response.getCurrencyId());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
+    }
+
+    @Test
+    void upsertCurrency_success() {
+        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD", true);
+        when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
+        when(currencyRepository.save(any(Currency.class)))
+                .thenReturn(new Currency(new Currency.Id("org123", "USD"), "USD123", true));
+        when(chartOfAccountRepository.findTopByCurrencyIdAndIdOrganisationId(eq("USD"), eq("org123"))).thenReturn(Optional.empty());
+
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", false);
+
+        CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate, true);
+
+        verify(currencyRepository).findById(new Currency.Id("org123", "USD"));
+        verifyNoMoreInteractions(currencyRepository);
+
+        assertNotNull(response);
+        assertFalse(response.getError().isPresent());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
+    }
+
+    @Test
+    void upsertCurrency_cantUpdateInactive() {
+        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD", true);
+        when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
+        when(chartOfAccountRepository.findTopByCurrencyIdAndIdOrganisationId(eq("USD"), eq("org123"))).thenReturn(Optional.of(chartOfAccount));
+
+        CurrencyUpdate currencyUpdate = new CurrencyUpdate("USD", "USD123", false);
+
+        CurrencyView response = currencyService.insertCurrency("org123", currencyUpdate, true);
+
+        verify(currencyRepository).findById(new Currency.Id("org123", "USD"));
+        verifyNoMoreInteractions(currencyRepository);
+
+        assertNotNull(response);
+        assertTrue(response.getError().isPresent());
+        assertEquals("USD", response.getCode());
+        assertEquals("USD123", response.getIsoCode());
     }
 
     @Test
     void getCurrency() {
-        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD");
+        Currency existingCurrency = new Currency(new Currency.Id("org123", "USD"), "USD", true);
         when(currencyRepository.findById(new Currency.Id("org123", "USD"))).thenReturn(Optional.of(existingCurrency));
 
         Optional<CurrencyView> response = currencyService.getCurrency("org123", "USD");
 
         assertNotNull(response);
-        assertEquals("USD", response.get().getCustomerCode());
-        assertEquals("USD", response.get().getCurrencyId());
+        assertEquals("USD", response.get().getCode());
+        assertEquals("USD", response.get().getIsoCode());
     }
 
     @Test
@@ -178,7 +270,7 @@ class CurrencyServiceTest {
 
         when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.right(List.of(currencyUpdate)));
 
-        Currency savedCurrency = new Currency(new Currency.Id("org123", "USD"), "USD123");
+        Currency savedCurrency = new Currency(new Currency.Id("org123", "USD"), "USD123", true);
         when(currencyRepository.save(any(Currency.class))).thenReturn(savedCurrency);
 
         Either<Problem, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
@@ -186,8 +278,8 @@ class CurrencyServiceTest {
         assertNotNull(response);
         assertTrue(response.isRight());
         assertEquals(1, response.get().size());
-        assertEquals("USD", response.get().getFirst().getCustomerCode());
-        assertEquals("USD123", response.get().getFirst().getCurrencyId());
+        assertEquals("USD", response.get().getFirst().getCode());
+        assertEquals("USD123", response.get().getFirst().getIsoCode());
     }
 
     @Test
@@ -245,5 +337,44 @@ class CurrencyServiceTest {
         assertEquals(1, result.size());
         assertTrue(result.contains(currency));
         verify(currencyRepository).findAllByOrganisationId(organisationId);
+    }
+
+    @Test
+    void shouldWriteCurrenciesToCsv() throws Exception {
+        // given
+        String orgId = "org-1";
+        String code = "EUR";
+        List<String> isoCodes = List.of("EUR", "USD");
+
+        Currency eur = new Currency(new Currency.Id(orgId,"EUR"), "EUR", true);
+        Currency usd = new Currency(new Currency.Id(orgId,"USD"), "USD", false);
+
+        Page<Currency> page = new PageImpl<>(List.of(eur, usd));
+
+        when(currencyRepository.findAllByOrganisationId(
+                eq(orgId),
+                eq(code),
+                eq(isoCodes),
+                eq(Pageable.unpaged())
+        )).thenReturn(page);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        // when
+        currencyService.downloadCsv(orgId, code, isoCodes, outputStream);
+
+        // then
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+
+        String[] lines = csv.split("\\R");
+
+        assertThat(lines).hasSize(3);
+        assertThat(lines[0]).isEqualTo("Code,ISO Code,Active");
+        assertThat(lines[1]).isEqualTo("EUR,EUR,true");
+        assertThat(lines[2]).isEqualTo("USD,USD,false");
+
+        verify(currencyRepository).findAllByOrganisationId(
+                orgId, code, isoCodes, Pageable.unpaged()
+        );
     }
 }

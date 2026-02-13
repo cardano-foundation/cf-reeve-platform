@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -23,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.google.common.collect.Sets;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
 
 @Service
 @RequiredArgsConstructor
@@ -39,8 +42,15 @@ public class TransactionEntityRepositoryGateway {
     @Value("${lob.blockchain_publisher.dispatcher.lock_timeout:PT3H}") // Default grace period to 3 hours
     private Duration lockTimeoutDuration;
 
+    @Value("${lob.blockchain-publisher.rollback.enabled:false}")
+    private Optional<Boolean> rollbackEnabled;
+
     public Optional<TransactionEntity> findById(String txId) {
         return transactionEntityRepository.findById(txId);
+    }
+
+    public List<TransactionEntity> findAllById(Set<String> txIds) {
+        return transactionEntityRepository.findAllById(txIds);
     }
 
     public Set<TransactionEntity> findTransactionsReadyToBeDispatched(String organisationId, int pullTransactionsBatchSize) {
@@ -96,6 +106,76 @@ public class TransactionEntityRepositoryGateway {
         return newTxs;
     }
 
+    @Transactional
+    public Set<TransactionEntity> updateErrorRollbackTransactions(Set<TransactionEntity> transactionEntities) {
+        Set<String> txIds = transactionEntities.stream()
+                .map(TransactionEntity::getId)
+                .collect(toSet());
+
+        Set<TransactionEntity> existingTransactions = new HashSet<>(transactionEntityRepository
+                .findByIdsAndPublishStatus(txIds, BlockchainPublishStatus.ERROR));
+
+        log.info("updateErrorRollbackTransactions..., updateErrorRollbackTransactions:{}", transactionEntities.size());
+
+        for (TransactionEntity existingEntity : existingTransactions) {
+            // Find the corresponding incoming transaction
+            TransactionEntity incomingTx = transactionEntities.stream()
+                    .filter(tx -> tx.getId().equals(existingEntity.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Matching transaction not found"));
+
+            // Update the existing entity with new values
+            existingEntity.setInternalNumber(incomingTx.getInternalNumber());
+            existingEntity.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+                    .publishStatus(BlockchainPublishStatus.ROLLBACKED)
+                    .build()));
+
+            // Update or add items
+            if (incomingTx.getItems() != null) {
+                Set<String> incomingItemIds = incomingTx.getItems().stream()
+                        .map(TransactionItemEntity::getId)
+                        .collect(toSet());
+
+                // Remove items that are not in the incoming set
+                existingEntity.getItems().removeIf(item -> !incomingItemIds.contains(item.getId()));
+
+                // Update existing items or add new ones
+                for (var incomingItem : incomingTx.getItems()) {
+                    TransactionItemEntity existingItem = existingEntity.getItems().stream()
+                            .filter(item -> item.getId().equals(incomingItem.getId()))
+                            .findFirst()
+                            .orElse(null);
+
+                    if (existingItem != null) {
+                        // Update existing item fields
+                        updateItemFields(existingItem, incomingItem);
+                    } else {
+                        // Create new item and add to collection
+                        TransactionItemEntity newItem = new TransactionItemEntity();
+                        newItem.setId(incomingItem.getId());
+                        newItem.setTransaction(existingEntity);
+                        updateItemFields(newItem, incomingItem);
+                        existingEntity.getItems().add(newItem);
+                    }
+                }
+            } else {
+                existingEntity.getItems().clear();
+            }
+        }
+        transactionEntityRepository.saveAll(existingTransactions);
+        return existingTransactions;
+    }
+
+    private void updateItemFields(TransactionItemEntity target, TransactionItemEntity source) {
+        target.setAmountFcy(source.getAmountFcy());
+        target.setAmountLcy(source.getAmountLcy());
+        target.setAccountEvent(source.getAccountEvent().orElse(null));
+        target.setFxRate(source.getFxRate());
+        target.setProject(source.getProject().orElse(null));
+        target.setCostCenter(source.getCostCenter().orElse(null));
+        target.setDocument(source.getDocument());
+    }
+
     public void storeTransaction(TransactionEntity transactionEntity) {
         transactionEntityRepository.save(transactionEntity);
     }
@@ -114,5 +194,19 @@ public class TransactionEntityRepositoryGateway {
         transactionsBatch.forEach(transactionEntity ->
                 transactionEntity.setLockedAt(LocalDateTime.now(clock)));
         transactionEntityRepository.saveAll(transactionsBatch);
+    }
+
+    @Transactional
+    public void removePublishedTransactions(String id) {
+        TransactionEntity transaction = transactionEntityRepository.findById(id).orElse(null);
+        if (transaction == null) {
+            return;
+        }
+
+        transaction.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+                .publishStatus(BlockchainPublishStatus.ERROR)
+                .build()));
+        transactionEntityRepository.save(transaction);
+        //transactionEntityRepository.deleteById(id);
     }
 }

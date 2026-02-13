@@ -29,13 +29,16 @@ public class Currency extends CommonEntity implements Persistable<Currency.Id> {
     @EmbeddedId
     @AttributeOverrides({
             @AttributeOverride(name = "organisationId", column = @Column(name = "organisation_id")),
-            @AttributeOverride(name = "customerCode", column = @Column(name = "customer_code"))
+            @AttributeOverride(name = "code", column = @Column(name = "code"))
     })
     @NonNull
     private Id id;
 
-    @Column(name = "currency_id", nullable = false)
-    private String currencyId;
+    @Column(name = "iso_code", nullable = false)
+    private String isoCode;
+
+    @Column(name = "active")
+    private boolean active = true;
 
     @Embeddable
     @AllArgsConstructor
@@ -46,7 +49,7 @@ public class Currency extends CommonEntity implements Persistable<Currency.Id> {
     public static class Id {
 
         private String organisationId;
-        private String customerCode;
+        private String code;
 
     }
 

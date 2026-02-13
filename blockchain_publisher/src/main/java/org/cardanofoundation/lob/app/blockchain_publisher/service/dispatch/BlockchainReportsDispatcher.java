@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.bloxbean.cardano.client.api.exception.ApiException;
 import io.vavr.control.Either;
+import org.apache.commons.lang3.tuple.Pair;
 import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
@@ -78,12 +79,14 @@ public class BlockchainReportsDispatcher {
     public void dispatchReport(String organisationId, ReportEntity reportEntity) {
         Either<Problem, API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
         if (api3BlockchainTransactionE.isEmpty()) {
-            reportEntity.setL1SubmissionData(Optional.ofNullable(L1SubmissionData.builder()
+            L1SubmissionData l1SubmissionData = L1SubmissionData.builder()
                     .publishRetry(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
                     .publishStatusErrorReason(Objects.requireNonNull(api3BlockchainTransactionE.getLeft().getDetail()))
                     .publishStatus(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) >= 5L ? BlockchainPublishStatus.ERROR : BlockchainPublishStatus.STORED)
-                    .build()));
-            ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(organisationId, Set.of(reportEntity));
+                    .build();
+            reportEntity.setL1SubmissionData(Optional.of(l1SubmissionData));
+            reportEntityRepositoryGateway.storeReport(reportEntity);
+            ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(organisationId, Set.of(Pair.of(reportEntity.getId(), l1SubmissionData)));
         }
     }
 
@@ -103,7 +106,7 @@ public class BlockchainReportsDispatcher {
 
         API3BlockchainTransaction serialisedTx = serialisedTxE.get();
         try {
-            sendTransactionOnChainAndUpdateDb(serialisedTx);
+            sendTransactionOnChainAndUpdateDb(reportEntity, serialisedTx);
 
             return serialisedTxE;
         } catch (ApiException | InterruptedException e) {
@@ -117,7 +120,7 @@ public class BlockchainReportsDispatcher {
     }
 
     @Transactional
-    public void sendTransactionOnChainAndUpdateDb(API3BlockchainTransaction api3BlockchainTransaction) throws ApiException, InterruptedException {
+    public void sendTransactionOnChainAndUpdateDb(ReportEntity report, API3BlockchainTransaction api3BlockchainTransaction) throws ApiException, InterruptedException {
         byte[] reportTxData = api3BlockchainTransaction.serialisedTxData();
 
         L1Submission l1SubmissionData = transactionSubmissionService.submitTransactionWithPossibleConfirmation(reportTxData, api3BlockchainTransaction.receiverAddress());
@@ -125,11 +128,18 @@ public class BlockchainReportsDispatcher {
         String txHash = l1SubmissionData.txHash();
         Optional<Long> txAbsoluteSlotM = l1SubmissionData.absoluteSlot();
 
-        ReportEntity report = api3BlockchainTransaction.report();
         long creationSlot = api3BlockchainTransaction.creationSlot();
 
         updateTransactionStatuses(txHash, txAbsoluteSlotM, creationSlot, report);
-        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(report.getOrganisation().getId(), Set.of(report));
+
+        ledgerUpdatedEventPublisher.sendReportLedgerUpdatedEvents(report.getOrganisation().getId(), Set.of(
+                Pair.of(report.getReportId(), L1SubmissionData.builder()
+                        .transactionHash(txHash)
+                        .absoluteSlot(txAbsoluteSlotM.orElse(null))
+                        .creationSlot(creationSlot)
+                        .publishStatus(BlockchainPublishStatus.SUBMITTED)
+                        .build())
+        ));
 
         log.info("Blockchain transaction submitted (report), l1SubmissionData:{}", l1SubmissionData);
     }

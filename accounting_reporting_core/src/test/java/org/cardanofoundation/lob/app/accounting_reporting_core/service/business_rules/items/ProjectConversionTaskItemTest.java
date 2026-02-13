@@ -56,7 +56,7 @@ public class ProjectConversionTaskItemTest {
         transaction.setItems(items);
 
         when(organisationPublicApiIF.findProject("1", "cust_code1"))
-                .thenReturn(Optional.of(new Project(new Project.Id("1", "cust_code1"), "name1", null, null)));
+                .thenReturn(Optional.of(new Project(new Project.Id("1", "cust_code1"), "name1", true,null, null)));
 
         projectConversionTaskItem.run(transaction);
 

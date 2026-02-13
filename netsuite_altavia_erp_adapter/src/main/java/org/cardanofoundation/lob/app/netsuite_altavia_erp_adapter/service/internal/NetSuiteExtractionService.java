@@ -6,12 +6,7 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.eve
 import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +28,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
@@ -346,16 +342,7 @@ public class NetSuiteExtractionService {
         }
     }
 
-    private Map<String, Object> getBag(Problem transactions, String code) {
-        Map<String, String> error = Map.of(
-                "code", code,
-                "message", transactions.getDetail()
-        );
-        Map<String, Object> bag = Map.of(
-                "detail", transactions.getDetail(),
-                "message", transactions.getTitle(),
-                "error", error
-        );
-        return Map.of("technicalErrorMessage", bag);
-    }
+    private Map<String, Object> getBag(Problem problem, String code) {
+    return ErrorUtils.getBag(problem, code);
+}
 }

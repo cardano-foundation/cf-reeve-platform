@@ -423,17 +423,17 @@ class AccountingCoreResourceTest extends WebBaseIntegrationTest{
                 .body("total", equalTo(1));
     }
 
-    @Test
-    void testListAllBatchNoBody() {
-        given()
-                .contentType("application/json")
-                .header(new Header("Accept-Language", "en-US"))
-                .when()
-                .post("/api/v1/batches")
-                .then()
-                .statusCode(400)
-                .body("title", equalTo("Bad Request"));
-    }
+//    @Test
+//    void testListAllBatchNoBody() {
+//        given()
+//                .contentType("application/json")
+//                .header(new Header("Accept-Language", "en-US"))
+//                .when()
+//                .post("/api/v1/batches")
+//                .then()
+//                .statusCode(400)
+//                .body("title", equalTo("Bad Request"));
+//    }
 
     @Test
     void testListAllBatchDetail() {

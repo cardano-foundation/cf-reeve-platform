@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -24,11 +25,14 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 class TransactionReconcilationServiceTest {
@@ -93,7 +97,7 @@ class TransactionReconcilationServiceTest {
         transactionReconcilationService.createReconcilation(reconcilationId, organisationId, fromDate, toDate, ExtractorType.NETSUITE);
 
         ArgumentCaptor<ReconcilationEntity> reconcilationCaptor = ArgumentCaptor.forClass(ReconcilationEntity.class);
-        verify(transactionReconcilationRepository).save(reconcilationCaptor.capture());
+        verify(transactionReconcilationRepository).saveAndFlush(reconcilationCaptor.capture());
 
         assertThat(reconcilationCaptor.getValue().getId()).isEqualTo(reconcilationId);
         assertThat(reconcilationCaptor.getValue().getOrganisationId()).isEqualTo(organisationId);
@@ -120,7 +124,7 @@ class TransactionReconcilationServiceTest {
         assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.FAILED);
         assertThat(reconcilationEntity.getDetails().get().getCode()).isEqualTo(fatalError.getCode().name());
 
-        verify(transactionReconcilationRepository).save(reconcilationEntity);
+        verify(transactionReconcilationRepository).saveAndFlush(reconcilationEntity);
     }
 
     @Test
@@ -195,10 +199,176 @@ class TransactionReconcilationServiceTest {
         transactionReconcilationService.failReconcilation(reconcilationId, organisationId, Optional.of(fromDate), Optional.of(toDate), fatalError);
 
         ArgumentCaptor<ReconcilationEntity> captor = ArgumentCaptor.forClass(ReconcilationEntity.class);
-        verify(transactionReconcilationRepository).save(captor.capture());
+        verify(transactionReconcilationRepository).saveAndFlush(captor.capture());
 
         assertThat(captor.getValue().getId()).isEqualTo(reconcilationId);
         assertThat(captor.getValue().getStatus()).isEqualTo(ReconcilationStatus.FAILED);
+    }
+
+    @Test
+    void testReconcileChunk_csvExtractorTypeShouldBypassSourceReconciliation() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        // Create organisation for both transactions
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        // Create attached transaction with CSV extractor type
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.CSV.name());
+        attachedTx.setLedgerDispatchStatus(LedgerDispatchStatus.FINALIZED);
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+
+        // Create detached transaction (different to trigger hash mismatch)
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("internal1-different");
+        detachedTx.setExtractorType(ExtractorType.CSV.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+
+        val detachedChunkTxs = Set.of(detachedTx);
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+
+        when(blockchainReaderPublicApi.isOnChain(anySet())).thenReturn(Either.right(Map.of(
+                "tx1", true
+        )));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, detachedChunkTxs);
+
+        // Verify the attached transaction has OK source reconciliation despite hash mismatch
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+
+        verify(transactionRepositoryGateway).storeAll(List.of(attachedTx));
+    }
+
+    @Test
+    void testWrapUpReconcilation_csvExtractorTypeShouldGetOkStatus() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        reconcilationEntity.setStatus(ReconcilationStatus.STARTED);
+        reconcilationEntity.setFrom(Optional.of(fromDate));
+        reconcilationEntity.setTo(Optional.of(toDate));
+        reconcilationEntity.setProcessedTxCount(0L);
+
+        when(transactionReconcilationRepository.findById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        // Create missing transaction with CSV extractor type
+        val missingTx = new TransactionEntity();
+        missingTx.setId("tx1");
+        missingTx.setInternalTransactionNumber("internal1");
+        missingTx.setExtractorType(ExtractorType.CSV.name());
+
+        when(transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate))
+                .thenReturn(Set.of(missingTx));
+
+        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId, 0L);
+
+        // Verify the missing transaction with CSV type gets OK source reconciliation
+        assertThat(missingTx.getReconcilation()).isPresent();
+        assertThat(missingTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+        assertThat(missingTx.getLastReconcilation()).isPresent();
+
+        // Verify no violations were added for the CSV transaction
+        assertThat(reconcilationEntity.getViolations()).isEmpty();
+        assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.COMPLETED);
+    }
+
+    @Test
+    void testWrapUpReconcilation_existingOkSourceReconciliationShouldRemainOk() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        reconcilationEntity.setStatus(ReconcilationStatus.STARTED);
+        reconcilationEntity.setFrom(Optional.of(fromDate));
+        reconcilationEntity.setTo(Optional.of(toDate));
+        reconcilationEntity.setProcessedTxCount(0L);
+
+        when(transactionReconcilationRepository.findById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        // Create missing transaction with existing OK source reconciliation (non-CSV)
+        val missingTx = new TransactionEntity();
+        missingTx.setId("tx1");
+        missingTx.setInternalTransactionNumber("internal1");
+        missingTx.setExtractorType(ExtractorType.NETSUITE.name());
+        missingTx.setReconcilation(Optional.of(Reconcilation.builder()
+                .source(ReconcilationCode.OK)
+                .build()));
+
+        when(transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate))
+                .thenReturn(Set.of(missingTx));
+
+        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId, 0L);
+
+        // Verify the missing transaction with existing OK keeps OK source reconciliation
+        assertThat(missingTx.getReconcilation()).isPresent();
+        assertThat(missingTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+        assertThat(missingTx.getLastReconcilation()).isPresent();
+
+        // Verify no violations were added
+        assertThat(reconcilationEntity.getViolations()).isEmpty();
+        assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.COMPLETED);
+    }
+
+    @Test
+    void testWrapUpReconcilation_nonCsvWithoutOkReconciliationShouldGetNok() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        reconcilationEntity.setStatus(ReconcilationStatus.STARTED);
+        reconcilationEntity.setFrom(Optional.of(fromDate));
+        reconcilationEntity.setTo(Optional.of(toDate));
+        reconcilationEntity.setProcessedTxCount(0L);
+
+        when(transactionReconcilationRepository.findById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        // Create missing transaction without CSV extractor type and without OK reconciliation
+        val missingTx = new TransactionEntity();
+        missingTx.setId("tx1");
+        missingTx.setInternalTransactionNumber("internal1");
+        missingTx.setExtractorType(ExtractorType.NETSUITE.name());
+        missingTx.setReconcilation(Optional.empty());
+
+        when(transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate))
+                .thenReturn(Set.of(missingTx));
+
+        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId, 0L);
+
+        // Verify the missing transaction gets NOK reconciliation
+        assertThat(missingTx.getReconcilation()).isPresent();
+        assertThat(missingTx.getReconcilation().get().getSource()).contains(ReconcilationCode.NOK);
+        assertThat(missingTx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
+
+        // Verify violation was added
+        assertThat(reconcilationEntity.getViolations()).hasSize(1);
+        assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.COMPLETED);
     }
 
 }

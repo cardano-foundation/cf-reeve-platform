@@ -27,7 +27,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +39,8 @@ jobs:
           distribution: 'corretto'
 
       - name: ⛮ cf-gha-baseline
-        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@main
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@fix/pipx
+        id: cf-gha-baseline
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRIVATE_DOCKER_REGISTRY_URL: ${{ env.PRIVATE_DOCKER_REGISTRY_URL }}
@@ -60,7 +61,7 @@ jobs:
           echo "${{ secrets.MAVEN_CENTRAL_GPG_KEY_BASE64 }}" > ~/.gradle/secring.gpg.b64
           base64 -d ~/.gradle/secring.gpg.b64 > ~/.gradle/secring.gpg
           echo "${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}" | gpg --batch --yes --passphrase-fd 0 --import ~/.gradle/secring.gpg
-          gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
+          # gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
 
       - name: Gradle publish
         env:
@@ -80,6 +81,7 @@ jobs:
               ;;
           esac
           ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test 
+          echo "VERSION_PUBLISH=$VERSION_PUBLISH" | tee -a $GITHUB_ENV
 
       - name:  🌍 earthly (docker build and push)
         run: |
@@ -96,3 +98,38 @@ jobs:
         with:
           name: sbom
           path: build/reports/bom.xml
+
+      - name: Build payload
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
+        id: payload
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg version "${VERSION_PUBLISH}" \
+            --arg prName "${{ github.event.pull_request.title }}" \
+            --arg sourceBranch "${{ github.event.pull_request.head.ref }}" \
+            --arg targetBranch "${{ github.event.pull_request.base.ref }}" \
+            '
+              {
+                "version": $version,
+                "prName": $prName,
+                "sourceBranch": $sourceBranch,
+                "targetBranch": $targetBranch 
+              }')
+          echo 'PAYLOAD<<EOF' | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
+          echo "$PAYLOAD" | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
+          echo EOF | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
+
+      - name: Dispatch successful build event to private repo
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@main
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
+        with:
+          EVENT_TYPE: cf-reeve-platform-pr
+          GITHUB_TOKEN: ${{ secrets.CF_REEVE_APPLICATION_REPO_PAT }}
+          GITHUB_REPO: cardano-foundation/cf-reeve-application
+          TRIGGERING_REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
+          TRIGGERING_EVENT: ${{ github.event_name }}
+          TRIGGERING_BRANCH: ${{ steps.cf-gha-baseline.outputs.BRANCH_NAME }}
+          TRIGGERING_TAG: ${{ steps.cf-gha-baseline.outputs.TAG_NAME }}
+          TRIGGERING_GHRUNID: ${{ github.run_id }}
+          GIT_SHORT_COMMIT: ${{ steps.cf-gha-baseline.outputs.GIT_SHORT_COMMIT }}
+          TRIGGERING_PAYLOAD: "${{ steps.payload.outputs.PAYLOAD }}"

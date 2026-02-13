@@ -27,4 +27,5 @@ public class ErrorTitleConstants {
     public static final String ACCOUNT_EVENT_NOT_FOUND = "ACCOUNT_EVENT_NOT_FOUND";
     public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
     public static final String OPENING_BALANCE_VALIDATION_ERROR = "OPENING_BALANCE_VALIDATION_ERROR";
+    public static final String VAT_RATE_CANNOT_BE_NEGATIVE = "VAT_RATE_CANNOT_BE_NEGATIVE";
 }

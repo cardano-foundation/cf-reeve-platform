@@ -2,6 +2,9 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.VAT_MAPPINGS;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -10,6 +13,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +22,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -85,6 +90,14 @@ public class VatService {
                     .withStatus(Status.NOT_FOUND)
                     .build());
         }
+        if (vatUpdate.getRate().doubleValue() < 0) {
+            return VatView.createFail(vatUpdate, Problem.builder()
+                    .withTitle(ErrorTitleConstants.VAT_RATE_CANNOT_BE_NEGATIVE)
+                    .withDetail("The organisation vat rate cannot be negative")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build());
+        }
+
         vatEntity.setRate(vatUpdate.getRate());
         vatEntity.setDescription(vatUpdate.getDescription());
         vatEntity.setCountryCode(vatUpdate.getCountryCode() == null || vatUpdate.getCountryCode().isEmpty() ? null : vatUpdate.getCountryCode());
@@ -110,6 +123,14 @@ public class VatService {
                     .withTitle(ErrorTitleConstants.COUNTRY_CODE_NOT_FOUND)
                     .withDetail("The organisation vat country_code with code %s do not exists".formatted(vatUpdate.getCountryCode()))
                     .withStatus(Status.NOT_FOUND)
+                    .build());
+        }
+
+        if (vatUpdate.getRate().doubleValue() < 0) {
+            return VatView.createFail(vatUpdate, Problem.builder()
+                    .withTitle(ErrorTitleConstants.VAT_RATE_CANNOT_BE_NEGATIVE)
+                    .withDetail("The organisation vat rate cannot be negative")
+                    .withStatus(Status.BAD_REQUEST)
                     .build());
         }
 
@@ -142,4 +163,25 @@ public class VatService {
         );
     }
 
+    public void downloadCsv(String orgId, String customerCode, Double minRate, Double maxRate, String description, List<String> countryCodes, Boolean active, OutputStream outputStream) {
+        Page<Vat> vatCodes = vatRepository.findAllByOrganisationId(orgId, customerCode, minRate, maxRate, description, countryCodes, active, Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Code", "Rate", "Description", "Country", "Active"};
+            csvWriter.writeNext(header, false);
+            for (Vat vat: vatCodes) {
+                String[] data = {
+                        vat.getId().getCustomerCode(),
+                        vat.getRate().toString(),
+                        vat.getDescription(),
+                        vat.getCountryCode(),
+                        String.valueOf(vat.getActive())
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing VAT codes to CSV", e);
+        }
+    }
 }

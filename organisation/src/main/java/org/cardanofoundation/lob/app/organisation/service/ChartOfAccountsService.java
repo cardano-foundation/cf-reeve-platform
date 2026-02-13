@@ -4,6 +4,10 @@ import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstant
 import static org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants.VALIDATION_ERROR;
 import static org.cardanofoundation.lob.app.organisation.util.SortFieldMappings.CHART_OF_ACCOUNT_MAPPINGS;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +20,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +29,7 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
@@ -114,7 +120,7 @@ public class ChartOfAccountsService {
         if (chartOfAccountOpt.isEmpty()) {
             return Either.left(ChartOfAccountView.createFail(Problem.builder()
                     .withTitle("CHART_OF_ACCOUNT_NOT_FOUND")
-                    .withDetail("Unable to find the chart of account with code :%s".formatted(chartOfAccountUpdate.getCustomerCode()))
+                    .withDetail("Unable to find the chart of account with code: %s".formatted(chartOfAccountUpdate.getCustomerCode()))
                     .withStatus(Status.NOT_FOUND)
                     .build(), chartOfAccountUpdate));
         }
@@ -150,7 +156,7 @@ public class ChartOfAccountsService {
         return subType.<Either<ChartOfAccountView, ChartOfAccountSubType>>map(Either::right)
                 .orElseGet(() -> Either.left(ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("SUBTYPE_NOT_FOUND")
-                        .withDetail("Unable to find subtype code :%s".formatted(chartOfAccountUpdate.getSubType()))
+                        .withDetail("Unable to find subtype code: %s".formatted(chartOfAccountUpdate.getSubType()))
                         .withStatus(Status.NOT_FOUND)
                         .build(), chartOfAccountUpdate)));
     }
@@ -161,14 +167,21 @@ public class ChartOfAccountsService {
             if (parentChartOfAccount.isEmpty()) {
                 return Either.left(ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("PARENT_ACCOUNT_NOT_FOUND")
-                        .withDetail("Unable to find the parent chart of account with code :%s".formatted(chartOfAccountUpdate.getParentCustomerCode()))
+                        .withDetail("Unable to find the parent chart of account with code: %s".formatted(chartOfAccountUpdate.getParentCustomerCode()))
                         .withStatus(Status.NOT_FOUND)
                         .build(), chartOfAccountUpdate));
             }
             if (parentChartOfAccount.get().getId().getCustomerCode().equals(chartOfAccountUpdate.getCustomerCode())) {
                 return Either.left(ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("PARENT_ACCOUNT_CANNOT_BE_SELF")
-                        .withDetail("The parent chart of account cannot be the same as the account itself :%s".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withDetail("The parent chart of account cannot be the same as the account itself: %s".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withStatus(Status.BAD_REQUEST)
+                        .build(), chartOfAccountUpdate));
+            }
+            if (Optional.ofNullable(parentChartOfAccount.get().getParentCustomerCode()).orElse("").equals(chartOfAccountUpdate.getCustomerCode())) {
+                return Either.left(ChartOfAccountView.createFail(Problem.builder()
+                        .withTitle("CIRCULAR_REFERENCE")
+                        .withDetail("The parent chart of account: %s cannot have a circular reference to the account itself: %s".formatted(chartOfAccountUpdate.getParentCustomerCode(), chartOfAccountUpdate.getCustomerCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), chartOfAccountUpdate));
             }
@@ -201,7 +214,7 @@ public class ChartOfAccountsService {
             } else {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
-                        .withDetail("The chart of account with code :%s already exists".formatted(chartOfAccountUpdate.getCustomerCode()))
+                        .withDetail("The chart of account with code: %s already exists".formatted(chartOfAccountUpdate.getCustomerCode()))
                         .withStatus(Status.CONFLICT)
                         .build(), chartOfAccountUpdate);
             }
@@ -253,10 +266,10 @@ public class ChartOfAccountsService {
             }
             Organisation organisation = organisationService.findById(chartOfAccount.getId().getOrganisationId()).orElseThrow();
             Currency organisationCurrency = currencyRepository.findByCurrencyId(chartOfAccount.getId().getOrganisationId(), organisation.getCurrencyId()).orElseThrow(() -> new RuntimeException("Organisation currency not found"));
-            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisationCurrency.getId().getCustomerCode())) {
+            if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisationCurrency.getId().getCode())) {
                 return ChartOfAccountView.createFail(Problem.builder()
                         .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
-                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCustomerCode()))
+                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCode()))
                         .withStatus(Status.BAD_REQUEST)
                         .build(), chartOfAccountUpdate);
             }
@@ -351,5 +364,39 @@ public class ChartOfAccountsService {
         chartOfAccountType.setSubTypes(Set.of(chartOfAccountSubType));
         ChartOfAccountType save = chartOfAccountTypeRepository.save(chartOfAccountType);
         return save.getSubTypes().stream().iterator().next();
+    }
+
+    public void downloadCsv(String orgId, String customerCode, String name, List<String> currencies, List<String> counterPartyIds, List<String> types, List<String> subTypes, List<String> referenceCodes, Boolean active, OutputStream outputStream) {
+        Page<ChartOfAccount> chartOfAccounts = chartOfAccountRepository.findAllByOrganisationIdFiltered(orgId, customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, active, Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Customer Code","Reference Code","Name","Type","Sub Type","Currency","CounterParty","Parent Customer Code","Active","Open Balance FCY","Open Balance LCY","Open Balance Currency ID FCY","Open Balance Currency ID LCY","Open Balance Type","Open Balance Date"};
+            csvWriter.writeNext(header, false);
+            for (ChartOfAccount coa : chartOfAccounts) {
+                OpeningBalance openingBalance = Optional.ofNullable(coa.getOpeningBalance()).orElse(new OpeningBalance());
+                String[] data = {
+                        coa.getId().getCustomerCode(),
+                        coa.getEventRefCode(),
+                        coa.getName(),
+                        coa.getSubType().getType().getName(),
+                        coa.getSubType().getName(),
+                        coa.getCurrencyId(),
+                        coa.getCounterParty(),
+                        coa.getParentCustomerCode(),
+                        String.valueOf(coa.getActive()),
+                        openingBalance.getBalanceFCY() != null ? openingBalance.getBalanceFCY().toString() : null,
+                        openingBalance.getBalanceLCY() != null ? openingBalance.getBalanceLCY().toString() : null,
+                        openingBalance.getOriginalCurrencyIdFCY(),
+                        openingBalance.getOriginalCurrencyIdLCY(),
+                        openingBalance.getBalanceType() != null ? openingBalance.getBalanceType().name() : "",
+                        openingBalance.getDate() != null ? openingBalance.getDate().toString() : ""
+
+                };
+                csvWriter.writeNext(data, false);
+            }
+            csvWriter.flush();
+        } catch (IOException e) {
+            log.error("Failed to download chart of account csv.", e);
+        }
     }
 }
