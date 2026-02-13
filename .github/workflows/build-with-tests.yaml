@@ -25,10 +25,6 @@ jobs:
         run: |
           ./gradlew spotlessCheck
       - name: Test
-        env:
-          TESTCONTAINERS_RYUK_DISABLED: true
-          TESTCONTAINERS_CHECKS_DISABLE: true
-          DOCKER_HOST: unix:///var/run/docker.sock
         run: |
           ./gradlew clean test jacocoTestReport
       - name: SonarCloud Scan
