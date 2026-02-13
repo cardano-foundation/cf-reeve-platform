@@ -29,9 +29,9 @@ docker-publish:
 follower-app:
    ARG EARTHLY_TARGET_NAME
    ARG EARTHLY_GIT_SHORT_HASH=""
-   ARG DOCKER_REGISTRIES=${DOCKER_REGISTRIES}
-   ARG DOCKER_IMAGES_EXTRA_TAGS=${DOCKER_IMAGES_EXTRA_TAGS}
-   ARG PUSH=${PUSH}
+   ARG DOCKER_REGISTRIES
+   ARG DOCKER_IMAGES_EXTRA_TAGS
+   ARG PUSH
    
    FROM DOCKERFILE -f _backend-services/cf-reeve-ledger-follower-app/Dockerfile --target ${EARTHLY_TARGET_NAME} ./_backend-services/cf-reeve-ledger-follower-app
    
@@ -44,12 +44,12 @@ follower-app:
    IF [ "$PUSH" = "true" ]
      FOR registry IN $DOCKER_REGISTRIES
        # Push with git short hash tag
-       IF [ ! -z "$EARTHLY_GIT_SHORT_HASH" ]
+       IF [ -n "$EARTHLY_GIT_SHORT_HASH" ]
          SAVE IMAGE --push ${registry}/${IMAGE_NAME}:${EARTHLY_GIT_SHORT_HASH}
        END
        
        # Push with extra tags
-       IF [ ! -z "$DOCKER_IMAGES_EXTRA_TAGS" ]
+       IF [ -n "$DOCKER_IMAGES_EXTRA_TAGS" ]
          FOR image_tag IN $DOCKER_IMAGES_EXTRA_TAGS
            SAVE IMAGE --push ${registry}/${IMAGE_NAME}:${image_tag}
          END
