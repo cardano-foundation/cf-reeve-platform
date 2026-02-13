@@ -643,6 +643,133 @@ class DbSynchronisationUseCaseServiceTest {
     }
 
     @Test
+    void shouldNotTriggerRollbackWhenTransactionIsNotChanged() {
+        // Given: a ROLLBACK transaction that is identical to the DB copy (isChanged = false)
+        val txId = "rollback-unchanged-tx";
+        val orgId = "org1";
+        val batchId = "batch-unchanged";
+
+        val txItem = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "0"));
+
+        val org = Organisation.builder()
+                .id(orgId)
+                .name("Test Org")
+                .countryCode("CH")
+                .currencyId("ISO_4217:CHF")
+                .build();
+
+        // Existing dispatched transaction in DB
+        val existingTx = TransactionEntity.builder()
+                .id(txId)
+                .internalTransactionNumber("txn-same")
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .processingStatus(TransactionProcessingStatus.DISPATCHED)
+                .ledgerDispatchApproved(true)
+                .transactionApproved(true)
+                .ledgerDispatchReceipt(new LedgerDispatchReceipt("receipt-123", "success"))
+                .ledgerDispatchStatus(DISPATCHED)
+                .organisation(org)
+                .build();
+
+        // Incoming ROLLBACK transaction - identical fields so isChanged = false
+        val incomingTx = TransactionEntity.builder()
+                .id(txId)
+                .internalTransactionNumber("txn-same")
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .processingStatus(TransactionProcessingStatus.ROLLBACK)
+                .ledgerDispatchApproved(true)
+                .transactionApproved(true)
+                .ledgerDispatchStatus(DISPATCHED)
+                .organisation(org)
+                .build();
+
+        when(accountingCoreTransactionRepository.findAllById(any())).thenReturn(List.of(existingTx));
+
+        ReflectionTestUtils.setField(service, "rollbackEnabled", Optional.of(true));
+
+        // When
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(incomingTx)), 1,
+                new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        // Then: No rollback event should be published since isChanged is false
+        verify(eventPublisher, never()).publishEvent(any(TxRollbackEvent.class));
+        // Transaction should NOT be saved (isChanged=false, so it goes to alreadyStoredCount)
+        verify(accountingCoreTransactionRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldTriggerRollbackWhenTransactionIsChanged() {
+        // Given: a ROLLBACK transaction that is different from the DB copy (isChanged = true)
+        val txId = "rollback-changed-tx";
+        val orgId = "org1";
+        val batchId = "batch-changed";
+
+        val txItem = new TransactionItemEntity();
+        txItem.setId(TransactionItem.id(txId, "0"));
+
+        val org = Organisation.builder()
+                .id(orgId)
+                .name("Test Org")
+                .countryCode("CH")
+                .currencyId("ISO_4217:CHF")
+                .build();
+
+        // Existing dispatched transaction in DB
+        val existingTx = TransactionEntity.builder()
+                .id(txId)
+                .internalTransactionNumber("txn-old")
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .processingStatus(TransactionProcessingStatus.DISPATCHED)
+                .ledgerDispatchApproved(true)
+                .transactionApproved(true)
+                .ledgerDispatchReceipt(new LedgerDispatchReceipt("receipt-123", "success"))
+                .ledgerDispatchStatus(DISPATCHED)
+                .organisation(org)
+                .build();
+
+        // Incoming ROLLBACK transaction - different internalTransactionNumber so isChanged = true
+        val incomingTx = TransactionEntity.builder()
+                .id(txId)
+                .internalTransactionNumber("txn-new")
+                .items(new LinkedHashSet<>(Set.of(txItem)))
+                .accountingPeriod(YearMonth.of(2023, 1))
+                .processingStatus(TransactionProcessingStatus.ROLLBACK)
+                .ledgerDispatchApproved(true)
+                .transactionApproved(true)
+                .ledgerDispatchStatus(DISPATCHED)
+                .organisation(org)
+                .build();
+
+        when(accountingCoreTransactionRepository.findAllById(any())).thenReturn(List.of(existingTx));
+        when(accountingCoreTransactionRepository.save(any(TransactionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ReflectionTestUtils.setField(service, "rollbackEnabled", Optional.of(true));
+
+        // When
+        service.execute(batchId, new OrganisationTransactions(orgId, Set.of(incomingTx)), 1,
+                new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
+
+        // Then: Rollback event SHOULD be published since isChanged is true
+        ArgumentCaptor<TxRollbackEvent> eventCaptor = ArgumentCaptor.forClass(TxRollbackEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getTransactionId()).isEqualTo(txId);
+
+        // Transaction should be saved with rollback fields reset
+        ArgumentCaptor<TransactionEntity> savedTxCaptor = ArgumentCaptor.forClass(TransactionEntity.class);
+        verify(accountingCoreTransactionRepository).save(savedTxCaptor.capture());
+        TransactionEntity savedTx = savedTxCaptor.getValue();
+        assertThat(savedTx.getLedgerDispatchApproved()).isFalse();
+        assertThat(savedTx.getTransactionApproved()).isFalse();
+        assertThat(savedTx.getLedgerDispatchReceipt()).isEmpty();
+        assertThat(savedTx.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.NOT_DISPATCHED);
+    }
+
+    @Test
     void shouldHandleTransactionWithExistingBatchAssociation() {
         // Given
         val batchId = "batch1";
