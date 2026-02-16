@@ -39,7 +39,7 @@ jobs:
           distribution: 'corretto'
 
       - name: ⛮ cf-gha-baseline
-        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@fix/pipx
+        uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@27ed10ed269f89d937edb58ceff0076e1d73bfd9
         id: cf-gha-baseline
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
