@@ -42,6 +42,13 @@ jobs:
           -Dsonar.pullrequest.key=$SONAR_PR_KEY \
           -Dsonar.pullrequest.branch=$SONAR_PR_BRANCH \
           -Dsonar.pullrequest.base=$SONAR_PR_BASE
+      - name: Upload test html report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: ./**/build/reports/tests/test
+
 #  mutation-test-organisation:
 #    needs: test
 #    runs-on: arc-runner-set
