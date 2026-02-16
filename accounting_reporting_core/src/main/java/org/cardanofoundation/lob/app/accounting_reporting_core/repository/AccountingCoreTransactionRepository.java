@@ -42,6 +42,17 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
                                               @Param("endDate") LocalDate endDate);
 
     @Query("""
+            SELECT t FROM accounting_reporting_core.TransactionEntity t
+            WHERE t.organisation.id = :organisationId
+            AND t.entryDate BETWEEN :startDate AND :endDate
+            ORDER BY t.createdAt ASC, t.id ASC
+            """)
+    Set<TransactionEntity> findByEntryDateRange(@Param("organisationId") String organisactionId,
+                                                                   @Param("startDate") LocalDate startDate,
+                                                                   @Param("endDate") LocalDate endDate);
+
+
+    @Query("""
         SELECT t FROM accounting_reporting_core.TransactionEntity t
         WHERE t.organisation.id = :organisationId
         AND t.entryDate BETWEEN :startDate AND :endDate

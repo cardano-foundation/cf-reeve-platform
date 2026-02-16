@@ -123,7 +123,7 @@ public class ERPIncomingDataProcessor {
 
         transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId, event.getTotalPrediction());
 
-        log.info("Finished processing ReconcilationChunkEvent, event: {}", event);
+        log.info("Finished processing ReconcilationFinalisationEvent, event: {}", event);
     }
 
 }

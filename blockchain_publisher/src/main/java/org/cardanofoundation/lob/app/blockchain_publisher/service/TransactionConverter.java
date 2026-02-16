@@ -59,12 +59,19 @@ public class TransactionConverter {
     // This method aggregates transaction items by their aggregated hash and sums their amounts.
     // the hash is currently derived from all the fields of the TransactionItemEntity except the amount.
     // this is to ensure that items with the same details but different amounts are treated as separate items.
+    // IMPORTANT: We sort items by ID before picking the first one to ensure deterministic selection.
+    // This is critical because Set iteration order is non-deterministic, and the selected item's ID
+    // is what gets stored in the indexer for reconciliation.
     private Set<TransactionItemEntity> aggregateTxItems(Set<TransactionItemEntity> items) {
         return items.stream()
                 .collect(Collectors.groupingBy(TransactionItemEntity::aggregatedHash, Collectors.toSet()))
                 .values().stream()
                 .map(itemSet -> {
-                    TransactionItemEntity aggregatedItem = itemSet.iterator().next();
+                    // Sort by ID to ensure deterministic selection across runs
+                    TransactionItemEntity aggregatedItem = itemSet.stream()
+                            .sorted((a, b) -> a.getId().compareTo(b.getId()))
+                            .findFirst()
+                            .orElseThrow();
                     aggregatedItem.setAmountFcy(itemSet.stream()
                             .map(TransactionItemEntity::getAmountFcy)
                             .reduce(ZERO, BigDecimal::add));

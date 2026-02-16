@@ -53,7 +53,10 @@ public class TransactionRepositoryGateway {
 
     @Transactional
     public void storeAll(Collection<TransactionEntity> txs) {
-        accountingCoreTransactionRepository.saveAll(txs);
+        List<TransactionEntity> sortedTxs = txs.stream()
+                .sorted(Comparator.comparing(TransactionEntity::getId))
+                .toList();
+        accountingCoreTransactionRepository.saveAll(sortedTxs);
     }
 
     @Transactional
@@ -240,6 +243,12 @@ public class TransactionRepositoryGateway {
                                                                         LocalDate from,
                                                                         LocalDate to) {
         return accountingCoreTransactionRepository.findByEntryDateRangeAndNotReconciledYet(organisationId, from, to);
+    }
+
+    public Set<TransactionEntity> findAllByDateRange(String organisationId,
+                                                                        LocalDate from,
+                                                                        LocalDate to) {
+        return accountingCoreTransactionRepository.findByEntryDateRange(organisationId, from, to);
     }
 
 }

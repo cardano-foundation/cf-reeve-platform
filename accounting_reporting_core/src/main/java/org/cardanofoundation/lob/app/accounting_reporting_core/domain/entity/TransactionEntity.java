@@ -210,6 +210,7 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reconcilation_id")
+    @DiffIgnore
     @Nullable
     private ReconcilationEntity lastReconcilation;
 
