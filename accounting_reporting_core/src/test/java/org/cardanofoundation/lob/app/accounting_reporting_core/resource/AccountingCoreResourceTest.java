@@ -6,8 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,6 +17,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,6 +30,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
@@ -218,7 +223,8 @@ class AccountingCoreResourceTest {
         assertNotNull(response.getBody());
     }
 
-    @Test void filterOptions_success() {
+    @Test
+    void filterOptions_success() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(mock(Organisation.class)));
         when(accountingCorePresentationViewService.getFilterOptions(List.of(), "org123")).thenReturn(mock(Map.class));
@@ -227,4 +233,64 @@ class AccountingCoreResourceTest {
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
     }
+
+    @Test
+    void downloadTransactionsCsv_noAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), null, null);
+        assertTrue(response.getStatusCode().is4xxClientError());
+        assertNotNull(response.getBody());
+    }
+
+    @Test
+    void downloadTransactionsCsv_invalidDateFormat() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+
+        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), "INVALID", null);
+        assertTrue(response.getStatusCode().is4xxClientError());
+        assertNotNull(response.getBody());
+    }
+
+    @Test
+    void downloadTransactionsCsv_success() throws Exception {
+        String orgId = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94";
+        List<TxValidationStatus> txStatusList = List.of();
+        List<TransactionType> transactionTypes = List.of();
+
+        // Mock security check to allow access
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
+
+        // Call the method
+        ResponseEntity<StreamingResponseBody> response = accountingCoreResource.downloadTransactionsCsv(
+                orgId,
+                txStatusList,
+                transactionTypes,
+                null,
+                null
+        );
+
+        // Verify response
+        assertTrue(response.getStatusCode().is2xxSuccessful());
+        assertEquals("text/plain", response.getHeaders().getContentType().toString());
+        assertEquals(
+                "attachment; filename=\"transactions_%s.csv\"".formatted(orgId),
+                response.getHeaders().getFirst("Content-Disposition")
+        );
+        assertNotNull(response.getBody());
+
+        // Optionally verify the StreamingResponseBody works
+        StreamingResponseBody body = response.getBody();
+        assertNotNull(body);
+
+        // You can test the streaming behavior by writing to a test output stream
+        ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
+        body.writeTo(outputStream);
+
+        // Verify the service was called
+        verify(accountingCorePresentationViewService)
+                .downloadCsvTransactions(eq(orgId), eq(txStatusList), eq(transactionTypes), eq(null), eq(null), any());
+    }
+
+
 }

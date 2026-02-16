@@ -2,10 +2,12 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
+import static org.zalando.problem.Status.BAD_REQUEST;
 import static org.zalando.problem.Status.NOT_FOUND;
 import static org.zalando.problem.Status.OK;
 import static org.zalando.problem.Status.UNAUTHORIZED;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,9 +22,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,6 +47,7 @@ import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
@@ -55,6 +60,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -82,6 +88,51 @@ public class AccountingCoreResource {
     public ResponseEntity<List<TransactionView>> listAllAction(@Valid @RequestBody SearchRequest body) {
         List<TransactionView> transactions = accountingCorePresentationService.allTransactions(body);
         return ResponseEntity.ok().body(transactions);
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
+    @Operation(description = "Download transactions as a CSV file with possible filtering", summary = "Download transactions as a CSV file")
+    @GetMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<StreamingResponseBody> downloadTransactionsCsv(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                         @RequestParam(name = "status", required = false) List<TxValidationStatus> txStatusList,
+                                                                         @RequestParam(name = "transactionType", required = false) List<TransactionType> transactionTypes,
+                                                                         @RequestParam(name = "dateFrom", required = false) String dateFrom,
+                                                                         @RequestParam(name = "dateTo", required = false) String dateTo){
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(UNAUTHORIZED.getStatusCode()).body(outputStream -> {
+                ObjectNode response = objectMapper.createObjectNode();
+                response.put("title", "NO_ACCESS_TO_ORG");
+                response.put("detail", "The user doesn't have access to this org");
+                response.put("status", UNAUTHORIZED.getStatusCode());
+                outputStream.write(objectMapper.writeValueAsBytes(response));
+            });
+        }
+        LocalDate dateFromD = null;
+        LocalDate dateToD = null;
+        try {
+            if(dateFrom != null) {
+                dateFromD = FlexibleDateParser.parse(dateFrom);
+            }
+            if(dateTo != null) {
+                dateToD = FlexibleDateParser.parse(dateTo);
+            }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(BAD_REQUEST.getStatusCode()).body(outputStream -> {
+                ObjectNode response = objectMapper.createObjectNode();
+                response.put("title", "INVALID_DATE_FORMAT");
+                response.put("detail", "One or both of the provided dates are in an invalid format. Please use one of the following formats: dd/MM/yyyy, MM-dd-yyyy, yyyy-MM-dd, dd.MM.yyyy");
+                response.put("status", BAD_REQUEST.getStatusCode());
+                outputStream.write(objectMapper.writeValueAsBytes(response));
+            });
+        }
+        LocalDate finalDateFromD = dateFromD;
+        LocalDate finalDateToD = dateToD;
+        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, finalDateFromD, finalDateToD, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"transactions_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
     }
 
     @Tag(name = "Transactions", description = "Transactions API")

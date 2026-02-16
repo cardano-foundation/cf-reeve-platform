@@ -6,7 +6,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +19,14 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Opera
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.AccountEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Counterparty;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.LedgerDispatchReceipt;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rejection;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
@@ -46,14 +52,6 @@ public class ExtractionItemService {
                 .stream().map(this::extractionTransactionItemViewBuilder).toList();
 
         return ExtractionTransactionView.createSuccess(transactionItem, transactionItem.size(), 0, transactionItem.size());
-    }
-
-    @Transactional(readOnly = true)
-    public ExtractionTransactionView findTransactionItemsPublic(String orgId, LocalDate dateFrom, LocalDate dateTo, Set<String> event, Set<String> currency, Optional<BigDecimal> minAmount, Optional<BigDecimal> maxAmount, Set<String> transactionHash, int page, int limit) {
-
-        List<ExtractionTransactionItemView> transactionItemViews = transactionItemRepositoryImpl.findByItemAccountDateAggregated(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash, page, limit).stream().map(item -> enrichTransactionItemViewBuilder(extractionTransactionItemViewBuilder(item))).toList();
-        long countTotalElements = transactionItemRepositoryImpl.countItemsByAccountDateAggregated(orgId, dateFrom, dateTo, event, currency, minAmount, maxAmount, transactionHash);
-        return ExtractionTransactionView.createSuccess(transactionItemViews, countTotalElements, page, limit);
     }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {

@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -31,8 +32,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presenta
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationStatisticRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconcileResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationStatisticView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
@@ -99,6 +102,19 @@ public class AccountingCoreResourceReconciliation {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ReconciliationRejectionCodeRequest[]> reconciliationRejectionCode() {
         return ResponseEntity.ok().body(ReconciliationRejectionCodeRequest.values());
+    }
+
+    @Tag(name = "Reconciliation", description = "Reconciliation API")
+    @Operation(description = "Get reconciliation statistics for a date range with optional aggregation", responses = {
+            @ApiResponse(content =
+                    {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = ReconciliationStatisticView.class))}
+            )
+    })
+    @PostMapping(value = "/reconciliation-statistic", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<Map<String, ReconciliationStatisticView>> reconciliationStatistic(@Valid @RequestBody ReconciliationStatisticRequest body) {
+        Map<String, ReconciliationStatisticView> result = accountingCorePresentationService.getReconciliationStatisticByDateRange(body);
+        return ResponseEntity.ok().body(result);
     }
 
 }

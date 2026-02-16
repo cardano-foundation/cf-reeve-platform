@@ -36,7 +36,6 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @RequiredArgsConstructor
@@ -68,17 +67,8 @@ public class API3L1TransactionCreator {
         log.info("API3L1TransactionCreator is initialised.");
     }
 
-    public Either<Problem, API3BlockchainTransaction> pullBlockchainTransaction(ReportEntity reportEntity) {
-        return blockchainReaderPublicApi.getChainTip()
-                .flatMap(chainTip -> {
-                    MetadataMap metadataMap = api3MetadataSerialiser
-                            .serialiseToMetadataMap(reportEntity, chainTip.getAbsoluteSlot());
-                    return handleTransactionCreation(metadataMap, chainTip.getAbsoluteSlot());
-                });
-    }
-
     public Either<Problem, API3BlockchainTransaction> pullBlockchainTransaction(
-            ReportV2Entity reportEntity) {
+            ReportEntity reportEntity) {
         return blockchainReaderPublicApi.getChainTip().flatMap(chainTip -> {
             MetadataMap metadataMap = api3MetadataSerialiser.serialiseToMetadataMap(reportEntity,
                     chainTip.getAbsoluteSlot());

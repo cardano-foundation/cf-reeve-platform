@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -12,17 +15,21 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 import org.zalando.problem.Problem;
 import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
@@ -31,10 +38,15 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportCsvLine;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
+import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 
 
 @Service
@@ -45,6 +57,7 @@ public class CsvReportService {
 
     private final ReportingService reportingService;
     private final ReportTemplateRepository reportTemplateRepository;
+    private final ReportingRepository reportingRepository;
     private final OrganisationPublicApiIF organisationPublicApiIF;
     private final CsvParser<ReportCsvLine> csvParser;
     private final Validator validator;
@@ -250,5 +263,48 @@ public class CsvReportService {
             return Either.left(problems);
         }
         return Either.right(null);
+    }
+
+    public void downloadReportAsCsv(String organisationId,
+                                    List<Short> years,
+                                    List<IntervalType> intervalTypes,
+                                    List<Short> periods,
+                                    LedgerDispatchStatus ledgerStatus,
+                                    List<ReportTemplateType> reportTypes,
+                                    List<String> reportTemplateIds,
+                                    String txHash,
+                                    Boolean isReadyToPublish,
+                                    Boolean ledgerDispatchApproved, OutputStream outputStream) {
+        Page<ReportEntity> allReports = reportingRepository.findAll(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Template name","Name","Interval type","Period","Year","Data mode","Field name","Amount"};
+            csvWriter.writeNext(header, false);
+            for(ReportEntity reportEntity : allReports) {
+                reportEntity.getFields().forEach(field -> writeLeafFieldsToCsv(csvWriter, reportEntity, field, ""));
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Failed to download reports", e);
+        }
+    }
+
+    private void writeLeafFieldsToCsv(CSVWriter csvWriter, ReportEntity reportEntity, ReportFieldEntity field, String prefix) {
+        if(field.getChildFields().isEmpty()) {
+            String[] data = {
+                    reportEntity.getReportTemplate().getName(),
+                    reportEntity.getName(),
+                    reportEntity.getIntervalType().name(),
+                    reportEntity.getPeriod() + "",
+                    reportEntity.getYear() + "",
+                    reportEntity.getDataMode().name(),
+                    prefix + field.getFieldTemplate().getName(),
+                    field.getValue() != null ? field.getValue().toString() : ""
+            };
+            csvWriter.writeNext(data, false);
+        } else {
+            String newPrefix = prefix + field.getFieldTemplate().getName() + ".";
+            field.getChildFields().forEach(childField -> writeLeafFieldsToCsv(csvWriter, reportEntity, childField, newPrefix));
+        }
     }
 }

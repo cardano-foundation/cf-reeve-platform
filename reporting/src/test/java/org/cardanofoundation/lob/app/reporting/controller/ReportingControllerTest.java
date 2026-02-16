@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.reporting.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -372,5 +374,27 @@ class ReportingControllerTest {
         ResponseEntity<?> response = reportingController.reprocess("report123", "org123");
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals(problem, response.getBody());
+    }
+
+    @Test
+    void downloadCsvReports_noAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null);
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+    }
+
+    @Test
+    void downloadCsvReports_success() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null);
+        assertTrue(response.getStatusCode().is2xxSuccessful());
+        assertEquals("text/plain", response.getHeaders().getContentType().toString());
+        assertEquals(
+                "attachment; filename=reports_%s.csv".formatted("org123"),
+                response.getHeaders().getFirst("Content-Disposition")
+        );
+        assertNotNull(response.getBody());
+
     }
 }
