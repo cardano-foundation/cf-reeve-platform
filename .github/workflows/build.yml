@@ -36,7 +36,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
+          distribution: 'temurin'
 
       - name: ⛮ cf-gha-baseline
         uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-baseline@main
