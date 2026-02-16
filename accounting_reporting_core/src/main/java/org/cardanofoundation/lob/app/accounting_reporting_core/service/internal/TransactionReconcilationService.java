@@ -250,12 +250,26 @@ public class TransactionReconcilationService {
 
                         .build());
             }
+
+            ReconcilationCode isSync = getSinkReconcilationStatus(attachedTx, isOnChainMap);
             // we check only existence of LOB transaction on chain, we do not actually check the content and hashes, etc
             attachedTx.setReconcilation(Optional.of(Reconcilation.builder()
                     .source(sourceReconcilationStatus)
-                    .sink(getSinkReconcilationStatus(attachedTx, isOnChainMap))
+                        .sink(isSync)
                     .build())
             );
+
+            if (isSync == ReconcilationCode.NOK) {
+                reconcilationEntity.addViolation(ReconcilationViolation.builder()
+                        .transactionId(attachedTx.getId())
+                        .rejectionCode(SINK_RECONCILATION_FAIL)
+                        .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
+                        .transactionEntryDate(attachedTx.getEntryDate())
+                        .transactionType(attachedTx.getTransactionType())
+                        .amountLcySum(computeAmountLcySum(attachedTx)
+                        )
+                        .build());
+            }
             attachedTx.setLastReconcilation(Optional.of(reconcilationEntity));
         }
 
