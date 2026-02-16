@@ -86,7 +86,7 @@ jobs:
 
       - name:  🌍 earthly (docker build and push)
         run: |
-          earthly --target linux/amd64 +docker-publish \
+          earthly --platform linux/amd64 +docker-publish \
             --PUSH=${DOCKER_PUSH} \
             --DOCKER_REGISTRIES="${{ env.DOCKER_REGISTRIES_FILTERED }}" \
             --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}"
