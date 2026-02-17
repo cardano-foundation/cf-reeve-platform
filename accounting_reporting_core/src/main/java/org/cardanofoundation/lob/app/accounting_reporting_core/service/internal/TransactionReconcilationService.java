@@ -50,7 +50,7 @@ public class TransactionReconcilationService {
     private final Javers javers;
     private final Optional<IndexerReconcilationServiceIF> indexerReconcilationService;
 
-    @Value("${lob.indexer.enabled:false}")
+    @Value("${lob.onchain-indexer.enabled:false}")
     private boolean indexerEnabled;
 
     public Optional<ReconcilationEntity> findById(String reconcilationId) {

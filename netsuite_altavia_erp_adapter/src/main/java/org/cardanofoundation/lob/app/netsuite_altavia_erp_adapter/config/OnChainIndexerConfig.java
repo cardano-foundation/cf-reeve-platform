@@ -16,19 +16,19 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.OnChainIndexerService;
 
 @Configuration
-@ConditionalOnProperty(value = "lob.indexer.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(value = "lob.onchain-indexer.enabled", havingValue = "true", matchIfMissing = false)
 public class OnChainIndexerConfig {
 
-    @Value("${lob.indexer.url}")
+    @Value("${lob.onchain-indexer.base-url}")
     private String indexerBaseUrl;
 
-    @Value("${lob.indexer.page-size:100}")
+    @Value("${lob.onchain-indexer.page-size:100}")
     private int pageSize;
 
-    @Value("${lob.indexer.connect-timeout:5000}")
+    @Value("${lob.onchain-indexer.connect-timeout:5000}")
     private int connectTimeoutMillis;
 
-    @Value("${lob.indexer.read-timeout:30000}")
+    @Value("${lob.onchain-indexer.read-timeout:30000}")
     private int readTimeoutMillis;
 
     @Bean
