@@ -51,7 +51,7 @@ jobs:
 
   mutation-test-organisation:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
@@ -83,7 +83,7 @@ jobs:
  
   mutation-test-blockchain_publisher:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
@@ -115,7 +115,7 @@ jobs:
  
   mutation-test-blockchain_common:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
@@ -147,7 +147,7 @@ jobs:
  
   mutation-test-accounting_reporting_core:
     needs: test
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres
