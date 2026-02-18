@@ -50,7 +50,7 @@ public class TransactionReconcilationService {
     private final Javers javers;
     private final Optional<IndexerReconcilationServiceIF> indexerReconcilationService;
 
-    @Value("${lob.indexer.enabled:false}")
+    @Value("${lob.indexer.enabled:true}")
     private boolean indexerEnabled;
 
     public Optional<ReconcilationEntity> findById(String reconcilationId) {
@@ -331,7 +331,7 @@ public class TransactionReconcilationService {
             log.info("Reconciliation not ready to proceed, reconcilationId: {}", reconcilationEntity.getId(),total,reconcilationEntity.getProcessedTxCount());
             return;
         }
-
+        log.info("\n\n############################## STARTING TEST ##############################\n\n");
         if (reconcilationEntity.getStatus() == ReconcilationStatus.COMPLETED) {
             log.warn("Reconcilation already completed, reconcilationId: {}", reconcilationEntity.getId());
             if (indexerEnabled && indexerReconcilationService.isPresent()) {
@@ -391,13 +391,13 @@ public class TransactionReconcilationService {
         reconcilationEntity.setStatus(ReconcilationStatus.COMPLETED);
 
         reconcilationEntity.incrementMissingTxsCount(missingTxs.size());
-
+        log.info("\n\nit should call the indexer. lets see if is seeted.\n indexerEnabled:{}\n indexerReconcilationService.isPresent():{}\n\n", indexerEnabled, indexerReconcilationService.isPresent());
         transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
         if (indexerEnabled && indexerReconcilationService.isPresent()) {
             log.info("Starting indexer reconciliation after main reconciliation completed, reconcilationId: {}", reconcilationId);
             reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
         }
-
+        log.info("\n\n############################## ENDING TEST ##############################\n\n");
 
     }
 

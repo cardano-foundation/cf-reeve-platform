@@ -87,7 +87,7 @@ public class ERPIncomingDataProcessor {
                 reconcilationStartedEvent.getExtractorType()
         );
 
-        log.info("Finished processing ReconcilationStartedEvent, event: {}", reconcilationStartedEvent);
+        log.info("\n\n################################ TESTING \n\nFinished processing ReconcilationStartedEvent, event: {}", reconcilationStartedEvent);
     }
 
     @Transactional
