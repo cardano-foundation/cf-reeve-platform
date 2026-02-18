@@ -16,7 +16,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.OnChainIndexerService;
 
 @Configuration
-@ConditionalOnProperty(value = "lob.indexer.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(value = "lob.indexer.enabled", havingValue = "true", matchIfMissing = true)
 public class OnChainIndexerConfig {
 
     @Value("${lob.indexer.url}")

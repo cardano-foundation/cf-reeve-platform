@@ -7,7 +7,7 @@ lob:
       client-id: ${LOB_NETSUITE_CLIENT_CLIENT_ID:<enter value>}
       certificate-id: ${LOB_NETSUITE_CLIENT_CERTIFICATE_ID:<enter value>}
   indexer:
-    enabled: ${LOB_INDEXER_ENABLED:false}
+    enabled: ${LOB_INDEXER_ENABLED:true}
     url: ${LOB_INDEXER_URL:http://localhost:9002}
     page-size: ${LOB_INDEXER_PAGE_SIZE:100}
     connect-timeout: ${LOB_INDEXER_CONNECT_TIMEOUT:5000}
