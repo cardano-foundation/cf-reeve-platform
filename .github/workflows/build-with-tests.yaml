@@ -8,7 +8,7 @@ on:
 jobs:
 
   test:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -20,7 +20,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
+          distribution: 'temurin'
       - name: Spotless
         run: |
           ./gradlew spotlessCheck
@@ -42,194 +42,201 @@ jobs:
           -Dsonar.pullrequest.key=$SONAR_PR_KEY \
           -Dsonar.pullrequest.branch=$SONAR_PR_BRANCH \
           -Dsonar.pullrequest.base=$SONAR_PR_BASE
-#  mutation-test-organisation:
-#    needs: test
-#    runs-on: arc-runner-set
-#    services:
-#      postgres:
-#        image: postgres
-#        env:
-#          POSTGRES_USER: postgres
-#          POSTGRES_PASSWORD: postgres
-#          POSTGRES_DB: postgres
-#        ports:
-#          - 5432:5432
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Setup JDK 21
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '21'
-#          distribution: 'corretto'
-#
-#      - name: PiTest
-#        run: |
-#          ./gradlew clean :organisation:pitest
-#      - name: Publish mutation test report to GitHub Pages
-#        uses: JamesIves/github-pages-deploy-action@v4
-#        if: github.ref == 'refs/heads/main'
-#        with:
-#          BRANCH: gh-pages
-#          folder: build/reports/pitest/
-#          target-folder: mutation-report/
-#
-#  mutation-test-blockchain_publisher:
-#    needs: test
-#    runs-on: arc-runner-set
-#    services:
-#      postgres:
-#        image: postgres
-#        env:
-#          POSTGRES_USER: postgres
-#          POSTGRES_PASSWORD: postgres
-#          POSTGRES_DB: postgres
-#        ports:
-#          - 5432:5432
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Setup JDK 21
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '21'
-#          distribution: 'corretto'
-#
-#      - name: PiTest
-#        run: |
-#          ./gradlew clean :blockchain_publisher:pitest
-#      - name: Publish mutation test report to GitHub Pages
-#        uses: JamesIves/github-pages-deploy-action@v4
-#        if: github.ref == 'refs/heads/main'
-#        with:
-#          BRANCH: gh-pages
-#          folder: build/reports/pitest/
-#          target-folder: mutation-report/
-#
-#  mutation-test-blockchain_common:
-#    needs: test
-#    runs-on: arc-runner-set
-#    services:
-#      postgres:
-#        image: postgres
-#        env:
-#          POSTGRES_USER: postgres
-#          POSTGRES_PASSWORD: postgres
-#          POSTGRES_DB: postgres
-#        ports:
-#          - 5432:5432
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Setup JDK 21
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '21'
-#          distribution: 'corretto'
-#
-#      - name: PiTest
-#        run: |
-#          ./gradlew clean :blockchain_common:pitest
-#      - name: Publish mutation test report to GitHub Pages
-#        uses: JamesIves/github-pages-deploy-action@v4
-#        if: github.ref == 'refs/heads/main'
-#        with:
-#          BRANCH: gh-pages
-#          folder: build/reports/pitest/
-#          target-folder: mutation-report/
-#
-#  mutation-test-accounting_reporting_core:
-#    needs: test
-#    runs-on: arc-runner-set
-#    services:
-#      postgres:
-#        image: postgres
-#        env:
-#          POSTGRES_USER: postgres
-#          POSTGRES_PASSWORD: postgres
-#          POSTGRES_DB: postgres
-#        ports:
-#          - 5432:5432
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Setup JDK 21
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '21'
-#          distribution: 'corretto'
-#
-#      - name: PiTest
-#        run: |
-#          ./gradlew clean :accounting_reporting_core:pitest
-#      - name: Publish mutation test report to GitHub Pages
-#        uses: JamesIves/github-pages-deploy-action@v4
-#        if: github.ref == 'refs/heads/main'
-#        with:
-#          BRANCH: gh-pages
-#          folder: build/reports/pitest/
-#          target-folder: mutation-report/
-#
-#  mutation-test-blockchain_reader:
-#    needs: test
-#    runs-on: ubuntu-latest
-#    services:
-#      postgres:
-#        image: postgres
-#        env:
-#          POSTGRES_USER: postgres
-#          POSTGRES_PASSWORD: postgres
-#          POSTGRES_DB: postgres
-#        ports:
-#          - 5432:5432
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Setup JDK 21
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '21'
-#          distribution: 'corretto'
-#
-#      - name: PiTest
-#        run: |
-#          ./gradlew clean :blockchain_reader:pitest
-#      - name: Publish mutation test report to GitHub Pages
-#        uses: JamesIves/github-pages-deploy-action@v4
-#        if: github.ref == 'refs/heads/main'
-#        with:
-#          BRANCH: gh-pages
-#          folder: build/reports/pitest/
-#          target-folder: mutation-report/
-#
-#  mutation-test-netsuite_altavia_erp_adapter:
-#    needs: test
-#    runs-on: ubuntu-latest
-#    services:
-#      postgres:
-#        image: postgres
-#        env:
-#          POSTGRES_USER: postgres
-#          POSTGRES_PASSWORD: postgres
-#          POSTGRES_DB: postgres
-#        ports:
-#          - 5432:5432
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v4
-#      - name: Setup JDK 21
-#        uses: actions/setup-java@v4
-#        with:
-#          java-version: '21'
-#          distribution: 'corretto'
-#
-#      - name: PiTest
-#        run: |
-#          ./gradlew clean :netsuite_altavia_erp_adapter:pitest
-#      - name: Publish mutation test report to GitHub Pages
-#        uses: JamesIves/github-pages-deploy-action@v4
-#        if: github.ref == 'refs/heads/main'
-#        with:
-#          BRANCH: gh-pages
-#          folder: build/reports/pitest/
-#          target-folder: mutation-report/
+      - name: Upload test html report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: ./**/build/reports/tests/test
+
+  mutation-test-organisation:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+ 
+      - name: PiTest
+        run: |
+          ./gradlew clean :organisation:pitest
+      - name: Publish mutation test report to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          BRANCH: gh-pages
+          folder: build/reports/pitest/
+          target-folder: mutation-report/
+ 
+  mutation-test-blockchain_publisher:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+ 
+      - name: PiTest
+        run: |
+          ./gradlew clean :blockchain_publisher:pitest
+      - name: Publish mutation test report to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          BRANCH: gh-pages
+          folder: build/reports/pitest/
+          target-folder: mutation-report/
+ 
+  mutation-test-blockchain_common:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+ 
+      - name: PiTest
+        run: |
+          ./gradlew clean :blockchain_common:pitest
+      - name: Publish mutation test report to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          BRANCH: gh-pages
+          folder: build/reports/pitest/
+          target-folder: mutation-report/
+ 
+  mutation-test-accounting_reporting_core:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+ 
+      - name: PiTest
+        run: |
+          ./gradlew clean :accounting_reporting_core:pitest
+      - name: Publish mutation test report to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          BRANCH: gh-pages
+          folder: build/reports/pitest/
+          target-folder: mutation-report/
+ 
+  mutation-test-blockchain_reader:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+ 
+      - name: PiTest
+        run: |
+          ./gradlew clean :blockchain_reader:pitest
+      - name: Publish mutation test report to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          BRANCH: gh-pages
+          folder: build/reports/pitest/
+          target-folder: mutation-report/
+ 
+  mutation-test-netsuite_altavia_erp_adapter:
+    needs: test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+ 
+      - name: PiTest
+        run: |
+          ./gradlew clean :netsuite_altavia_erp_adapter:pitest
+      - name: Publish mutation test report to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          BRANCH: gh-pages
+          folder: build/reports/pitest/
+          target-folder: mutation-report/
