@@ -27,7 +27,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    runs-on: arc-runner-set 
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,7 +61,7 @@ jobs:
           echo "${{ secrets.MAVEN_CENTRAL_GPG_KEY_BASE64 }}" > ~/.gradle/secring.gpg.b64
           base64 -d ~/.gradle/secring.gpg.b64 > ~/.gradle/secring.gpg
           echo "${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}" | gpg --batch --yes --passphrase-fd 0 --import ~/.gradle/secring.gpg
-          # gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
+          gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
 
       - name: Gradle publish
         env:
@@ -77,8 +77,7 @@ jobs:
               ;;
             tag)
               VERSION_PUBLISH=${TAG_NAME}
-              # do not release until we fixed signify java snapshot dependency
-              # GRADLE_TARGETS="$GRADLE_TARGETS jreleaserDeploy"
+              GRADLE_TARGETS="$GRADLE_TARGETS jreleaserDeploy"
               ;;
           esac
           ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test 
