@@ -99,6 +99,7 @@ public class NetSuiteEventHandler {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Async
+    @EventListener
     public void handleCreatedReconciliationEvent(ReconcilationCreatedEvent reconcilationCreatedEvent) {
         log.info("Handling handleCreatedReconciliationEvent...");
         if (reconcilationCreatedEvent.getExtractorType() != ExtractorType.NETSUITE) {
