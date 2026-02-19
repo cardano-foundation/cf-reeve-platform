@@ -94,7 +94,7 @@ public class ChartOfAccountController {
     }
 
     @Operation(summary = "Download chart of accounts CSV file", description = "Download chart of accounts as a CSV file")
-    @GetMapping(value = "/organisations/{orgId}/chart-of-accounts/download", produces = "test/csv")
+    @GetMapping(value = "/{orgId}/chart-of-accounts/download", produces = "test/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<StreamingResponseBody> downloadChartOfAccountsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                             @RequestParam(value = "customerCode", required = false) String customerCode,
