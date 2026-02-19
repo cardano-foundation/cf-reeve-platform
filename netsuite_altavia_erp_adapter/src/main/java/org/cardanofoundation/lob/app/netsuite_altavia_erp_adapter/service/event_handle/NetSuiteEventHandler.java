@@ -6,8 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
@@ -97,8 +95,8 @@ public class NetSuiteEventHandler {
         log.info("Handled handleScheduledReconciliationEvent.");
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Async
+    @EventListener
     public void handleCreatedReconciliationEvent(ReconcilationCreatedEvent reconcilationCreatedEvent) {
         log.info("Handling handleCreatedReconciliationEvent...");
         if (reconcilationCreatedEvent.getExtractorType() != ExtractorType.NETSUITE) {
