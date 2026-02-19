@@ -121,7 +121,6 @@ class CsvReportServiceTest {
         CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
         Organisation organisation = mock(Organisation.class);
         MultipartFile multipartFile = mock(MultipartFile.class);
-        Errors errors = mock(Errors.class);
 
         when(request.getOrganisationId()).thenReturn("org123");
         when(organisationPublicApiIF.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
