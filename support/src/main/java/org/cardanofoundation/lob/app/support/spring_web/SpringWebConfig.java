@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.multipart.MultipartResolver;
 import org.springframework.web.multipart.support.StandardServletMultipartResolver;
@@ -27,6 +28,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 @Configuration
 @Slf4j
 @RequiredArgsConstructor
+@ComponentScan(basePackages = "org.cardanofoundation.lob.app.support")
 public class SpringWebConfig {
 
     @Value("${lob.cors.allowed.origins:http://localhost:3000}")

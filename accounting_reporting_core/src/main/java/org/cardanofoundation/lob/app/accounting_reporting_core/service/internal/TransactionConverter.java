@@ -34,7 +34,7 @@ public class TransactionConverter {
     @Value("${lob.blockchain-publisher.rollback.enabled:false}")
     private Optional<Boolean> rollbackEnabled;
 
-    public FilteringParameters convertToDbDetached(SystemExtractionParameters systemExtractionParameters,
+    public FilteringParameters convertToDbDetached(org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters systemExtractionParameters,
                                                    UserExtractionParameters userExtractionParameters) {
         return FilteringParameters.builder()
                 .organisationId(userExtractionParameters.getOrganisationId())
@@ -48,7 +48,7 @@ public class TransactionConverter {
     }
 
     public FilteringParameters convertToDbDetached(UserExtractionParameters userExtractionParameters,
-                                                   Optional<SystemExtractionParameters> systemExtractionParameters) {
+                                                   Optional<org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters> systemExtractionParameters) {
         return systemExtractionParameters.map(se -> {
             return convertToDbDetached(se, userExtractionParameters);
         }).orElseGet(() -> convertToDbDetached(userExtractionParameters));

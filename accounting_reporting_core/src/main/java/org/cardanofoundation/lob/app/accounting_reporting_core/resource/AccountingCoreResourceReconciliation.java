@@ -11,7 +11,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
@@ -45,7 +44,6 @@ import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
 public class AccountingCoreResourceReconciliation {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;

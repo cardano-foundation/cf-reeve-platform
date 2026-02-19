@@ -12,7 +12,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -59,7 +58,6 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "Reports", description = "Manage reports based on templates with column data")
-@ConditionalOnProperty(value = "lob.reporting.enabled", havingValue = "true", matchIfMissing = true)
 public class ReportTemplateController {
 
     private final ReportTemplateService reportTemplateService;

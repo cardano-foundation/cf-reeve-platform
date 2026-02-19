@@ -8,7 +8,6 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -26,7 +25,6 @@ import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.reporting.enabled", havingValue = "true", matchIfMissing = true)
 public class ReportingEventHandler {
 
     private final ReportingRepository reportingRepository;

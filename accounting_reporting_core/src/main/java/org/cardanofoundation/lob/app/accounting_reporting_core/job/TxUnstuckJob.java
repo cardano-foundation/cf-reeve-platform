@@ -24,7 +24,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Accoun
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = {"lob.accounting_reporting_core.enabled", "lob.accounting_reporting_core.jobs.unstuck.enabled"}, havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(value = "lob.accounting_reporting_core.jobs.unstuck.enabled", havingValue = "true", matchIfMissing = true)
 public class TxUnstuckJob {
 
     private final AccountingCoreTransactionRepository accountingCoreTransactionRepository;

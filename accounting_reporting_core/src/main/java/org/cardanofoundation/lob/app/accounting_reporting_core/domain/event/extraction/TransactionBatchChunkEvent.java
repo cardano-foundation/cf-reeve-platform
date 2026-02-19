@@ -12,8 +12,8 @@ import lombok.NoArgsConstructor;
 
 import org.jmolecules.event.annotation.DomainEvent;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
+import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @AllArgsConstructor

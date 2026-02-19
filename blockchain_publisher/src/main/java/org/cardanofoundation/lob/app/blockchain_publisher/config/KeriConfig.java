@@ -27,10 +27,7 @@ import org.cardanofoundation.signify.cesr.Salter;
 import org.cardanofoundation.signify.core.States;
 
 @Configuration
-@ConditionalOnProperty(name = {
-    "lob.blockchain-publisher.keri.enabled",
-    "lob.blockchain-publisher.enabled"
-}, havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(name = "lob.blockchain-publisher.keri.enabled", havingValue = "true", matchIfMissing = false)
 @Slf4j
 public class KeriConfig {
 

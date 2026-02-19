@@ -9,6 +9,7 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server:$springBootSecurity")
     implementation("org.springframework.boot:spring-boot-starter-security:$springBootSecurity")
+//    implementation("org.springframework.boot:spring-boot-starter-web")
     // Keycloak dependencies
     implementation("org.keycloak:keycloak-spring-boot-starter:$springBootKeycloak")
 
