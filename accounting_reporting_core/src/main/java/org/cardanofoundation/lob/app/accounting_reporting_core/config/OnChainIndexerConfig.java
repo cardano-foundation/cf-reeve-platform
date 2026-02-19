@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.config;
+package org.cardanofoundation.lob.app.accounting_reporting_core.config;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;

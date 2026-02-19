@@ -69,7 +69,7 @@ public class ProjectCodeController {
     }
 
     @Operation(summary = "Download projects CSV file", description = "Download projects as a CSV file")
-    @GetMapping(value = "/organisations/{orgId}/projects/download", produces = "test/csv")
+    @GetMapping(value = "/{orgId}/projects/download", produces = "test/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<StreamingResponseBody> downloadProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "customerCode", required = false) String customerCode,

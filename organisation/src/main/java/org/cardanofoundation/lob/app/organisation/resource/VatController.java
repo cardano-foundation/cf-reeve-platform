@@ -64,7 +64,7 @@ public class VatController {
     }
 
     @Operation(summary = "Download vat CSV file", description = "Download vat codes as a CSV file")
-    @GetMapping(value = "/organisations/{orgId}/vat-codes/download", produces = "test/csv")
+    @GetMapping(value = "/{orgId}/vat-codes/download", produces = "test/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<StreamingResponseBody> downloadVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "customerCode", required = false) String customerCode,
