@@ -20,7 +20,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
+          distribution: 'temurin'
       - name: Spotless
         run: |
           ./gradlew spotlessCheck
@@ -42,6 +42,13 @@ jobs:
           -Dsonar.pullrequest.key=$SONAR_PR_KEY \
           -Dsonar.pullrequest.branch=$SONAR_PR_BRANCH \
           -Dsonar.pullrequest.base=$SONAR_PR_BASE
+      - name: Upload test html report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: ./**/build/reports/tests/test
+
   mutation-test-organisation:
     needs: test
     runs-on: ubuntu-latest
@@ -61,8 +68,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
-
+          distribution: 'temurin'
+ 
       - name: PiTest
         run: |
           ./gradlew clean :organisation:pitest
@@ -73,7 +80,7 @@ jobs:
           BRANCH: gh-pages
           folder: build/reports/pitest/
           target-folder: mutation-report/
-
+ 
   mutation-test-blockchain_publisher:
     needs: test
     runs-on: ubuntu-latest
@@ -93,8 +100,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
-
+          distribution: 'temurin'
+ 
       - name: PiTest
         run: |
           ./gradlew clean :blockchain_publisher:pitest
@@ -105,7 +112,7 @@ jobs:
           BRANCH: gh-pages
           folder: build/reports/pitest/
           target-folder: mutation-report/
-
+ 
   mutation-test-blockchain_common:
     needs: test
     runs-on: ubuntu-latest
@@ -125,8 +132,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
-
+          distribution: 'temurin'
+ 
       - name: PiTest
         run: |
           ./gradlew clean :blockchain_common:pitest
@@ -137,7 +144,7 @@ jobs:
           BRANCH: gh-pages
           folder: build/reports/pitest/
           target-folder: mutation-report/
-
+ 
   mutation-test-accounting_reporting_core:
     needs: test
     runs-on: ubuntu-latest
@@ -157,8 +164,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
-
+          distribution: 'temurin'
+ 
       - name: PiTest
         run: |
           ./gradlew clean :accounting_reporting_core:pitest
@@ -169,7 +176,7 @@ jobs:
           BRANCH: gh-pages
           folder: build/reports/pitest/
           target-folder: mutation-report/
-
+ 
   mutation-test-blockchain_reader:
     needs: test
     runs-on: ubuntu-latest
@@ -189,8 +196,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
-
+          distribution: 'temurin'
+ 
       - name: PiTest
         run: |
           ./gradlew clean :blockchain_reader:pitest
@@ -201,7 +208,7 @@ jobs:
           BRANCH: gh-pages
           folder: build/reports/pitest/
           target-folder: mutation-report/
-
+ 
   mutation-test-netsuite_altavia_erp_adapter:
     needs: test
     runs-on: ubuntu-latest
@@ -221,8 +228,8 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'corretto'
-
+          distribution: 'temurin'
+ 
       - name: PiTest
         run: |
           ./gradlew clean :netsuite_altavia_erp_adapter:pitest

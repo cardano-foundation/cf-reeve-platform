@@ -256,4 +256,7 @@ public class TransactionItemEntity extends CommonEntity implements Persistable<S
         return Objects.hashCode(id);
     }
 
+    public int aggregatedHash() {
+        return java.util.Objects.hash(accountEvent, fxRate, project, costCenter, document);
+    }
 }

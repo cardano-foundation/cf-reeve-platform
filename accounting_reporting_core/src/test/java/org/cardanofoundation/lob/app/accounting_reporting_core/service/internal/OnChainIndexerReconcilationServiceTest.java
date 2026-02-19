@@ -1,0 +1,679 @@
+package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+import io.vavr.control.Either;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.zalando.problem.Problem;
+import org.zalando.problem.Status;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionDto;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionItemDto;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.IndexerReconcilationServiceIF.IndexerReconcilationResult;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.IndexerTransactionTransformer.TransformedTransaction;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.IndexerTransactionTransformer.TransformedTransactionItem;
+
+@ExtendWith(MockitoExtension.class)
+class OnChainIndexerReconcilationServiceTest {
+
+    @Mock
+    private OnChainIndexerService indexerService;
+
+    @Mock
+    private IndexerTransactionTransformer indexerTransactionTransformer;
+
+    private OnChainIndexerReconcilationService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new OnChainIndexerReconcilationService(indexerService, indexerTransactionTransformer);
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldReturnOK_whenTransactionsMatch() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+        TransactionItemEntity dbItem = createDbTransactionItem("item-1", BigDecimal.valueOf(1000), "1.0", "9000", "PRJ001");
+        dbItem.setTransaction(dbTx);
+        dbTx.setAllItems(Set.of(dbItem));
+
+        // Mock transformer to return matching transformed transaction
+        TransformedTransactionItem transformedItem = TransformedTransactionItem.builder()
+                .id("item-1")
+                .amountFcy(BigDecimal.valueOf(1000))
+                .fxRate(BigDecimal.ONE)
+                .costCenter(new IndexerTransactionTransformer.CostCenterHolder("9000", "Internal"))
+                .project(new IndexerTransactionTransformer.ProjectHolder("PRJ001", "Test Project"))
+                .document(new IndexerTransactionTransformer.DocumentHolder("doc-001",
+                        new IndexerTransactionTransformer.CurrencyHolder("ISO_4217:CHF", "CHF"),
+                        new IndexerTransactionTransformer.VatHolder("VAT0", BigDecimal.ZERO),
+                        null))
+                .accountEvent(new IndexerTransactionTransformer.AccountEventHolder("7820T000", "Test Event"))
+                .operationType(OperationType.DEBIT)
+                .build();
+
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of(transformedItem))
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        OnChainTransactionItemDto indexerItem = new OnChainTransactionItemDto(
+                "item-1", BigDecimal.valueOf(1000), "1", "doc-001", "ISO_4217:CHF",
+                "Internal", "9000", "0", "VAT0", "7820T000", "Test Event", "PRJ001", "Test Project"
+        );
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of(indexerItem)
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results).hasSize(1);
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.OK);
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldReturnNOK_whenTransactionNotFoundInIndexer() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of())); // Empty list
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results).hasSize(1);
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("not found in indexer");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldReturnNOK_whenTransactionTypeMismatch() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        // Mock transformer
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "Journal", "2024-01-15", organisationId, List.of() // Different type
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("Type mismatch");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldReturnNOK_whenItemsCountMismatch() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+        TransactionItemEntity dbItem = createDbTransactionItem("item-1", BigDecimal.valueOf(1000), "1.0", "9000", "PRJ001");
+        dbItem.setTransaction(dbTx);
+        dbTx.setAllItems(Set.of(dbItem));
+
+        // Mock transformer to return one item
+        TransformedTransactionItem transformedItem = TransformedTransactionItem.builder()
+                .id("item-1")
+                .amountFcy(BigDecimal.valueOf(1000))
+                .build();
+
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of(transformedItem))
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        // Indexer has no items
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of()
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("Items count mismatch");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldReturnProblem_whenIndexerCallFails() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        Problem problem = Problem.builder()
+                .withStatus(Status.SERVICE_UNAVAILABLE)
+                .withTitle("INDEXER_API_ERROR")
+                .withDetail("Connection refused")
+                .build();
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.left(problem));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("INDEXER_API_ERROR");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldDetectTransactionInIndexerButNotInDb() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        // DB has tx-1, but indexer has both tx-1 and tx-2
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        // Mock transformer
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        OnChainTransactionDto indexerTx1 = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of()
+        );
+        OnChainTransactionDto indexerTx2 = new OnChainTransactionDto(
+                "tx-2", "hash-2", "VENDPYMT-002", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-16", organisationId, List.of()
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx1, indexerTx2)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results).hasSize(2);
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.OK);
+        assertThat(results.get("tx-2").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-2").mismatchReason()).contains("found in indexer but not in database");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldDetectAmountMismatch() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        // Mock transformer to return different amount - content fields must match indexer item for content-based matching
+        TransformedTransactionItem transformedItem = TransformedTransactionItem.builder()
+                .id("item-1")
+                .amountFcy(BigDecimal.valueOf(2000)) // Different amount - this is what we're testing
+                .fxRate(BigDecimal.ONE)
+                .costCenter(new IndexerTransactionTransformer.CostCenterHolder("9000", "Internal"))
+                .project(new IndexerTransactionTransformer.ProjectHolder("PRJ001", "Test Project"))
+                .document(new IndexerTransactionTransformer.DocumentHolder("doc-001",
+                        new IndexerTransactionTransformer.CurrencyHolder("ISO_4217:CHF", "CHF"),
+                        new IndexerTransactionTransformer.VatHolder("VAT0", BigDecimal.ZERO),
+                        null))
+                .accountEvent(new IndexerTransactionTransformer.AccountEventHolder("7820T000", "Test Event"))
+                .operationType(OperationType.DEBIT)
+                .build();
+
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of(transformedItem))
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        OnChainTransactionItemDto indexerItem = new OnChainTransactionItemDto(
+                "item-1", BigDecimal.valueOf(1000), "1", "doc-001", "ISO_4217:CHF",
+                "Internal", "9000", "0", "VAT0", "7820T000", "Test Event", "PRJ001", "Test Project"
+        );
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of(indexerItem)
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("amountFcy mismatch");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldNotCompareBatchId() {
+        // Given - Batch ID comparison is currently disabled in the reconciliation service
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        // Mock transformer
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-2", // Different batch ID - but this should be ignored
+                "VendorPayment", "2024-01-15", organisationId, List.of()
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then - Batch ID comparison is disabled, so this should be OK
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.OK);
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldDetectDateMismatch() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        // Mock transformer
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-20", organisationId, List.of() // Different date
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("Date mismatch");
+    }
+
+    private TransactionEntity createDbTransaction(String id, String internalNumber, String type, String date, String batchId) {
+        TransactionEntity tx = TransactionEntity.builder()
+                .internalTransactionNumber(internalNumber)
+                .transactionType(TransactionType.valueOf(type))
+                .entryDate(LocalDate.parse(date))
+                .batchId(batchId)
+                .accountingPeriod(YearMonth.of(2024, 1))
+                .organisation(Organisation.builder().id("test-org").build())
+                .build();
+        tx.setId(id);
+        return tx;
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldHandleCreditOperationType() {
+        // Given - CREDIT operations should negate the indexer amount for comparison
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+        TransactionItemEntity dbItem = createDbTransactionItem("item-1", BigDecimal.valueOf(-1000), "1.0", "9000", "PRJ001");
+        dbItem.setOperationType(OperationType.CREDIT); // Set CREDIT operation type
+        dbItem.setTransaction(dbTx);
+        dbTx.setAllItems(Set.of(dbItem));
+
+        // Mock transformer to return CREDIT item - transformer already negates CREDIT amounts
+        // (see IndexerTransactionTransformer line 109: amountFcy.negate() for non-DEBIT)
+        // so DB -1000 becomes +1000 after transformation, matching the indexer's stored value
+        TransformedTransactionItem transformedItem = TransformedTransactionItem.builder()
+                .id("item-1")
+                .amountFcy(BigDecimal.valueOf(1000)) // Positive after transformer negation of CREDIT -1000
+                .fxRate(BigDecimal.ONE)
+                .costCenter(new IndexerTransactionTransformer.CostCenterHolder("9000", "Internal"))
+                .project(new IndexerTransactionTransformer.ProjectHolder("PRJ001", "Test Project"))
+                .document(new IndexerTransactionTransformer.DocumentHolder("doc-001",
+                        new IndexerTransactionTransformer.CurrencyHolder("ISO_4217:CHF", "CHF"),
+                        new IndexerTransactionTransformer.VatHolder("VAT0", BigDecimal.ZERO),
+                        null))
+                .accountEvent(new IndexerTransactionTransformer.AccountEventHolder("7820T000", "Test Event"))
+                .operationType(OperationType.CREDIT)
+                .build();
+
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of(transformedItem))
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        // Indexer stores positive amount, CREDIT should negate it for comparison
+        OnChainTransactionItemDto indexerItem = new OnChainTransactionItemDto(
+                "item-1", BigDecimal.valueOf(1000), "1", "doc-001", "ISO_4217:CHF",
+                "Internal", "9000", "0", "VAT0", "7820T000", "Test Event", "PRJ001", "Test Project"
+        );
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of(indexerItem)
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then - Transformer converts CREDIT -1000 to +1000, matching indexer's +1000
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.OK);
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldDetectFxRateMismatch() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+        TransactionItemEntity dbItem = createDbTransactionItem("item-1", BigDecimal.valueOf(1000), "1.25", "9000", "PRJ001");
+        dbItem.setTransaction(dbTx);
+        dbTx.setAllItems(Set.of(dbItem));
+
+        // Mock transformer to return item with different fxRate - note: content key uses fxRate
+        TransformedTransactionItem transformedItem = TransformedTransactionItem.builder()
+                .id("item-1")
+                .amountFcy(BigDecimal.valueOf(1000))
+                .fxRate(new BigDecimal("1.25")) // Different from indexer
+                .costCenter(new IndexerTransactionTransformer.CostCenterHolder("9000", "Internal"))
+                .project(new IndexerTransactionTransformer.ProjectHolder("PRJ001", "Test Project"))
+                .document(new IndexerTransactionTransformer.DocumentHolder("doc-001",
+                        new IndexerTransactionTransformer.CurrencyHolder("ISO_4217:CHF", "CHF"),
+                        new IndexerTransactionTransformer.VatHolder("VAT0", BigDecimal.ZERO),
+                        null))
+                .accountEvent(new IndexerTransactionTransformer.AccountEventHolder("7820T000", "Test Event"))
+                .operationType(OperationType.DEBIT)
+                .build();
+
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of(transformedItem))
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        // Indexer has different fxRate - this will cause a mismatch because items won't match by content key
+        OnChainTransactionItemDto indexerItem = new OnChainTransactionItemDto(
+                "item-1", BigDecimal.valueOf(1000), "1.50", "doc-001", "ISO_4217:CHF",
+                "Internal", "9000", "0", "VAT0", "7820T000", "Test Event", "PRJ001", "Test Project"
+        );
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of(indexerItem)
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then - fxRate mismatch should cause item not found
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("not found in indexer");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldHandleInternalNumberMismatch() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+
+        // Mock transformer
+        TransformedTransaction transformedTx = TransformedTransaction.builder()
+                .id("tx-1")
+                .internalNumber("VENDPYMT-001")
+                .transactionType("VendorPayment")
+                .entryDate("2024-01-15")
+                .batchId("batch-1")
+                .organisationId(organisationId)
+                .items(List.of())
+                .build();
+
+        when(indexerTransactionTransformer.transformForIndexerComparison(any(TransactionEntity.class)))
+                .thenReturn(transformedTx);
+
+        // Indexer has different internal number
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-999", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of()
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        // Then
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("Internal number mismatch");
+    }
+
+    @Test
+    void reconcileWithIndexer_shouldHandleEmptyDbTransactions() {
+        // Given
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        // Indexer has transactions but DB doesn't
+        OnChainTransactionDto indexerTx = new OnChainTransactionDto(
+                "tx-1", "hash-1", "VENDPYMT-001", "2024-01", "batch-1",
+                "VendorPayment", "2024-01-15", organisationId, List.of()
+        );
+
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        // When
+        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of());
+
+        // Then - should detect orphaned indexer transaction
+        assertThat(result.isRight()).isTrue();
+        Map<String, IndexerReconcilationResult> results = result.get();
+        assertThat(results).hasSize(1);
+        assertThat(results.get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        assertThat(results.get("tx-1").mismatchReason()).contains("found in indexer but not in database");
+    }
+
+    private TransactionItemEntity createDbTransactionItem(String id, BigDecimal amount, String fxRate, String costCenterCode, String projectCode) {
+        TransactionItemEntity item = new TransactionItemEntity();
+        item.setId(id);
+        item.setAmountFcy(amount);
+        item.setAmountLcy(amount);
+        item.setFxRate(new BigDecimal(fxRate));
+        item.setOperationType(OperationType.DEBIT);
+        item.setCostCenter(Optional.of(CostCenter.builder().customerCode(costCenterCode).build()));
+        item.setProject(Optional.of(Project.builder().customerCode(projectCode).build()));
+        return item;
+    }
+}
