@@ -77,6 +77,14 @@ public class CsvReportService {
             return Either.left(parsedLines.getLeft());
         }
         List<ReportCsvLine> reportLines = new ArrayList<>(parsedLines.get());
+        if (reportLines.isEmpty()) {
+            Problem problem = Problem.builder()
+                    .withTitle(Constants.CSV_PARSING_ERROR)
+                    .withDetail("CSV file has no content lines.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build();
+            return Either.left(problem);
+        }
         List<ReportCsvLine> copyOfReportLines = new ArrayList<>(reportLines); // Creating a copy to keep track of original indexes for error reporting
         Either<List<Problem>, Void> voids = validateReportCsvLines(reportLines);
         if (voids.isLeft()) {

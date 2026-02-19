@@ -74,6 +74,14 @@ public class CsvReportTemplateService {
             return Either.left(parsedLines.getLeft());
         }
         List<TemplateCsvLine> templateCsvLines = new ArrayList<>(parsedLines.get());
+        if (templateCsvLines.isEmpty()) {
+            Problem problem = Problem.builder()
+                    .withTitle(Constants.CSV_PARSING_ERROR)
+                    .withDetail("CSV file has no content lines.")
+                    .withStatus(Status.BAD_REQUEST)
+                    .build();
+            return Either.left(problem);
+        }
         Either<List<Problem>, Void> validationResult = validateTemplateCsvLines(templateCsvLines);
         if (validationResult.isLeft()) {
             return Either.left(validationResult.getLeft().getFirst());
