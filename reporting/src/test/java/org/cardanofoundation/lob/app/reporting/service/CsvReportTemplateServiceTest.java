@@ -81,6 +81,24 @@ class CsvReportTemplateServiceTest {
     }
 
     @Test
+    void createCsvTemplates_noContent() {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        Organisation organisation = new Organisation();
+        MultipartFile file = mock(MultipartFile.class);
+
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of()));
+        when(request.getFile()).thenReturn(file);
+
+        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
+        assertEquals("CSV file has no content lines.", result.getLeft().getDetail());
+    }
+
+    @Test
     void createCsvTemplates_validationError() {
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         Organisation organisation = new Organisation();

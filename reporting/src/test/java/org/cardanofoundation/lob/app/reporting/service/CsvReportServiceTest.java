@@ -117,6 +117,25 @@ class CsvReportServiceTest {
     }
 
     @Test
+    void createCsvReports_emptyLines() {
+        CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
+        Organisation organisation = mock(Organisation.class);
+        MultipartFile multipartFile = mock(MultipartFile.class);
+        Errors errors = mock(Errors.class);
+
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(organisationPublicApiIF.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getFile()).thenReturn(multipartFile);
+        when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.right(List.of()));
+
+        Either<Problem, List<ReportResponseDto>> result = service.createCsvReports(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
+        assertEquals("CSV file has no content lines.", result.getLeft().getDetail());
+    }
+
+    @Test
     void createCsvReports_templateNotFound() {
         CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
         Organisation organisation = mock(Organisation.class);
