@@ -104,6 +104,7 @@ subprojects {
     extra["springCloudVersion"] = "2023.0.0"
     extra["jMoleculesVersion"] = "2023.1.0"
     extra["flyway.version"] = "10.20.1"
+    extra["testcontainers.version"] = "1.21.4"
 
     dependencies {
         implementation("org.springframework.data:spring-data-envers")
