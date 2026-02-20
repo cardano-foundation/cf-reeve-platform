@@ -926,9 +926,9 @@ public class AccountingCorePresentationViewService {
 
     }
 
-    public void downloadCsvTransactions(@Valid String orgId, List<TxValidationStatus> txStatusList, List<TransactionType> transactionTypes, LocalDate dateFrom, LocalDate dateTo, OutputStream outputStream) {
+    public void downloadCsvTransactions(@Valid String orgId, List<TxValidationStatus> txStatusList, List<TransactionType> transactionTypes, LocalDate dateFrom, LocalDate dateTo, Boolean published, OutputStream outputStream) {
         List<TransactionEntity> allFilteredTxEntities = accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange(orgId, txStatusList, transactionTypes,
-                dateFrom, dateTo,Pageable.unpaged());
+                dateFrom, dateTo, published, Pageable.unpaged());
         try (Writer writer = new OutputStreamWriter(outputStream)) {
             CSVWriter csvWriter = new CSVWriter(writer);
             String[] header = {"Transaction Number",
@@ -961,6 +961,7 @@ public class AccountingCorePresentationViewService {
                     String [] data = {
                         transactionEntity.getInternalTransactionNumber(),
                         transactionEntity.getEntryDate().toString(),
+                        Optional.ofNullable(transactionEntity.getTransactionType()).map(Enum::name).orElse(""),
                         item.getFxRate().stripTrailingZeros().toPlainString(),
                         isCredit ? "" : item.getAmountLcy().stripTrailingZeros().toPlainString(),
                         isCredit ? item.getAmountLcy().stripTrailingZeros().toPlainString() : "",
@@ -975,6 +976,7 @@ public class AccountingCorePresentationViewService {
                         item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
                         item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
                         item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
+                        item.getCostCenter().map(costCenter -> costCenter.getCustomerCode()).orElse(""),
                         item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
                         item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
                         transactionEntity.getExtractorType(),

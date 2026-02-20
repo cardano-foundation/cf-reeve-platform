@@ -238,7 +238,7 @@ class AccountingCoreResourceTest {
     void downloadTransactionsCsv_noAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), null, null);
+        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), null, null, null);
         assertTrue(response.getStatusCode().is4xxClientError());
         assertNotNull(response.getBody());
     }
@@ -247,7 +247,7 @@ class AccountingCoreResourceTest {
     void downloadTransactionsCsv_invalidDateFormat() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
 
-        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), "INVALID", null);
+        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), "INVALID", null, null);
         assertTrue(response.getStatusCode().is4xxClientError());
         assertNotNull(response.getBody());
     }
@@ -267,7 +267,7 @@ class AccountingCoreResourceTest {
                 txStatusList,
                 transactionTypes,
                 null,
-                null
+                null, null
         );
 
         // Verify response
@@ -289,7 +289,7 @@ class AccountingCoreResourceTest {
 
         // Verify the service was called
         verify(accountingCorePresentationViewService)
-                .downloadCsvTransactions(eq(orgId), eq(txStatusList), eq(transactionTypes), eq(null), eq(null), any());
+                .downloadCsvTransactions(eq(orgId), eq(txStatusList), eq(transactionTypes), eq(null), eq(null), any(), any());
     }
 
 

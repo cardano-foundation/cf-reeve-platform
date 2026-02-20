@@ -172,7 +172,7 @@ public class VatService {
             for (Vat vat: vatCodes) {
                 String[] data = {
                         vat.getId().getCustomerCode(),
-                        vat.getRate().toString(),
+                        vat.getRate().stripTrailingZeros().toPlainString(),
                         vat.getDescription(),
                         vat.getCountryCode(),
                         String.valueOf(vat.getActive())

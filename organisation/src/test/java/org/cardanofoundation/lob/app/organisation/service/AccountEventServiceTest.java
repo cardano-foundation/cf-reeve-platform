@@ -339,7 +339,7 @@ class AccountEventServiceTest {
     }
 
     @Test
-    void shouldWriteCurrenciesToCsv() throws Exception {
+    void shouldWriteEventsToCsv() throws Exception {
         // given
 
         String orgId = "org123";
@@ -368,9 +368,9 @@ class AccountEventServiceTest {
         String[] lines = csv.split("\\R");
 
         assertThat(lines).hasSize(3);
-        assertThat(lines[0]).isEqualTo("Debit Reference Code,Credit Reference Code,Name,Active");
-        assertThat(lines[1]).isEqualTo("event1,event1,event1,true");
-        assertThat(lines[2]).isEqualTo("event2,event2,event2,true");
+        assertThat(lines[0]).isEqualTo("Debit Reference Code,Credit Reference Code,Name,Customer Code,Active");
+        assertThat(lines[1]).isEqualTo("event1,event1,event1,,true");
+        assertThat(lines[2]).isEqualTo("event2,event2,event2,,true");
 
     }
 }

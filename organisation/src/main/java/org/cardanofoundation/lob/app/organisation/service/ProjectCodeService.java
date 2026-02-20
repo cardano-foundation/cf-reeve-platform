@@ -55,13 +55,13 @@ public class ProjectCodeService {
     }
 
 
-    public Either<Problem, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String name, String parentCustomerCode, Pageable pageable) {
+    public Either<Problem, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String name, String parentCustomerCode, Boolean active, Pageable pageable) {
         Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Project.class, pageable, PROJECT_MAPPINGS);
         if(pageables.isLeft()) {
             return Either.left(pageables.getLeft());
         }
         pageable = pageables.get();
-        return Either.right(projectRepository.findAllByOrganisationId(organisationId, customerCode, name, parentCustomerCode, pageable).map(ProjectView::fromEntity).toList());
+        return Either.right(projectRepository.findAllByOrganisationId(organisationId, customerCode, name, parentCustomerCode, active, pageable).map(ProjectView::fromEntity).toList());
     }
 
     @Transactional
@@ -210,8 +210,8 @@ public class ProjectCodeService {
         );
     }
 
-    public void downloadCsv(String orgId, String customerCode, String name, String parentCustomerCode, OutputStream outputStream) {
-        Page<Project> allProjects = projectRepository.findAllByOrganisationId(orgId, customerCode, name, parentCustomerCode, Pageable.unpaged());
+    public void downloadCsv(String orgId, String customerCode, String name, String parentCustomerCode, Boolean active, OutputStream outputStream) {
+        Page<Project> allProjects = projectRepository.findAllByOrganisationId(orgId, customerCode, name, parentCustomerCode, active, Pageable.unpaged());
         try(Writer writer = new OutputStreamWriter(outputStream)) {
             CSVWriter csvWriter = new CSVWriter(writer);
             String[] header = {"Customer code", "Name", "Parent customer code", "Active"};
