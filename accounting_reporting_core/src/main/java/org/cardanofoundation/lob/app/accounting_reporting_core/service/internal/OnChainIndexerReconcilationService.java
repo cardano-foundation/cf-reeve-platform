@@ -36,6 +36,9 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
     private final OnChainIndexerService onChainIndexerService;
     private final IndexerTransactionTransformer indexerTransactionTransformer;
 
+    private String cachedIndexerKey;
+    private Either<Problem, List<OnChainTransactionDto>> cachedIndexerTransactions;
+
     /**
      * Reconciles transactions from the database with transactions from the On-Chain Indexer.
      *
@@ -55,15 +58,21 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
         log.info("Starting indexer reconciliation for organisation: {}, from: {}, to: {}, db transactions count: {}",
                 organisationId, dateFrom, dateTo, dbTransactions.size());
 
-        Either<Problem, List<OnChainTransactionDto>> indexerTransactionsE =
-                onChainIndexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
-
-        if (indexerTransactionsE.isLeft()) {
-            log.error("Failed to retrieve transactions from indexer: {}", indexerTransactionsE.getLeft().getDetail());
-            return Either.left(indexerTransactionsE.getLeft());
+        String cacheKey = organisationId + "|" + dateFrom + "|" + dateTo;
+        if (cachedIndexerTransactions == null || !cacheKey.equals(cachedIndexerKey)) {
+            log.info("Fetching transactions from indexer for key: {}", cacheKey);
+            cachedIndexerTransactions = onChainIndexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
+            cachedIndexerKey = cacheKey;
+        } else {
+            log.info("Using cached indexer transactions for key: {}", cacheKey);
         }
 
-        List<OnChainTransactionDto> indexerTransactions = indexerTransactionsE.get();
+        if (cachedIndexerTransactions.isLeft()) {
+            log.error("Failed to retrieve transactions from indexer: {}", cachedIndexerTransactions.getLeft().getDetail());
+            return Either.left(cachedIndexerTransactions.getLeft());
+        }
+
+        List<OnChainTransactionDto> indexerTransactions = cachedIndexerTransactions.get();
         log.info("Retrieved {} transactions from indexer", indexerTransactions.size());
 
         // Pre-compute indexer map once to avoid recreating it for each partition

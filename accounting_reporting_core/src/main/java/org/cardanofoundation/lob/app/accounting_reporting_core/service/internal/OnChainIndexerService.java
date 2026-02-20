@@ -74,8 +74,6 @@ public class OnChainIndexerService {
             hasMorePages = !pageResponse.last();
             currentPage++;
 
-            log.debug("\n\n\n###########\nComprobar si llama varias veces\n###########\nFetched page {} with {} transactions. Total so far: {}. Has more: {}",
-                    currentPage - 1, pageResponse.content().size(), allTransactions.size(), hasMorePages);
         }
 
         log.info("Successfully retrieved {} transactions from On-Chain Indexer", allTransactions.size());

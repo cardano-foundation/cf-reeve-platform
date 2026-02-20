@@ -133,6 +133,7 @@ public class DbSynchronisationUseCaseService {
                     if (txM.isPresent()) {
                         TransactionEntity attached = txM.orElseThrow();
                         batchesToBeUpdated.addAll(attached.getBatches().stream().map(TransactionBatchEntity::getId).collect(Collectors.toSet()));
+                        attached.clearAllViolations(Source.ERP);
                         transactionConverter.copyFields(attached, incomingTx);
                         attached.getAllItems().clear();
                         attached.getAllItems().addAll(incomingTx.getAllItems());
@@ -209,6 +210,9 @@ public class DbSynchronisationUseCaseService {
 
     private boolean isIncomingTransactionERPSame(TransactionEntity existingTx,
                                                  TransactionEntity incomingTx) {
+        if (existingTx.hasAnyViolation(Source.ERP)) {
+            return false;
+        }
         String existingTxVersion = ERPSourceTransactionVersionCalculator.compute(existingTx);
         String incomingTxVersion = ERPSourceTransactionVersionCalculator.compute(incomingTx);
 

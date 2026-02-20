@@ -1,7 +1,6 @@
 val jsonWebTokenVersion: String by project
 
 dependencies {
-    implementation("org.springframework:spring-tx")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("io.jsonwebtoken:jjwt-impl:$jsonWebTokenVersion")
     implementation("io.jsonwebtoken:jjwt-api:$jsonWebTokenVersion")

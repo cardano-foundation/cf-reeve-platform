@@ -21,12 +21,12 @@ import org.javers.core.Javers;
 import org.javers.core.diff.Diff;
 import org.zalando.problem.Problem;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Details;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
@@ -49,6 +49,7 @@ public class TransactionReconcilationService {
     private final BlockchainReaderPublicApiIF blockchainReaderPublicApi;
     private final Javers javers;
     private final Optional<IndexerReconcilationServiceIF> indexerReconcilationService;
+    private final TransactionBatchService transactionBatchService;
 
     @Value("${lob.indexer.enabled:false}")
     private boolean indexerEnabled;
@@ -255,21 +256,10 @@ public class TransactionReconcilationService {
             // we check only existence of LOB transaction on chain, we do not actually check the content and hashes, etc
             attachedTx.setReconcilation(Optional.of(Reconcilation.builder()
                     .source(sourceReconcilationStatus)
-                        .sink(isSync)
+                    .sink(isSync)
                     .build())
             );
 
-            if (isSync == ReconcilationCode.NOK) {
-                reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                        .transactionId(attachedTx.getId())
-                        .rejectionCode(SINK_RECONCILATION_FAIL)
-                        .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
-                        .transactionEntryDate(attachedTx.getEntryDate())
-                        .transactionType(attachedTx.getTransactionType())
-                        .amountLcySum(computeAmountLcySum(attachedTx)
-                        )
-                        .build());
-            }
             attachedTx.setLastReconcilation(Optional.of(reconcilationEntity));
         }
 
@@ -280,6 +270,8 @@ public class TransactionReconcilationService {
         log.info("Saving reconcilation entity, reconcilationId: {}", reconcilationEntity.getId());
 
         transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
+
+        processIndexerReconciliation(organisationId, fromDate, toDate, new HashSet<>(attachedTxEntities), reconcilationEntity);
 
         log.info("Finished reconciling transactions chunk.");
     }
@@ -298,7 +290,7 @@ public class TransactionReconcilationService {
          */
         // Check if there's an existing sink value
         if (attachedTx.getReconcilation().isPresent() &&
-            attachedTx.getReconcilation().get().getSink().isPresent()) {
+                attachedTx.getReconcilation().get().getSink().isPresent()) {
             return attachedTx.getReconcilation().get().getSink().get();
         }
 
@@ -328,7 +320,7 @@ public class TransactionReconcilationService {
         }
         ReconcilationEntity reconcilationEntity = reconcilationEntityM.get();
         if (total != reconcilationEntity.getProcessedTxCount()) {
-            log.info("Reconciliation not ready to proceed, reconcilationId: {}", reconcilationEntity.getId(),total,reconcilationEntity.getProcessedTxCount());
+            log.info("Reconciliation not ready to proceed, reconcilationId: {}", reconcilationEntity.getId(), total, reconcilationEntity.getProcessedTxCount());
             return;
         }
 
@@ -372,16 +364,31 @@ public class TransactionReconcilationService {
                     .build())
             );
 
-            reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                    .transactionId(missingTx.getId())
-                    .rejectionCode(TX_NOT_IN_ERP)
-                    .transactionInternalNumber(missingTx.getInternalTransactionNumber())
-                    .transactionEntryDate(missingTx.getEntryDate())
-                    .transactionType(missingTx.getTransactionType())
-                    .amountLcySum(computeAmountLcySum(missingTx)
-                    )
-                    .build()
-            );
+            if (!missingTx.getLedgerDispatchApproved()) {
+                missingTx.setInternalTransactionNumber(missingTx.getInternalTransactionNumber());
+                org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation violation =
+                        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation.builder()
+                                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                                .severity(Violation.Severity.ERROR)
+                                .source(Source.ERP)
+                                .processorModule("reconciliation")
+                                .txItemId(missingTx.getId())
+                                .build();
+
+                missingTx.addViolation(violation);
+                log.info("Created TransactionViolation for TX_NOT_IN_ERP, transactionId: {} ({})", missingTx.getInternalTransactionNumber(), missingTx.getId());
+            } else {
+                reconcilationEntity.addViolation(ReconcilationViolation.builder()
+                        .transactionId(missingTx.getId())
+                        .rejectionCode(TX_NOT_IN_ERP)
+                        .transactionInternalNumber(missingTx.getInternalTransactionNumber())
+                        .transactionEntryDate(missingTx.getEntryDate())
+                        .transactionType(missingTx.getTransactionType())
+                        .amountLcySum(computeAmountLcySum(missingTx)
+                        )
+                        .build()
+                );
+            }
 
             missingTx.setLastReconcilation(Optional.of(reconcilationEntity));
         }
@@ -391,13 +398,15 @@ public class TransactionReconcilationService {
         reconcilationEntity.setStatus(ReconcilationStatus.COMPLETED);
 
         reconcilationEntity.incrementMissingTxsCount(missingTxs.size());
-
         transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
         if (indexerEnabled && indexerReconcilationService.isPresent()) {
             log.info("Starting indexer reconciliation after main reconciliation completed, reconcilationId: {}", reconcilationId);
             reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
         }
-
+        // updating all batches
+        missingTxs.stream()
+                .flatMap(txEntity -> txEntity.getBatches().stream().map(TransactionBatchEntity::getId)).collect(Collectors.toSet())
+                .forEach(batchId -> transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
 
     }
 
@@ -433,6 +442,10 @@ public class TransactionReconcilationService {
 
         Set<TransactionEntity> attachedTxEntities = transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate);
 
+        processIndexerReconciliation(organisationId, fromDate, toDate, attachedTxEntities, reconcilationEntity);
+    }
+
+    private void processIndexerReconciliation(String organisationId, LocalDate fromDate, LocalDate toDate, Set<TransactionEntity> attachedTxEntities, ReconcilationEntity reconcilationEntity) {
         if (attachedTxEntities.isEmpty()) {
             log.warn("No attached transactions found for indexer reconciliation");
             return;
@@ -459,7 +472,7 @@ public class TransactionReconcilationService {
 
             for (TransactionEntity attachedTx : attachedTxEntities) {
 
-                if (attachedTx.getReconcilation().isPresent() && attachedTx.getReconcilation().get().getSink().isPresent() && attachedTx.getReconcilation().get().getSink().get().equals(ReconcilationCode.NOK) ) {
+                if (attachedTx.getReconcilation().isPresent() && attachedTx.getReconcilation().get().getSink().isPresent() && attachedTx.getReconcilation().get().getSink().get().equals(ReconcilationCode.NOK)) {
                     reconcilationEntity.addViolation(ReconcilationViolation.builder()
                             .transactionId(attachedTx.getId())
                             .rejectionCode(SINK_RECONCILATION_FAIL)
@@ -484,7 +497,7 @@ public class TransactionReconcilationService {
 
             ReconcilationCode sinkReconcilationStatus;
             if (indexerResult == null) {
-                log.warn("Transaction {} ({}) not found in indexer results",tx.getInternalTransactionNumber(), txId);
+                log.warn("Transaction {} ({}) not found in indexer results", tx.getInternalTransactionNumber(), txId);
                 sinkReconcilationStatus = ReconcilationCode.NOK;
 
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
@@ -496,8 +509,6 @@ public class TransactionReconcilationService {
                         .amountLcySum(computeAmountLcySum(tx))
                         .build());
             } else if (indexerResult.status() == ReconcilationCode.NOK) {
-                log.warn("Transaction {} failed indexer reconciliation: {} ({})", tx.getInternalTransactionNumber(), indexerResult.mismatchReason(), txId);
-                sinkReconcilationStatus = ReconcilationCode.NOK;
 
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(txId)
@@ -508,6 +519,11 @@ public class TransactionReconcilationService {
                         .transactionType(tx.getTransactionType())
                         .amountLcySum(computeAmountLcySum(tx))
                         .build());
+
+                log.warn("Transaction {} failed indexer reconciliation: {} ({})", tx.getInternalTransactionNumber(), indexerResult.mismatchReason(), txId);
+                sinkReconcilationStatus = ReconcilationCode.NOK;
+
+
             } else {
                 log.info("Transaction {} ({}) is OK", tx.getInternalTransactionNumber(), txId);
                 sinkReconcilationStatus = ReconcilationCode.OK;

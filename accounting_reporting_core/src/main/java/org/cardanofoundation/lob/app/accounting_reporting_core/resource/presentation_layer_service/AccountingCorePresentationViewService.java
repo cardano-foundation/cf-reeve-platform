@@ -698,7 +698,6 @@ public class AccountingCorePresentationViewService {
 
     private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(
             TransactionWithViolationDto violations) {
-        // All the needed data is within the Transaction. The violation is just a
         // fallback, if the transaction doesn't exist in Reeve
         if (Optional.ofNullable(violations.tx()).isPresent()) {
             return getTransactionReconciliationView(violations.tx());
