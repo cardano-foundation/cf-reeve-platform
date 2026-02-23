@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.present
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -17,14 +18,19 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,13 +47,16 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconciliationStatisticProjection;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterSource;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationStatisticRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
@@ -537,5 +546,260 @@ class AccountingCorePresentationViewServiceTest {
         assertEquals("JANUARY", keys.get(0));
         assertEquals("FEBRUARY", keys.get(1));
         assertEquals("MARCH", keys.get(2));
+    }
+
+    @Test
+    void expandSorts_nullPageable_returnsNull() {
+        Pageable result = accountingCorePresentationViewService.expandSorts(null, true);
+        assertNull(result);
+    }
+
+    @Test
+    void expandSorts_unsortedPageable_returnsUnchanged() {
+        Pageable pageable = Pageable.unpaged();
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, true);
+        assertEquals(pageable, result);
+    }
+
+    @Test
+    void expandSorts_simpleField_mapRvFalse_onlyTrPrefixed() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "entryDate"));
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, false);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        assertEquals(1, orders.size());
+        assertEquals("tr.entryDate", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
+    }
+
+    @Test
+    void expandSorts_fieldNotInRvMap_mapRvTrue_onlyTrPrefixed() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "someOtherField"));
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, true);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        assertEquals(1, orders.size());
+        assertEquals("tr.someOtherField", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
+    }
+
+    @Test
+    void expandSorts_fieldWithRvMapping_mapRvTrue_addsRvAndTrOrders() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "entryDate"));
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, true);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        assertEquals(2, orders.size());
+        assertEquals("rv.transactionEntryDate", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
+        assertEquals("tr.entryDate", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(1).getDirection());
+    }
+
+    @Test
+    void expandSorts_fieldWithRvMapping_mapRvFalse_onlyTrPrefixed() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "totalAmountLcy"));
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, false);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        assertEquals(1, orders.size());
+        assertEquals("tr.totalAmountLcy", orders.get(0).getProperty());
+    }
+
+    @Test
+    void expandSorts_internalTransactionNumberMapping_mapRvTrue() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "internalTransactionNumber"));
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, true);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        assertEquals(2, orders.size());
+        assertEquals("rv.transactionInternalNumber", orders.get(0).getProperty());
+        assertEquals("tr.internalTransactionNumber", orders.get(1).getProperty());
+    }
+
+    @Test
+    void expandSorts_functionSort_mapRvTrue_addsRvAndTrFunctionOrders() {
+        Sort jpaSort = JpaSort.unsafe(Sort.Direction.ASC, "function('enum_to_text', transactionType)");
+        Pageable pageable = PageRequest.of(0, 10, jpaSort);
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, true);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        assertEquals(2, orders.size());
+        assertEquals("function('enum_to_text', rv.transactionType)", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
+        assertEquals("function('enum_to_text', tr.transactionType)", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(1).getDirection());
+    }
+
+    @Test
+    void expandSorts_functionSort_mapRvFalse_onlyTrFunctionOrder() {
+        Sort jpaSort = JpaSort.unsafe(Sort.Direction.DESC, "function('enum_to_text', transactionType)");
+        Pageable pageable = PageRequest.of(0, 10, jpaSort);
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, false);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        assertEquals(1, orders.size());
+        assertEquals("function('enum_to_text', tr.transactionType)", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
+    }
+
+    @Test
+    void expandSorts_multipleFields_mapRvTrue_expandsAll() {
+        Sort sort = Sort.by(Sort.Direction.ASC, "entryDate").and(Sort.by(Sort.Direction.DESC, "totalAmountLcy"));
+        Pageable pageable = PageRequest.of(0, 10, sort);
+        Pageable result = accountingCorePresentationViewService.expandSorts(pageable, true);
+
+        List<Sort.Order> orders = result.getSort().stream().toList();
+        // entryDate → rv.transactionEntryDate + tr.entryDate
+        // totalAmountLcy → rv.amountLcySum + tr.totalAmountLcy
+        assertEquals(4, orders.size());
+        assertEquals("rv.transactionEntryDate", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
+        assertEquals("tr.entryDate", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(1).getDirection());
+        assertEquals("rv.amountLcySum", orders.get(2).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(2).getDirection());
+        assertEquals("tr.totalAmountLcy", orders.get(3).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(3).getDirection());
+    }
+
+    @Test
+    void testAllReconciliationTransaction_reconciledFilter_withTransactionId() {
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(eq("RECONCILED"), eq(null), eq(null), eq(null), eq("TXN-123"), eq(null), any(Pageable.class))).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
+        when(body.getTransactionId()).thenReturn("TXN-123");
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        verify(reconcilationRepository).findAllReconcilation(eq("RECONCILED"), eq(null), eq(null), eq(null), eq("TXN-123"), eq(null), any(Pageable.class));
+        verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
+    }
+
+    @Test
+    void testAllReconciliationTransaction_unreconciledFilter_withTransactionId() {
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(eq(null), eq(null), eq(null), eq(null), eq(null), eq("TXN-123"), any(Pageable.class))).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+        when(body.getTransactionId()).thenReturn("TXN-123");
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        verify(reconcilationRepository).findAllReconciliationSpecial(eq(null), eq(null), eq(null), eq(null), eq(null), eq("TXN-123"), any(Pageable.class));
+        verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
+    }
+
+    @Test
+    void allReconciliationTransaction_reconciledFilter_withDatesAndSource() {
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 12, 31);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(
+                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class))
+        ).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
+        when(body.getDateFrom()).thenReturn(Optional.of(dateFrom));
+        when(body.getDateTo()).thenReturn(Optional.of(dateTo));
+        when(body.getSource()).thenReturn(Optional.of(ReconciliationFilterSource.ERP));
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        verify(reconcilationRepository).findAllReconcilation(
+                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class));
+        verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
+    }
+
+    @Test
+    void allReconciliationTransaction_unreconciledFilter_withNonEmptyRejectionCodesAndTypes() {
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+        when(body.getReconciliationRejectionCode()).thenReturn(Set.of(ReconciliationRejectionCodeRequest.MISSING_IN_ERP));
+        when(body.getTransactionTypes()).thenReturn(Set.of(TransactionType.Journal));
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Set<ReconcilationRejectionCode>> rejectionCodesCaptor = ArgumentCaptor.forClass(Set.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Set<TransactionType>> typesCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(reconcilationRepository).findAllReconciliationSpecial(
+                rejectionCodesCaptor.capture(), any(), any(), any(), typesCaptor.capture(), any(), any(Pageable.class));
+
+        assertEquals(Set.of(ReconcilationRejectionCode.TX_NOT_IN_ERP), rejectionCodesCaptor.getValue());
+        assertEquals(Set.of(TransactionType.Journal), typesCaptor.getValue());
+        verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
+    }
+
+    @Test
+    void allReconciliationTransaction_reconciledFilter_withSortedPageable_expandsSort() {
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
+
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "entryDate"));
+        accountingCorePresentationViewService.allReconciliationTransaction(body, pageable);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(reconcilationRepository).findAllReconcilation(any(), any(), any(), any(), any(), any(), pageableCaptor.capture());
+
+        List<Sort.Order> orders = pageableCaptor.getValue().getSort().stream().toList();
+        assertEquals(1, orders.size());
+        assertEquals("tr.entryDate", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.ASC, orders.get(0).getDirection());
+    }
+
+    @Test
+    void allReconciliationTransaction_unreconciledFilter_withSortedPageable_expandsSortWithRvMapping() {
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "entryDate"));
+        accountingCorePresentationViewService.allReconciliationTransaction(body, pageable);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(reconcilationRepository).findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), pageableCaptor.capture());
+
+        List<Sort.Order> orders = pageableCaptor.getValue().getSort().stream().toList();
+        assertEquals(2, orders.size());
+        assertEquals("rv.transactionEntryDate", orders.get(0).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(0).getDirection());
+        assertEquals("tr.entryDate", orders.get(1).getProperty());
+        assertEquals(Sort.Direction.DESC, orders.get(1).getDirection());
+    }
+
+    @Test
+    void allReconciliationTransaction_reconciledFilter_resultsPreserveInsertionOrder() {
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        assertTrue(result.getTransactions() instanceof LinkedHashSet,
+                "Transactions should be a LinkedHashSet to preserve ordering");
     }
 }

@@ -177,7 +177,7 @@ public class AccountingCorePresentationViewService {
             count = pagedTransactions.getTotalElements();
             transactions = pagedTransactions.stream()
                     .map(this::getTransactionReconciliationView)
-                    .collect(toSet());
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
         }
         return new ReconciliationResponseView(count,
                 latestReconcilation.flatMap(ReconcilationEntity::getFrom),
