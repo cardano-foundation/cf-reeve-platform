@@ -50,27 +50,31 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                 (CAST(:startDate AS date) IS NULL OR tr.entryDate >= :startDate)
                 AND (CAST(:endDate AS date) IS NULL OR tr.entryDate <= :endDate)
                 AND (:transactionTypes IS NULL OR tr.transactionType IN :transactionTypes)
-                AND (:transactionId IS NULL OR LOWER(tr.id) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')))
-                AND (:filter = 'RECONCILED'
-                    AND tr.reconcilation.finalStatus = 'OK'
-                    AND (:source IS NULL
-                         OR (:source = 'ERP' AND tr.reconcilation.source = 'OK')
-                         OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK'))
+                AND (:transactionId IS NULL OR LOWER(tr.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:transactionId AS string), '%')))
+                AND (
+                    (:filter = 'RECONCILED'
+                        AND tr.reconcilation.finalStatus = 'OK'
+                        AND (:source IS NULL
+                             OR (:source = 'ERP' AND tr.reconcilation.source = 'OK')
+                             OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK'))
                     )
-                OR (:filter = 'UNRECONCILED'
-                    AND tr.reconcilation.source IS NULL
+                    OR (:filter = 'UNRECONCILED'
+                        AND tr.reconcilation.source IS NULL
                     )
+                )
             """, countQuery = """
             SELECT COUNT(tr)
             FROM accounting_reporting_core.TransactionEntity tr
             WHERE
-                (:filter = 'RECONCILED'
-                    AND tr.reconcilation.finalStatus = 'OK'
-                    AND (:source IS NULL
-                         OR (:source = 'ERP' AND tr.reconcilation.source = 'OK')
-                         OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK')))
-                OR (:filter = 'UNRECONCILED'
-                    AND tr.reconcilation.source IS NULL)
+                (
+                    (:filter = 'RECONCILED'
+                        AND tr.reconcilation.finalStatus = 'OK'
+                        AND (:source IS NULL
+                             OR (:source = 'ERP' AND tr.reconcilation.source = 'OK')
+                             OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK')))
+                    OR (:filter = 'UNRECONCILED'
+                        AND tr.reconcilation.source IS NULL)
+                )
             """)
     Page<TransactionEntity> findAllReconcilation(
             @Param("filter") String filter,
@@ -193,6 +197,7 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
             WHERE (tx.organisation_id = :orgId OR r.organisation_id = :orgId)
               AND COALESCE(tx.entry_date, rv.transaction_entry_date) >= :dateFrom
               AND COALESCE(tx.entry_date, rv.transaction_entry_date) <= :dateTo
+              AND (tx.transaction_id IS NULL OR NOT EXISTS (SELECT 1 FROM accounting_core_transaction_violation tv WHERE tv.transaction_id = tx.transaction_id AND tv.code = 'TX_NOT_IN_ERP'))
             GROUP BY
                 EXTRACT(YEAR FROM COALESCE(tx.entry_date, rv.transaction_entry_date))::int,
                 EXTRACT(MONTH FROM COALESCE(tx.entry_date, rv.transaction_entry_date))::int
