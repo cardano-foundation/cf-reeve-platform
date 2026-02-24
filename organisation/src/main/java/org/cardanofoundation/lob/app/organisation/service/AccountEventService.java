@@ -208,13 +208,14 @@ public class AccountEventService {
         Page<AccountEvent> accountEvents = accountEventRepository.findAllByOrganisationId(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, Pageable.unpaged());
         try (Writer writer = new OutputStreamWriter(outputStream)) {
             CSVWriter csvWriter = new CSVWriter(writer);
-            String[] header = {"Debit Reference Code", "Credit Reference Code", "Name", "Active"};
+            String[] header = {"Debit Reference Code", "Credit Reference Code", "Name", "Customer Code", "Active"};
             csvWriter.writeNext(header, false);
             for (AccountEvent accountEvent : accountEvents) {
                 String[] data = {
                         accountEvent.getId().getDebitReferenceCode(),
                         accountEvent.getId().getCreditReferenceCode(),
                         accountEvent.getName(),
+                        accountEvent.getCustomerCode(),
                         String.valueOf(accountEvent.getActive())
                 };
                 csvWriter.writeNext(data, false);

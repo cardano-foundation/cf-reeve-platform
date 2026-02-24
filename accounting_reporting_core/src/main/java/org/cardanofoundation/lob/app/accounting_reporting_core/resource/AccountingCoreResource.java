@@ -96,7 +96,8 @@ public class AccountingCoreResource {
                                                                          @RequestParam(name = "status", required = false) List<TxValidationStatus> txStatusList,
                                                                          @RequestParam(name = "transactionType", required = false) List<TransactionType> transactionTypes,
                                                                          @RequestParam(name = "dateFrom", required = false) String dateFrom,
-                                                                         @RequestParam(name = "dateTo", required = false) String dateTo){
+                                                                         @RequestParam(name = "dateTo", required = false) String dateTo,
+                                                                         @RequestParam(name = "published", required = false) Boolean published){
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return ResponseEntity.status(UNAUTHORIZED.getStatusCode()).body(outputStream -> {
                 ObjectNode response = objectMapper.createObjectNode();
@@ -126,7 +127,7 @@ public class AccountingCoreResource {
         }
         LocalDate finalDateFromD = dateFromD;
         LocalDate finalDateToD = dateToD;
-        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, finalDateFromD, finalDateToD, outputStream);
+        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, finalDateFromD, finalDateToD, published, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"transactions_%s.csv\"".formatted(orgId))
                 .contentType(MediaType.TEXT_PLAIN)

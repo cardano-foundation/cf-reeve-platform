@@ -158,12 +158,14 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             AND (:transactionTypes IS NULL OR t.transactionType in (:transactionTypes))
             AND t.entryDate >= COALESCE(:dateFrom, t.entryDate)
             AND t.entryDate <= COALESCE(:dateTo, t.entryDate)
+            AND (:published IS NULL OR t.ledgerDispatchApproved = :published)
             """)
     List<TransactionEntity> findAllByStatusAndTypeAndInDateRange(@Param("organisationId") String organisationId,
                                                                  @Param("validationStatuses") List<TxValidationStatus> validationStatuses,
                                                                  @Param("transactionTypes") List<TransactionType> transactionTypes,
                                                                  @Param("dateFrom") LocalDate dateFrom,
                                                                 @Param("dateTo") LocalDate dateTo,
+                                                                 @Param("published") Boolean published,
                                                                  Pageable pageable);
 
     @Query("""

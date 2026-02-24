@@ -62,8 +62,9 @@ public class ProjectCodeController {
                                             @RequestParam(value = "customerCode", required = false) String customerCode,
                                             @RequestParam(value = "name", required = false) String name,
                                             @RequestParam(value = "parentCustomerCode", required = false) String parentCustomerCode,
+                                            @RequestParam(value = "active", required = false) Boolean active,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, pageable).fold(
+        return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, active, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
                 ResponseEntity::ok);
     }
@@ -74,8 +75,9 @@ public class ProjectCodeController {
     public ResponseEntity<StreamingResponseBody> downloadProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "customerCode", required = false) String customerCode,
                                                                      @RequestParam(value = "name", required = false) String name,
-                                                                     @RequestParam(value = "parentCustomerCodes", required = false) String parentCustomerCodes) {
-        StreamingResponseBody responseBody = outputStream -> projectCodeService.downloadCsv(orgId, customerCode, name, parentCustomerCodes, outputStream);
+                                                                     @RequestParam(value = "parentCustomerCodes", required = false) String parentCustomerCodes,
+                                                                     @RequestParam(value = "active", required = false) Boolean active) {
+        StreamingResponseBody responseBody = outputStream -> projectCodeService.downloadCsv(orgId, customerCode, name, parentCustomerCodes, active, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"projects_%s.csv\"".formatted(orgId))
                 .contentType(MediaType.TEXT_PLAIN)

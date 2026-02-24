@@ -200,8 +200,8 @@ class AccountingCorePresentationViewServiceTest {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
 
-        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, Pageable.unpaged())).thenReturn(List.of());
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, outputStream);
+        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, null,Pageable.unpaged())).thenReturn(List.of());
+        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, null,outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -230,17 +230,17 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, Pageable.unpaged())).thenReturn(List.of(transactionEntity));
+        when(accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, null,Pageable.unpaged())).thenReturn(List.of(transactionEntity));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions("org123", List.of(), List.of(), LocalDate.EPOCH, LocalDate.MAX, null,outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
 
         assertEquals(2, lines.length); // Only header line should be present
         assertEquals("Transaction Number,Transaction Date,Transaction Type,Fx Rate,AmountLCY Debit,AmountLCY Credit,AmountFCY Debit,AmountFCY Credit,Debit Code,Debit Name,Credit Code,Credit Name,Project Code,Document Name,Currency,VAT Rate,VAT Code,Cost Center Code,Counterparty Code,Counterparty Name,Extractor Type,Ledger Dispatch Status,Blockchain Hash", lines[0]);
-        assertEquals("TXN123,2026-01-01,1,,100,,100,,,,,,,,0,,,,ERP,FINALIZED,", lines[1]);
+        assertEquals("TXN123,2026-01-01,,1,,100,,100,,,,,,,,0,,,,,ERP,FINALIZED,", lines[1]);
     }
 
     // --- getReconciliationStatisticByDateRange tests ---
