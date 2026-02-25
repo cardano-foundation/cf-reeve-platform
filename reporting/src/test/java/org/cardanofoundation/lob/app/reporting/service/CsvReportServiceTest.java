@@ -16,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -85,12 +86,12 @@ class CsvReportServiceTest {
         when(request.getOrganisationId()).thenReturn("org123");
         when(organisationPublicApiIF.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
         when(request.getFile()).thenReturn(multipartFile);
-        when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.left(Problem.builder().withTitle("CSV Parsing Error").build()));
+        when(csvParser.parseCsv(multipartFile, ReportCsvLine.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV Parsing Error")));
 
         Either<ProblemDetail, List<ReportResponseDto>> result = service.createCsvReports(request);
 
         assertTrue(result.isLeft());
-        assertEquals("CSV Parsing Error", result.getLeft().getTitle());
+        assertEquals("CSV Parsing Error", result.getLeft().getDetail());
     }
 
     @Test

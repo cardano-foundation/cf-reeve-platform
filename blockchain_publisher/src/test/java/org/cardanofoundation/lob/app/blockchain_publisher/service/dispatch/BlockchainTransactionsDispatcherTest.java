@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.http.ProblemDetail;
+
 import com.bloxbean.cardano.client.api.exception.ApiException;
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -101,11 +103,7 @@ class BlockchainTransactionsDispatcherTest {
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
         when(transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched("organisationId", 50)).thenReturn(Set.of());
         when(dispatchingStrategy.apply("organisationId", Set.of())).thenReturn(Set.of(transactionEntity));
-        when(l1TransactionCreator.pullBlockchainTransaction(anyString(), anySet())).thenReturn(Either.left(Problem.builder()
-                .withTitle("ERROR_CREATING_TRANSACTION")
-                .withDetail("MESSAGE ERROR")
-                .withStatus(INTERNAL_SERVER_ERROR)
-                .build()));
+        when(l1TransactionCreator.pullBlockchainTransaction(anyString(), anySet())).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "Detail")));
 
         dispatcher.dispatchTransactions();
 

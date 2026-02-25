@@ -13,6 +13,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -246,11 +247,11 @@ class CostCenterServiceTest {
     @Test
     void createCostCenterFromCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("Parse Error").build()));
+        when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parse Error")));
 
         Either<ProblemDetail, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
         assertTrue(result.isLeft());
-        assertEquals("Parse Error", result.getLeft().getTitle());
+        assertEquals("Parse Error", result.getLeft().getDetail());
     }
 
     @Test

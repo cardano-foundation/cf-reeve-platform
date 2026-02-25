@@ -250,13 +250,13 @@ class CurrencyServiceTest {
     @Test
     void insertViaCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.left(Problem.valueOf(HttpStatus.BAD_REQUEST)));
+        when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         Either<ProblemDetail, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
 
         assertNotNull(response);
         assertTrue(response.isLeft());
-        assertEquals(HttpStatus.BAD_REQUEST, response.getLeft().getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST.value(), response.getLeft().getStatus());
     }
 
     @Test

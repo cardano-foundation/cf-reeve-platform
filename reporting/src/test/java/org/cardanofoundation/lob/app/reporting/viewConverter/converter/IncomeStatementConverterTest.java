@@ -8,6 +8,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.junit.jupiter.api.Test;
@@ -22,7 +25,7 @@ class IncomeStatementConverterTest {
     @Test
     void convertResponse_errorIsNotEmpty() {
         ReportResponseDto response = mock(ReportResponseDto.class);
-        when(response.getError()).thenReturn(Optional.of(Problem.builder().build()));
+        when(response.getError()).thenReturn(Optional.of(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         IncomeStatementConverter converter = new IncomeStatementConverter();
         ReportResponseDto result = converter.convertResponse(response);

@@ -14,6 +14,7 @@ import java.util.*;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -198,15 +199,12 @@ class VatServiceTest {
     @Test
     void insertVatCodesCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, VatUpdate.class)).thenReturn(Either.left(Problem.builder()
-                .withTitle("CSV_PARSE_ERROR")
-                .withDetail("Error parsing CSV file")
-                .build()));
+        when(csvParser.parseCsv(file, VatUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV_PARSE_ERROR")));
 
         Either<ProblemDetail, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
 
         assertTrue(response.isLeft());
-        assertEquals("CSV_PARSE_ERROR", response.getLeft().getTitle());
+        assertEquals("CSV_PARSE_ERROR", response.getLeft().getDetail());
     }
 
     @Test

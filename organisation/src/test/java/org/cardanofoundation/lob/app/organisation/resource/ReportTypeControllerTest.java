@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,10 +33,7 @@ class ReportTypeControllerTest {
     @Test
     void insertReferenceCodeByCsv_error() {
         MultipartFile file = mock(MultipartFile.class);
-        when(reportTypeService.addMappingToReportTypeFieldCsv("orgId", file)).thenReturn(Either.left(List.of(Problem.builder()
-                .withTitle("Error")
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .build())));
+        when(reportTypeService.addMappingToReportTypeFieldCsv("orgId", file)).thenReturn(Either.left(List.of(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail"))));
 
         ResponseEntity<?> response = controller.addMappingToReportTypeField("orgId", file);
 

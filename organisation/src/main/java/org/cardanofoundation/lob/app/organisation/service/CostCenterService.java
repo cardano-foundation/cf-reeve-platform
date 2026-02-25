@@ -135,9 +135,9 @@ public class CostCenterService {
     }
 
     @Transactional
-    public Either<List<ProblemDetail>, List<CostCenterView>> createCostCenterFromCsv(String orgId, MultipartFile file) {
+    public Either<ProblemDetail, List<CostCenterView>> createCostCenterFromCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, CostCenterUpdate.class).fold(
-                problemDetail -> Either.left(List.of(problemDetail)),
+                problemDetail -> Either.left(problemDetail),
                 costCenterUpdates -> Either.right(costCenterUpdates.stream().map(costCenterUpdate -> {
                     Errors errors = validator.validateObject(costCenterUpdate);
                     List<ObjectError> allErrors = errors.getAllErrors();

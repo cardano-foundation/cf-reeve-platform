@@ -10,6 +10,7 @@ import java.util.List;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -83,10 +84,10 @@ class CostCenterControllerTest {
     @Test
     void insertCostCentersCsv_problem() {
         MultipartFile file = mock(MultipartFile.class);
-        when(costCenterService.createCostCenterFromCsv("org123", file)).thenReturn(Either.left(Problem.builder().withStatus(HttpStatus.BAD_REQUEST).build()));
+        when(costCenterService.createCostCenterFromCsv("org123", file)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         ResponseEntity<?> response = costCenterController.insertCostCentersCsv("org123", file);
-        assertEquals(HttpStatus.BAD_REQUEST.getStatusCode(), response.getStatusCode().value());
+        assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatusCode().value());
         assertNotNull(response.getBody());
     }
 

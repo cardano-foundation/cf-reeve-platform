@@ -48,16 +48,13 @@ class ReportTypeServiceTest {
         String orgId = "orgId";
         MultipartFile file = mock(MultipartFile.class);
 
-        when(csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class)).thenReturn(Either.left(Problem.builder()
-                .withTitle("CSV_PARSE_ERROR")
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .build()));
+        when(csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV_PARSE_ERROR")));
 
         Either<List<ProblemDetail>, Void> result = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(result.isLeft());
         Assertions.assertEquals(1, result.getLeft().size());
-        Assertions.assertEquals("CSV_PARSE_ERROR", result.getLeft().iterator().next().getTitle());
+        Assertions.assertEquals("CSV_PARSE_ERROR", result.getLeft().iterator().next().getDetail());
     }
 
     @Test
@@ -71,7 +68,7 @@ class ReportTypeServiceTest {
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());
-        Assertions.assertEquals(HttpStatus.BAD_REQUEST, voids.getLeft().iterator().next().getStatus());
+        Assertions.assertEquals(HttpStatus.BAD_REQUEST.value(), voids.getLeft().iterator().next().getStatus());
     }
 
     @Test
@@ -95,7 +92,7 @@ class ReportTypeServiceTest {
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());
-        Assertions.assertEquals("Report Type not found", voids.getLeft().iterator().next().getTitle());
+        Assertions.assertEquals("REPORT_TYPE_NOT_FOUND", voids.getLeft().iterator().next().getTitle());
 
         when(reportTypeRepository.findByOrganisationIdAndId(orgId, 1L)).thenReturn(Optional.of(reportTypeEntity));
 
@@ -103,14 +100,14 @@ class ReportTypeServiceTest {
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());
-        Assertions.assertEquals("Report Type Field not found", voids.getLeft().iterator().next().getTitle());
+        Assertions.assertEquals("REPORT_TYPE_FIELD_NOT_FOUND", voids.getLeft().iterator().next().getTitle());
 
         when(reportTypeFieldRepository.findByReportIdAndId(1L, 0L)).thenReturn(Optional.of(reportTypeFieldEntity));
         voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());
-        Assertions.assertEquals("Organisation Chart Of Account Sub Type not found", voids.getLeft().iterator().next().getTitle());
+        Assertions.assertEquals("SUB_TYPE_NOT_FOUND", voids.getLeft().iterator().next().getTitle());
 
         when(subType.getId()).thenReturn(2L);
         when(chartOfAccountSubTypeRepository.findById("2")).thenReturn(Optional.of(subType));

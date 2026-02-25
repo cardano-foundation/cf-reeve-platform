@@ -109,7 +109,7 @@ class CurrencyControllerTest {
     @Test
     void insertCurrenciesCsv_failure() {
         MultipartFile file = mock(MultipartFile.class);
-        Either<ProblemDetail, List<CurrencyView>> either = Either.left(Problem.builder().withTitle("Error").withStatus(HttpStatus.BAD_REQUEST).build());
+        Either<ProblemDetail, List<CurrencyView>> either = Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST));
         when(currencyService.insertViaCsv("org123", file)).thenReturn(either);
 
         ResponseEntity<?> response = currencyController.insertCurrenciesCsv("org123", file);

@@ -271,7 +271,7 @@ class ProjectCodeServiceTest {
         Either<ProblemDetail, List<ProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
 
         assertTrue(result.isLeft());
-        assertEquals("CSV_PARSE_ERROR", result.getLeft().getTitle());
+        assertEquals("CSV_PARSE_ERROR", result.getLeft().getDetail());
     }
 
     @Test

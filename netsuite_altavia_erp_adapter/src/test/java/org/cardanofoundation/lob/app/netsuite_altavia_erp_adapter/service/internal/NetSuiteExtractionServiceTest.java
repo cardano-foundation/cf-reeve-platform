@@ -17,6 +17,7 @@ import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
 import org.mockito.Mock;
@@ -70,11 +71,7 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testStartNewERPExtraction_errorJson() {
-        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.left(Problem.builder()
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .withTitle("testTitle")
-                .withDetail("testDetail")
-                .build()));
+        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
@@ -98,11 +95,7 @@ class NetSuiteExtractionServiceTest {
     @Test
     void testStartNewERPExtraction_errorCreatingExtractionParams() {
         when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of(List.of("TestBody"))));
-        when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.left(Problem.builder()
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .withTitle("testTitle")
-                .withDetail("testDetail")
-                .build()));
+        when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
@@ -158,11 +151,7 @@ class NetSuiteExtractionServiceTest {
     @Test
     void testContinueERPExtraction_parseSearchFailed() {
         when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
-        when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.left(Problem.builder()
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .withTitle("testTitle")
-                .withDetail("testDetail")
-                .build()));
+        when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         netSuiteExtractionService.continueERPExtraction("id", "orgId", UserExtractionParameters.builder().organisationId("org").from(LocalDate.now()).to(LocalDate.now()).build(), SystemExtractionParameters.builder().organisationId("org").build());
 

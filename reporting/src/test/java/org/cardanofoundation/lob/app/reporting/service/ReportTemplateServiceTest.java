@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -488,7 +489,7 @@ class ReportTemplateServiceTest {
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
-        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.left(Problem.builder().build()));
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
         // When
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 

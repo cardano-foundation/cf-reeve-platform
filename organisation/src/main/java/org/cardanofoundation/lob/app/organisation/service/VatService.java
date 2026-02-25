@@ -133,9 +133,9 @@ public class VatService {
     }
 
     @Transactional
-    public Either<List<ProblemDetail>, List<VatView>> insertVatCodesCsv(String organisationId, MultipartFile file) {
+    public Either<ProblemDetail, List<VatView>> insertVatCodesCsv(String organisationId, MultipartFile file) {
         return csvParser.parseCsv(file, VatUpdate.class).fold(
-                problemDetail -> Either.left(List.of(problemDetail)),
+                problemDetail -> Either.left(problemDetail),
                 organisationVatUpdates -> Either.right(organisationVatUpdates.stream().map(vatUpdate -> {
                     Errors errors = validator.validateObject(vatUpdate);
                     List<ObjectError> allErrors = errors.getAllErrors();

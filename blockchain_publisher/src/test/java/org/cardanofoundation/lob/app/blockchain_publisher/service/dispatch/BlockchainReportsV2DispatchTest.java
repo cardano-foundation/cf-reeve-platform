@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+
 import com.bloxbean.cardano.client.api.exception.ApiException;
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -70,7 +73,7 @@ class BlockchainReportsV2DispatchTest {
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
         when(organisation.getId()).thenReturn("org123");
         when(reportEntityRepositoryGateway.findReportsV2ByStatus("org123", 50)).thenReturn(Set.of(reportEntity));
-        when(api3L1TransactionCreator.pullBlockchainTransaction(reportEntity)).thenReturn(Either.left(Problem.builder().withDetail("Detail").build()));
+        when(api3L1TransactionCreator.pullBlockchainTransaction(reportEntity)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
         when(reportEntity.getL1SubmissionData()).thenReturn(Optional.empty());
         dispatcher.dispatchReports();
 

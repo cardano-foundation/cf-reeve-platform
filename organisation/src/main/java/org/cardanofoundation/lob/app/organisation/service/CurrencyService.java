@@ -129,9 +129,9 @@ public class CurrencyService {
                 .map(currency -> CurrencyView.createSuccess(currency.getId().getCode(), currency.getIsoCode(), currency.isActive()));
     }
 
-    public Either<List<ProblemDetail>, List<CurrencyView>> insertViaCsv(String orgId, MultipartFile file) {
+    public Either<ProblemDetail, List<CurrencyView>> insertViaCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, CurrencyUpdate.class).fold(
-                problemDetail -> Either.left(List.of(problemDetail)),
+                problemDetail -> Either.left(problemDetail),
                 currencyUpdates -> Either.right(currencyUpdates.stream().map(currencyUpdate -> {
                     Errors errors = validator.validateObject(currencyUpdate);
                     List<ObjectError> allErrors = errors.getAllErrors();

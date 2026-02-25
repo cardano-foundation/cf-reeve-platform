@@ -13,6 +13,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 
 import com.google.common.cache.Cache;
 import io.vavr.control.Either;
@@ -68,7 +70,7 @@ class CsvExtractionServiceTest {
     void startNewExtraction_noSystemParameters() {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
 
-        when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.left(Problem.builder().build()));
+        when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.startNewExtraction("orgId", "userId", userExtractionParameters, null);
 
@@ -154,7 +156,7 @@ class CsvExtractionServiceTest {
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(null);
-        when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(Problem.builder().build()));
+        when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
@@ -176,7 +178,7 @@ class CsvExtractionServiceTest {
         when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(new byte[]{1,2,3});
-        when(parser.parseCsv(new byte[]{1,2,3}, TransactionLine.class)).thenReturn(Either.left(Problem.builder().build()));
+        when(parser.parseCsv(new byte[]{1,2,3}, TransactionLine.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
@@ -205,7 +207,7 @@ class CsvExtractionServiceTest {
 
         when(extractionData.file()).thenReturn(bytes);
         when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(transactionLine)));
-        when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.left(Problem.builder().build()));
+        when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
@@ -324,7 +326,7 @@ class CsvExtractionServiceTest {
         when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(null);
-        when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(Problem.builder().build()));
+        when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
 
@@ -371,7 +373,7 @@ class CsvExtractionServiceTest {
 
         when(extractionData.file()).thenReturn(bytes);
         when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
-        when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.left(Problem.builder().build()));
+        when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
 

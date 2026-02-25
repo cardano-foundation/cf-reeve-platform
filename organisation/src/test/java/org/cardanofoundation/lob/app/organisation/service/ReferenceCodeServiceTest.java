@@ -13,6 +13,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -85,13 +86,13 @@ class ReferenceCodeServiceTest {
     void insertReferenceCodeByCsv_parseError() {
         String orgId = "org123";
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("ParseError").build()));
+        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "ParseError")));
 
         Either<List<ProblemDetail>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
 
         assertTrue(result.isLeft());
         assertEquals(1, result.getLeft().size());
-        assertEquals("ParseError", result.getLeft().iterator().next().getTitle());
+        assertEquals("ParseError", result.getLeft().iterator().next().getDetail());
     }
 
     @Test

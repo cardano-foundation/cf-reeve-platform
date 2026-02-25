@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -71,13 +72,13 @@ class CsvReportTemplateServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
         when(request.getOrganisationId()).thenReturn("org123");
-        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.left(Problem.builder().withTitle("CSV_PARSE_ERROR").build()));
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV_PARSE_ERROR")));
         when(request.getFile()).thenReturn(file);
 
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isLeft());
-        assertEquals("CSV_PARSE_ERROR", result.getLeft().getTitle());
+        assertEquals("CSV_PARSE_ERROR", result.getLeft().getDetail());
     }
 
     @Test

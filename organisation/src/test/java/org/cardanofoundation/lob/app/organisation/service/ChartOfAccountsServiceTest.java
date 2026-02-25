@@ -19,6 +19,7 @@ import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -117,10 +118,7 @@ class ChartOfAccountsServiceTest {
     @Test
     void insertChartOfAccountByCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.left(Problem.builder()
-                .withTitle("Error")
-                .withStatus(org.zalando.problem.HttpStatus.BAD_REQUEST)
-                .build()));
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         Either<List<ProblemDetail>, List<ChartOfAccountView>> views = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
 

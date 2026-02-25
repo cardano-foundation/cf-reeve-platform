@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,14 +37,11 @@ class ReferenceCodeResourceTest {
     @Test
     void insertReferenceCodeByCsv_error() {
         when(referenceCodeService.insertReferenceCodeByCsv("orgId", null)).thenReturn(Either.left(
-                List.of(Problem.builder()
-                .withTitle("Error")
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .build())));
+                List.of(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail"))));
 
         ResponseEntity<?> response = controller.insertRefCodeByCsv("orgId", null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(HttpStatus.BAD_REQUEST.getStatusCode());
+        assertThat(response.getStatusCode().value()).isEqualTo(HttpStatus.BAD_REQUEST.value());
         assertThat(response.getBody()).isInstanceOf(List.class);
         assertThat(((List<?>) response.getBody())).hasSize(1);
     }

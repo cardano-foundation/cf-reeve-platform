@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -42,10 +43,7 @@ class AccountEventControllerTest {
 
     @Test
     void insertReferenceCodeByCsv_error() {
-        when(accountEventService.insertAccountEventByCsv("orgId", null)).thenReturn(Either.left(List.of(Problem.builder()
-                .withTitle("Error")
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .build())));
+        when(accountEventService.insertAccountEventByCsv("orgId", null)).thenReturn(Either.left(List.of(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail"))));
 
         ResponseEntity<?> response = controller.insertReferenceCodeByCsv("orgId", null);
 
@@ -95,10 +93,7 @@ class AccountEventControllerTest {
     void testInsertReferenceCode_withError() {
         EventCodeUpdate update = new EventCodeUpdate();
         AccountEventView view = mock(AccountEventView.class);
-        when(view.getError()).thenReturn(Optional.of(Problem.builder()
-                .withTitle("Error")
-                .withStatus(HttpStatus.NOT_FOUND)
-                .build()));
+        when(view.getError()).thenReturn(Optional.of(ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "NotFound")));
         when(accountEventService.insertAccountEvent(orgId, update, false)).thenReturn(view);
 
         ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
@@ -123,10 +118,7 @@ class AccountEventControllerTest {
     void testUpdateReferenceCode_withError() {
         EventCodeUpdate update = new EventCodeUpdate();
         AccountEventView view = mock(AccountEventView.class);
-        when(view.getError()).thenReturn(Optional.of(Problem.builder()
-                .withTitle("Error")
-                .withStatus(HttpStatus.BAD_REQUEST)
-                .build()));
+        when(view.getError()).thenReturn(Optional.of(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
         when(accountEventService.updateAccountEvent(orgId, update)).thenReturn(view);
 
         ResponseEntity<?> response = controller.updateReferenceCode(orgId, update);
