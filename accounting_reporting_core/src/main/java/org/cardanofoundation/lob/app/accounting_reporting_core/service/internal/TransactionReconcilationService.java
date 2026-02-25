@@ -326,11 +326,13 @@ public class TransactionReconcilationService {
 
         if (reconcilationEntity.getStatus() == ReconcilationStatus.COMPLETED) {
             log.warn("Reconcilation already completed, reconcilationId: {}", reconcilationEntity.getId());
+            Set<TransactionEntity> attachedTxEntities = transactionRepositoryGateway.findAllByDateRange(organisationId, reconcilationEntity.getFrom().get(), reconcilationEntity.getTo().get());
+
             if (indexerEnabled && indexerReconcilationService.isPresent()) {
                 LocalDate fromDate = reconcilationEntity.getFrom().orElseThrow();
                 LocalDate toDate = reconcilationEntity.getTo().orElseThrow();
                 log.info("Starting indexer reconciliation after main reconciliation completed, reconcilationId: {}", reconcilationId);
-                reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
+                processIndexerReconciliation(organisationId, fromDate, toDate, attachedTxEntities, reconcilationEntity);
             }
             return;
         }
@@ -401,48 +403,13 @@ public class TransactionReconcilationService {
         transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
         if (indexerEnabled && indexerReconcilationService.isPresent()) {
             log.info("Starting indexer reconciliation after main reconciliation completed, reconcilationId: {}", reconcilationId);
-            reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
+            processIndexerReconciliation(organisationId, fromDate, toDate, missingTxs, reconcilationEntity);
         }
         // updating all batches
         missingTxs.stream()
                 .flatMap(txEntity -> txEntity.getBatches().stream().map(TransactionBatchEntity::getId)).collect(Collectors.toSet())
                 .forEach(batchId -> transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
 
-    }
-
-    /**
-     * Reconciles transactions from the database with the On-Chain Indexer.
-     * This method follows the same pattern as reconcileChunk:
-     * - Get chunk data to validate
-     * - Get data from indexer
-     * - Compare data and validate
-     *
-     * @param reconcilationId The reconciliation ID
-     * @param organisationId  The organisation ID to reconcile
-     * @param fromDate        Start date for reconciliation
-     * @param toDate          End date for reconciliation
-     */
-    @Transactional
-    public void reconcileWithIndexer(
-            String reconcilationId,
-            String organisationId,
-            LocalDate fromDate,
-            LocalDate toDate) {
-        log.info("Reconciling transactions with indexer, reconcilationId: {}, organisation: {}, from: {}, to: {}",
-                reconcilationId, organisationId, fromDate, toDate);
-
-
-        Optional<ReconcilationEntity> reconcilationEntityM = transactionReconcilationRepository.findById(reconcilationId);
-        if (reconcilationEntityM.isEmpty()) {
-            log.error("Reconcilation entity not found, reconcilationId: {}", reconcilationId);
-            return;
-        }
-
-        ReconcilationEntity reconcilationEntity = reconcilationEntityM.get();
-
-        Set<TransactionEntity> attachedTxEntities = transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate);
-
-        processIndexerReconciliation(organisationId, fromDate, toDate, attachedTxEntities, reconcilationEntity);
     }
 
     private void processIndexerReconciliation(String organisationId, LocalDate fromDate, LocalDate toDate, Set<TransactionEntity> attachedTxEntities, ReconcilationEntity reconcilationEntity) {
