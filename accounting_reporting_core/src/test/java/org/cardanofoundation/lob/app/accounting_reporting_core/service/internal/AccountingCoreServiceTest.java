@@ -169,7 +169,7 @@ class AccountingCoreServiceTest {
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_DATE_RANGE");
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
     @Test
@@ -191,7 +191,7 @@ class AccountingCoreServiceTest {
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("ORGANISATION_DATE_MISMATCH");
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
     @Test
@@ -211,7 +211,7 @@ class AccountingCoreServiceTest {
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
     @Test
@@ -252,7 +252,7 @@ class AccountingCoreServiceTest {
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_DATE_RANGE");
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
 }

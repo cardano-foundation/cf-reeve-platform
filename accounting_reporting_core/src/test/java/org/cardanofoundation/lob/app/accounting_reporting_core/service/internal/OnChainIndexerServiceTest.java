@@ -178,7 +178,7 @@ class OnChainIndexerServiceTest {
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INDEXER_API_ERROR");
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE.value());
         assertThat(result.getLeft().getDetail()).contains("Connection refused");
     }
 
@@ -212,7 +212,7 @@ class OnChainIndexerServiceTest {
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INDEXER_API_ERROR");
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.value());
         assertThat(result.getLeft().getDetail()).contains("Error parsing JSON");
     }
 
