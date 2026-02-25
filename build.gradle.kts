@@ -157,7 +157,7 @@ subprojects {
 
         compileOnly("org.projectlombok:lombok:1.18.32")
         annotationProcessor("org.projectlombok:lombok:1.18.32")
-        implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
+        implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.15")
         testCompileOnly("org.projectlombok:lombok:1.18.32")
         testAnnotationProcessor("org.projectlombok:lombok:1.18.32")
         testImplementation("io.rest-assured:rest-assured:5.5.0")
