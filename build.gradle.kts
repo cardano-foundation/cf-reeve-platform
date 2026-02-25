@@ -103,6 +103,7 @@ subprojects {
     extra["springBootVersion"] = "3.5.8"
     extra["springCloudVersion"] = "2025.0.1"
     extra["jMoleculesVersion"] = "2023.1.0"
+    extra["flyway.version"] = "10.20.1"
     extra["testcontainers.version"] = "1.21.4"
 
     dependencies {
