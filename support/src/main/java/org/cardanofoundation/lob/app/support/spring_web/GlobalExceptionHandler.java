@@ -2,14 +2,14 @@ package org.cardanofoundation.lob.app.support.spring_web;
 
 import java.util.Arrays;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -35,11 +35,9 @@ public class GlobalExceptionHandler {
                         fieldName,
                         Arrays.toString(invalidFormatException.getTargetType().getEnumConstants())
                 );
-                return ResponseEntity.badRequest().body(Problem.builder()
-                        .withTitle("INVALID_ENUM_VALUE")
-                        .withDetail(message)
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, message);
+                detail.setTitle("INVALID_ENUM_VALUE");
+                return ResponseEntity.badRequest().body(detail);
             }
         }
 
