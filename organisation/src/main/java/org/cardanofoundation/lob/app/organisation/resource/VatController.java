@@ -4,8 +4,6 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 
 import jakarta.validation.Valid;
 
@@ -27,8 +25,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.zalando.problem.Status;
-import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
@@ -58,7 +54,7 @@ public class VatController {
                                                      @RequestParam(value = "active", required = false) Boolean active,
                                                      @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return vatService.findAllByOrganisationId(orgId, customerCode, minRate, maxRate, description, countryCodes, active, pageable).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
 
     }
@@ -91,7 +87,7 @@ public class VatController {
                                            @Valid @RequestBody VatUpdate vatUpdate) {
 
         VatView vatView = vatService.insert(orgId, vatUpdate, false);
-        return vatView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(vatView))
                 .orElse(ResponseEntity.ok(vatView));
     }
@@ -109,7 +105,7 @@ public class VatController {
                                                  @Valid @RequestBody VatUpdate vatUpdate) {
 
         VatView vatView = vatService.update(orgId, vatUpdate);
-        return vatView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(vatView))
                 .orElse(ResponseEntity.ok(vatView));
     }

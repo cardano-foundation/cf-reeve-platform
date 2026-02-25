@@ -16,14 +16,13 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,10 +96,7 @@ class ReportingControllerTest {
     @Test
     void create_ServiceError() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Template Not Found")
-                .withStatus(Status.NOT_FOUND)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
         ReportResponseDto responseDto = ReportResponseDto.builder().error(Optional.of(problem)).build();
 
         when(reportService.create(any(ReportDto.class)))
@@ -247,10 +243,7 @@ class ReportingControllerTest {
     @Test
     void delete_CannotDeletePublishedReport() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Report Already Published")
-                .withStatus(Status.BAD_REQUEST)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
 
         reportResponseDto.setOrganisationId("org123");
         when(reportService.findById("abc")).thenReturn(Optional.of(reportResponseDto));
@@ -297,10 +290,7 @@ class ReportingControllerTest {
     @Test
     void generate_ServiceError() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Template Not Found")
-                .withStatus(Status.NOT_FOUND)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
 
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportService.generate(any(ReportGenerateRequest.class)))
@@ -317,10 +307,7 @@ class ReportingControllerTest {
     @Test
     void templateCreateCsv_problem() {
         CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
-        Problem problem = Problem.builder()
-                .withTitle("CSV Creation Failed")
-                .withStatus(Status.INTERNAL_SERVER_ERROR)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
         ReportResponseDto reportResponseDto = ReportResponseDto.builder().error(Optional.of(problem)).build();
 
         when(csvReportService.createCsvReports(request)).thenReturn(Either.left(problem));
@@ -364,10 +351,7 @@ class ReportingControllerTest {
 
     @Test
     void reporcess_problem() {
-        Problem problem = Problem.builder()
-                .withTitle("Reprocess Failed")
-                .withStatus(Status.INTERNAL_SERVER_ERROR)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(reportService.reprocess("org123", "report123")).thenReturn(Either.left(problem));
 

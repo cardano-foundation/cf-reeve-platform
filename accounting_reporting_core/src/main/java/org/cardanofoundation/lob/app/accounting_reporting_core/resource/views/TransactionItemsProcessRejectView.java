@@ -8,8 +8,9 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.springframework.http.ProblemDetail;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
 
@@ -27,7 +28,7 @@ public class TransactionItemsProcessRejectView {
     @JsonProperty("items")
     private Set<TransactionItemsProcessView> transactionItemsProcessViewSet = new LinkedHashSet<>();
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static TransactionItemsProcessRejectView createSuccess(String transactionId, Optional<TransactionProcessingStatus> statistic, Set<TransactionItemsProcessView> items) {
         return new TransactionItemsProcessRejectView(
@@ -40,7 +41,7 @@ public class TransactionItemsProcessRejectView {
     }
 
     public static TransactionItemsProcessRejectView createFail(String transactionId,
-                                                               Problem error) {
+                                                               ProblemDetail error) {
         return new TransactionItemsProcessRejectView(transactionId, false, null, Set.of(), Optional.of(error));
     }
 

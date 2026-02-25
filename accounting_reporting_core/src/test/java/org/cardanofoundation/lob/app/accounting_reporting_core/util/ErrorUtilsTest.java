@@ -6,9 +6,10 @@ import static org.mockito.Mockito.when;
 
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +27,7 @@ class ErrorUtilsTest {
 
     @Test
     void getBag_catchingException() {
-        Problem problem = mock(Problem.class);
+        ProblemDetail problem = mock(ProblemDetail.class);
         when(problem.getDetail()).thenThrow(new RuntimeException("Test Exception"));
 
         Map<String, Object> bag = ErrorUtils.getBag(problem, "TEST_CODE");
@@ -35,11 +36,8 @@ class ErrorUtilsTest {
 
     @Test
     void getBag_fullFlow() {
-        Problem problem = Problem.builder()
-                .withTitle("Test Title")
-                .withStatus(Status.BAD_REQUEST)
-                .withDetail("This is a detailed error message.")
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "This is a detailed error message.");
+        problem.setTitle("Test Title");
 
         Map<String, Object> bag = ErrorUtils.getBag(problem, "TEST_CODE");
 

@@ -14,6 +14,7 @@ import java.util.*;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -23,7 +24,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -203,7 +203,7 @@ class VatServiceTest {
                 .withDetail("Error parsing CSV file")
                 .build()));
 
-        Either<Problem, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
+        Either<ProblemDetail, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
 
         assertTrue(response.isLeft());
         assertEquals("CSV_PARSE_ERROR", response.getLeft().getTitle());
@@ -232,7 +232,7 @@ class VatServiceTest {
         when(vatRepository.findById(new Vat.Id("organisationId", "customerCode"))).thenReturn(Optional.empty());
         when(vatRepository.save(any(Vat.class)))
                 .thenReturn(saved);
-        Either<Problem, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
+        Either<ProblemDetail, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
 
         assertTrue(response.isRight());
         assertEquals(updates.size(), response.get().size());
@@ -251,7 +251,7 @@ class VatServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of(objectError));
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
 
-        Either<Problem, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
+        Either<ProblemDetail, List<VatView>> response = vatService.insertVatCodesCsv("organisationId", file);
         assertTrue(response.isRight());
         assertEquals(1, response.get().size());
         assertEquals("Default Message", response.get().get(0).getError().get().getDetail());

@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -17,8 +19,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -109,7 +109,7 @@ class CurrencyControllerTest {
     @Test
     void insertCurrenciesCsv_failure() {
         MultipartFile file = mock(MultipartFile.class);
-        Either<Problem, List<CurrencyView>> either = Either.left(Problem.builder().withTitle("Error").withStatus(Status.BAD_REQUEST).build());
+        Either<ProblemDetail, List<CurrencyView>> either = Either.left(Problem.builder().withTitle("Error").withStatus(HttpStatus.BAD_REQUEST).build());
         when(currencyService.insertViaCsv("org123", file)).thenReturn(either);
 
         ResponseEntity<?> response = currencyController.insertCurrenciesCsv("org123", file);

@@ -7,8 +7,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.springframework.http.ProblemDetail;
+
 import io.swagger.v3.oas.annotations.media.Schema;
-import org.zalando.problem.Problem;
 
 @Setter
 @Getter
@@ -18,6 +19,6 @@ public class ExtractionValidationResponse {
 
     @Schema(description = "Correlation ID for tracking the request", example = "123e4567-e89b-12d3-a456-426614174000")
     private boolean valid;
-    private List<Problem> errors;
+    private List<ProblemDetail> errors;
 
 }

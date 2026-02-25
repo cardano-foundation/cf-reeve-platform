@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.typeValidations.validator;
 
-import static org.zalando.problem.Status.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 import java.util.List;
 import java.util.Optional;
@@ -8,10 +8,10 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
@@ -29,16 +29,14 @@ public class BalanceSheetValidator implements ReportTypeValidator {
     }
 
     @Override
-    public Either<Problem, Void> validateReportTemplateType(ReportTemplateEntity reportTemplateEntity) {
+    public Either<ProblemDetail, Void> validateReportTemplateType(ReportTemplateEntity reportTemplateEntity) {
         if (areAllFieldsAccumulated(reportTemplateEntity.getFields())) {
             return Either.right(null);
         } else {
             log.debug("Balance sheet report template validation failed: not all fields are accumulated");
-            return Either.left(Problem.builder()
-                    .withTitle("ALL_FIELDS_MUST_BE_ACCUMULATED")
-                    .withDetail("All fields in a Balance Sheet report template must be marked as accumulated.")
-                    .withStatus(BAD_REQUEST)
-                    .build());
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "All fields in a Balance Sheet report template must be marked as accumulated.");
+            problemDetail.setTitle("ALL_FIELDS_MUST_BE_ACCUMULATED");
+            return Either.left(problemDetail);
         }
     }
 

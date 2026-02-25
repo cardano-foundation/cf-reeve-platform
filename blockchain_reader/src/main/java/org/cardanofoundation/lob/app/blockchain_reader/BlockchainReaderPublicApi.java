@@ -119,32 +119,23 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
                     .body(LOBOnChainTxStatusResponse.class);
 
             if (lobOnChainDetailsResponse.getNetwork() != network) {
-                ThrowableProblem problem = Problem.builder()
-                        .withTitle(NETWORK_MISMATCH)
-                        .withStatus(BAD_REQUEST)
-                        .withDetail(NETWORK_MISMATCH_S_S.formatted(lobOnChainDetailsResponse.getNetwork(), network))
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, NETWORK_MISMATCH_S_S.formatted(lobOnChainDetailsResponse.getNetwork(), network));
+                problem.setTitle(NETWORK_MISMATCH);
 
                 return Either.left(problem);
             }
 
             return Either.right(lobOnChainDetailsResponse.getTransactionStatuses());
         } catch (RestClientResponseException ex) {
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("LOB_TX_STATUSES_ERROR")
-                    .withStatus(BAD_REQUEST)
-                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()));
+            problem.setTitle("LOB_TX_STATUSES_ERROR");
 
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
             log.error("Error while fetching on-chain statuses", ex);
 
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("LOB_TX_STATUSES_ERROR")
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()));
+            problem.setTitle("LOB_TX_STATUSES_ERROR");
 
             return Either.left(problem);
         }

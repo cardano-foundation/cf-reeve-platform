@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,8 +14,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,12 +38,12 @@ class ReferenceCodeResourceTest {
         when(referenceCodeService.insertReferenceCodeByCsv("orgId", null)).thenReturn(Either.left(
                 List.of(Problem.builder()
                 .withTitle("Error")
-                .withStatus(Status.BAD_REQUEST)
+                .withStatus(HttpStatus.BAD_REQUEST)
                 .build())));
 
         ResponseEntity<?> response = controller.insertRefCodeByCsv("orgId", null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(Status.BAD_REQUEST.getStatusCode());
+        assertThat(response.getStatusCode().value()).isEqualTo(HttpStatus.BAD_REQUEST.getStatusCode());
         assertThat(response.getBody()).isInstanceOf(List.class);
         assertThat(((List<?>) response.getBody())).hasSize(1);
     }

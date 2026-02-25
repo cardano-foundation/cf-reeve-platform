@@ -13,7 +13,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import java.util.Optional;
 
@@ -31,7 +31,7 @@ public class YaciTransactionDetailsBlockchainDataService implements BlockchainDa
     @Override
     @Transactional(readOnly = true)
     @Cacheable("trxDetailsCache")
-    public Either<Problem, Optional<OnChainTxDetails>> getTransactionDetails(String transactionHash) {
+    public Either<ProblemDetail, Optional<OnChainTxDetails>> getTransactionDetails(String transactionHash) {
         return Either.right(transactionService.getTransaction(transactionHash)
                 .flatMap(txn -> {
                     return blockService.getBlockByNumber(txn.getBlockHeight()).map(txBlock -> {

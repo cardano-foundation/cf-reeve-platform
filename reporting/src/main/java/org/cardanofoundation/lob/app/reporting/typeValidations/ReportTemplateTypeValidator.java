@@ -6,10 +6,10 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 
@@ -20,7 +20,7 @@ public class ReportTemplateTypeValidator {
 
     private final List<ReportTypeValidator> validators;
 
-    public Either<Problem, Void> validateReportTemplateType(ReportTemplateEntity reportTemplateEntity) {
+    public Either<ProblemDetail, Void> validateReportTemplateType(ReportTemplateEntity reportTemplateEntity) {
         Optional<ReportTypeValidator> validator = validators.stream().filter(v -> v.getSupportedReportTemplateType().equals(reportTemplateEntity.getReportTemplateType())).findFirst();
         if(validator.isPresent()) {
             return validator.get().validateReportTemplateType(reportTemplateEntity);

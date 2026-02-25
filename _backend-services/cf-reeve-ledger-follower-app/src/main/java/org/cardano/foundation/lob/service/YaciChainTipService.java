@@ -11,9 +11,9 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
-import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
+import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
 import java.util.Optional;
 
@@ -31,7 +31,7 @@ public class YaciChainTipService implements BlockchainDataChainTipService {
     @Override
     @Transactional(readOnly = true)
     @Cacheable("chainTipCache")
-    public Either<Problem, ChainTip> getChainTip() {
+    public Either<ProblemDetail, ChainTip> getChainTip() {
         var latestBlockM = blockService.getLatestBlock();
 
         if (latestBlockM.isEmpty()) {

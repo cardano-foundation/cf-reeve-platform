@@ -18,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
@@ -26,8 +28,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
@@ -49,8 +49,8 @@ public class CurrencyService {
     private final JpaSortFieldValidator jpaSortFieldValidator;
     private final ChartOfAccountRepository chartOfAccountRepository;
 
-    public Either<Problem, List<CurrencyView>> getAllCurrencies(String orgId, String customerCode, List<String> currencyIds, Pageable pageable) {
-        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Currency.class, pageable, CURRENCY_MAPPINGS);
+    public Either<ProblemDetail, List<CurrencyView>> getAllCurrencies(String orgId, String customerCode, List<String> currencyIds, Pageable pageable) {
+        Either<ProblemDetail, Pageable> pageables = jpaSortFieldValidator.validateEntity(Currency.class, pageable, CURRENCY_MAPPINGS);
         if(pageables.isLeft()) {
             return Either.left(pageables.getLeft());
         }
@@ -77,11 +77,8 @@ public class CurrencyService {
                         if(canUpdateCurrencyActive(currency)) {
                             currency.setActive(currencyUpdate.getActive());
                         } else {
-                            Problem error = Problem.builder()
-                                    .withStatus(Status.BAD_REQUEST)
-                                    .withTitle("CURRENCY_IN_USE_CANNOT_DEACTIVATE")
-                                    .withDetail("Currency with customer code " + currencyUpdate.getCode() + " is in use and cannot be deactivated")
-                                    .build();
+                            ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Currency with customer code " + currencyUpdate.getCode() + " is in use and cannot be deactivated");
+                            error.setTitle("CURRENCY_IN_USE_CANNOT_DEACTIVATE");
                             return CurrencyView.createFail(error, currencyUpdate);
                         }
                     }
@@ -90,11 +87,8 @@ public class CurrencyService {
                     return CurrencyView.createSuccess(updatedEntity.getId().getCode(), updatedEntity.getIsoCode(), currency.isActive());
                 })
                 .orElseGet(() -> {
-                    Problem error = Problem.builder()
-                            .withStatus(Status.NOT_FOUND)
-                            .withTitle(ErrorTitleConstants.CURRENCY_NOT_FOUND)
-                            .withDetail("Currency with customer code " + currencyUpdate.getCode() + " not found")
-                            .build();
+                    ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Currency with customer code " + currencyUpdate.getCode() + " not found");
+                    error.setTitle(ErrorTitleConstants.CURRENCY_NOT_FOUND);
                     return CurrencyView.createFail(error, currencyUpdate);
                 });
     }
@@ -114,21 +108,15 @@ public class CurrencyService {
                     if(canUpdateCurrencyActive(currency)) {
                         currency.setActive(currencyUpdate.getActive());
                     } else {
-                        Problem error = Problem.builder()
-                                .withStatus(Status.BAD_REQUEST)
-                                .withTitle("CURRENCY_IN_USE_CANNOT_DEACTIVATE")
-                                .withDetail("Currency with customer code " + currencyUpdate.getCode() + " is in use and cannot be deactivated")
-                                .build();
+                        ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Currency with customer code " + currencyUpdate.getCode() + " is in use and cannot be deactivated");
+                        error.setTitle("CURRENCY_IN_USE_CANNOT_DEACTIVATE");
                         return CurrencyView.createFail(error, currencyUpdate);
                     }
                 }
-                currency.setIsoCode(currency.getIsoCode());
+                currency.setIsoCode(currencyUpdate.getIsoCode());
             } else {
-                Problem error = Problem.builder()
-                        .withStatus(Status.CONFLICT)
-                        .withTitle(ErrorTitleConstants.CURRENCY_ALREADY_EXISTS)
-                        .withDetail("Currency with customer code " + currencyUpdate.getCode() + " already exists")
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Currency with customer code " + currencyUpdate.getCode() + " already exists");
+                error.setTitle(ErrorTitleConstants.CURRENCY_ALREADY_EXISTS);
                 return CurrencyView.createFail(error, currencyUpdate);
             }
         }
@@ -141,21 +129,19 @@ public class CurrencyService {
                 .map(currency -> CurrencyView.createSuccess(currency.getId().getCode(), currency.getIsoCode(), currency.isActive()));
     }
 
-    public Either<Problem, List<CurrencyView>> insertViaCsv(String orgId, MultipartFile file) {
+    public Either<List<ProblemDetail>, List<CurrencyView>> insertViaCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, CurrencyUpdate.class).fold(
-                Either::left,
-                    currencyUpdates -> Either.right(currencyUpdates.stream().map(currencyUpdate -> {
-                        Errors errors = validator.validateObject(currencyUpdate);
-                        List<ObjectError> allErrors = errors.getAllErrors();
-                        if (!allErrors.isEmpty()) {
-                            return CurrencyView.createFail(Problem.builder()
-                                    .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
-                                    .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
-                                    .withStatus(Status.BAD_REQUEST)
-                                    .build(), currencyUpdate);
-                        }
-                        return insertCurrency(orgId, currencyUpdate, true);
-                    }).toList())
+                problemDetail -> Either.left(List.of(problemDetail)),
+                currencyUpdates -> Either.right(currencyUpdates.stream().map(currencyUpdate -> {
+                    Errors errors = validator.validateObject(currencyUpdate);
+                    List<ObjectError> allErrors = errors.getAllErrors();
+                    if (!allErrors.isEmpty()) {
+                        ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
+                        error.setTitle(ErrorTitleConstants.VALIDATION_ERROR);
+                        return CurrencyView.createFail(error, currencyUpdate);
+                    }
+                    return insertCurrency(orgId, currencyUpdate, true);
+                }).toList())
         );
     }
 

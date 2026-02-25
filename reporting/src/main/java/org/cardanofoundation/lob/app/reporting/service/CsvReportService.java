@@ -17,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -25,8 +27,6 @@ import org.springframework.validation.Validator;
 
 import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
@@ -62,31 +62,25 @@ public class CsvReportService {
     private final CsvParser<ReportCsvLine> csvParser;
     private final Validator validator;
 
-    public Either<Problem, List<ReportResponseDto>> createCsvReports(@Valid CreateCsvReportRequest csvTemplateRequest) {
+    public Either<ProblemDetail, List<ReportResponseDto>> createCsvReports(@Valid CreateCsvReportRequest csvTemplateRequest) {
         Optional<Organisation> organisationO = organisationPublicApiIF.findByOrganisationId(csvTemplateRequest.getOrganisationId());
         if (organisationO.isEmpty()) {
-            Problem problem = Problem.builder()
-                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
-                    .withDetail("Organisation with id " + csvTemplateRequest.getOrganisationId() + " not found.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Organisation with id " + csvTemplateRequest.getOrganisationId() + " not found.");
+            problem.setTitle(Constants.ORGANISATION_NOT_FOUND);
             return Either.left(problem);
         }
-        Either<Problem, List<ReportCsvLine>> parsedLines = csvParser.parseCsv(csvTemplateRequest.getFile(), ReportCsvLine.class);
+        Either<ProblemDetail, List<ReportCsvLine>> parsedLines = csvParser.parseCsv(csvTemplateRequest.getFile(), ReportCsvLine.class);
         if (parsedLines.isLeft()) {
             return Either.left(parsedLines.getLeft());
         }
         List<ReportCsvLine> reportLines = new ArrayList<>(parsedLines.get());
         if (reportLines.isEmpty()) {
-            Problem problem = Problem.builder()
-                    .withTitle(Constants.CSV_PARSING_ERROR)
-                    .withDetail("CSV file has no content lines.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV file has no content lines.");
+            problem.setTitle(Constants.CSV_PARSING_ERROR);
             return Either.left(problem);
         }
         List<ReportCsvLine> copyOfReportLines = new ArrayList<>(reportLines); // Creating a copy to keep track of original indexes for error reporting
-        Either<List<Problem>, Void> voids = validateReportCsvLines(reportLines);
+        Either<List<ProblemDetail>, Void> voids = validateReportCsvLines(reportLines);
         if (voids.isLeft()) {
             return Either.left(voids.getLeft().getFirst());
         }
@@ -96,15 +90,12 @@ public class CsvReportService {
             int index = copyOfReportLines.indexOf(line) + 2; // +2 to convert from 0-based to 1-based and to account for header line
             Optional<ReportTemplateEntity> templateEntityO = reportTemplateRepository.findLatestByOrganisationIdAndName(csvTemplateRequest.getOrganisationId(), line.getTemplateName());
             if(templateEntityO.isEmpty()) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Line " + index + ": Report template with name " + line.getTemplateName() + " not found at line.");
+                problem.setTitle("REPORT_TEMPLATE_NOT_FOUND");
                 createdReports.add(ReportResponseDto.builder()
-                                .error(Optional.of(Problem.builder()
-                                                .withTitle("REPORT_TEMPLATE_NOT_FOUND")
-                                                .withDetail("Line " + index + ": Report template with name " + line.getTemplateName() + " not found at line.")
-                                                .withStatus(Status.BAD_REQUEST)
-                                        .build()
-                                ))
+                        .error(Optional.of(problem))
                         .build());
-                reportLines.removeFirst(); // First line failed so removing it to prevent re-processing
+                reportLines.removeFirst();
                 continue;
             }
             ReportTemplateEntity reportTemplateEntity = templateEntityO.get();
@@ -113,15 +104,12 @@ public class CsvReportService {
             try {
                 dataMode = DataMode.valueOf(line.getDataMode());
             } catch (IllegalArgumentException e) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Line " + index + ": Data mode '" + line.getDataMode() + "' is not valid. Must be either SYSTEM or USER at line.");
+                problem.setTitle("INVALID_DATA_MODE");
                 createdReports.add(ReportResponseDto.builder()
-                        .error(Optional.of(Problem.builder()
-                                .withTitle("INVALID_DATA_MODE")
-                                .withDetail("Line " + index + ": Data mode '" + line.getDataMode() + "' is not valid. Must be either SYSTEM or USER at line.")
-                                .withStatus(Status.BAD_REQUEST)
-                                .build()
-                        ))
+                        .error(Optional.of(problem))
                         .build());
-                reportLines.removeFirst(); // First line failed so removing it to prevent re-processing
+                reportLines.removeFirst();
                 continue;
             }
             // Filtering all lines that belong to the same report
@@ -139,13 +127,10 @@ public class CsvReportService {
                     index = copyOfReportLines.indexOf(reportCsvLine) + 2; // +2 to convert from 0-based to 1-based and to account for header line
                     reportLines.remove(reportCsvLine);
                     if (reportCsvLine.getField() == null || reportCsvLine.getField().isBlank()) {
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Line " + index + ": Field name is missing in CSV line at line.");
+                        problem.setTitle("MISSING_FIELD_NAME");
                         createdReports.add(ReportResponseDto.builder()
-                                .error(Optional.of(Problem.builder()
-                                        .withTitle("MISSING_FIELD_NAME")
-                                        .withDetail("Line " + index + ": Field name is missing in CSV line at line.")
-                                        .withStatus(Status.BAD_REQUEST)
-                                        .build()
-                                ))
+                                .error(Optional.of(problem))
                                 .build());
                         continue;
                     }
@@ -153,18 +138,15 @@ public class CsvReportService {
                     try {
                         amount = new BigDecimal(Optional.ofNullable(reportCsvLine.getAmount()).orElse("0"));
                     } catch (NumberFormatException e) {
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Line " + index + ": Amount '" + reportCsvLine.getAmount() + "' is not a valid number at.");
+                        problem.setTitle("INVALID_AMOUNT_FORMAT");
                         createdReports.add(ReportResponseDto.builder()
-                                .error(Optional.of(Problem.builder()
-                                        .withTitle("INVALID_AMOUNT_FORMAT")
-                                        .withDetail("Line " + index + ": Amount '" + reportCsvLine.getAmount() + "' is not a valid number at.")
-                                        .withStatus(Status.BAD_REQUEST)
-                                        .build()
-                                ))
+                                .error(Optional.of(problem))
                                 .build());
                         continue;
                     }
                     String[] fieldNamesSplit = reportCsvLine.getField().split("\\."); // Since field is not null nor blank the array size must be at least 1
-                    Either<Problem, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getFields(), null, reportTemplateEntity, index);
+                    Either<ProblemDetail, Void> updateResult = updateFields(amount, new ArrayList<>(Arrays.asList(fieldNamesSplit)), fields, reportTemplateEntity.getFields(), null, reportTemplateEntity, index);
                     if (updateResult.isLeft()) {
                         createdReports.add(ReportResponseDto.builder()
                                 .error(Optional.of(updateResult.getLeft()))
@@ -175,13 +157,10 @@ public class CsvReportService {
             }
             if(sameReportLines.size() > 1 && dataMode == DataMode.SYSTEM) {
                 // Multiple lines for the same report in SYSTEM mode is not allowed
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Line " + index + ": Multiple lines for the same report are not allowed in SYSTEM data mode.");
+                problem.setTitle("MULTIPLE_LINES_FOR_SYSTEM_REPORT");
                 createdReports.add(ReportResponseDto.builder()
-                        .error(Optional.of(Problem.builder()
-                                .withTitle("MULTIPLE_LINES_FOR_SYSTEM_REPORT")
-                                .withDetail("Line " + index + ": Multiple lines for the same report are not allowed in SYSTEM data mode.")
-                                .withStatus(Status.BAD_REQUEST)
-                                .build()
-                        ))
+                        .error(Optional.of(problem))
                         .build());
                 // Removing all lines for this report to prevent re-processing
                 reportLines.removeAll(sameReportLines);
@@ -205,12 +184,13 @@ public class CsvReportService {
             // Removing all lines for this report to prevent re-processing
             reportLines.removeAll(sameReportLines);
             if(reportResponseDto.getError().isPresent()) {
-                Problem problem = reportResponseDto.getError().get();
-                // Adding the line number to the error detail for better traceability
-                reportResponseDto.setError(Optional.of(Problem.builder()
-                        .withDetail("Line " + index + ": " + problem.getDetail())
-                        .withStatus(problem.getStatus())
-                        .build()));
+                ProblemDetail problem = reportResponseDto.getError().get();
+                // Create a new ProblemDetail with the line number added to the detail
+                ProblemDetail enhancedProblem = ProblemDetail.forStatusAndDetail(
+                        HttpStatus.valueOf(problem.getStatus()),
+                        "Line " + index + ": " + problem.getDetail());
+                enhancedProblem.setTitle(problem.getTitle());
+                reportResponseDto.setError(Optional.of(enhancedProblem));
                 createdReports.add(reportResponseDto);
             } else {
                 createdReports.add(reportResponseDto);
@@ -219,18 +199,16 @@ public class CsvReportService {
         return Either.right(createdReports);
     }
 
-    private Either<Problem, Void> updateFields(BigDecimal amount, List<String> fieldNames, List<ReportFieldDto> fields, List<ReportTemplateFieldEntity> entities, ReportTemplateFieldEntity parent, ReportTemplateEntity reportTemplateEntity, int index) {
+    private Either<ProblemDetail, Void> updateFields(BigDecimal amount, List<String> fieldNames, List<ReportFieldDto> fields, List<ReportTemplateFieldEntity> entities, ReportTemplateFieldEntity parent, ReportTemplateEntity reportTemplateEntity, int index) {
         if(fieldNames.isEmpty()) {
             return Either.right(null);
         }
         String currentFieldName = fieldNames.removeFirst();
         Optional<ReportTemplateFieldEntity> templateField = entities.stream().filter(e -> e.getName().equals(currentFieldName)).findFirst();
         if(templateField.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("FIELD_NOT_FOUND")
-                    .withDetail("Line " + index + ": Field with name " + currentFieldName + " not found in template " + reportTemplateEntity.getName() + " " + (parent != null ? "for parent field: " + parent.getName() : "at root level") + ".")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Line " + index + ": Field with name " + currentFieldName + " not found in template " + reportTemplateEntity.getName() + " " + (parent != null ? "for parent field: " + parent.getName() : "at root level") + ".");
+            problem.setTitle("FIELD_NOT_FOUND");
+            return Either.left(problem);
         }
         ReportTemplateFieldEntity templateFieldEntity = templateField.get();
         Optional<ReportFieldDto> existingFieldDtoO = fields.stream().filter(f -> f.getTemplateFieldId().equals(templateFieldEntity.getId())).findFirst();
@@ -253,17 +231,14 @@ public class CsvReportService {
         }
     }
 
-    private Either<List<Problem>, Void> validateReportCsvLines(List<ReportCsvLine> reportCsvLines) {
-        List<Problem> problems = new ArrayList<>();
+    private Either<List<ProblemDetail>, Void> validateReportCsvLines(List<ReportCsvLine> reportCsvLines) {
+        List<ProblemDetail> problems = new ArrayList<>();
         for (ReportCsvLine reportCsvLine : reportCsvLines) {
             Errors validateObject = validator.validateObject(reportCsvLine);
             List<ObjectError> allErrors = validateObject.getAllErrors();
             if (!allErrors.isEmpty()) {
-                Problem error = Problem.builder()
-                        .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
+                error.setTitle(Constants.CSV_PARSING_ERROR);
                 problems.add(error);
             }
         }

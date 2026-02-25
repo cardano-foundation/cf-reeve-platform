@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import static org.apache.commons.collections4.iterators.PeekingIterator.peekingIterator;
-import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
+import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,6 +19,8 @@ import jakarta.annotation.PostConstruct;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.http.ProblemDetail;
 
 import co.nstant.in.cbor.model.Map;
 import com.bloxbean.cardano.client.account.Account;
@@ -38,7 +40,6 @@ import com.bloxbean.cardano.client.transaction.util.TransactionUtil;
 import com.google.common.collect.Sets;
 import io.vavr.control.Either;
 import org.apache.commons.collections4.iterators.PeekingIterator;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API1BlockchainTransactions;
@@ -75,30 +76,27 @@ public class API1L1TransactionCreator {
         log.info("API1L1TransactionCreator is initialised.");
     }
 
-    public Either<Problem, Optional<API1BlockchainTransactions>> pullBlockchainTransaction(String organisationId,
+    public Either<ProblemDetail, Optional<API1BlockchainTransactions>> pullBlockchainTransaction(String organisationId,
                                                                                            Set<TransactionEntity> txs) {
         return blockchainReaderPublicApi.getChainTip()
                 .flatMap(chainTip -> handleTransactionCreation(organisationId, txs, chainTip.getAbsoluteSlot()));
     }
 
-    private Either<Problem, Optional<API1BlockchainTransactions>> handleTransactionCreation(String organisationId,
+    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> handleTransactionCreation(String organisationId,
                                                                                             Set<TransactionEntity> transactions,
                                                                                             long creationSlot) {
         try {
             return createTransaction(organisationId, transactions, creationSlot);
         } catch (IOException e) {
             log.error("Error creating blockchain transaction: ", e);
-
-            return Either.left(Problem.builder()
-                    .withTitle("ERROR_CREATING_TRANSACTION")
-                    .withDetail("%s".formatted(e.getMessage()))
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .build());
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "%s".formatted(e.getMessage()));
+            problemDetail.setTitle("ERROR_CREATING_TRANSACTION");
+            return Either.left(problemDetail);
         }
     }
 
     // error or transactions to process or no more transactions to process in case of blockchain transaction creation
-    private Either<Problem, Optional<API1BlockchainTransactions>> createTransaction(String organisationId,
+    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> createTransaction(String organisationId,
                                                                                     Set<TransactionEntity> transactions,
                                                                                     long creationSlot) throws IOException {
         log.info("Splitting {} passedTransactions into blockchain passedTransactions", transactions.size());
@@ -110,7 +108,7 @@ public class API1L1TransactionCreator {
 
             transactionsBatch.add(txEntity);
 
-            Either<Problem, SerializedCardanoL1Transaction> serializedTransactionsE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
+            Either<ProblemDetail, SerializedCardanoL1Transaction> serializedTransactionsE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
             if (serializedTransactionsE.isLeft()) {
                 log.error(ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE, serializedTransactionsE.getLeft().getDetail());
 
@@ -124,7 +122,7 @@ public class API1L1TransactionCreator {
             if (transactionLinePeek == null) { // next one is last element
                 continue;
             }
-            Either<Problem, SerializedCardanoL1Transaction> newChunkTxBytesE = serialiseTransactionChunk(organisationId, Stream.concat(transactionsBatch.stream(), Stream.of(transactionLinePeek))
+            Either<ProblemDetail, SerializedCardanoL1Transaction> newChunkTxBytesE = serialiseTransactionChunk(organisationId, Stream.concat(transactionsBatch.stream(), Stream.of(transactionLinePeek))
                     .collect(Collectors.toSet()), creationSlot);
 
             if (newChunkTxBytesE.isLeft()) {
@@ -151,7 +149,7 @@ public class API1L1TransactionCreator {
         if (!transactionsBatch.isEmpty()) {
             log.info("Leftovers batch size: {}", transactionsBatch.size());
 
-            Either<Problem, SerializedCardanoL1Transaction> serializedTxE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
+            Either<ProblemDetail, SerializedCardanoL1Transaction> serializedTxE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
 
             if (serializedTxE.isEmpty()) {
                 log.error(ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE, serializedTxE.getLeft().getDetail());
@@ -206,7 +204,7 @@ public class API1L1TransactionCreator {
         return Sets.difference(transactions, transactionsBatch);
     }
 
-    private Either<Problem, SerializedCardanoL1Transaction> serialiseTransactionChunk(String organisationId,
+    private Either<ProblemDetail, SerializedCardanoL1Transaction> serialiseTransactionChunk(String organisationId,
                                                                                       Set<TransactionEntity> transactionsBatch,
                                                                                       long creationSlot) {
         try {
@@ -220,12 +218,9 @@ public class API1L1TransactionCreator {
             String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
             boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
             if (!isValid) {
-                return Either.left(Problem.builder()
-                        .withTitle("INVALID_TRANSACTION_METADATA")
-                        .withDetail("Metadata is not valid according to the transaction schema, we will not create a transaction!")
-                        .withStatus(INTERNAL_SERVER_ERROR)
-                        .build()
-                );
+                ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "Metadata is not valid according to the transaction schema, we will not create a transaction!");
+                problemDetail.setTitle("INVALID_TRANSACTION_METADATA");
+                return Either.left(problemDetail);
             }
 
             Metadata metadata = MetadataBuilder.createMetadata();
@@ -240,12 +235,9 @@ public class API1L1TransactionCreator {
             return Either.right(new SerializedCardanoL1Transaction(serialisedTx, bytes, json));
         } catch (Exception e) {
             log.error("Error serialising metadata to cbor", e);
-            return Either.left(Problem.builder()
-                    .withTitle("ERROR_SERIALISING_METADATA")
-                    .withDetail(e.getMessage())
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .build()
-            );
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "%s".formatted(e.getMessage()));
+            problemDetail.setTitle("ERROR_SERIALISING_METADATA");
+            return Either.left(problemDetail);
         }
     }
 

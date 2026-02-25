@@ -8,11 +8,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.zalando.problem.Status.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +21,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -101,11 +101,8 @@ class ExtractionControllerTest {
     void extractionTrigger_error() {
         ExtractionRequest request = mock(ExtractionRequest.class);
         Organisation org = mock(Organisation.class);
-        Problem problem = Problem.builder()
-                .withTitle("Test Problem")
-                .withDetail("Test Problem")
-                .withStatus(BAD_REQUEST)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Test Problem");
+        problem.setTitle("Test Problem");
 
         when(request.getOrganisationId()).thenReturn("123");
         when(organisationPublicApi.findByOrganisationId(request.getOrganisationId())).thenReturn(Optional.of(org));
@@ -114,7 +111,7 @@ class ExtractionControllerTest {
         ResponseEntity<?> responseEntity = extractionController.extractionTrigger(request);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
-        assertEquals(problem.getStatus(), ((Problem) responseEntity.getBody()).getStatus());
+        assertEquals(problem.getStatus(), ((ProblemDetail) responseEntity.getBody()).getStatus());
     }
 
     @Test

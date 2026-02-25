@@ -6,13 +6,12 @@ import static org.mockito.Mockito.*;
 import java.util.*;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.mockito.*;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +38,7 @@ class ChartOfAccountControllerTest {
         when(chartOfAccountsService.insertChartOfAccountByCsv("orgId", null)).thenReturn(Either.left(
                 List.of(Problem.builder()
                 .withTitle("Error")
-                .withStatus(Status.BAD_REQUEST)
+                .withStatus(HttpStatus.BAD_REQUEST)
                 .build())));
 
         ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", null);
@@ -102,7 +101,7 @@ class ChartOfAccountControllerTest {
         when(view.getError()).thenReturn(Optional.of(Problem.builder()
                 .withTitle("Error")
                 .withDetail("Invalid")
-                .withStatus(Status.BAD_REQUEST)
+                .withStatus(HttpStatus.BAD_REQUEST)
                 .build()));
         when(chartOfAccountsService.insertChartOfAccount(orgId, update, false)).thenReturn(view);
 

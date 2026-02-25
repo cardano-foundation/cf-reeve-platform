@@ -4,15 +4,16 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -25,9 +26,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
-import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.domain.request.OrganisationCreate;
@@ -90,13 +88,10 @@ public class OrganisationResource {
     public ResponseEntity<?> organisationDetailSpecific(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         Optional<OrganisationView> organisation = organisationService.findById(orgId).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
-                    .withDetail(ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));
+            issue.setTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+            return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
         return ResponseEntity.ok().body(organisation);
@@ -140,24 +135,20 @@ public class OrganisationResource {
 
         Optional<Organisation> organisationChe = organisationService.findById(Organisation.id(organisationCreate.getCountryCode(), organisationCreate.getTaxIdNumber()));
         if (organisationChe.isPresent()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_ALREADY_EXIST")
-                    .withDetail("Unable to crate Organisation with IdNumber: %s and CountryCode: %s".formatted(organisationCreate.getTaxIdNumber(), organisationCreate.getCountryCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Unable to crate Organisation with IdNumber: %s and CountryCode: %s".formatted(organisationCreate.getTaxIdNumber(), organisationCreate.getCountryCode()));
+            issue.setTitle("ORGANISATION_ALREADY_EXIST");
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+
+
+            return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
         Optional<OrganisationView> organisation = organisationService.createOrganisation(organisationCreate).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_CREATE_ERROR")
-                    .withDetail("Unable to create Organisation by Id: %s".formatted(organisationCreate.getName()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Unable to create Organisation by Id: %s".formatted(organisationCreate.getName()));
+            issue.setTitle("ORGANISATION_CREATE_ERROR");
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+            return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
         return ResponseEntity.ok().body(organisation.get());
@@ -193,24 +184,18 @@ public class OrganisationResource {
     public ResponseEntity<?> organisationUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody OrganisationUpdate organisationUpdate) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
-                    .withDetail(ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));
+            issue.setTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+            return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
         Optional<OrganisationView> organisation = organisationService.updateOrganisation(organisationChe.get(), organisationUpdate).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_UPDATE_ERROR")
-                    .withDetail("Unable to create Organisation by Id: %s".formatted(organisationUpdate.getName()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to update Organisation by Id: %s".formatted(organisationUpdate.getName()));
+            issue.setTitle("ORGANISATION_UPDATE_ERROR");
 
-            return ResponseEntity.status(issue.getStatus().getStatusCode()).body(issue);
+            return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
         return ResponseEntity.ok().body(organisation.get());
@@ -238,13 +223,10 @@ public class OrganisationResource {
         if (keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             Optional<Organisation> organisationOptional = organisationService.findById(orgId);
             if (organisationOptional.isEmpty()) {
-                ThrowableProblem issue = Problem.builder()
-                        .withTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND)
-                        .withDetail(ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
-                        .withStatus(Status.NOT_FOUND)
-                        .build();
+                ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));
+                issue.setTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
 
-                return ResponseEntity.status(Objects.requireNonNull(issue.getStatus()).getStatusCode()).body(issue);
+                return ResponseEntity.status(issue.getStatus()).body(issue);
             } else {
                 return ResponseEntity.ok(organisationService.validateOrganisation(organisationOptional.get()));
             }

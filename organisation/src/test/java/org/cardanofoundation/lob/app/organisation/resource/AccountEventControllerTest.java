@@ -7,13 +7,12 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.mockito.*;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +44,7 @@ class AccountEventControllerTest {
     void insertReferenceCodeByCsv_error() {
         when(accountEventService.insertAccountEventByCsv("orgId", null)).thenReturn(Either.left(List.of(Problem.builder()
                 .withTitle("Error")
-                .withStatus(Status.BAD_REQUEST)
+                .withStatus(HttpStatus.BAD_REQUEST)
                 .build())));
 
         ResponseEntity<?> response = controller.insertReferenceCodeByCsv("orgId", null);
@@ -98,7 +97,7 @@ class AccountEventControllerTest {
         AccountEventView view = mock(AccountEventView.class);
         when(view.getError()).thenReturn(Optional.of(Problem.builder()
                 .withTitle("Error")
-                .withStatus(Status.NOT_FOUND)
+                .withStatus(HttpStatus.NOT_FOUND)
                 .build()));
         when(accountEventService.insertAccountEvent(orgId, update, false)).thenReturn(view);
 
@@ -126,7 +125,7 @@ class AccountEventControllerTest {
         AccountEventView view = mock(AccountEventView.class);
         when(view.getError()).thenReturn(Optional.of(Problem.builder()
                 .withTitle("Error")
-                .withStatus(Status.BAD_REQUEST)
+                .withStatus(HttpStatus.BAD_REQUEST)
                 .build()));
         when(accountEventService.updateAccountEvent(orgId, update)).thenReturn(view);
 

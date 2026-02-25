@@ -8,7 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 
@@ -19,5 +19,5 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Filte
 public class FilterOptionsResponse {
 
     Map<FilterOptions, List<FilteringOptionsListResponse>> filterOptions;
-    Problem error;
+    ProblemDetail error;
 }

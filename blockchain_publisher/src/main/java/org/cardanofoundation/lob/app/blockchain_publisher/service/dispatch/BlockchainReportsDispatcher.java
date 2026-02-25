@@ -8,14 +8,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.bloxbean.cardano.client.api.exception.ApiException;
 import io.vavr.control.Either;
 import org.apache.commons.lang3.tuple.Pair;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
@@ -73,7 +73,7 @@ public class BlockchainReportsDispatcher {
 
     @Transactional
     public void dispatchReport(String organisationId, ReportEntity reportEntity) {
-        Either<Problem, API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
+        Either<ProblemDetail, API3BlockchainTransaction> api3BlockchainTransactionE = createAndSendBlockchainTransactions(reportEntity);
         if (api3BlockchainTransactionE.isEmpty()) {
             L1SubmissionData l1SubmissionData = L1SubmissionData.builder()
                     .publishRetry(reportEntity.getL1SubmissionData().map(L1SubmissionData::getPublishRetry).orElse(0L) + 1L)
@@ -89,13 +89,13 @@ public class BlockchainReportsDispatcher {
     }
 
     @Transactional
-    public Either<Problem, API3BlockchainTransaction> createAndSendBlockchainTransactions(ReportEntity reportEntity) {
+    public Either<ProblemDetail, API3BlockchainTransaction> createAndSendBlockchainTransactions(ReportEntity reportEntity) {
         log.info("Creating and sending blockchain transactions for report:{}", reportEntity.getId());
 
-        Either<Problem, API3BlockchainTransaction> serialisedTxE = api3L1TransactionCreator.pullBlockchainTransaction(reportEntity);
+        Either<ProblemDetail, API3BlockchainTransaction> serialisedTxE = api3L1TransactionCreator.pullBlockchainTransaction(reportEntity);
 
         if (serialisedTxE.isLeft()) {
-            Problem problem = serialisedTxE.getLeft();
+            ProblemDetail problem = serialisedTxE.getLeft();
 
             log.error("Error pulling blockchain transaction, problem: {}", problem);
 
@@ -108,11 +108,9 @@ public class BlockchainReportsDispatcher {
 
             return serialisedTxE;
         } catch (ApiException e) {
-            return Either.left(Problem.builder()
-                    .withTitle("ERROR_PUSHING_TRANSACTION")
-                    .withDetail("%s".formatted(e.getMessage()))
-                    .withStatus(Status.INTERNAL_SERVER_ERROR)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "%s".formatted(e.getMessage()));
+            problem.setTitle("ERROR_PUSHING_TRANSACTION");
+            return Either.left(problem);
         }
 
     }

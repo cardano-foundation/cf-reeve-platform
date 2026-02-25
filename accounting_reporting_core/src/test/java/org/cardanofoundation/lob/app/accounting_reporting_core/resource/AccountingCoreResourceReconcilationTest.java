@@ -13,14 +13,14 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -52,7 +52,7 @@ class AccountingCoreResourceReconcilationTest {
     @Test
     void testReconciliationTrigger_shouldReturnProblem() {
         when(accountingCoreService.scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of()))
-                .thenReturn(Either.left(Problem.builder().withStatus(Status.BAD_REQUEST).build()));
+                .thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
         ReconciliationRequest request = mock(ReconciliationRequest.class);
         when(request.getOrganisationId()).thenReturn("orgId");
         when(request.getDateFrom()).thenReturn(LocalDate.now());
@@ -61,7 +61,7 @@ class AccountingCoreResourceReconcilationTest {
         when(request.getFile()).thenReturn(null);
         when(request.getParameters()).thenReturn(Map.of());
         ResponseEntity<ReconcileResponseView> reconcileResponseViewResponseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(request);
-        Assertions.assertEquals(Status.BAD_REQUEST.getStatusCode(), reconcileResponseViewResponseEntity.getStatusCode().value());
+        Assertions.assertEquals(HttpStatus.BAD_REQUEST.value(), reconcileResponseViewResponseEntity.getStatusCode().value());
 
         verify(accountingCoreService).scheduleReconcilation("orgId", LocalDate.now(),LocalDate.now(), ExtractorType.NETSUITE, Optional.empty(), Map.of());
         verifyNoMoreInteractions(accountingCoreService);

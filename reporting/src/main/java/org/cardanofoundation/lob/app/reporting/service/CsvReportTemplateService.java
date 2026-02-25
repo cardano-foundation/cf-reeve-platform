@@ -14,6 +14,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -21,8 +23,6 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -58,35 +58,29 @@ public class CsvReportTemplateService {
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final Validator validator;
 
-    public Either<Problem, List<ReportTemplateResponseDto>> createCsvTemplates(@Valid CreateCsvTemplateRequest csvTemplateRequest) {
+    public Either<ProblemDetail, List<ReportTemplateResponseDto>> createCsvTemplates(@Valid CreateCsvTemplateRequest csvTemplateRequest) {
         Optional<Organisation> organisationO = organisationPublicApiIF.findByOrganisationId(csvTemplateRequest.getOrganisationId());
         if (organisationO.isEmpty()) {
-            Problem problem = Problem.builder()
-                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
-                    .withDetail("Organisation with id " + csvTemplateRequest.getOrganisationId() + " not found.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Organisation with id " + csvTemplateRequest.getOrganisationId() + " not found.");
+            problem.setTitle(Constants.ORGANISATION_NOT_FOUND);
             return Either.left(problem);
         }
-        Either<Problem, List<TemplateCsvLine>> parsedLines = csvParser.parseCsv(
+        Either<ProblemDetail, List<TemplateCsvLine>> parsedLines = csvParser.parseCsv(
                 csvTemplateRequest.getFile(), TemplateCsvLine.class);
         if (parsedLines.isLeft()) {
             return Either.left(parsedLines.getLeft());
         }
         List<TemplateCsvLine> templateCsvLines = new ArrayList<>(parsedLines.get());
         if (templateCsvLines.isEmpty()) {
-            Problem problem = Problem.builder()
-                    .withTitle(Constants.CSV_PARSING_ERROR)
-                    .withDetail("CSV file has no content lines.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV file has no content lines.");
+            problem.setTitle(Constants.CSV_PARSING_ERROR);
             return Either.left(problem);
         }
-        Either<List<Problem>, Void> validationResult = validateTemplateCsvLines(templateCsvLines);
+        Either<List<ProblemDetail>, Void> validationResult = validateTemplateCsvLines(templateCsvLines);
         if (validationResult.isLeft()) {
             return Either.left(validationResult.getLeft().getFirst());
         }
-        List<Either<Problem, ReportTemplateDto>> results = new ArrayList<>();
+        List<Either<ProblemDetail, ReportTemplateDto>> results = new ArrayList<>();
         outerLoop:
         while (!templateCsvLines.isEmpty()) {
             TemplateCsvLine firstLine = templateCsvLines.getFirst();
@@ -98,22 +92,16 @@ public class CsvReportTemplateService {
             try {
                 reportTemplateType = ReportTemplateType.valueOf(firstLine.getReportType());
             } catch (IllegalArgumentException e) {
-                Problem problem = Problem.builder()
-                        .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail("Invalid report template type: " + firstLine.getReportType() + ". Options are: " + String.join(", ", Arrays.stream(ReportTemplateType.values()).map(Enum::name).toList()))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid report template type: " + firstLine.getReportType() + ". Options are: " + String.join(", ", Arrays.stream(ReportTemplateType.values()).map(Enum::name).toList()));
+                problem.setTitle(Constants.CSV_PARSING_ERROR);
                 results.add(Either.left(problem));
                 continue;
             }
             try {
                 DataMode.valueOf(firstLine.getDataMode());
             } catch (IllegalArgumentException e) {
-                Problem problem = Problem.builder()
-                        .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail("Invalid data mode: " + firstLine.getDataMode() + ". Options are: SYSTEM, USER")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid data mode: " + firstLine.getDataMode() + ". Options are: SYSTEM, USER");
+                problem.setTitle(Constants.CSV_PARSING_ERROR);
                 results.add(Either.left(problem));
                 continue;
             }
@@ -125,7 +113,7 @@ public class CsvReportTemplateService {
             reportTemplateDto.setVer(1L);
             List<ReportTemplateFieldDto> fieldDtos = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
-                Either<Problem, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), templateCsvLine);
+                Either<ProblemDetail, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), templateCsvLine);
                 if (fieldEntityResult.isLeft()) {
                     results.add(Either.left(fieldEntityResult.getLeft()));
                     break outerLoop;
@@ -136,11 +124,8 @@ public class CsvReportTemplateService {
                             .filter(fe -> fe.getFieldName().equals(templateCsvLine.getParent()))
                             .findFirst();
                     if (parentFieldO.isEmpty()) {
-                        Problem problem = Problem.builder()
-                                .withTitle(Constants.CSV_PARSING_ERROR)
-                                .withDetail("Parent field not found: " + templateCsvLine.getParent() + " for field: " + templateCsvLine.getFieldName() + ". Note: The parent field must be defined before the child field in the CSV.")
-                                .withStatus(Status.BAD_REQUEST)
-                                .build();
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parent field not found: " + templateCsvLine.getParent() + " for field: " + templateCsvLine.getFieldName() + ". Note: The parent field must be defined before the child field in the CSV.");
+                        problem.setTitle(Constants.CSV_PARSING_ERROR);
                         results.add(Either.left(problem));
                         break outerLoop;
                     }
@@ -150,11 +135,8 @@ public class CsvReportTemplateService {
                     }
                     Optional<ReportTemplateFieldDto> childWithSameName = parentField.getChildFields().stream().filter(field -> field.getFieldName().equals(fieldDto.getFieldName())).findFirst();
                     if (childWithSameName.isPresent()) {
-                        Problem problem = Problem.builder()
-                                .withTitle(Constants.CSV_PARSING_ERROR)
-                                .withDetail("Duplicate field name under the same parent: " + fieldDto.getFieldName() + " under parent: " + parentField.getFieldName())
-                                .withStatus(Status.BAD_REQUEST)
-                                .build();
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Duplicate field name under the same parent: " + fieldDto.getFieldName() + " under parent: " + parentField.getFieldName());
+                        problem.setTitle(Constants.CSV_PARSING_ERROR);
                         results.add(Either.left(problem));
                         break outerLoop;
                     }
@@ -188,18 +170,15 @@ public class CsvReportTemplateService {
         )).toList());
     }
 
-    private Either<Problem, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, TemplateCsvLine templateCsvLine) {
+    private Either<ProblemDetail, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, TemplateCsvLine templateCsvLine) {
         ReportTemplateFieldDto fieldEntity = new ReportTemplateFieldDto();
         fieldEntity.setFieldName(templateCsvLine.getFieldName());
         ReportFieldDateRange dateRange;
         try {
             dateRange = ReportFieldDateRange.valueOf(templateCsvLine.getDateRange());
         } catch (IllegalArgumentException e) {
-            Problem problem = Problem.builder()
-                    .withTitle(Constants.CSV_PARSING_ERROR)
-                    .withDetail("Invalid date range: " + templateCsvLine.getDateRange() + ". Options are: " + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(Enum::name).toList()))
-                    .withStatus(Status.BAD_REQUEST)
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid date range: " + templateCsvLine.getDateRange() + ". Options are: " + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(Enum::name).toList()));
+            problem.setTitle(Constants.CSV_PARSING_ERROR);
             return Either.left(problem);
         }
         fieldEntity.setDateRange(dateRange);
@@ -212,11 +191,8 @@ public class CsvReportTemplateService {
             }
             Optional<ChartOfAccount> chartOfAccountO = chartOfAccountRepository.findById(new ChartOfAccount.Id(organisationId, mappedAccount));
             if (chartOfAccountO.isEmpty()) {
-                Problem problem = Problem.builder()
-                        .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail("Chart of account not found: " + mappedAccount)
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Chart of account not found: " + mappedAccount);
+                problem.setTitle(Constants.CSV_PARSING_ERROR);
                 return Either.left(problem);
             }
             mappendAccountTypes.add(chartOfAccountO.get());
@@ -225,17 +201,14 @@ public class CsvReportTemplateService {
         return Either.right(fieldEntity);
     }
 
-    private Either<List<Problem>, Void> validateTemplateCsvLines(List<TemplateCsvLine> reportCsvLines) {
-        List<Problem> problems = new ArrayList<>();
+    private Either<List<ProblemDetail>, Void> validateTemplateCsvLines(List<TemplateCsvLine> reportCsvLines) {
+        List<ProblemDetail> problems = new ArrayList<>();
         for (TemplateCsvLine templateCsvLine : reportCsvLines) {
             Errors validateObject = validator.validateObject(templateCsvLine);
             List<ObjectError> allErrors = validateObject.getAllErrors();
             if (!allErrors.isEmpty()) {
-                Problem error = Problem.builder()
-                        .withTitle(Constants.CSV_PARSING_ERROR)
-                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
+                error.setTitle(Constants.CSV_PARSING_ERROR);
                 problems.add(error);
             }
         }

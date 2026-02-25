@@ -5,7 +5,6 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -17,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -39,7 +39,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
@@ -101,9 +100,9 @@ public class ReportingController {
         ReportResponseDto result = reportService.create(report);
 
         if (result.getError().isPresent()) {
-            Problem problem = result.getError().get();
+            ProblemDetail problem = result.getError().get();
             return ResponseEntity
-                .status(problem.getStatus().getStatusCode())
+                .status(problem.getStatus())
                 .body(result);
         }
 
@@ -117,7 +116,7 @@ public class ReportingController {
             @Valid @ModelAttribute CreateCsvReportRequest csvReportRequest) {
         return csvReportService.createCsvReports(csvReportRequest)
                 .fold(
-                        error -> ResponseEntity.status(error.getStatus().getStatusCode()).body(List.of(ReportResponseDto.builder().error(Optional.of(error)).build())),
+                        error -> ResponseEntity.status(error.getStatus()).body(List.of(ReportResponseDto.builder().error(Optional.of(error)).build())),
                         templates -> ResponseEntity.status(HttpStatus.CREATED).body(templates)
                 );
     }
@@ -223,11 +222,11 @@ public class ReportingController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
-        Either<Problem, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, PageableFieldMappings.REPORT_MAPPINGS, ReportEntity.class);
+        Either<ProblemDetail, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, PageableFieldMappings.REPORT_MAPPINGS, ReportEntity.class);
         if (pageableE.isLeft()) {
-            Problem problem = pageableE.getLeft();
+            ProblemDetail problem = pageableE.getLeft();
             return ResponseEntity
-                .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
+                .status(problem.getStatus())
                 .body(problem);
         }
         ReportListResponseDto reportListDto = reportService.findAll(organisationId, years, intervalTypes, periods, ledgerStatus,
@@ -263,11 +262,11 @@ public class ReportingController {
                 }
 
                 // Proceed with deletion
-                Either<Problem, Void> result = reportService.delete(id);
+                Either<ProblemDetail, Void> result = reportService.delete(id);
 
                 if (result.isLeft()) {
-                    Problem problem = result.getLeft();
-                    return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+                    ProblemDetail problem = result.getLeft();
+                    return ResponseEntity.status(problem.getStatus()).body(problem);
                 }
 
                 return ResponseEntity.noContent().build();
@@ -310,12 +309,12 @@ public class ReportingController {
                 .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
 
-        Either<Problem, ReportResponseDto> result = reportService.generate(request);
+        Either<ProblemDetail, ReportResponseDto> result = reportService.generate(request);
 
         if (result.isLeft()) {
-            Problem problem = result.getLeft();
+            ProblemDetail problem = result.getLeft();
             return ResponseEntity
-                .status(problem.getStatus().getStatusCode())
+                .status(problem.getStatus())
                 .body(problem);
         }
 
@@ -344,11 +343,11 @@ public class ReportingController {
                 "POST /api/reports/publish - Org: {}, Report ID: {}",
                 request.getOrganisationId(), request.getReportId());
 
-        Either<Problem, ReportResponseDto> result = reportService.publish(request);
+        Either<ProblemDetail, ReportResponseDto> result = reportService.publish(request);
 
         if (result.isLeft()) {
-            Problem problem = result.getLeft();
-            return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
@@ -389,11 +388,11 @@ public class ReportingController {
                 .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
 
-        Either<Problem, ReportResponseDto> result = reportService.reprocess(organisationId, id);
+        Either<ProblemDetail, ReportResponseDto> result = reportService.reprocess(organisationId, id);
 
         if (result.isLeft()) {
-            Problem problem = result.getLeft();
-            return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
         }
 
         return ResponseEntity.ok(result.get());

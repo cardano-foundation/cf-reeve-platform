@@ -6,14 +6,14 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -50,10 +50,10 @@ class ReportTypeServiceTest {
 
         when(csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class)).thenReturn(Either.left(Problem.builder()
                 .withTitle("CSV_PARSE_ERROR")
-                .withStatus(Status.BAD_REQUEST)
+                .withStatus(HttpStatus.BAD_REQUEST)
                 .build()));
 
-        Either<List<Problem>, Void> result = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
+        Either<List<ProblemDetail>, Void> result = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(result.isLeft());
         Assertions.assertEquals(1, result.getLeft().size());
@@ -67,11 +67,11 @@ class ReportTypeServiceTest {
         ReportTypeFieldUpdateCsv reportTypeFieldUpdateCsv = mock(ReportTypeFieldUpdateCsv.class);
         when(csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class)).thenReturn(Either.right(List.of(reportTypeFieldUpdateCsv)));
 
-        Either<List<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
+        Either<List<ProblemDetail>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());
-        Assertions.assertEquals(Status.BAD_REQUEST, voids.getLeft().iterator().next().getStatus());
+        Assertions.assertEquals(HttpStatus.BAD_REQUEST, voids.getLeft().iterator().next().getStatus());
     }
 
     @Test
@@ -91,7 +91,7 @@ class ReportTypeServiceTest {
         when(updateCsv.getSubType()).thenReturn("SubTypeId");
         when(chartOfAccountSubTypeRepository.findFirstByOrganisationIdAndName(orgId, "SubTypeId")).thenReturn(Optional.of(subType));
 
-        Either<List<Problem>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
+        Either<List<ProblemDetail>, Void> voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(voids.isLeft());
         Assertions.assertEquals(1, voids.getLeft().size());

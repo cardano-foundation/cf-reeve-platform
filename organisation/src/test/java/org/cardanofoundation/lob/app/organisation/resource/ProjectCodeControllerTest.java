@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,8 +18,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -86,12 +86,12 @@ class ProjectCodeControllerTest {
         MultipartFile file = mock(MultipartFile.class);
 
         // Mock the service call
-        when(projectCodeService.createProjectCodeFromCsv("org123", file)).thenReturn(Either.left(Problem.valueOf(Status.BAD_REQUEST)));
+        when(projectCodeService.createProjectCodeFromCsv("org123", file)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         ResponseEntity<?> responseEntity = projectCodeController.insertProjectsCsv("org123", file);
 
         // Verify the response
-        assertEquals(Status.BAD_REQUEST.getStatusCode(), responseEntity.getStatusCode().value());
+        assertEquals(HttpStatus.BAD_REQUEST.value(), responseEntity.getStatusCode().value());
         assertNotNull(responseEntity.getBody());
     }
 

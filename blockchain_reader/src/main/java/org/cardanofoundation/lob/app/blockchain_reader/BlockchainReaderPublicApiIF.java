@@ -8,8 +8,9 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.val;
 
-import io.vavr.control.Either;
 import org.springframework.http.ProblemDetail;
+
+import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;

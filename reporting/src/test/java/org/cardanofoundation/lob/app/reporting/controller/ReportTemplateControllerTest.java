@@ -14,14 +14,13 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,10 +84,8 @@ class ReportTemplateControllerTest {
     @Test
     void create_TemplateAlreadyExists() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Template Already Exists")
-                .withStatus(Status.CONFLICT)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Template Already Exists");
         ReportTemplateResponseDto reportTemplateResponseDto = ReportTemplateResponseDto.builder().error(Optional.of(problem)).build();
         when(reportTemplateService.create(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
@@ -104,10 +101,8 @@ class ReportTemplateControllerTest {
     @Test
     void create_ServiceError() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Validation Error")
-                .withStatus(Status.BAD_REQUEST)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problem.setTitle("Validation Error");
         ReportTemplateResponseDto reportTemplateResponseDto = ReportTemplateResponseDto.builder().error(Optional.of(problem)).build();
         when(reportTemplateService.create(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
@@ -138,10 +133,8 @@ class ReportTemplateControllerTest {
     @Test
     void update_TemplateNotFound() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Template Not Found")
-                .withStatus(Status.NOT_FOUND)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        problem.setTitle("Template Not Found");
 
         when(reportTemplateService.update(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
@@ -157,10 +150,8 @@ class ReportTemplateControllerTest {
     @Test
     void update_ServiceError() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Validation Error")
-                .withStatus(Status.BAD_REQUEST)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+        problem.setTitle("Validation Error");
 
         when(reportTemplateService.update(any(ReportTemplateDto.class)))
                 .thenReturn(Either.left(problem));
@@ -291,10 +282,7 @@ class ReportTemplateControllerTest {
     @Test
     void delete_CannotDeleteTemplateWithReports() {
         // Given
-        Problem problem = Problem.builder()
-                .withTitle("Template Has Associated Reports")
-                .withStatus(Status.BAD_REQUEST)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
 
         templateResponseDto.setOrganisationId("org123");
         when(reportTemplateService.findById("abc")).thenReturn(Optional.of(templateResponseDto));
@@ -312,10 +300,7 @@ class ReportTemplateControllerTest {
     @Test
     void templateCreateCsv_error() {
         CreateCsvTemplateRequest csvRequest = mock(CreateCsvTemplateRequest.class);
-        Problem problem = Problem.builder()
-                .withTitle("CSV Problem")
-                .withStatus(Status.BAD_REQUEST)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         when(csvReportTemplateService.createCsvTemplates(csvRequest)).thenReturn(Either.left(problem));
 
         ResponseEntity<List<ReportTemplateResponseDto>> listResponseEntity = reportTemplateController.templateCreateCsv(csvRequest);

@@ -24,12 +24,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
@@ -207,10 +207,10 @@ public class AccountingCorePresentationViewService {
     }
 
 
-    public Either<Problem, Optional<BatchView>> batchDetail(String batchId,
+    public Either<ProblemDetail, Optional<BatchView>> batchDetail(String batchId,
                                                             List<TransactionProcessingStatus> txStatus, Pageable page,
                                                             BatchFilterRequest batchFilterRequest) {
-        Either<Problem, Pageable> pageableEither =
+        Either<ProblemDetail, Pageable> pageableEither =
                 jpaSortFieldValidator.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return Either.left(pageableEither.getLeft());
@@ -252,7 +252,7 @@ public class AccountingCorePresentationViewService {
                 }));
     }
 
-    public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Pageable pageable) {
+    public Either<ProblemDetail, BatchsDetailView> listAllBatch(BatchSearchRequest body, Pageable pageable) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
         Page<TransactionBatchEntity> transactionBatchEntities =
                 transactionBatchRepositoryGateway.findByFilter(body, pageable);
@@ -291,7 +291,7 @@ public class AccountingCorePresentationViewService {
     }
 
     @Transactional
-    public Either<Problem, Void> extractionTrigger(ExtractionRequest body) {
+    public Either<ProblemDetail, Void> extractionTrigger(ExtractionRequest body) {
         UserExtractionParameters fp = getUserExtractionParameters(body);
 
         return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(),
@@ -313,7 +313,7 @@ public class AccountingCorePresentationViewService {
                 .transactionNumbers(transactionNumbers).build();
     }
 
-    public Either<List<Problem>, Void> extractionValidation(ExtractionRequest body) {
+    public Either<List<ProblemDetail>, Void> extractionValidation(ExtractionRequest body) {
         UserExtractionParameters userExtractionParameters =
                 getUserExtractionParameters(body);
         return accountingCoreService.validateIngestion(userExtractionParameters,
@@ -383,7 +383,7 @@ public class AccountingCorePresentationViewService {
 
     @Transactional
     public BatchReprocessView scheduleReIngestionForFailed(String batchId) {
-        Either<Problem, Void> txM =
+        Either<ProblemDetail, Void> txM =
                 accountingCoreService.scheduleReIngestionForFailed(batchId);
 
         if (txM.isEmpty()) {

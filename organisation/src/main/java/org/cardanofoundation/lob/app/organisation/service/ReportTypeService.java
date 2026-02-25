@@ -9,13 +9,13 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ReportTypeFieldUpdateCsv;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccountSubType;
@@ -47,28 +47,25 @@ public class ReportTypeService {
     }
 
     @Transactional
-    public Either<Problem, Void> addMappingToReportTypeField(String orgId, @Valid ReportTypeFieldUpdate reportTypeFieldUpdate) {
+    public Either<ProblemDetail, Void> addMappingToReportTypeField(String orgId, @Valid ReportTypeFieldUpdate reportTypeFieldUpdate) {
         Optional<ReportTypeEntity> reportTypeEntityOptional = reportTypeRepository.findByOrganisationIdAndId(orgId, reportTypeFieldUpdate.getReportTypeId());
         if (reportTypeEntityOptional.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("Report Type not found")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report Type not found");
+            detail.setTitle("REPORT_TYPE_NOT_FOUND");
+            return Either.left(detail);
         } else {
             Optional<ReportTypeFieldEntity> optionalReportField = reportTypeFieldRepository.findByReportIdAndId(reportTypeFieldUpdate.getReportTypeId(), reportTypeFieldUpdate.getReportTypeFieldId());
             if (optionalReportField.isEmpty()) {
-                return Either.left(Problem.builder()
-                        .withTitle("Report Type Field not found")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report Type Field not found");
+                problem.setTitle("REPORT_TYPE_FIELD_NOT_FOUND");
+                return Either.left(problem);
             }
             ReportTypeFieldEntity reportTypeFieldEntity = optionalReportField.get();
             Optional<ChartOfAccountSubType> optionalSubType = chartOfAccountSubTypeRepository.findById(String.valueOf(reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId()));
             if (optionalSubType.isEmpty()) {
-                return Either.left(Problem.builder()
-                        .withTitle("Organisation Chart Of Account Sub Type not found")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Organisation Chart of Account Sub type not found");
+                problem.setTitle("SUB_TYPE_NOT_FOUND");
+                return Either.left(problem);
             }
             List<ChartOfAccountSubType> mappingTypes = reportTypeFieldEntity.getMappingTypes();
             mappingTypes.add(optionalSubType.get());
@@ -79,13 +76,13 @@ public class ReportTypeService {
     }
 
     @Transactional
-    public Either<List<Problem>, Void> addMappingToReportTypeFieldCsv(String orgId, MultipartFile file) {
-        Either<Problem, List<ReportTypeFieldUpdateCsv>> csv = csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class);
+    public Either<List<ProblemDetail>, Void> addMappingToReportTypeFieldCsv(String orgId, MultipartFile file) {
+        Either<ProblemDetail, List<ReportTypeFieldUpdateCsv>> csv = csvParser.parseCsv(file, ReportTypeFieldUpdateCsv.class);
         if (csv.isLeft()) {
             return Either.left(List.of(csv.getLeft()));
         }
         List<ReportTypeFieldUpdateCsv> reportTypeFieldUpdateCsvs = csv.get();
-        List<Problem> errors = new ArrayList<>();
+        List<ProblemDetail> errors = new ArrayList<>();
         for (ReportTypeFieldUpdateCsv reportUpdate : reportTypeFieldUpdateCsvs) {
             ReportTypeFieldUpdate reportTypeFieldUpdate = new ReportTypeFieldUpdate(
                     safeParse(reportUpdate.getReportType()),
@@ -102,10 +99,9 @@ public class ReportTypeService {
                     .ifPresent(organisationChartOfAccountSubType -> reportTypeFieldUpdate.setOrganisationChartOfAccountSubTypeId(organisationChartOfAccountSubType.getId()));
 
             if (reportTypeFieldUpdate.getReportTypeId() == null || reportTypeFieldUpdate.getReportTypeFieldId() == null || reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId() == null) {
-                errors.add(Problem.builder()
-                        .withTitle("Can't add mappings to Report Type field: %s".formatted(reportUpdate))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Can't add mappings to Reporty Type field: %s".formatted(reportUpdate));
+                problemDetail.setTitle("CAN'T_ADD_MAPPINGS_TO_REPORT_TYPE_FIELD");
+                errors.add(problemDetail);
                 continue;
             }
             addMappingToReportTypeField(orgId, reportTypeFieldUpdate)

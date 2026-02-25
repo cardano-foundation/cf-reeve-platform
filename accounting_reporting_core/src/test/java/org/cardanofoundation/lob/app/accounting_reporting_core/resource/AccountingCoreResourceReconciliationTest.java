@@ -6,19 +6,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
-import static org.zalando.problem.Status.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -59,10 +59,7 @@ class AccountingCoreResourceReconciliationTest {
 
     @Test
     void testReconcileTriggerAction_problem() {
-        when(accountingCoreService.scheduleReconcilation(any(), any(), any(), any(), any(), any())).thenReturn(Either.left(Problem.builder()
-                .withTitle("title")
-                .withStatus(BAD_REQUEST)
-                .build()));
+        when(accountingCoreService.scheduleReconcilation(any(), any(), any(), any(), any(), any())).thenReturn(Either.left(ProblemDetail.forStatus(BAD_REQUEST)));
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(new ReconciliationRequest());
 
         Assertions.assertEquals(400, responseEntity.getStatusCode().value());

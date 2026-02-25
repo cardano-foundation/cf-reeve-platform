@@ -22,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -31,8 +33,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ChartOfAccountUpdateCsv;
 import org.cardanofoundation.lob.app.organisation.domain.entity.*;
@@ -79,8 +79,8 @@ public class ChartOfAccountsService {
 
 
 
-    public Either<Problem, List<ChartOfAccountView>> getAllChartOfAccount(String organisationId, String customerCode, String name, List<String> currencies, List<String> counterPartyIds, List<String> types, List<String> subTypes, List<String> referenceCodes, Boolean active, Pageable pageable) {
-        Either<Problem, Pageable> validateEntity = jpaSortFieldValidator.validateEntity(ChartOfAccount.class, pageable, CHART_OF_ACCOUNT_MAPPINGS);
+    public Either<ProblemDetail, List<ChartOfAccountView>> getAllChartOfAccount(String organisationId, String customerCode, String name, List<String> currencies, List<String> counterPartyIds, List<String> types, List<String> subTypes, List<String> referenceCodes, Boolean active, Pageable pageable) {
+        Either<ProblemDetail, Pageable> validateEntity = jpaSortFieldValidator.validateEntity(ChartOfAccount.class, pageable, CHART_OF_ACCOUNT_MAPPINGS);
         if(validateEntity.isLeft()) {
             return Either.left(validateEntity.getLeft());
         }
@@ -118,11 +118,10 @@ public class ChartOfAccountsService {
     private Either<ChartOfAccountView, ChartOfAccount> isChartOfAccountAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         Optional<ChartOfAccount> chartOfAccountOpt = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode());
         if (chartOfAccountOpt.isEmpty()) {
-            return Either.left(ChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("CHART_OF_ACCOUNT_NOT_FOUND")
-                    .withDetail("Unable to find the chart of account with code: %s".formatted(chartOfAccountUpdate.getCustomerCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(), chartOfAccountUpdate));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find the chart of account with code: %s".formatted(chartOfAccountUpdate.getCustomerCode()));
+             problem.setTitle("CHART_OF_ACCOUNT_NOT_FOUND");
+             problem.setStatus(HttpStatus.NOT_FOUND);
+             return Either.left(ChartOfAccountView.createFail(problem, chartOfAccountUpdate));
         }
         return Either.right(chartOfAccountOpt.get());
     }
@@ -130,11 +129,9 @@ public class ChartOfAccountsService {
     private Either<ChartOfAccountView, Void> isOrganisationAvaliable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
-            return Either.left(ChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Unable to find Organisation by Id: %s".formatted(orgId))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(), chartOfAccountUpdate));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find Organisation by Id: %s".formatted(orgId));
+            problem.setTitle("ORGANISATION_NOT_FOUND");
+            return Either.left(ChartOfAccountView.createFail(problem, chartOfAccountUpdate));
         }
         return Either.right(null);
     }
@@ -142,11 +139,9 @@ public class ChartOfAccountsService {
     private Either<ChartOfAccountView, Void> isReferenceCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         Optional<ReferenceCode> referenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode());
         if (referenceCode.isEmpty()) {
-            return Either.left(ChartOfAccountView.createFail(Problem.builder()
-                    .withTitle("REFERENCE_CODE_NOT_FOUND")
-                    .withDetail("Unable to find event ref code: %s".formatted(chartOfAccountUpdate.getEventRefCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build(), chartOfAccountUpdate));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find event ref code: %s".formatted(chartOfAccountUpdate.getEventRefCode()));
+            problem.setTitle("REFERENCE_CODE_NOT_FOUND");
+            return Either.left(ChartOfAccountView.createFail(problem, chartOfAccountUpdate));
         }
         return Either.right(null);
     }
@@ -154,36 +149,30 @@ public class ChartOfAccountsService {
     private Either<ChartOfAccountView, ChartOfAccountSubType> isSubTypeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         Optional<ChartOfAccountSubType> subType = chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType());
         return subType.<Either<ChartOfAccountView, ChartOfAccountSubType>>map(Either::right)
-                .orElseGet(() -> Either.left(ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("SUBTYPE_NOT_FOUND")
-                        .withDetail("Unable to find subtype code: %s".formatted(chartOfAccountUpdate.getSubType()))
-                        .withStatus(Status.NOT_FOUND)
-                        .build(), chartOfAccountUpdate)));
+                .orElseGet(() -> {
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find subtype code: %s".formatted(chartOfAccountUpdate.getSubType()));
+                    problem.setTitle("SUBTYPE_NOT_FOUND");
+                    return Either.left(ChartOfAccountView.createFail(problem, chartOfAccountUpdate));
+                });
     }
 
     Either<ChartOfAccountView, Void> isParentCodeAvailable(String orgId, ChartOfAccountUpdate chartOfAccountUpdate) {
         if (chartOfAccountUpdate.getParentCustomerCode() != null && !chartOfAccountUpdate.getParentCustomerCode().isEmpty()) {
             Optional<ChartOfAccount> parentChartOfAccount = chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getParentCustomerCode());
             if (parentChartOfAccount.isEmpty()) {
-                return Either.left(ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("PARENT_ACCOUNT_NOT_FOUND")
-                        .withDetail("Unable to find the parent chart of account with code: %s".formatted(chartOfAccountUpdate.getParentCustomerCode()))
-                        .withStatus(Status.NOT_FOUND)
-                        .build(), chartOfAccountUpdate));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find the parent chart of account with code: %s".formatted(chartOfAccountUpdate.getParentCustomerCode()));
+                problem.setTitle("PARENT_ACCOUNT_NOT_FOUND");
+                return Either.left(ChartOfAccountView.createFail(problem, chartOfAccountUpdate));
             }
             if (parentChartOfAccount.get().getId().getCustomerCode().equals(chartOfAccountUpdate.getCustomerCode())) {
-                return Either.left(ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("PARENT_ACCOUNT_CANNOT_BE_SELF")
-                        .withDetail("The parent chart of account cannot be the same as the account itself: %s".formatted(chartOfAccountUpdate.getCustomerCode()))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build(), chartOfAccountUpdate));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent chart of account cannot be the same as the account itself: %s".formatted(chartOfAccountUpdate.getCustomerCode()));
+                problem.setTitle("PARENT_ACCOUNT_CANNOT_BE_SELF");
+                return Either.left(ChartOfAccountView.createFail(problem, chartOfAccountUpdate));
             }
             if (Optional.ofNullable(parentChartOfAccount.get().getParentCustomerCode()).orElse("").equals(chartOfAccountUpdate.getCustomerCode())) {
-                return Either.left(ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("CIRCULAR_REFERENCE")
-                        .withDetail("The parent chart of account: %s cannot have a circular reference to the account itself: %s".formatted(chartOfAccountUpdate.getParentCustomerCode(), chartOfAccountUpdate.getCustomerCode()))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build(), chartOfAccountUpdate));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent chart of account: %s cannot have a circular reference to the account itself: %s".formatted(chartOfAccountUpdate.getParentCustomerCode(), chartOfAccountUpdate.getCustomerCode()));
+                problem.setTitle("CIRCULAR_REFERENCE");
+                return Either.left(ChartOfAccountView.createFail(problem, chartOfAccountUpdate));
             }
         }
         return Either.right(null);
@@ -212,11 +201,9 @@ public class ChartOfAccountsService {
             if (isUpsert) {
                 chartOfAccount = chartOfAccountOpt.get();
             } else {
-                return ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS")
-                        .withDetail("The chart of account with code: %s already exists".formatted(chartOfAccountUpdate.getCustomerCode()))
-                        .withStatus(Status.CONFLICT)
-                        .build(), chartOfAccountUpdate);
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The chart of account with code: %s already exists".formatted(chartOfAccountUpdate.getCustomerCode()));
+                problem.setTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS");
+                return ChartOfAccountView.createFail(problem, chartOfAccountUpdate);
             }
         }
 
@@ -233,11 +220,9 @@ public class ChartOfAccountsService {
         if (!currency.isEmpty()) {
             Optional<Currency> byId = currencyRepository.findById(new Currency.Id(chartOfAccount.getId().getOrganisationId(), currency));
             if (byId.isEmpty()) {
-                return ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("CURRENCY_NOT_FOUND")
-                        .withDetail("Unable to find currency with id: %s".formatted(currency))
-                        .withStatus(Status.NOT_FOUND)
-                        .build(), chartOfAccountUpdate);
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find currency with id: %s".formatted(currency));
+                problem.setTitle("CURRENCY_NOT_FOUND");
+                return ChartOfAccountView.createFail(problem, chartOfAccountUpdate);
             }
         }
         chartOfAccount.setCurrencyId(chartOfAccountUpdate.getCurrency());
@@ -250,28 +235,21 @@ public class ChartOfAccountsService {
             Errors errors = validator.validateObject(chartOfAccountUpdate.getOpeningBalance());
             List<ObjectError> allErrors = errors.getAllErrors();
             if (!allErrors.isEmpty()) {
-                Problem error = Problem.builder()
-                        .withTitle(OPENING_BALANCE_VALIDATION_ERROR)
-                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
+                error.setTitle(OPENING_BALANCE_VALIDATION_ERROR);
                 return ChartOfAccountView.createFail(error, chartOfAccountUpdate);
             }
             if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdFCY().equals(chartOfAccountUpdate.getCurrency())) {
-                return ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
-                        .withDetail("The opening balance FCY currency must match the chart of account currency.")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build(), chartOfAccountUpdate);
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The opening balance FCY currency must match the chart of account currency.");
+                problem.setTitle("OPENING_BALANCE_CURRENCY_MISMATCH");
+                return ChartOfAccountView.createFail(problem, chartOfAccountUpdate);
             }
             Organisation organisation = organisationService.findById(chartOfAccount.getId().getOrganisationId()).orElseThrow();
             Currency organisationCurrency = currencyRepository.findByCurrencyId(chartOfAccount.getId().getOrganisationId(), organisation.getCurrencyId()).orElseThrow(() -> new RuntimeException("Organisation currency not found"));
             if (!chartOfAccountUpdate.getOpeningBalance().getOriginalCurrencyIdLCY().equals(organisationCurrency.getId().getCode())) {
-                return ChartOfAccountView.createFail(Problem.builder()
-                        .withTitle("OPENING_BALANCE_CURRENCY_MISMATCH")
-                        .withDetail("The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCode()))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build(), chartOfAccountUpdate);
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The opening balance LCY currency must match the organisation currency: %s".formatted(organisationCurrency.getId().getCode()));
+                problem.setTitle("OPENING_BALANCE_CURRENCY_MISMATCH");
+                return ChartOfAccountView.createFail(problem, chartOfAccountUpdate);
             }
         }
 
@@ -283,10 +261,10 @@ public class ChartOfAccountsService {
     }
 
     @Transactional
-    public Either<List<Problem>, List<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
+    public Either<List<ProblemDetail>, List<ChartOfAccountView>> insertChartOfAccountByCsv(String orgId, MultipartFile file) {
 
 
-        Either<Problem, List<ChartOfAccountUpdateCsv>> lists = csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class);
+        Either<ProblemDetail, List<ChartOfAccountUpdateCsv>> lists = csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class);
 
         if (lists.isLeft()) {
             return Either.left(List.of(lists.getLeft()));
@@ -298,11 +276,8 @@ public class ChartOfAccountsService {
             Errors errors = validator.validateObject(chartOfAccountUpdateCsv);
             List<ObjectError> allErrors = errors.getAllErrors();
             if (!allErrors.isEmpty()) {
-                Problem error = Problem.builder()
-                        .withTitle(VALIDATION_ERROR)
-                        .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
+                error.setTitle(VALIDATION_ERROR);
                 accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
                 continue;
             }
@@ -311,11 +286,8 @@ public class ChartOfAccountsService {
             try {
                 chartOfAccountUpdateCsv.fillOpeningBalance();
             } catch (Exception e) {
-                Problem error = Problem.builder()
-                        .withTitle("OPENING_BALANCE_ERROR")
-                        .withDetail(e.getMessage())
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+                error.setTitle("OPENING_BALANCE_ERROR");
                 accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
                 continue;
             }
@@ -323,21 +295,15 @@ public class ChartOfAccountsService {
 
             Optional<ChartOfAccountType> type = chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, chartOfAccountUpdateCsv.getType());
             if( type.isEmpty()) {
-                Problem error = Problem.builder()
-                        .withTitle("CHART_OF_ACCOUNT_TYPE_NOT_FOUND")
-                        .withDetail("Chart of account type: %s not found. Please provide a valid type.".formatted(chartOfAccountUpdateCsv.getType()))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Chart of account type: %s not found. Please provide a valid type.".formatted(chartOfAccountUpdateCsv.getType()));
+                error.setTitle("CHART_OF_ACCOUNT_TYPE_NOT_FOUND");
                 accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
                 continue;
             }
             Optional<ChartOfAccountSubType> subType = chartOfAccountSubTypeRepository.findFirstByNameAndOrganisationIdAndParentName(orgId, chartOfAccountUpdateCsv.getSubType(), chartOfAccountUpdateCsv.getType());
             if (subType.isEmpty()) {
-                Problem error = Problem.builder()
-                        .withTitle("CHART_OF_ACCOUNT_SUBTYPE_NOT_FOUND")
-                        .withDetail("Chart of account subtype: %s not found for type: %s. Please provide a valid subtype.".formatted(chartOfAccountUpdateCsv.getSubType(), chartOfAccountUpdateCsv.getType()))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build();
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Chart of account subtype: %s not found for type: %s. Please provide a valid subtype.".formatted(chartOfAccountUpdateCsv.getSubType(), chartOfAccountUpdateCsv.getType()));
+                error.setTitle("CHART_OF_ACCOUNT_SUBTYPE_NOT_FOUND");
                 accountEventViews.add(ChartOfAccountView.createFail(error, chartOfAccountUpdateCsv));
                 continue;
             }

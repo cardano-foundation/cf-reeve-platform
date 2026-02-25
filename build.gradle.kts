@@ -131,7 +131,6 @@ subprojects {
         testImplementation("org.testcontainers:postgresql")
 
         runtimeOnly("org.springframework.boot:spring-boot-properties-migrator")
-//        implementation("org.zalando:problem-spring-web-starter:0.29.1")
         implementation("io.vavr:vavr:0.10.4")
         implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
@@ -157,7 +156,7 @@ subprojects {
 
         compileOnly("org.projectlombok:lombok:1.18.32")
         annotationProcessor("org.projectlombok:lombok:1.18.32")
-        implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+        implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.15")
         testCompileOnly("org.projectlombok:lombok:1.18.32")
         testAnnotationProcessor("org.projectlombok:lombok:1.18.32")
         testImplementation("io.rest-assured:rest-assured:5.5.0")

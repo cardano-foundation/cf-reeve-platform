@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
@@ -26,7 +26,7 @@ public class ProjectView {
 
     private Boolean active;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static ProjectView fromEntity(Project project) {
         ProjectView.ProjectViewBuilder builder = ProjectView.builder()
@@ -40,7 +40,7 @@ public class ProjectView {
         return builder.build();
     }
 
-    public static ProjectView createFail(ProjectUpdate projectUpdate, Problem error) {
+    public static ProjectView createFail(ProjectUpdate projectUpdate, ProblemDetail error)  {
         return ProjectView.builder()
                 .customerCode(projectUpdate.getCustomerCode())
                 .name(projectUpdate.getName())

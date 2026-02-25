@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,8 +17,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -84,10 +83,10 @@ class CostCenterControllerTest {
     @Test
     void insertCostCentersCsv_problem() {
         MultipartFile file = mock(MultipartFile.class);
-        when(costCenterService.createCostCenterFromCsv("org123", file)).thenReturn(Either.left(Problem.builder().withStatus(Status.BAD_REQUEST).build()));
+        when(costCenterService.createCostCenterFromCsv("org123", file)).thenReturn(Either.left(Problem.builder().withStatus(HttpStatus.BAD_REQUEST).build()));
 
         ResponseEntity<?> response = costCenterController.insertCostCentersCsv("org123", file);
-        assertEquals(Status.BAD_REQUEST.getStatusCode(), response.getStatusCode().value());
+        assertEquals(HttpStatus.BAD_REQUEST.getStatusCode(), response.getStatusCode().value());
         assertNotNull(response.getBody());
     }
 

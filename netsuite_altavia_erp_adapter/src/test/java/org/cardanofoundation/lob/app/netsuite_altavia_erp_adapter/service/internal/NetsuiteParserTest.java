@@ -8,12 +8,13 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.http.ProblemDetail;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -88,7 +89,7 @@ class NetsuiteParserTest {
     @Test
     void parseSearchResult() {
 
-        Either<Problem, List<TxLine>> parsedSearchResults = netsuiteParser.parseSearchResults(json);
+        Either<ProblemDetail, List<TxLine>> parsedSearchResults = netsuiteParser.parseSearchResults(json);
 
         Assertions.assertTrue(parsedSearchResults.isRight());
         List<TxLine> txLines = parsedSearchResults.get();
@@ -115,10 +116,10 @@ class NetsuiteParserTest {
                   "more": true
                 """;
 
-        Either<Problem, List<TxLine>> parsedSearchResults = netsuiteParser.parseSearchResults(wrongJson);
+        Either<ProblemDetail, List<TxLine>> parsedSearchResults = netsuiteParser.parseSearchResults(wrongJson);
 
         Assertions.assertTrue(parsedSearchResults.isLeft());
-        Problem problem = parsedSearchResults.getLeft();
+        ProblemDetail problem = parsedSearchResults.getLeft();
         Assertions.assertEquals("JSON_PARSE_ERROR", problem.getTitle());
     }
 
@@ -127,7 +128,7 @@ class NetsuiteParserTest {
         NetsuiteIngestionBody body1 = new NetsuiteIngestionBody(1L, MoreCompress.compress(json), "1", json, "123");
         NetsuiteIngestionBody body2 = new NetsuiteIngestionBody(2L, MoreCompress.compress(json), "1", json, "123");
 
-        Either<Problem, List<TxLine>> allTxLinesFromBodies = netsuiteParser.getAllTxLinesFromBodies(List.of(body1, body2));
+        Either<ProblemDetail, List<TxLine>> allTxLinesFromBodies = netsuiteParser.getAllTxLinesFromBodies(List.of(body1, body2));
         assertTrue(allTxLinesFromBodies.isRight());
         List<TxLine> txLines = allTxLinesFromBodies.get();
         assertEquals(2, txLines.size());
@@ -142,7 +143,7 @@ class NetsuiteParserTest {
         NetsuiteIngestionBody body1 = new NetsuiteIngestionBody(1L, MoreCompress.compress(json), "1", json, "123");
         NetsuiteIngestionBody body2 = new NetsuiteIngestionBody(2L, MoreCompress.compress(wrongJson), "1", json, "123");
 
-        Either<Problem, List<TxLine>> allTxLinesFromBodies = netsuiteParser.getAllTxLinesFromBodies(List.of(body1, body2));
+        Either<ProblemDetail, List<TxLine>> allTxLinesFromBodies = netsuiteParser.getAllTxLinesFromBodies(List.of(body1, body2));
         Assertions.assertTrue(allTxLinesFromBodies.isLeft());
     }
 
