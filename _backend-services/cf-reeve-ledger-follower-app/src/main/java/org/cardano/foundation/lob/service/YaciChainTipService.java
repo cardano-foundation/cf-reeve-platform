@@ -35,12 +35,9 @@ public class YaciChainTipService implements BlockchainDataChainTipService {
         var latestBlockM = blockService.getLatestBlock();
 
         if (latestBlockM.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("CHAIN_TIP_NOT_FOUND")
-                    .withDetail("Unable to get chain tip from backend service.")
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .build()
-            );
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "Unable to get chain tip from backend service.");
+            problemDetail.setTitle("CHAIN_TIP_NOT_FOUND");
+            return Either.left(problemDetail);
         }
         var latestBlock = latestBlockM.orElseThrow();
 

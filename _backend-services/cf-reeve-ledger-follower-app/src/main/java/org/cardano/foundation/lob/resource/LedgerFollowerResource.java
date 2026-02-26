@@ -81,12 +81,10 @@ public class LedgerFollowerResource {
         }
 
         if (txDetailsM.isEmpty()) {
-            val problem = Problem.builder()
-                    .withTitle("TX_NOT_FOUND")
-                    .withDetail("Transaction not found, with txHash: " + txHash)
-                    .build();
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction not found, with txHash: " + txHash);
+            problemDetail.setTitle("TX_NOT_FOUND");
 
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+            return ResponseEntity.status(problemDetail.getStatus()).body(problemDetail);
         }
 
         return ResponseEntity.ok()
