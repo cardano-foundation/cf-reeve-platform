@@ -472,7 +472,10 @@ public class TransactionReconcilationService {
 
             for (TransactionEntity attachedTx : attachedTxEntities) {
 
-                if (attachedTx.getReconcilation().isPresent() && attachedTx.getReconcilation().get().getSink().isPresent() && attachedTx.getReconcilation().get().getSink().get().equals(ReconcilationCode.NOK)) {
+                if (attachedTx.getReconcilation()
+                        .flatMap(Reconcilation::getSink)
+                        .filter(status -> status == ReconcilationCode.OK)
+                        .isEmpty()) {
                     reconcilationEntity.addViolation(ReconcilationViolation.builder()
                             .transactionId(attachedTx.getId())
                             .rejectionCode(SINK_RECONCILATION_FAIL)
@@ -496,10 +499,10 @@ public class TransactionReconcilationService {
             IndexerReconcilationServiceIF.IndexerReconcilationResult indexerResult = results.get(txId);
 
             ReconcilationCode sinkReconcilationStatus;
-            if (indexerResult == null) {
-                log.warn("Transaction {} ({}) not found in indexer results", tx.getInternalTransactionNumber(), txId);
-                sinkReconcilationStatus = ReconcilationCode.NOK;
 
+            if (indexerResult == null) {
+                sinkReconcilationStatus = ReconcilationCode.NOK;
+                log.warn("Transaction {} ({}) not found in indexer results", tx.getInternalTransactionNumber(), txId);
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(txId)
                         .rejectionCode(SINK_RECONCILATION_FAIL)
@@ -509,21 +512,16 @@ public class TransactionReconcilationService {
                         .amountLcySum(computeAmountLcySum(tx))
                         .build());
             } else if (indexerResult.status() == ReconcilationCode.NOK) {
-
+                sinkReconcilationStatus = ReconcilationCode.NOK;
+                log.warn("Transaction {} ({}) failed indexer reconciliation: {} ", tx.getInternalTransactionNumber(), txId, indexerResult.mismatchReason());
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(txId)
-                        //.rejectionCode(SOURCE_RECONCILATION_FAIL)
                         .rejectionCode(SINK_RECONCILATION_FAIL)
                         .transactionInternalNumber(tx.getInternalTransactionNumber())
                         .transactionEntryDate(tx.getEntryDate())
                         .transactionType(tx.getTransactionType())
                         .amountLcySum(computeAmountLcySum(tx))
                         .build());
-
-                log.warn("Transaction {} failed indexer reconciliation: {} ({})", tx.getInternalTransactionNumber(), indexerResult.mismatchReason(), txId);
-                sinkReconcilationStatus = ReconcilationCode.NOK;
-
-
             } else {
                 log.info("Transaction {} ({}) is OK", tx.getInternalTransactionNumber(), txId);
                 sinkReconcilationStatus = ReconcilationCode.OK;
