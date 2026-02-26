@@ -173,6 +173,7 @@ class API1MetadataSerialiserTest {
 
         assertThat(itemMap1.get("id")).isEqualTo("item1");
         assertThat(itemMap1.get("amount")).isEqualTo(BigDecimals.normaliseString(item1.getAmountFcy()));
+        assertThat(itemMap1.get("amount_lcy")).isEqualTo(BigDecimals.normaliseString(item1.getAmountLcy()));
         assertThat(itemMap1.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(item1.getFxRate()));
         assertThat(itemMap1.get("document")).isInstanceOf(MetadataMap.class);
         assertThat(itemMap1.get("project")).isInstanceOf(MetadataMap.class); // only for item 1
@@ -201,13 +202,64 @@ class API1MetadataSerialiserTest {
 
         assertThat(itemMap2.get("id")).isEqualTo(item2.getId());
         assertThat(itemMap2.get("amount")).isEqualTo(BigDecimals.normaliseString(item2.getAmountFcy()));
+        assertThat(itemMap2.get("amount_lcy")).isEqualTo(BigDecimals.normaliseString(item2.getAmountLcy()));
         assertThat(itemMap2.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(item2.getFxRate()));
         assertThat(itemMap2.get("document")).isInstanceOf(MetadataMap.class);
 
         assertThat(itemMap3.get("id")).isEqualTo(item3.getId());
         assertThat(itemMap3.get("amount")).isEqualTo(BigDecimals.normaliseString(item3.getAmountFcy()));
+        assertThat(itemMap3.get("amount_lcy")).isEqualTo(BigDecimals.normaliseString(item3.getAmountLcy()));
         assertThat(itemMap3.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(item3.getFxRate()));
         assertThat(itemMap3.get("document")).isInstanceOf(MetadataMap.class);
+    }
+
+    @Test
+    void testSerialiseToMetadataMap_amountLcyNullIsOmitted() {
+        // Given
+        YearMonth accountingPeriod = YearMonth.of(2023, 2);
+
+        String organisationId = "org123";
+        Organisation organisation = new Organisation();
+        organisation.setId(organisationId);
+        organisation.setName("Test Organisation");
+        organisation.setTaxIdNumber("123456789");
+        organisation.setCurrencyId("USD");
+        organisation.setCountryCode("US");
+
+        TransactionEntity transaction = new TransactionEntity();
+        transaction.setId("tx1");
+        transaction.setInternalNumber("1");
+        transaction.setBatchId("batch1");
+        transaction.setTransactionType(FxRevaluation);
+        transaction.setEntryDate(LocalDate.now(fixedClock));
+        transaction.setAccountingPeriod(accountingPeriod);
+        transaction.setOrganisation(organisation);
+
+        TransactionItemEntity item = new TransactionItemEntity();
+        item.setId("item1");
+        item.setAmountFcy(new BigDecimal("100.00"));
+        item.setAmountLcy(null); // no LCY amount
+        item.setFxRate(new BigDecimal("1.0"));
+        item.setDocument(Document.builder()
+                .num("doc1")
+                .currency(Currency.builder()
+                        .customerCode("USD")
+                        .build())
+                .build()
+        );
+        transaction.setItems(Set.of(item));
+
+        // When
+        MetadataMap result = api1MetadataSerialiser.serialiseToMetadataMap(organisationId, Set.of(transaction), 12345L);
+
+        // Then
+        CBORMetadataList txsList = (CBORMetadataList) result.get("data");
+        MetadataMap txMap = (MetadataMap) txsList.getValueAt(0);
+        CBORMetadataList itemsList = (CBORMetadataList) txMap.get("items");
+        MetadataMap itemMap = (MetadataMap) itemsList.getValueAt(0);
+
+        assertThat(itemMap.get("amount")).isEqualTo(BigDecimals.normaliseString(item.getAmountFcy()));
+        assertThat(itemMap.get("amount_lcy")).isNull();
     }
 
     private MetadataMap assertContainsItem(String id, CBORMetadataList items) {
