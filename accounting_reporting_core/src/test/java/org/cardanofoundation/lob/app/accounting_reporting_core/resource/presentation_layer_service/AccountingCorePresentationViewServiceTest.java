@@ -178,6 +178,21 @@ class AccountingCorePresentationViewServiceTest {
     }
 
     @Test
+    void getFilterOptions_reconciliationSources_includesAllSourcesIncludingCSV() {
+        Map<FilterOptions, List<FilteringOptionsListResponse>> map = accountingCorePresentationViewService.getFilterOptions(
+                List.of(FilterOptions.RECONCILIATION_SOURCES), "org123");
+
+        assertFalse(map.isEmpty());
+        List<FilteringOptionsListResponse> sources = map.get(FilterOptions.RECONCILIATION_SOURCES);
+        assertEquals(ReconciliationFilterSource.values().length, sources.size());
+        List<String> sourceNames = sources.stream().map(FilteringOptionsListResponse::getName).toList();
+        assertTrue(sourceNames.contains("CSV"));
+        assertTrue(sourceNames.contains("ERP"));
+        assertTrue(sourceNames.contains("BLOCKCHAIN"));
+        verifyNoInteractions(transactionBatchRepositoryGateway, transactionItemRepository);
+    }
+
+    @Test
     void getFilterOptions_AllOptions() {
         when(transactionBatchRepositoryGateway.findBatchUsersList("org123")).thenReturn(List.of("user1", "user2"));
         when(transactionItemRepository.getAllDocumentNumbers()).thenReturn(List.of("Doc12"));
@@ -723,6 +738,59 @@ class AccountingCorePresentationViewServiceTest {
 
         verify(reconcilationRepository).findAllReconcilation(
                 eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class));
+        verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
+    }
+
+    @Test
+    void allReconciliationTransaction_reconciledFilter_withCSVSource() {
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 12, 31);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(
+                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("CSV"), any(Pageable.class))
+        ).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
+        when(body.getDateFrom()).thenReturn(Optional.of(dateFrom));
+        when(body.getDateTo()).thenReturn(Optional.of(dateTo));
+        when(body.getSource()).thenReturn(Optional.of(ReconciliationFilterSource.CSV));
+        when(body.getTransactionTypes()).thenReturn(Set.of());
+        when(body.getReconciliationRejectionCode()).thenReturn(Set.of());
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        verify(reconcilationRepository).findAllReconcilation(
+                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("CSV"), any(Pageable.class));
+        verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
+    }
+
+    @Test
+    void allReconciliationTransaction_unreconciledFilter_withCSVSource() {
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 12, 31);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(
+                eq(null), eq(dateFrom), eq(dateTo), eq("CSV"), eq(null), eq(null), any(Pageable.class))
+        ).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+        when(body.getDateFrom()).thenReturn(Optional.of(dateFrom));
+        when(body.getDateTo()).thenReturn(Optional.of(dateTo));
+        when(body.getSource()).thenReturn(Optional.of(ReconciliationFilterSource.CSV));
+        when(body.getTransactionTypes()).thenReturn(Set.of());
+        when(body.getReconciliationRejectionCode()).thenReturn(Set.of());
+        when(body.getTransactionId()).thenReturn(null);
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        verify(reconcilationRepository).findAllReconciliationSpecial(
+                eq(null), eq(dateFrom), eq(dateTo), eq("CSV"), eq(null), eq(null), any(Pageable.class));
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
 
