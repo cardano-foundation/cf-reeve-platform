@@ -99,7 +99,7 @@ public class ReportTypeService {
                     .ifPresent(organisationChartOfAccountSubType -> reportTypeFieldUpdate.setOrganisationChartOfAccountSubTypeId(organisationChartOfAccountSubType.getId()));
 
             if (reportTypeFieldUpdate.getReportTypeId() == null || reportTypeFieldUpdate.getReportTypeFieldId() == null || reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId() == null) {
-                ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Can't add mappings to Reporty Type field: %s".formatted(reportUpdate));
+                ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Can't add mappings to Report Type field: %s".formatted(reportUpdate));
                 problemDetail.setTitle("CAN'T_ADD_MAPPINGS_TO_REPORT_TYPE_FIELD");
                 errors.add(problemDetail);
                 continue;
