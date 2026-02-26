@@ -9,7 +9,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -19,8 +21,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,7 +94,7 @@ class OnChainIndexerServiceTest {
         when(objectMapper.readValue(anyString(), any(Class.class))).thenReturn(pageResponse);
 
         // When
-        Either<Problem, List<OnChainTransactionDto>> result =
+        Either<ProblemDetail, List<OnChainTransactionDto>> result =
                 service.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
 
         // Then
@@ -144,7 +144,7 @@ class OnChainIndexerServiceTest {
                 .thenReturn(page2);
 
         // When
-        Either<Problem, List<OnChainTransactionDto>> result =
+        Either<ProblemDetail, List<OnChainTransactionDto>> result =
                 service.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
 
         // Then
@@ -172,13 +172,13 @@ class OnChainIndexerServiceTest {
         when(requestBodySpec.retrieve()).thenThrow(new RestClientException("Connection refused"));
 
         // When
-        Either<Problem, List<OnChainTransactionDto>> result =
+        Either<ProblemDetail, List<OnChainTransactionDto>> result =
                 service.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
 
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INDEXER_API_ERROR");
-        assertThat(result.getLeft().getStatus()).isEqualTo(Status.SERVICE_UNAVAILABLE);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE.value());
         assertThat(result.getLeft().getDetail()).contains("Connection refused");
     }
 
@@ -206,13 +206,13 @@ class OnChainIndexerServiceTest {
                 .thenThrow(new JsonProcessingException("Invalid JSON") {});
 
         // When
-        Either<Problem, List<OnChainTransactionDto>> result =
+        Either<ProblemDetail, List<OnChainTransactionDto>> result =
                 service.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
 
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INDEXER_API_ERROR");
-        assertThat(result.getLeft().getStatus()).isEqualTo(Status.INTERNAL_SERVER_ERROR);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.value());
         assertThat(result.getLeft().getDetail()).contains("Error parsing JSON");
     }
 
@@ -239,7 +239,7 @@ class OnChainIndexerServiceTest {
         when(responseSpec.toEntity(String.class)).thenReturn(responseEntity);
 
         // When
-        Either<Problem, List<OnChainTransactionDto>> result =
+        Either<ProblemDetail, List<OnChainTransactionDto>> result =
                 service.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
 
         // Then
@@ -274,7 +274,7 @@ class OnChainIndexerServiceTest {
         when(objectMapper.readValue(anyString(), any(Class.class))).thenReturn(emptyResponse);
 
         // When
-        Either<Problem, List<OnChainTransactionDto>> result =
+        Either<ProblemDetail, List<OnChainTransactionDto>> result =
                 service.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo);
 
         // Then
@@ -299,7 +299,7 @@ class OnChainIndexerServiceTest {
         when(responseSpec.toEntity(String.class)).thenReturn(responseEntity);
 
         // When
-        Either<Problem, Void> result = service.testConnection();
+        Either<ProblemDetail, Void> result = service.testConnection();
 
         // Then
         assertThat(result.isRight()).isTrue();
@@ -319,7 +319,7 @@ class OnChainIndexerServiceTest {
         when(requestBodySpec.retrieve()).thenThrow(new RestClientException("Connection refused"));
 
         // When
-        Either<Problem, Void> result = service.testConnection();
+        Either<ProblemDetail, Void> result = service.testConnection();
 
         // Then
         assertThat(result.isLeft()).isTrue();
@@ -364,7 +364,7 @@ class OnChainIndexerServiceTest {
         when(responseSpec.toEntity(String.class)).thenReturn(responseEntity);
 
         // When
-        Either<Problem, Void> result = service.testConnection();
+        Either<ProblemDetail, Void> result = service.testConnection();
 
         // Then - 4xx is still considered a successful connection test
         assertThat(result.isRight()).isTrue();
@@ -389,7 +389,7 @@ class OnChainIndexerServiceTest {
         when(responseSpec.toEntity(String.class)).thenReturn(responseEntity);
 
         // When
-        Either<Problem, Void> result = service.testConnection();
+        Either<ProblemDetail, Void> result = service.testConnection();
 
         // Then - 5xx is considered a failed connection test
         assertThat(result.isLeft()).isTrue();

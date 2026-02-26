@@ -3,7 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.utils;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 public class ErrorUtils {
 
@@ -11,7 +11,7 @@ public class ErrorUtils {
         // Private constructor to prevent instantiation
     }
 
-    public static Map<String, Object> getBag(Problem problem, String code) {
+    public static Map<String, Object> getBag(ProblemDetail problem, String code) {
         try {
             if (problem == null) {
                 return Map.of();

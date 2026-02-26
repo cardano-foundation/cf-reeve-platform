@@ -10,7 +10,9 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -19,8 +21,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.OnChainTransactionSearchRequest;
@@ -48,7 +48,7 @@ public class OnChainIndexerService {
         return new OnChainIndexerService(objectMapper, restClient, baseUrl, DEFAULT_PAGE_SIZE);
     }
 
-    public Either<Problem, List<OnChainTransactionDto>> retrieveTransactionsByDateRange(
+    public Either<ProblemDetail, List<OnChainTransactionDto>> retrieveTransactionsByDateRange(
             String organisationId,
             LocalDate dateFrom,
             LocalDate dateTo) {
@@ -61,7 +61,7 @@ public class OnChainIndexerService {
         boolean hasMorePages = true;
 
         while (hasMorePages) {
-            Either<Problem, OnChainTransactionsPageResponse> pageResultE =
+            Either<ProblemDetail, OnChainTransactionsPageResponse> pageResultE =
                     fetchPage(organisationId, dateFrom, dateTo, currentPage);
 
             if (pageResultE.isLeft()) {
@@ -80,7 +80,7 @@ public class OnChainIndexerService {
         return Either.right(allTransactions);
     }
 
-    private Either<Problem, OnChainTransactionsPageResponse> fetchPage(
+    private Either<ProblemDetail, OnChainTransactionsPageResponse> fetchPage(
             String organisationId,
             LocalDate dateFrom,
             LocalDate dateTo,
@@ -119,30 +119,30 @@ public class OnChainIndexerService {
             log.error("On-Chain Indexer API returned error status: {}, body: {}",
                     response.getStatusCode(), response.getBody());
 
-            return Either.left(Problem.builder()
-                    .withStatus(Status.valueOf(response.getStatusCode().value()))
-                    .withTitle(INDEXER_API_ERROR)
-                    .withDetail("Indexer API returned error: " + response.getBody())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.valueOf(response.getStatusCode().value()),
+                    "Indexer API returned error: " + response.getBody());
+            problem.setTitle(INDEXER_API_ERROR);
+            return Either.left(problem);
 
         } catch (JsonProcessingException e) {
             log.error("Error parsing JSON response from On-Chain Indexer API: {}", e.getMessage());
-            return Either.left(Problem.builder()
-                    .withStatus(Status.INTERNAL_SERVER_ERROR)
-                    .withTitle(INDEXER_API_ERROR)
-                    .withDetail("Error parsing JSON response: " + e.getMessage())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Error parsing JSON response: " + e.getMessage());
+            problem.setTitle(INDEXER_API_ERROR);
+            return Either.left(problem);
         } catch (RestClientException e) {
             log.error("Error calling On-Chain Indexer API: {}", e.getMessage());
-            return Either.left(Problem.builder()
-                    .withStatus(Status.SERVICE_UNAVAILABLE)
-                    .withTitle(INDEXER_API_ERROR)
-                    .withDetail("Error calling indexer API: " + e.getMessage())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Error calling indexer API: " + e.getMessage());
+            problem.setTitle(INDEXER_API_ERROR);
+            return Either.left(problem);
         }
     }
 
-    public Either<Problem, Void> testConnection() {
+    public Either<ProblemDetail, Void> testConnection() {
         log.info("Testing connection to On-Chain Indexer at: {}", baseUrl);
 
         try {
@@ -173,19 +173,19 @@ public class OnChainIndexerService {
                 return Either.right(null);
             }
 
-            return Either.left(Problem.builder()
-                    .withStatus(Status.valueOf(response.getStatusCode().value()))
-                    .withTitle(INDEXER_API_ERROR)
-                    .withDetail("Connection test failed: " + response.getBody())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.valueOf(response.getStatusCode().value()),
+                    "Connection test failed: " + response.getBody());
+            problem.setTitle(INDEXER_API_ERROR);
+            return Either.left(problem);
 
         } catch (Exception e) {
             log.error("Error testing connection to On-Chain Indexer: {}", e.getMessage());
-            return Either.left(Problem.builder()
-                    .withStatus(Status.SERVICE_UNAVAILABLE)
-                    .withTitle(INDEXER_API_ERROR)
-                    .withDetail("Connection test failed: " + e.getMessage())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Connection test failed: " + e.getMessage());
+            problem.setTitle(INDEXER_API_ERROR);
+            return Either.left(problem);
         }
     }
 }

@@ -9,10 +9,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import org.springframework.http.ProblemDetail;
+
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
@@ -92,5 +93,5 @@ public class ReportResponseDto {
 
     private LocalDateTime updatedAt;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 }

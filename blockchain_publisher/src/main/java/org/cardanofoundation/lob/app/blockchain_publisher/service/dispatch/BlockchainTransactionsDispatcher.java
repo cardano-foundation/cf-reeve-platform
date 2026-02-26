@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch;
 
 import static org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus.SUBMITTED;
-import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
+import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
 import java.util.HashSet;
 import java.util.Objects;
@@ -14,12 +14,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.bloxbean.cardano.client.api.exception.ApiException;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.BlockchainException;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API1BlockchainTransactions;
@@ -79,7 +79,7 @@ public class BlockchainTransactionsDispatcher {
                                            Set<TransactionEntity> transactionEntitiesBatch) {
         log.info("Dispatching passedTransactions for organisation: {}", organisationId);
         transactionEntityRepositoryGateway.lockTransactions(transactionEntitiesBatch);
-        Either<Problem, Optional<API1BlockchainTransactions>> blockchainTransactionsM = createAndSendBlockchainTransactions(organisationId, transactionEntitiesBatch);
+        Either<ProblemDetail, Optional<API1BlockchainTransactions>> blockchainTransactionsM = createAndSendBlockchainTransactions(organisationId, transactionEntitiesBatch);
 
         if (blockchainTransactionsM.isEmpty()) {
             transactionEntitiesBatch.forEach(tx -> tx.setL1SubmissionData(Optional.ofNullable(
@@ -115,7 +115,7 @@ public class BlockchainTransactionsDispatcher {
         log.info("Submitted tx count:{}, remainingTxCount:{}", submittedTxCount, remainingTxCount);
     }
 
-    private Either<Problem, Optional<API1BlockchainTransactions>> createAndSendBlockchainTransactions(String organisationId,
+    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> createAndSendBlockchainTransactions(String organisationId,
                                                                                                       Set<TransactionEntity> transactions) {
         log.info("Processing passedTransactions for organisation:{}, remaining size:{}", organisationId, transactions.size());
 
@@ -125,7 +125,7 @@ public class BlockchainTransactionsDispatcher {
             return Either.right(Optional.empty());
         }
 
-        Either<Problem, Optional<API1BlockchainTransactions>> serialisedTxE = l1TransactionCreator.pullBlockchainTransaction(organisationId, transactions);
+        Either<ProblemDetail, Optional<API1BlockchainTransactions>> serialisedTxE = l1TransactionCreator.pullBlockchainTransaction(organisationId, transactions);
         if (serialisedTxE.isEmpty()) {
             log.warn("Error, there is more passedTransactions to dispatch for organisation:{}, actual issue:{}", organisationId, serialisedTxE.getLeft());
 
@@ -147,19 +147,15 @@ public class BlockchainTransactionsDispatcher {
             return Either.right(Optional.of(serialisedTx));
         } catch (ApiException | BlockchainException e) {
             log.error("Error sending transaction on chain and / or updating db", e);
-            return Either.left(Problem.builder()
-                    .withTitle("ERROR_PUSHING_TRANSACTION")
-                    .withDetail(e.getMessage())
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .build());
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, e.getMessage());
+            problemDetail.setTitle("ERROR_PUSHING_TRANSACTION");
+            return Either.left(problemDetail);
 
         } catch (Exception e) {
             log.error("Unexpected error while sending transaction on chain and / or updating db", e);
-            return Either.left(Problem.builder()
-                    .withTitle("ERROR_TRANSACTION_DISPATCHER")
-                    .withDetail(e.getMessage())
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .build());
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, e.getMessage());
+            problemDetail.setTitle("ERROR_TRANSACTION_DISPATCHER");
+            return Either.left(problemDetail);
         }
 
     }

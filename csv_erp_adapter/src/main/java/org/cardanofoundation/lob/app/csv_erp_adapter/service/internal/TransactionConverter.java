@@ -18,11 +18,12 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
 import org.apache.commons.lang3.StringUtils;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CostCenter;
@@ -47,7 +48,7 @@ public class TransactionConverter {
 
     NumberFormat format = NumberFormat.getInstance(Locale.US);
 
-    public Either<Problem, List<Transaction>> convertToTransaction(String organisationId, String batchId, List<TransactionLine> lines) {
+    public Either<ProblemDetail, List<Transaction>> convertToTransaction(String organisationId, String batchId, List<TransactionLine> lines) {
         Map<String, List<TransactionLine>> collect = lines.stream().collect(groupingBy(transactionLine -> Optional.ofNullable(transactionLine.getTxNumber()).orElse("")));
         List<Transaction> transactions = new ArrayList<>();
         for (Map.Entry<String, List<TransactionLine>> entry : collect.entrySet()) {
@@ -70,35 +71,31 @@ public class TransactionConverter {
             try {
                 Optional<TransactionLine> firstWithDate = transactionLines.stream().filter(line -> Optional.ofNullable(line.getDate()).isPresent()).findFirst();
                 if (firstWithDate.isEmpty()) {
-                    return Either.left(Problem.builder()
-                            .withTitle("Transaction items conversion failed")
-                            .withDetail("Transaction date is missing for transaction number " + entry.getKey())
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Transaction date is missing for transaction number " + entry.getKey());
+                    problem.setTitle("Transaction items conversion failed");
+                    return Either.left(problem);
                 } else {
                     entryDate = FlexibleDateParser.parse(firstWithDate.get().getDate());
                 }
             } catch (IllegalArgumentException e) {
                 log.error("Transaction date parse error {}", entry.getKey(), e);
-                return Either.left(Problem.builder()
-                        .withTitle("Date parse exception")
-                        .withDetail("transaction date can't be parsed " + entry.getKey())
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "transaction date can't be parsed " + entry.getKey());
+                problem.setTitle("Date parse exception");
+                return Either.left(problem);
             }
-            Either<Problem, Set<TransactionItem>> convertItems = null;
+            Either<ProblemDetail, Set<TransactionItem>> convertItems = null;
             try {
                 convertItems = convertToTransactionItem(transactionLines);
             } catch (Exception e) {
                 log.error("Transaction items conversion failed for transaction number {}", entry.getKey(), e);
-                return Either.left(Problem.builder()
-                        .withTitle("Transaction items conversion failed")
-                        .withDetail("Transaction items conversion failed for transaction number " + entry.getKey())
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Transaction items conversion failed for transaction number " + entry.getKey());
+                problem.setTitle("Transaction items conversion failed");
+                return Either.left(problem);
             }
             if (convertItems == null) {
-                return Either.left(Problem.builder()
-                        .withTitle("Transaction items conversion failed")
-                        .withDetail("Transaction items conversion failed for transaction number " + entry.getKey())
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Transaction items conversion failed for transaction number " + entry.getKey());
+                problem.setTitle("Transaction items conversion failed");
+                return Either.left(problem);
             } else if (convertItems.isLeft()) {
                 return Either.left(convertItems.getLeft());
             }
@@ -119,7 +116,7 @@ public class TransactionConverter {
         return Either.right(transactions);
     }
 
-    private Either<Problem, Set<TransactionItem>> convertToTransactionItem(List<TransactionLine> transactionLines) {
+    private Either<ProblemDetail, Set<TransactionItem>> convertToTransactionItem(List<TransactionLine> transactionLines) {
         Set<TransactionItem> items = new HashSet<>();
         int lineNumber = 0;
         for (TransactionLine line : transactionLines) {
@@ -149,7 +146,7 @@ public class TransactionConverter {
                     )
                     .document(getDocument(line));
 
-            Either<Problem, Void> problemAddingAmounts = addAmountsAndOperationType(line, builder);
+            Either<ProblemDetail, Void> problemAddingAmounts = addAmountsAndOperationType(line, builder);
             if (problemAddingAmounts.isLeft()) return Either.left(problemAddingAmounts.getLeft());
 
             items.add(builder.build());
@@ -157,7 +154,7 @@ public class TransactionConverter {
         return Either.right(items);
     }
 
-    private Either<Problem, Void> addAmountsAndOperationType(TransactionLine line, TransactionItem.TransactionItemBuilder builder) {
+    private Either<ProblemDetail, Void> addAmountsAndOperationType(TransactionLine line, TransactionItem.TransactionItemBuilder builder) {
         try {
             OperationType operationType;
             BigDecimal amountLcy;
@@ -167,10 +164,9 @@ public class TransactionConverter {
                     StringUtils.isNoneBlank(line.getAmountFCYDebit()) && StringUtils.isNoneBlank(line.getAmountFCYCredit())) {
                 // Error when both amounts are non-zero
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", line.getTxNumber());
-                return Either.left(Problem.builder()
-                        .withTitle("Both debit and credit amounts are non-zero")
-                        .withDetail("Both debit and credit amounts are non-zero for transaction: " + line.getTxNumber())
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Both debit and credit amounts are non-zero for transaction: " + line.getTxNumber());
+                problem.setTitle("Both debit and credit amounts are non-zero");
+                return Either.left(problem);
             } else if (StringUtils.isNoneBlank(line.getAmountLCYDebit()) || StringUtils.isNoneBlank(line.getAmountFCYDebit())) {
                 operationType = OperationType.DEBIT;
                 String debitLcyStr = line.getAmountLCYDebit();
@@ -195,10 +191,9 @@ public class TransactionConverter {
             builder.operationType(operationType);
         } catch (NumberFormatException | ParseException e) {
             log.error("Error parsing amount in transaction line", e);
-            return Either.left(Problem.builder()
-                    .withTitle("Error parsing amount")
-                    .withDetail("Error parsing amount in transaction line")
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Error parsing amount in transaction line");
+            problem.setTitle("Error parsing amount");
+            return Either.left(problem);
         }
         return Either.right(null);
     }

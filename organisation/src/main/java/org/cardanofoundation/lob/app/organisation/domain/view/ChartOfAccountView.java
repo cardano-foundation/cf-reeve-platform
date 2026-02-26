@@ -7,7 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.OpeningBalance;
@@ -41,7 +41,7 @@ public class ChartOfAccountView {
 
     private OpeningBalance openingBalance;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static ChartOfAccountView createSuccess(ChartOfAccount chartOfAccount) {
 
@@ -75,7 +75,7 @@ public class ChartOfAccountView {
                 .build();
     }
 
-    public static ChartOfAccountView createFail(Problem error, ChartOfAccountUpdate chartOfAccountUpdate) {
+    public static ChartOfAccountView createFail(ProblemDetail error, ChartOfAccountUpdate chartOfAccountUpdate) {
         return ChartOfAccountView.builder()
                 .customerCode(chartOfAccountUpdate.getCustomerCode())
                 .eventRefCode(chartOfAccountUpdate.getEventRefCode())

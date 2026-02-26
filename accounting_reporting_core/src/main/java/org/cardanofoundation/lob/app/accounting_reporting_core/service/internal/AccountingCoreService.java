@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
-import static org.zalando.problem.Status.BAD_REQUEST;
-import static org.zalando.problem.Status.NOT_FOUND;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -21,13 +21,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.apache.commons.lang3.Range;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
@@ -68,10 +68,10 @@ public class AccountingCoreService {
     private int maxTransactionNumbersPerBatch = 600;
 
     @Transactional(readOnly = true)
-    public Either<Problem, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
+    public Either<ProblemDetail, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
         log.info("scheduleIngestion, parameters: {}", userExtractionParameters);
 
-        Either<Problem, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(
+        Either<ProblemDetail, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(
                 userExtractionParameters.getOrganisationId(),
                 userExtractionParameters.getFrom(),
                 userExtractionParameters.getTo());
@@ -80,13 +80,11 @@ public class AccountingCoreService {
         }
 
         if (userExtractionParameters.getTransactionNumbers().size() > maxTransactionNumbersPerBatch) {
-            return Either.left(Problem.builder()
-                    .withTitle("TOO_MANY_TRANSACTIONS")
-                    .withDetail("Too many transactions requested, maximum is %s".formatted(maxTransactionNumbersPerBatch))
-                    .withStatus(BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Too many transactions requested, maximum is %s".formatted(maxTransactionNumbersPerBatch));
+            problem.setTitle("TOO_MANY_TRANSACTIONS");
+            return Either.left(problem);
         }
-        Either<Problem, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
+        Either<ProblemDetail, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
         if (bytesE.isLeft()) {
             return Either.left(bytesE.getLeft());
         }
@@ -104,8 +102,8 @@ public class AccountingCoreService {
         return Either.right(null); // all fine
     }
 
-    public Either<List<Problem>, Void> validateIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
-        Either<Problem, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(
+    public Either<List<ProblemDetail>, Void> validateIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
+        Either<ProblemDetail, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(
                 userExtractionParameters.getOrganisationId(),
                 userExtractionParameters.getFrom(),
                 userExtractionParameters.getTo());
@@ -114,13 +112,11 @@ public class AccountingCoreService {
         }
 
         if (userExtractionParameters.getTransactionNumbers().size() > maxTransactionNumbersPerBatch) {
-            return Either.left(List.of(Problem.builder()
-                    .withTitle("TOO_MANY_TRANSACTIONS")
-                    .withDetail("Too many transactions requested, maximum is %s".formatted(maxTransactionNumbersPerBatch))
-                    .withStatus(BAD_REQUEST)
-                    .build()));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Too many transactions requested, maximum is %s".formatted(maxTransactionNumbersPerBatch));
+            problem.setTitle("TOO_MANY_TRANSACTIONS");
+            return Either.left(List.of(problem));
         }
-        Either<Problem, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
+        Either<ProblemDetail, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
         if (bytesE.isLeft()) {
             return Either.left(List.of(bytesE.getLeft()));
         }
@@ -144,34 +140,32 @@ public class AccountingCoreService {
             ValidateIngestionResponseEvent response = future.get(10, TimeUnit.SECONDS);
             if (!response.isValid()) {
                 // return the list of problems
-                return Either.left(response.getErrors().stream().map(error -> Problem.builder()
-                        .withTitle("VALIDATION_ERROR")
-                        .withDetail(error)
-                        .withStatus(BAD_REQUEST)
-                        .build()).collect(Collectors.toList()));
+                return Either.left(response.getErrors().stream().map(error -> {
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, error);
+                    problem.setTitle("VALIDATION_ERROR");
+                    return problem;
+                }).collect(Collectors.toList()));
             }
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
             log.error("Error waiting for ValidateIngestionResponseEvent", e);
-            return Either.left(List.of(Problem.builder()
-                    .withTitle("VALIDATION_ERROR")
-                    .withDetail("Error validating ingestion: %s".formatted(e.getMessage()))
-                    .withStatus(BAD_REQUEST)
-                    .build()));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Error validating ingestion: %s".formatted(e.getMessage()));
+            problem.setTitle("VALIDATION_ERROR");
+            return Either.left(List.of(problem));
         }
         return Either.right(null);
     }
 
     @Transactional(readOnly = true)
-    public Either<Problem, Void> scheduleReconcilation(String organisationId,
+    public Either<ProblemDetail, Void> scheduleReconcilation(String organisationId,
                                                        LocalDate fromDate,
                                                        LocalDate toDate, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
         log.info("scheduleReconilation, organisationId: {}, from: {}, to: {}", organisationId, fromDate, toDate);
 
-        Either<Problem, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(organisationId, fromDate, toDate);
+        Either<ProblemDetail, Void> dateRangeCheckE = checkIfWithinAccountPeriodRange(organisationId, fromDate, toDate);
         if (dateRangeCheckE.isLeft()) {
             return dateRangeCheckE;
         }
-        Either<Problem, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
+        Either<ProblemDetail, byte[]> bytesE = antiVirusScanner.readFileBytes(file);
         if (bytesE.isLeft()) {
             return Either.left(bytesE.getLeft());
         }
@@ -192,16 +186,14 @@ public class AccountingCoreService {
     }
 
     @Transactional
-    public Either<Problem, Void> scheduleReIngestionForFailed(String batchId) {
+    public Either<ProblemDetail, Void> scheduleReIngestionForFailed(String batchId) {
         log.info("scheduleReIngestion..., batchId: {}", batchId);
 
         Optional<TransactionBatchEntity> txBatchM = transactionBatchRepository.findById(batchId);
         if (txBatchM.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("TX_BATCH_NOT_FOUND")
-                    .withDetail("Transaction batch with id: %s not found".formatted(batchId))
-                    .withStatus(NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(NOT_FOUND, "Transaction batch with id: %s not found".formatted(batchId));
+            problem.setTitle("TX_BATCH_NOT_FOUND");
+            return Either.left(problem);
         }
         try {
             // calling it in a different thread
@@ -239,26 +231,22 @@ public class AccountingCoreService {
         erpIncomingDataProcessor.continueIngestion(organisationId, batchId, txs.size(), txs, processorFlags);
     }
 
-    private Either<Problem, Void> checkIfWithinAccountPeriodRange(String organisationId,
+    private Either<ProblemDetail, Void> checkIfWithinAccountPeriodRange(String organisationId,
                                                                   LocalDate fromDate,
                                                                   LocalDate toDate) {
         if (fromDate.isAfter(toDate)) {
-            return Either.left(Problem.builder()
-                    .withTitle("INVALID_DATE_RANGE")
-                    .withDetail("From date must be before to date")
-                    .withStatus(BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "From date must be before to date");
+            problem.setTitle("INVALID_DATE_RANGE");
+            return Either.left(problem);
         }
         Range<LocalDate> userExtractionRange = Range.of(fromDate, toDate);
 
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
 
         if (orgM.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Organisation with id: %s not found".formatted(organisationId))
-                    .withStatus(BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Organisation with id: %s not found".formatted(organisationId));
+            problem.setTitle("ORGANISATION_NOT_FOUND");
+            return Either.left(problem);
         }
         Organisation org = orgM.orElseThrow();
         Range<LocalDate> accountingPeriod = accountingPeriodCalculator.calculateAccountingPeriod(org);
@@ -267,14 +255,11 @@ public class AccountingCoreService {
         boolean outsideOfRange = !withinRange;
 
         if (outsideOfRange) {
-            return Either.left(Problem.builder()
-                    .withTitle("ORGANISATION_DATE_MISMATCH")
-                    .withDetail("Date range must be within the accounting period: %s".formatted(accountingPeriod))
-                    .withStatus(BAD_REQUEST)
-                    .with("accountingPeriodFrom", accountingPeriod.getMinimum())
-                    .with("accountingPeriodTo", accountingPeriod.getMaximum())
-                    .build()
-            );
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Date range must be within the accounting period: %s".formatted(accountingPeriod));
+            problem.setTitle("ORGANISATION_DATE_MISMATCH");
+            problem.setProperty("accountingPeriodFrom", accountingPeriod.getMinimum());
+            problem.setProperty("accountingPeriodTo", accountingPeriod.getMaximum());
+            return Either.left(problem);
         }
 
         return Either.right(null);

@@ -6,12 +6,12 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
 import org.apache.commons.lang3.Range;
-import org.zalando.problem.Problem;
-import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
@@ -25,16 +25,15 @@ public class SystemExtractionParametersFactory {
     private final OrganisationPublicApiIF organisationPublicApi;
     private final AccountingPeriodCalculator accountingPeriodCalculator;
 
-    public Either<Problem, org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters> createSystemExtractionParameters(String organisationId) {
+    public Either<ProblemDetail, org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters> createSystemExtractionParameters(String organisationId) {
         Optional<Organisation> organisationM = organisationPublicApi.findByOrganisationId(organisationId);
 
         if (organisationM.isEmpty()) {
             log.error("Organisation not found for id: {}", organisationId);
 
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("ORGANISATION_NOT_FOUND")
-                    .withDetail("Organisation not found for id: %s".formatted(organisationId))
-                    .build();
+
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Organisation not found for id: %s".formatted(organisationId));
+                    issue.setTitle("ORGANISATION_NOT_FOUND");
 
             return Either.left(issue);
         }

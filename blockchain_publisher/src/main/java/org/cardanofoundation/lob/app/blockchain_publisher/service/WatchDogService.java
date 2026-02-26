@@ -13,12 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Limit;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 import org.apache.commons.lang3.tuple.Pair;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
 import org.cardanofoundation.lob.app.blockchain_common.domain.FinalityScore;
@@ -113,7 +113,7 @@ public class WatchDogService {
         Long txCreationSlot = submissionData.getCreationSlot().orElseThrow(() -> new RuntimeException("Failed to get tx creation slot"));
         String txHash = submissionData.getTransactionHash().orElseThrow(() -> new RuntimeException("Failed to get tx hash"));
         log.info("Checking transaction status changes for txHash:{}", txHash);
-        Either<Problem, Optional<OnChainTxDetails>> txDetails = blockchainReaderPublicApi.getTxDetails(txHash);
+        Either<ProblemDetail, Optional<OnChainTxDetails>> txDetails = blockchainReaderPublicApi.getTxDetails(txHash);
 
         Optional<OnChainTxDetails> onChainTxDetails = txDetails.getOrElseThrow(() -> {
             log.error("Failed to get tx details for txHash:{}", txHash);

@@ -6,12 +6,13 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.util.Optional;
 
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
 import org.apache.commons.lang3.Range;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,7 @@ class SystemExtractionParametersFactoryTest {
 
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.empty());
 
-        Either<Problem, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
+        Either<ProblemDetail, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
 
         Assertions.assertTrue(systemExtractionParameters.isLeft());
     }
@@ -52,7 +53,7 @@ class SystemExtractionParametersFactoryTest {
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(org));
         when(accountingPeriodCalculator.calculateAccountingPeriod(org)).thenReturn(Range.of(LocalDate.EPOCH, now));
 
-        Either<Problem, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
+        Either<ProblemDetail, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
 
         Assertions.assertTrue(systemExtractionParameters.isRight());
         Assertions.assertEquals("org123", systemExtractionParameters.get().getOrganisationId());

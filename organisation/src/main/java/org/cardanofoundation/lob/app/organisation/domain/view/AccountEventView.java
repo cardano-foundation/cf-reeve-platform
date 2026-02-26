@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.AccountEvent;
 import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
@@ -24,7 +24,7 @@ public class AccountEventView {
     private String description;
     private Boolean active;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
 
     public static AccountEventView convertFromEntity(AccountEvent eventCode){
@@ -39,7 +39,7 @@ public class AccountEventView {
                 .build();
     }
 
-    public static AccountEventView createFail(Problem error, EventCodeUpdate eventCodeUpdate) {
+    public static AccountEventView createFail(ProblemDetail error, EventCodeUpdate eventCodeUpdate) {
         return AccountEventView.builder()
                 .debitReferenceCode(eventCodeUpdate.getDebitReferenceCode())
                 .creditReferenceCode(eventCodeUpdate.getCreditReferenceCode())

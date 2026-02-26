@@ -13,6 +13,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -22,7 +24,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,13 +86,13 @@ class ReferenceCodeServiceTest {
     void insertReferenceCodeByCsv_parseError() {
         String orgId = "org123";
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("ParseError").build()));
+        when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "ParseError")));
 
-        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
 
         assertTrue(result.isLeft());
         assertEquals(1, result.getLeft().size());
-        assertEquals("ParseError", result.getLeft().iterator().next().getTitle());
+        assertEquals("ParseError", result.getLeft().iterator().next().getDetail());
     }
 
     @Test
@@ -105,7 +106,7 @@ class ReferenceCodeServiceTest {
         when(validator.validateObject(refCodeUpdate)).thenReturn(errors);
         when(errors.getAllErrors()).thenReturn(List.of());
 
-        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
@@ -127,7 +128,7 @@ class ReferenceCodeServiceTest {
         when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrganisation));
         when(referenceCodeRepository.save(any(ReferenceCode.class))).thenReturn(referenceCode);
 
-        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
     }
@@ -145,7 +146,7 @@ class ReferenceCodeServiceTest {
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
 
         when(csvParser.parseCsv(file, ReferenceCodeUpdate.class)).thenReturn(Either.right(List.of(refCodeUpdate)));
-        Either<List<Problem>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ReferenceCodeView>> result = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals("Default Message", result.get().iterator().next().getError().get().getDetail());
@@ -156,7 +157,7 @@ class ReferenceCodeServiceTest {
         when(referenceCodeRepository.findAllByOrgId(ORG_ID, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(referenceCode)));
         when(jpaSortFieldValidator.validateEntity(ReferenceCode.class, Pageable.unpaged(), SortFieldMappings.REFERENCE_CODE_MAPPINGS))
                 .thenReturn(Either.right(Pageable.unpaged()));
-        Either<Problem, List<ReferenceCodeView>> result = referenceCodeService.getAllReferenceCodes(ORG_ID, null, null, null, null, Pageable.unpaged());
+        Either<ProblemDetail, List<ReferenceCodeView>> result = referenceCodeService.getAllReferenceCodes(ORG_ID, null, null, null, null, Pageable.unpaged());
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());

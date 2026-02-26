@@ -4,9 +4,6 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
-import java.util.Objects;
-import java.util.Optional;
-
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
@@ -35,8 +32,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.zalando.problem.Status;
-import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
@@ -65,7 +60,7 @@ public class ProjectCodeController {
                                             @RequestParam(value = "active", required = false) Boolean active,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, active, pageable).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
     }
 
@@ -94,7 +89,7 @@ public class ProjectCodeController {
     public ResponseEntity<ProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         ProjectView projectView = projectCodeService.insertProject(orgId, projectUpdate, false);
         return projectView.getError().map(error ->
-                        ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        ResponseEntity.status(error.getStatus())
                                 .body(projectView))
                 .orElseGet(() -> ResponseEntity.ok(projectView));
     }
@@ -109,7 +104,7 @@ public class ProjectCodeController {
     public ResponseEntity<ProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         ProjectView projectView = projectCodeService.updateProject(orgId, projectUpdate);
         return projectView.getError().map(error ->
-                        ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        ResponseEntity.status(error.getStatus())
                                 .body(projectView))
                 .orElseGet(() -> ResponseEntity.ok(projectView));
     }

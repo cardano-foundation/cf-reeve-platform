@@ -17,10 +17,10 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ProblemDetail;
 import org.springframework.test.context.ContextConfiguration;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,7 +64,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = org.springframework.data.domain.PageRequest.of(0, 10,
                 org.springframework.data.domain.Sort.by("invalidField"));
 
-        Either<Problem, Pageable> result = validator.validateEntity(TestRootEntity.class, pageable, Map.of());
+        Either<ProblemDetail, Pageable> result = validator.validateEntity(TestRootEntity.class, pageable, Map.of());
 
         assertTrue(result.isLeft());
         assertEquals("Invalid sort: invalidField", result.getLeft().getDetail());
@@ -75,7 +75,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = org.springframework.data.domain.PageRequest.of(0, 10,
                 org.springframework.data.domain.Sort.by("nested.value"));
 
-        Either<Problem, Pageable> result = validator.validateEntity(TestRootEntity.class, pageable, Map.of());
+        Either<ProblemDetail, Pageable> result = validator.validateEntity(TestRootEntity.class, pageable, Map.of());
 
         assertTrue(result.isRight());
     }
@@ -85,7 +85,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = org.springframework.data.domain.PageRequest.of(0, 10,
                 org.springframework.data.domain.Sort.by("invalidField"));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
 
         assertTrue(result.isLeft());
         assertEquals("Invalid sort: invalidField", result.getLeft().getDetail());
@@ -96,7 +96,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = org.springframework.data.domain.PageRequest.of(0, 10,
                 org.springframework.data.domain.Sort.by("invalidButMappedField"));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of("invalidButMappedField", "nested.value"), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of("invalidButMappedField", "nested.value"), TestRootEntity.class);
 
         assertTrue(result.isRight());
     }
@@ -106,7 +106,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = org.springframework.data.domain.PageRequest.of(0, 10,
                 org.springframework.data.domain.Sort.by("status"));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
 
         assertTrue(result.isRight());
         Pageable converted = result.get();
@@ -121,7 +121,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = PageRequest.of(0, 10,
                 Sort.by(Sort.Direction.DESC, "status"));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
 
         assertTrue(result.isRight());
         Pageable converted = result.get();
@@ -133,7 +133,7 @@ class JpaSortFieldValidatorTest {
     void convertPageable_unsortedPageable() {
         PageRequest pageable = PageRequest.of(0, 10);
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
 
         assertTrue(result.isRight());
         Pageable converted = result.get();
@@ -148,7 +148,7 @@ class JpaSortFieldValidatorTest {
                         Sort.Order.desc("name")
                 ));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
 
         assertTrue(result.isRight());
         Pageable converted = result.get();
@@ -163,7 +163,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = PageRequest.of(0, 10,
                 Sort.by("mappedStatus"));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of("mappedStatus", "status"), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of("mappedStatus", "status"), TestRootEntity.class);
 
         assertTrue(result.isRight());
         Pageable converted = result.get();
@@ -177,7 +177,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = PageRequest.of(0, 10,
                 Sort.by(Sort.Direction.DESC, "name"));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
 
         assertTrue(result.isRight());
         Pageable converted = result.get();
@@ -190,7 +190,7 @@ class JpaSortFieldValidatorTest {
         PageRequest pageable = PageRequest.of(3, 25,
                 Sort.by("name"));
 
-        Either<Problem, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestRootEntity.class);
 
         assertTrue(result.isRight());
         Pageable converted = result.get();

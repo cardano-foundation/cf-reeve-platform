@@ -7,7 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 @Getter
 @Setter
@@ -19,7 +19,7 @@ public class ExtractionTransactionView {
 
     private List<ExtractionTransactionItemView> transactions;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     private int page;
     private int size;
@@ -35,7 +35,7 @@ public class ExtractionTransactionView {
         );
     }
 
-    public static ExtractionTransactionView createFail(Problem error) {
+    public static ExtractionTransactionView createFail(ProblemDetail error)  {
         return new ExtractionTransactionView(false, 0L, List.of(), Optional.of(error), 0, 0);
     }
 }

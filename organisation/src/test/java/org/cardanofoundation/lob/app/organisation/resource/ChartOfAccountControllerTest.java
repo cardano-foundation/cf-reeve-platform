@@ -6,13 +6,13 @@ import static org.mockito.Mockito.*;
 import java.util.*;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.mockito.*;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,10 +37,7 @@ class ChartOfAccountControllerTest {
     @Test
     void insertReferenceCodeByCsv_error() {
         when(chartOfAccountsService.insertChartOfAccountByCsv("orgId", null)).thenReturn(Either.left(
-                List.of(Problem.builder()
-                .withTitle("Error")
-                .withStatus(Status.BAD_REQUEST)
-                .build())));
+                List.of(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail"))));
 
         ResponseEntity<?> response = controller.insertChartOfAccountByCsv("orgId", null);
 
@@ -99,11 +96,7 @@ class ChartOfAccountControllerTest {
         ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
         ChartOfAccountView view = mock(ChartOfAccountView.class);
 
-        when(view.getError()).thenReturn(Optional.of(Problem.builder()
-                .withTitle("Error")
-                .withDetail("Invalid")
-                .withStatus(Status.BAD_REQUEST)
-                .build()));
+        when(view.getError()).thenReturn(Optional.of(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
         when(chartOfAccountsService.insertChartOfAccount(orgId, update, false)).thenReturn(view);
 
         ResponseEntity<?> response = controller.insertChartOfAccount(orgId, update);

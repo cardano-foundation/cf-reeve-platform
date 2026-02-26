@@ -14,6 +14,8 @@ import java.util.Set;
 import lombok.val;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
@@ -22,8 +24,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -398,7 +398,7 @@ class TransactionReconcilationServiceTest {
                 .thenReturn(List.of(attachedTx));
 
         when(blockchainReaderPublicApi.isOnChain(anySet()))
-                .thenReturn(Either.left(Problem.builder().withStatus(Status.SERVICE_UNAVAILABLE).build()));
+                .thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.SERVICE_UNAVAILABLE)));
 
         transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
 
@@ -934,10 +934,8 @@ class TransactionReconcilationServiceTest {
         when(transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate))
                 .thenReturn(Set.of(tx));
 
-        Problem problem = Problem.builder()
-                .withStatus(Status.SERVICE_UNAVAILABLE)
-                .withDetail("Connection refused")
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Connection refused");
+
         when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
                 .thenReturn(Either.left(problem));
 
@@ -972,7 +970,7 @@ class TransactionReconcilationServiceTest {
                 .thenReturn(Set.of(tx));
 
         when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
-                .thenReturn(Either.left(Problem.builder().withStatus(Status.SERVICE_UNAVAILABLE).build()));
+                .thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.SERVICE_UNAVAILABLE)));
 
         transactionReconcilationService.reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
 

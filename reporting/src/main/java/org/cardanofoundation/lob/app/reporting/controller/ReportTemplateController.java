@@ -6,7 +6,6 @@ import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
@@ -16,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -37,7 +37,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
@@ -89,11 +88,11 @@ public class ReportTemplateController {
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("POST /api/report-templates - Creating template: {}", template.getName());
 
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(template);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(template);
 
         if (result.isLeft()) {
-            Problem problem = result.getLeft();
-            return ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(ReportTemplateResponseDto.builder().error(Optional.of(problem)).build());
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(ReportTemplateResponseDto.builder().error(Optional.of(problem)).build());
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
@@ -107,7 +106,7 @@ public class ReportTemplateController {
 
         return csvReportTemplateService.createCsvTemplates(csvTemplateRequest)
                 .fold(
-                        error -> ResponseEntity.status(error.getStatus().getStatusCode()).body(List.of(ReportTemplateResponseDto.builder().error(Optional.of(error)).build())),
+                        error -> ResponseEntity.status(error.getStatus()).body(List.of(ReportTemplateResponseDto.builder().error(Optional.of(error)).build())),
                         templates -> ResponseEntity.status(HttpStatus.CREATED).body(templates)
                 );
     }
@@ -136,11 +135,11 @@ public class ReportTemplateController {
         log.debug("PUT /api/report-templates - Updating template: {}", template.getName());
 
 
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(template);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(template);
 
         if (result.isLeft()) {
-            Problem problem = result.getLeft();
-            return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
         }
 
         return ResponseEntity.ok(result.get());
@@ -199,10 +198,10 @@ public class ReportTemplateController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
         }
-        Either<Problem, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, Map.of(), ReportTemplateEntity.class);
+        Either<ProblemDetail, Pageable> pageableE = jpaSortFieldValidator.convertPageable(pageable, Map.of(), ReportTemplateEntity.class);
         if (pageableE.isLeft()) {
-            Problem problem = pageableE.getLeft();
-            return ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem);
+            ProblemDetail problem = pageableE.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
         }
         ReportTemplateListResponseDto reportListDto = reportTemplateService.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageableE.get());
         return ResponseEntity.ok(reportListDto);
@@ -233,11 +232,11 @@ public class ReportTemplateController {
                 }
 
                 // Proceed with deletion
-                Either<Problem, Void> result = reportTemplateService.delete(id);
+                Either<ProblemDetail, Void> result = reportTemplateService.delete(id);
 
                 if (result.isLeft()) {
-                    Problem problem = result.getLeft();
-                    return ResponseEntity.status(problem.getStatus().getStatusCode()).body(problem);
+                    ProblemDetail problem = result.getLeft();
+                    return ResponseEntity.status(problem.getStatus()).body(problem);
                 }
 
                 return ResponseEntity.noContent().build();

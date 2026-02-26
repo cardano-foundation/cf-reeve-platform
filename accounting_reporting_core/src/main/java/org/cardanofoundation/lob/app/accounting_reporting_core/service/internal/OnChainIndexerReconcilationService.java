@@ -13,8 +13,9 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionItemDto;
@@ -37,7 +38,7 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
     private final IndexerTransactionTransformer indexerTransactionTransformer;
 
     private String cachedIndexerKey;
-    private Either<Problem, List<OnChainTransactionDto>> cachedIndexerTransactions;
+    private Either<ProblemDetail, List<OnChainTransactionDto>> cachedIndexerTransactions;
 
     /**
      * Reconciles transactions from the database with transactions from the On-Chain Indexer.
@@ -49,7 +50,7 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
      * @return Either a Problem if the API call fails, or a Map of transaction IDs to their reconciliation status
      */
     @Override
-    public Either<Problem, Map<String, IndexerReconcilationResult>> reconcileWithIndexer(
+    public Either<ProblemDetail, Map<String, IndexerReconcilationResult>> reconcileWithIndexer(
             String organisationId,
             LocalDate dateFrom,
             LocalDate dateTo,

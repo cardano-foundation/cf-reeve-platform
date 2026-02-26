@@ -19,12 +19,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
@@ -83,49 +83,37 @@ public class ReportingService {
         }
 
         // Validate report template exists and organization matches
-        Either<Problem, ReportTemplateEntity> templateResult = validateTemplate(dto.getReportTemplateId(), dto.getOrganisationId());
+        Either<ProblemDetail, ReportTemplateEntity> templateResult = validateTemplate(dto.getReportTemplateId(), dto.getOrganisationId());
         if (templateResult.isLeft()) {
             return ReportResponseDto.builder().error(Optional.of(templateResult.getLeft())).build();
         }
         ReportTemplateEntity template = templateResult.get();
         if (dataMode != template.getDataMode()) {
-            return ReportResponseDto.builder().error(Optional.of(
-                    Problem.builder()
-                            .withTitle("DATA_MODE_MISMATCH")
-                            .withDetail("Data mode of the report (" + dataMode.name() + ") does not match the template's data mode (" + template.getDataMode().name() + ")")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build()
-            )).build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Data mode of the report (" + dataMode.name() + ") does not match the template's data mode (" + template.getDataMode().name() + ")");
+            problem.setTitle("DATA_MODE_MISMATCH");
+            return ReportResponseDto.builder().error(Optional.of(problem)).build();
         }
 
         // Check if template is active
         if (!template.isActive()) {
-            return ReportResponseDto.builder().error(Optional.of(
-                    Problem.builder()
-                            .withTitle("TEMPLATE_INACTIVE")
-                            .withDetail("Report template with ID %s is inactive and cannot be used to create reports".formatted(dto.getReportTemplateId()))
-                            .withStatus(Status.BAD_REQUEST)
-                            .build()
-            )).build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report template with ID %s is inactive and cannot be used to create reports".formatted(dto.getReportTemplateId()));
+            problem.setTitle("TEMPLATE_INACTIVE");
+            return ReportResponseDto.builder().error(Optional.of(problem)).build();
         }
 
         // Validating Time in DTO
-        Either<Problem, Void> timeValidation = validateTimeInDto(dto.getYear(), dto.getPeriod(), dto.getIntervalType());
+        Either<ProblemDetail, Void> timeValidation = validateTimeInDto(dto.getYear(), dto.getPeriod(), dto.getIntervalType());
         if (timeValidation.isLeft()) {
             return ReportResponseDto.builder().error(Optional.of(timeValidation.getLeft())).build();
         }
         if (dataMode == DataMode.SYSTEM && dto.getFields() != null && !dto.getFields().isEmpty()) {
-            return ReportResponseDto.builder().error(Optional.of(
-                    Problem.builder()
-                            .withTitle("FIELDS_NOT_ALLOWED")
-                            .withDetail("Fields should not be provided when dataMode is SYSTEM")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build()
-            )).build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Fields should not be provided when dataMode is SYSTEM");
+            problem.setTitle("FIELDS_NOT_ALLOWED");
+            return ReportResponseDto.builder().error(Optional.of(problem)).build();
         }
 
         // Handle field generation based on data mode
-        Either<Problem, List<ReportFieldDto>> fieldsResult = generateOrValidateFields(dto, dataMode, template);
+        Either<ProblemDetail, List<ReportFieldDto>> fieldsResult = generateOrValidateFields(dto, dataMode, template);
         if (fieldsResult.isLeft()) {
             return ReportResponseDto.builder().error(Optional.of(fieldsResult.getLeft())).build();
         }
@@ -230,80 +218,65 @@ public class ReportingService {
      *
      * @return Either a ReportResponseDto with error details if validation fails, or Void if validation passes.
      */
-    private Either<Problem, Void> validateTimeInDto(short year, short period, String intervalTypeStr) {
+    private Either<ProblemDetail, Void> validateTimeInDto(short year, short period, String intervalTypeStr) {
         IntervalType intervalType;
         try {
             intervalType = IntervalType.valueOf(intervalTypeStr);
         } catch (IllegalArgumentException e) {
-            return Either.left(
-                    Problem.builder()
-                            .withTitle("INVALID_INTERVAL_TYPE")
-                            .withDetail("Interval type must be one of: MONTH, QUARTER, YEAR")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Interval type must be one of: MONTH, QUARTER, YEAR");
+            problem.setTitle("INVALID_INTERVAL_TYPE");
+            return Either.left(problem);
         }
         LocalDate now = LocalDate.now();
         if (year > now.getYear()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_IN_FUTURE)
-                    .withDetail("Report year cannot be in the future")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report year cannot be in the future");
+            problem.setTitle(Constants.REPORT_IN_FUTURE);
+            return Either.left(problem);
         }
         if(intervalType == IntervalType.YEAR) {
             if (period != 1) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_PERIOD)
-                        .withDetail("Report period must be 1 for yearly reports")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report period must be 1 for yearly reports");
+                problem.setTitle(Constants.INVALID_PERIOD);
+                return Either.left(problem);
             }
         }
         if (intervalType == IntervalType.MONTH) {
             if (period < 1 || period > 12) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_PERIOD)
-                        .withDetail("Report month must be between 1 and 12")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report month must be between 1 and 12");
+                problem.setTitle(Constants.INVALID_PERIOD);
+                return Either.left(problem);
             }
             if (year == now.getYear() && period > now.getMonthValue() - 1) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.REPORT_IN_FUTURE)
-                        .withDetail("Report month cannot be in the future")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report month cannot be in the future");
+                problem.setTitle(Constants.REPORT_IN_FUTURE);
+                return Either.left(problem);
             }
         }
         if (intervalType == IntervalType.QUARTER) {
             if (period < 1 || period > 4) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_PERIOD)
-                        .withDetail("Report quarter must be between 1 and 4")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report quarter must be between 1 and 4");
+                problem.setTitle(Constants.INVALID_PERIOD);
+                return Either.left(problem);
             }
             if (year == now.getYear()) {
                 int currentQuarter = (now.getMonthValue() - 1) / 3;
                 if (period > currentQuarter) {
-                    return Either.left(Problem.builder()
-                            .withTitle(Constants.REPORT_IN_FUTURE)
-                            .withDetail("Report quarter cannot be in the future")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report quarter cannot be in the future");
+                    problem.setTitle(Constants.REPORT_IN_FUTURE);
+                    return Either.left(problem);
                 }
             }
         }
         return Either.right(null);
     }
 
-    public Either<Problem, ReportResponseDto> generate(ReportGenerateRequest request) {
+    public Either<ProblemDetail, ReportResponseDto> generate(ReportGenerateRequest request) {
         log.info("Generating report preview for template: {}, org: {}, interval: {}, year: {}, period: {}",
                 request.getReportTemplateId(), request.getOrganisationId(),
                 request.getIntervalType(), request.getYear(), request.getPeriod());
 
         // Validate report template exists and organization matches
-        Either<Problem, ReportTemplateEntity> templateResult = validateTemplate(request.getReportTemplateId(), request.getOrganisationId());
+        Either<ProblemDetail, ReportTemplateEntity> templateResult = validateTemplate(request.getReportTemplateId(), request.getOrganisationId());
         if (templateResult.isLeft()) {
             return Either.left(templateResult.getLeft());
         }
@@ -311,15 +284,13 @@ public class ReportingService {
 
         // Check if template is active
         if (!template.isActive()) {
-            return Either.left(Problem.builder()
-                    .withTitle("TEMPLATE_INACTIVE")
-                    .withDetail("Report template with ID %s is inactive and cannot be used to generate reports".formatted(request.getReportTemplateId()))
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report template with ID %s is inactive and cannot be used to generate reports".formatted(request.getReportTemplateId()));
+            problem.setTitle("TEMPLATE_INACTIVE");
+            return Either.left(problem);
         }
 
         // Validating Time in DTO
-        Either<Problem, Void> timeValidation = validateTimeInDto(request.getYear(), request.getPeriod(), request.getIntervalType());
+        Either<ProblemDetail, Void> timeValidation = validateTimeInDto(request.getYear(), request.getPeriod(), request.getIntervalType());
         if (timeValidation.isLeft()) {
             return Either.left(timeValidation.getLeft());
         }
@@ -365,29 +336,25 @@ public class ReportingService {
         }
     }
 
-    private Either<Problem, ReportTemplateEntity> validateTemplate(String templateId, String organisationId) {
+    private Either<ProblemDetail, ReportTemplateEntity> validateTemplate(String templateId, String organisationId) {
         Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(templateId);
         if (templateOpt.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("REPORT_TEMPLATE_NOT_FOUND")
-                    .withDetail("Report template with ID %s does not exist".formatted(templateId))
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Report template with ID %s does not exist".formatted(templateId));
+            problem.setTitle("REPORT_TEMPLATE_NOT_FOUND");
+            return Either.left(problem);
         }
 
         ReportTemplateEntity template = templateOpt.get();
         if (!template.getOrganisationId().equals(organisationId)) {
-            return Either.left(Problem.builder()
-                    .withTitle("ORGANISATION_MISMATCH")
-                    .withDetail("Report template belongs to a different organisation")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report template belongs to a different organisation");
+            problem.setTitle("ORGANISATION_MISMATCH");
+            return Either.left(problem);
         }
 
         return Either.right(template);
     }
 
-    private Either<Problem, List<ReportFieldDto>> generateOrValidateFields(ReportDto dto, DataMode
+    private Either<ProblemDetail, List<ReportFieldDto>> generateOrValidateFields(ReportDto dto, DataMode
             dataMode, ReportTemplateEntity template) {
         if (dataMode == DataMode.SYSTEM) {
             return generateFieldsForReport(dto, template);
@@ -396,7 +363,7 @@ public class ReportingService {
         }
     }
 
-    private Either<Problem, List<ReportFieldDto>> generateFieldsForReport(ReportDto dto, ReportTemplateEntity
+    private Either<ProblemDetail, List<ReportFieldDto>> generateFieldsForReport(ReportDto dto, ReportTemplateEntity
             template) {
         IntervalType intervalType = IntervalType.valueOf(dto.getIntervalType());
         Short periodValue = dto.getPeriod();
@@ -408,18 +375,16 @@ public class ReportingService {
         return Either.right(fields);
     }
 
-    private Either<Problem, List<ReportFieldDto>> validateUserFields
+    private Either<ProblemDetail, List<ReportFieldDto>> validateUserFields
             (List<ReportFieldDto> fields, ReportTemplateEntity template) {
         if (fields == null || fields.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.MISSING_REQUIRED_FIELDS)
-                    .withDetail("USER reports must have fields specified.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "USER reports must have fields specified.");
+            problem.setTitle(Constants.MISSING_REQUIRED_FIELDS);
+            return Either.left(problem);
         }
 
         // Validate template fields exist
-        Either<Problem, Void> fieldValidation = validateTemplateFields(fields, template.getFields());
+        Either<ProblemDetail, Void> fieldValidation = validateTemplateFields(fields, template.getFields());
         if (fieldValidation.isLeft()) {
             return Either.left(fieldValidation.getLeft());
         }
@@ -506,7 +471,7 @@ public class ReportingService {
      * 2. Fields with children must NOT have a value set
      * 3. Field hierarchy matches template hierarchy
      */
-    private Either<Problem, Void> validateTemplateFields(List<ReportFieldDto> columns, List<ReportTemplateFieldEntity> templateColumns) {
+    private Either<ProblemDetail, Void> validateTemplateFields(List<ReportFieldDto> columns, List<ReportTemplateFieldEntity> templateColumns) {
         if (columns == null || columns.isEmpty()) {
             return Either.right(null);
         }
@@ -522,7 +487,7 @@ public class ReportingService {
      * @param pathPrefix     Path prefix for error messages (e.g., "Income.Revenue")
      * @return Either a Problem if validation fails, or void on success
      */
-    private Either<Problem, Void> validateTemplateFieldsRecursive(
+    private Either<ProblemDetail, Void> validateTemplateFieldsRecursive(
             List<ReportFieldDto> reportFields,
             List<ReportTemplateFieldEntity> templateFields,
             String pathPrefix) {
@@ -538,22 +503,18 @@ public class ReportingService {
         for (ReportFieldDto reportField : reportFields) {
             // Check if template field ID is provided
             if (reportField.getTemplateFieldId() == null) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.MISSING_TEMPLATE_ID)
-                        .withDetail("Report field at path '" + pathPrefix + "' is missing template field ID")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report field at path '" + pathPrefix + "' is missing template field ID");
+                problem.setTitle(Constants.MISSING_TEMPLATE_ID);
+                return Either.left(problem);
             }
 
             // Check if template field exists at this level
             ReportTemplateFieldEntity templateField = templateFieldMap.get(reportField.getTemplateFieldId());
             if (templateField == null) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_TEMPLATE_FIELD_ID)
-                        .withDetail("Template field with ID " + reportField.getTemplateFieldId() +
-                                " does not exist at path '" + pathPrefix + "'")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Template field with ID " + reportField.getTemplateFieldId() +
+                        " does not exist at path '" + pathPrefix + "'");
+                problem.setTitle(Constants.INVALID_TEMPLATE_FIELD_ID);
+                return Either.left(problem);
             }
 
             String currentPath = pathPrefix.isEmpty() ? templateField.getName() : pathPrefix + "." + templateField.getName();
@@ -563,11 +524,9 @@ public class ReportingService {
 
             // Validate: fields with children must NOT have a value
             if (hasChildren && reportField.getValue() != null) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_FIELD_VALUE)
-                        .withDetail("Field '%s' has child fields and must not have a value set. Only leaf fields (fields without children) can have values.".formatted(currentPath))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Field '%s' has child fields and must not have a value set. Only leaf fields (fields without children) can have values.".formatted(currentPath));
+                problem.setTitle(Constants.INVALID_FIELD_VALUE);
+                return Either.left(problem);
             }
 
             // Recursively validate child fields
@@ -575,15 +534,13 @@ public class ReportingService {
                 List<ReportTemplateFieldEntity> templateChildFields = templateField.getChildFields();
 
                 if (templateChildFields == null || templateChildFields.isEmpty()) {
-                    return Either.left(Problem.builder()
-                            .withTitle(Constants.INVALID_FIELD_STRUCTURE)
-                            .withDetail("Field '" + currentPath + "' has child fields in the report, " +
-                                    "but the template field has no children defined")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Field '" + currentPath + "' has child fields in the report, " +
+                            "but the template field has no children defined");
+                    problem.setTitle(Constants.INVALID_FIELD_STRUCTURE);
+                    return Either.left(problem);
                 }
 
-                Either<Problem, Void> childValidation = validateTemplateFieldsRecursive(
+                Either<ProblemDetail, Void> childValidation = validateTemplateFieldsRecursive(
                         reportField.getChildFields(),
                         templateChildFields,
                         currentPath
@@ -649,27 +606,23 @@ public class ReportingService {
                 .build();
     }
 
-    public Either<Problem, Void> delete(String id) {
+    public Either<ProblemDetail, Void> delete(String id) {
         log.info("Deleting report id: {}", id);
 
         Optional<ReportEntity> reportOpt = reportRepository.findById(id);
         if (reportOpt.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(id))
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(id));
+            problem.setTitle(Constants.REPORT_NOT_FOUND);
+            return Either.left(problem);
         }
 
         ReportEntity report = reportOpt.get();
 
         // Check if report is already published
         if (report.isLedgerDispatchApproved()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
-                    .withDetail("Cannot delete report with ID %s because it has already been published".formatted(id))
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Cannot delete report with ID %s because it has already been published".formatted(id));
+            problem.setTitle(Constants.REPORT_ALREADY_PUBLISHED);
+            return Either.left(problem);
         }
         reportRepository.deleteById(id);
         return Either.right(null);
@@ -866,29 +819,23 @@ public class ReportingService {
         };
     }
 
-    public Either<Problem, ReportResponseDto> publish(ReportPublishRequest request) {
+    public Either<ProblemDetail, ReportResponseDto> publish(ReportPublishRequest request) {
         Optional<ReportEntity> reportO = reportRepository.findByOrganisationIdAndId(request.getOrganisationId(), request.getReportId());
         if (reportO.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(request.getReportId()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(request.getReportId()));
+            problem.setTitle(Constants.REPORT_NOT_FOUND);
+            return Either.left(problem);
         }
         ReportEntity report = reportO.get();
         if (!report.isReadyToPublish()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_NOT_READY_TO_PUBLISH)
-                    .withDetail("Report with ID %s is not ready to be published".formatted(request.getReportId()))
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report with ID %s is not ready to be published".formatted(request.getReportId()));
+            problem.setTitle(Constants.REPORT_NOT_READY_TO_PUBLISH);
+            return Either.left(problem);
         }
         if (report.isLedgerDispatchApproved()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
-                    .withDetail("Report with ID %s has already been published".formatted(request.getReportId()))
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report with ID %s has already been published".formatted(request.getReportId()));
+            problem.setTitle(Constants.REPORT_ALREADY_PUBLISHED);
+            return Either.left(problem);
         }
         report.setLedgerDispatchApproved(true);
         report.setLedgerDispatchDate(LocalDateTime.now());
@@ -911,28 +858,24 @@ public class ReportingService {
      * @param reportId       The report ID to reprocess
      * @return Either a Problem if the report cannot be found or processed, or the updated ReportResponseDto
      */
-    public Either<Problem, ReportResponseDto> reprocess(String organisationId, String reportId) {
+    public Either<ProblemDetail, ReportResponseDto> reprocess(String organisationId, String reportId) {
         log.info("Reprocessing report: {}", reportId);
 
         // Find the report
         Optional<ReportEntity> reportOpt = reportRepository.findByOrganisationIdAndId(organisationId, reportId);
         if (reportOpt.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_NOT_FOUND)
-                    .withDetail(Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(reportId))
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(reportId));
+            problem.setTitle(Constants.REPORT_NOT_FOUND);
+            return Either.left(problem);
         }
 
         ReportEntity report = reportOpt.get();
 
         // Check if report is already published - can't reprocess published reports
         if (report.isLedgerDispatchApproved()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.REPORT_ALREADY_PUBLISHED)
-                    .withDetail("Cannot reprocess report with ID %s because it has already been published".formatted(reportId))
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Cannot reprocess report with ID %s because it has already been published".formatted(reportId));
+            problem.setTitle(Constants.REPORT_ALREADY_PUBLISHED);
+            return Either.left(problem);
         }
 
         // If data mode is SYSTEM, regenerate field values
@@ -941,11 +884,9 @@ public class ReportingService {
 
             // Validate we have the required information to regenerate
             if (report.getIntervalType() == null || report.getYear() == 0) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.MISSING_REQUIRED_FIELDS)
-                        .withDetail("Cannot regenerate fields: intervalType and year are required")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Cannot regenerate fields: intervalType and year are required");
+                problem.setTitle(Constants.MISSING_REQUIRED_FIELDS);
+                return Either.left(problem);
             }
 
             // Calculate date range

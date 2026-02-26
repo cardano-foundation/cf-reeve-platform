@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 @Getter
 @Setter
@@ -15,7 +15,7 @@ public class TransactionItemsProcessView {
 
     private String transactionItemId;
     private Boolean success;
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static TransactionItemsProcessView createSuccess(String transactionItemId) {
         return new TransactionItemsProcessView(
@@ -26,7 +26,7 @@ public class TransactionItemsProcessView {
     }
 
     public static TransactionItemsProcessView createFail(String transactionItemId,
-                                                         Problem error) {
+                                                         ProblemDetail error) {
         return new TransactionItemsProcessView(transactionItemId, false, Optional.of(error));
     }
 

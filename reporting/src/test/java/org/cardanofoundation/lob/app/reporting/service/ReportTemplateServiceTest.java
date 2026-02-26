@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -25,7 +27,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -109,7 +110,7 @@ class ReportTemplateServiceTest {
         when(validator.validateObject(any())).thenReturn(errors);
         when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         // Then
         assertTrue(result.isRight());
@@ -125,7 +126,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -148,7 +149,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -173,7 +174,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_FIELD_NAME", reportTemplateResponseDtos.getLeft().getTitle());
@@ -197,7 +198,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_ACCOUNTS", reportTemplateResponseDtos.getLeft().getTitle());
@@ -228,7 +229,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
@@ -269,7 +270,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
@@ -302,7 +303,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
@@ -351,7 +352,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
@@ -388,7 +389,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
@@ -426,7 +427,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
@@ -470,7 +471,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> reportTemplateResponseDtos = reportTemplateService.create(templateDto);
 
         assertTrue(reportTemplateResponseDtos.isLeft());
         assertEquals("INVALID_VALIDATION_RULE", reportTemplateResponseDtos.getLeft().getTitle());
@@ -488,9 +489,9 @@ class ReportTemplateServiceTest {
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
-        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.left(Problem.builder().build()));
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -506,7 +507,7 @@ class ReportTemplateServiceTest {
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
 
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -529,7 +530,7 @@ class ReportTemplateServiceTest {
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
 
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(dto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(dto);
 
         // Then
         assertTrue(result.isLeft());
@@ -554,7 +555,7 @@ class ReportTemplateServiceTest {
         when(validator.validateObject(any())).thenReturn(errors);
 
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(dto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(dto);
 
         // Then
         assertTrue(result.isLeft());
@@ -574,7 +575,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -604,7 +605,7 @@ class ReportTemplateServiceTest {
 
         when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         // Then
         assertTrue(result.isRight());
@@ -642,7 +643,7 @@ class ReportTemplateServiceTest {
         when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
 
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         // Then
         assertTrue(result.isRight());
@@ -668,7 +669,7 @@ class ReportTemplateServiceTest {
         when(validator.validateObject(any())).thenReturn(errors);
         // When
         templateDto.setName("name1");
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
         assertTrue(result.isLeft());
         assertEquals("NAME_CHANGE_NOT_ALLOWED", result.getLeft().getTitle());
 
@@ -695,7 +696,7 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
         // When
-        Either<Problem, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         // Then
         assertTrue(result.isLeft());
@@ -710,7 +711,7 @@ class ReportTemplateServiceTest {
         when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
 
         // When
-        Either<Problem, Void> result = reportTemplateService.delete("abc");
+        Either<ProblemDetail, Void> result = reportTemplateService.delete("abc");
 
         // Then
         assertTrue(result.isRight());
@@ -723,7 +724,7 @@ class ReportTemplateServiceTest {
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Either<Problem, Void> result = reportTemplateService.delete("abc");
+        Either<ProblemDetail, Void> result = reportTemplateService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());
@@ -741,7 +742,7 @@ class ReportTemplateServiceTest {
         when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(report));
 
         // When
-        Either<Problem, Void> result = reportTemplateService.delete("abc");
+        Either<ProblemDetail, Void> result = reportTemplateService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());

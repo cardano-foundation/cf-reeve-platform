@@ -4,8 +4,9 @@ import java.time.LocalDate;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -25,7 +26,7 @@ public interface IndexerReconcilationServiceIF {
      * @param dbTransactions Transactions from the database to compare
      * @return Either a Problem if the API call fails, or a Map of transaction IDs to their reconciliation status
      */
-    Either<Problem, Map<String, IndexerReconcilationResult>> reconcileWithIndexer(
+    Either<ProblemDetail, Map<String, IndexerReconcilationResult>> reconcileWithIndexer(
             String organisationId,
             LocalDate dateFrom,
             LocalDate dateTo,

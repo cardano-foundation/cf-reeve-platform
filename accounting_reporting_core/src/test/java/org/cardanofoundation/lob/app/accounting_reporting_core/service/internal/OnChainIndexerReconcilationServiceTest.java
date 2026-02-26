@@ -14,11 +14,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -107,7 +108,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -130,7 +131,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of())); // Empty list
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -173,7 +174,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -224,7 +225,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -243,17 +244,14 @@ class OnChainIndexerReconcilationServiceTest {
 
         TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
 
-        Problem problem = Problem.builder()
-                .withStatus(Status.SERVICE_UNAVAILABLE)
-                .withTitle("INDEXER_API_ERROR")
-                .withDetail("Connection refused")
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Connection refused");
+        problem.setTitle("INDEXER_API_ERROR");
 
         when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
                 .thenReturn(Either.left(problem));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -298,7 +296,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx1, indexerTx2)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -360,7 +358,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -402,7 +400,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then - Batch ID comparison is disabled, so this should be OK
@@ -443,7 +441,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -523,7 +521,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then - Transformer converts CREDIT -1000 to +1000, matching indexer's +1000
@@ -586,7 +584,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then - fxRate mismatch should cause item not found
@@ -629,7 +627,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then
@@ -656,7 +654,7 @@ class OnChainIndexerReconcilationServiceTest {
                 .thenReturn(Either.right(List.of(indexerTx)));
 
         // When
-        Either<Problem, Map<String, IndexerReconcilationResult>> result =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of());
 
         // Then - should detect orphaned indexer transaction
@@ -758,9 +756,9 @@ class OnChainIndexerReconcilationServiceTest {
                 ))));
 
         // When - two calls with different date ranges
-        Either<Problem, Map<String, IndexerReconcilationResult>> result1 =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result1 =
                 service.reconcileWithIndexer(organisationId, dateFromFirst, dateToFirst, Set.of(dbTx1));
-        Either<Problem, Map<String, IndexerReconcilationResult>> result2 =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result2 =
                 service.reconcileWithIndexer(organisationId, dateFromSecond, dateToSecond, Set.of(dbTx2));
 
         // Then - the indexer API is called twice (once per unique key)
@@ -779,18 +777,15 @@ class OnChainIndexerReconcilationServiceTest {
 
         TransactionEntity dbTx = createDbTransaction("tx-1", "VENDPYMT-001", "VendorPayment", "2024-03-15", "batch-1");
 
-        Problem problem = Problem.builder()
-                .withStatus(Status.SERVICE_UNAVAILABLE)
-                .withDetail("Indexer down")
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Indexer down");
 
         when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
                 .thenReturn(Either.left(problem));
 
         // When - two consecutive calls with the same key, first call returns error
-        Either<Problem, Map<String, IndexerReconcilationResult>> result1 =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result1 =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
-        Either<Problem, Map<String, IndexerReconcilationResult>> result2 =
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result2 =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         // Then - API called only once; second call uses cached (failed) result

@@ -1,8 +1,5 @@
 package org.cardanofoundation.lob.app.blockchain_reader;
 
-import static org.zalando.problem.Status.BAD_REQUEST;
-import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
-
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -14,13 +11,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
@@ -48,7 +45,7 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
     }
 
     @Override
-    public Either<Problem, ChainTip> getChainTip() {
+    public Either<ProblemDetail, ChainTip> getChainTip() {
         try {
             ChainTip chainTip = restClient.get()
                     .uri("%s/v1/tip".formatted(lobFollowerBaseUrl))
@@ -56,37 +53,27 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
                     .body(ChainTip.class);
 
             if (chainTip.getNetwork() != network) {
-                ThrowableProblem problem = Problem.builder()
-                        .withTitle(NETWORK_MISMATCH)
-                        .withStatus(BAD_REQUEST)
-                        .withDetail(NETWORK_MISMATCH_S_S.formatted(chainTip.getNetwork(), network))
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, NETWORK_MISMATCH_S_S.formatted(chainTip.getNetwork(), network));
+                problem.setTitle(NETWORK_MISMATCH);
 
                 return Either.left(problem);
             }
 
             return Either.right(chainTip);
         } catch (RestClientResponseException ex) {
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("CHAIN_TIP_ERROR")
-                    .withStatus(BAD_REQUEST)
-                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()));
+            problem.setTitle("CHAIN_TIP_ERROR");
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
             log.error("Error while fetching chain tip", ex);
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("CHAIN_TIP_ERROR")
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
-                    .build();
-
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()));
+            problem.setTitle("CHAIN_TIP_ERROR");
             return Either.left(problem);
         }
     }
 
     @Override
-    public Either<Problem, Optional<OnChainTxDetails>> getTxDetails(String transactionHash) {
+    public Either<ProblemDetail, Optional<OnChainTxDetails>> getTxDetails(String transactionHash) {
         try {
             OnChainTxDetails txDetails = restClient.get()
                     .uri("%s/v1/tx-details/%s".formatted(lobFollowerBaseUrl, transactionHash))
@@ -94,11 +81,8 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
                     .body(OnChainTxDetails.class);
 
             if (Objects.requireNonNull(txDetails).getNetwork() != network) {
-                ThrowableProblem problem = Problem.builder()
-                        .withTitle(NETWORK_MISMATCH)
-                        .withStatus(BAD_REQUEST)
-                        .withDetail(NETWORK_MISMATCH_S_S.formatted(txDetails.getNetwork(), network))
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, NETWORK_MISMATCH_S_S.formatted(txDetails.getNetwork(), network));
+                problem.setTitle(NETWORK_MISMATCH);
 
                 return Either.left(problem);
             }
@@ -112,29 +96,21 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
                     return Either.right(Optional.empty());
                 }
             }
-
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("TX_DETAILS_ERROR")
-                    .withStatus(BAD_REQUEST)
-                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ERROR_FROM_THE_CLIENT_S.formatted(ex.getMessage()));
+            problem.setTitle("TX_DETAILS_ERROR");
 
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
             log.error("Error while fetching tx details", ex);
-
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("TX_DETAILS_ERROR")
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()));
+            problem.setTitle("TX_DETAILS_ERROR");
 
             return Either.left(problem);
         }
     }
 
     @Override
-    public Either<Problem, Map<String, Boolean>> isOnChain(Set<String> transactionIds) {
+    public Either<ProblemDetail, Map<String, Boolean>> isOnChain(Set<String> transactionIds) {
         try {
             LOBOnChainTxStatusResponse lobOnChainDetailsResponse = restClient.post()
                     .uri("%s/v1/on-chain-statuses".formatted(lobFollowerBaseUrl))
@@ -143,32 +119,23 @@ public class BlockchainReaderPublicApi implements BlockchainReaderPublicApiIF {
                     .body(LOBOnChainTxStatusResponse.class);
 
             if (lobOnChainDetailsResponse.getNetwork() != network) {
-                ThrowableProblem problem = Problem.builder()
-                        .withTitle(NETWORK_MISMATCH)
-                        .withStatus(BAD_REQUEST)
-                        .withDetail(NETWORK_MISMATCH_S_S.formatted(lobOnChainDetailsResponse.getNetwork(), network))
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, NETWORK_MISMATCH_S_S.formatted(lobOnChainDetailsResponse.getNetwork(), network));
+                problem.setTitle(NETWORK_MISMATCH);
 
                 return Either.left(problem);
             }
 
             return Either.right(lobOnChainDetailsResponse.getTransactionStatuses());
         } catch (RestClientResponseException ex) {
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("LOB_TX_STATUSES_ERROR")
-                    .withStatus(BAD_REQUEST)
-                    .withDetail(ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()))
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ERROR_FROM_THE_CLIENT_S.formatted(ex.getResponseBodyAsString()));
+            problem.setTitle("LOB_TX_STATUSES_ERROR");
 
             return Either.left(problem);  // Return as Either.left
         } catch (RestClientException ex) {
             log.error("Error while fetching on-chain statuses", ex);
 
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("LOB_TX_STATUSES_ERROR")
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .withDetail(INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()))
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_SERVER_ERROR_REASON_S.formatted(ex.getMessage()));
+            problem.setTitle("LOB_TX_STATUSES_ERROR");
 
             return Either.left(problem);
         }

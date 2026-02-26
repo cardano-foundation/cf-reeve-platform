@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +20,6 @@ import io.vavr.control.Either;
 import org.javers.core.Changes;
 import org.javers.core.Javers;
 import org.javers.core.diff.Diff;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
@@ -201,7 +201,7 @@ public class TransactionReconcilationService {
                     .build());
         }
 
-        Either<Problem, Map<String, Boolean>> isOnChainE = blockchainReaderPublicApi.isOnChain(attachedTxEntities.stream()
+        Either<ProblemDetail, Map<String, Boolean>> isOnChainE = blockchainReaderPublicApi.isOnChain(attachedTxEntities.stream()
                 .map(TransactionEntity::getId)
                 .collect(Collectors.toSet())
         );
@@ -459,7 +459,7 @@ public class TransactionReconcilationService {
 
         IndexerReconcilationServiceIF indexerService = indexerReconcilationService
                 .orElseThrow(() -> new IllegalStateException("Indexer reconciliation service is not available"));
-        Either<Problem, Map<String, IndexerReconcilationServiceIF.IndexerReconcilationResult>> resultE =
+        Either<ProblemDetail, Map<String, IndexerReconcilationServiceIF.IndexerReconcilationResult>> resultE =
                 indexerService.reconcileWithIndexer(
                         organisationId,
                         fromDate,

@@ -18,8 +18,9 @@ import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Currency;
@@ -221,7 +222,7 @@ public class TransactionConverter {
 
             Optional<String> vatCodeM = Optional.<String>empty();
             if (taxItemM.isPresent()) {
-                Either<Problem, String> vatCodeE = preprocessorService.preProcess(taxItemM.orElseThrow(), VAT);
+                Either<ProblemDetail, String> vatCodeE = preprocessorService.preProcess(taxItemM.orElseThrow(), VAT);
 
                 if (vatCodeE.isEmpty()) {
                     log.warn("Conversion failed for vatCode: {} in organisation: {}", taxItemM.orElseThrow(), organisationId);
@@ -250,7 +251,7 @@ public class TransactionConverter {
         if (accountCodeCreditM.isPresent()) {
             String accountCodeCreditText = accountCodeCreditM.orElseThrow();
 
-            Either<Problem, String> accountCreditCodeE = preprocessorService.preProcess(accountCodeCreditM.orElseThrow(), CHART_OF_ACCOUNT);
+            Either<ProblemDetail, String> accountCreditCodeE = preprocessorService.preProcess(accountCodeCreditM.orElseThrow(), CHART_OF_ACCOUNT);
 
             if (accountCreditCodeE.isEmpty()) {
                 log.warn("Conversion failed for accountCodeCredit: {} in organisation: {}", accountCodeCreditText, organisationId);
@@ -272,7 +273,7 @@ public class TransactionConverter {
         if (accountCodeCreditM.isPresent()) {
             String accountCodeCreditText = accountCodeCreditM.orElseThrow();
 
-            Either<Problem, String> accountCreditCodeE = preprocessorService.preProcess(accountCodeCreditM.orElseThrow(), ACCOUNT_CREDIT_NAME);
+            Either<ProblemDetail, String> accountCreditCodeE = preprocessorService.preProcess(accountCodeCreditM.orElseThrow(), ACCOUNT_CREDIT_NAME);
 
             if (accountCreditCodeE.isEmpty()) {
                 log.warn("Conversion failed for accountCodeCredit: {} in organisation: {}", accountCodeCreditText, organisationId);
@@ -294,7 +295,7 @@ public class TransactionConverter {
         if (costCenterM.isPresent()) {
             String costCenterText = costCenterM.orElseThrow();
 
-            Either<Problem, String> costCenterE = preprocessorService.preProcess(costCenterText, COST_CENTER);
+            Either<ProblemDetail, String> costCenterE = preprocessorService.preProcess(costCenterText, COST_CENTER);
 
             if (costCenterE.isEmpty()) {
                 log.warn("Conversion failed for costCenter: {} in organisation: {}", costCenterText, organisationId);
@@ -327,7 +328,7 @@ public class TransactionConverter {
         if (projectM.isPresent()) {
             String projectText = projectM.orElseThrow();
 
-            Either<Problem, String> projectCodeE = preprocessorService.preProcess(projectM.orElseThrow(), PROJECT);
+            Either<ProblemDetail, String> projectCodeE = preprocessorService.preProcess(projectM.orElseThrow(), PROJECT);
 
             if (projectCodeE.isEmpty()) {
                 log.warn("Conversion failed for projectCode: {} in organisation: {}", projectText, organisationId);

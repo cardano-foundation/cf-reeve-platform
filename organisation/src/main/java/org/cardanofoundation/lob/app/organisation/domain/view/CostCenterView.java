@@ -8,7 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
@@ -31,7 +31,7 @@ public class CostCenterView {
 
     private boolean active;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static CostCenterView fromEntity(CostCenter costCenter) {
         CostCenterViewBuilder builder = CostCenterView.builder()
@@ -57,7 +57,7 @@ public class CostCenterView {
                 .build();
     }
 
-    public static CostCenterView createFail(CostCenterUpdate costCenterUpdate, Problem error) {
+    public static CostCenterView createFail(CostCenterUpdate costCenterUpdate, ProblemDetail error)  {
         return CostCenterView.builder()
                 .customerCode(costCenterUpdate.getCustomerCode())
                 .name(costCenterUpdate.getName())

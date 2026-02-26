@@ -7,8 +7,9 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.springframework.http.ProblemDetail;
+
 import com.fasterxml.jackson.annotation.JsonFormat;
-import org.zalando.problem.Problem;
 
 @Getter
 @Setter
@@ -24,7 +25,7 @@ public class ReconcileResponseView {
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate dateTo;
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static ReconcileResponseView createSuccess(String message, LocalDate dateFrom, LocalDate dateTo) {
         return new ReconcileResponseView(
@@ -40,7 +41,7 @@ public class ReconcileResponseView {
     public static ReconcileResponseView createFail(String message,
                                                    LocalDate dateFrom,
                                                    LocalDate dateTo,
-                                                   Problem error) {
+                                                   ProblemDetail error) {
         return new ReconcileResponseView(
                 message,
                 "RECONCILIATION",
