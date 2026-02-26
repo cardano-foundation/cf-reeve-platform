@@ -72,29 +72,9 @@ public class ReferenceCodeService {
     @Transactional
     public ReferenceCodeView insertReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate, boolean isUpsert) {
 
-        Optional<Organisation> organisationChe = organisationService.findById(orgId);
-        if (organisationChe.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find Organisation by Id: %s".formatted(orgId));
-            problem.setTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
-            return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
-        }
-        if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
-            Optional<ReferenceCode> parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
-            if (parentReferenceCode.isEmpty()) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()));
-                problem.setTitle(ErrorTitleConstants.PARENT_REFERENCE_CODE_NOT_FOUND);
-                return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
-            }
-            if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent reference code cannot be the same as the reference code itself: %s".formatted(referenceCodeUpdate.getReferenceCode()));
-                problem.setTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF");
-                return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
-            }
-            if (Optional.ofNullable(parentReferenceCode.get().getParentReferenceCode()).orElse("").equals(referenceCodeUpdate.getReferenceCode())) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent reference code cannot have a cycle with itself: %s".formatted(referenceCodeUpdate.getReferenceCode()));
-                problem.setTitle("CIRCULAR_REFERENCE");
-                return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
-            }
+        Either<ReferenceCodeView, Void> eventCodeUpdateChecks = checkEventCodeUpdate(orgId, referenceCodeUpdate);
+        if (eventCodeUpdateChecks.isLeft()) {
+            return eventCodeUpdateChecks.getLeft();
         }
 
         Optional<ReferenceCode> referenceCodeOpt = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode());
@@ -123,32 +103,40 @@ public class ReferenceCodeService {
         return ReferenceCodeView.fromEntity(savedEntity);
     }
 
-    @Transactional
-    public ReferenceCodeView updateReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate) {
-
+    private Either<ReferenceCodeView, Void> checkEventCodeUpdate(String orgId, ReferenceCodeUpdate referenceCodeUpdate) {
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find Organisation by Id: %s".formatted(orgId));
             problem.setTitle(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
-            return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
+            return Either.left(ReferenceCodeView.createFail(problem, referenceCodeUpdate));
         }
         if (referenceCodeUpdate.getParentReferenceCode() != null && !referenceCodeUpdate.getParentReferenceCode().isEmpty()) {
-            Optional<ReferenceCode>  parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
+            Optional<ReferenceCode> parentReferenceCode = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getParentReferenceCode());
             if (parentReferenceCode.isEmpty()) {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Unable to find parent reference Id: %s".formatted(referenceCodeUpdate.getParentReferenceCode()));
                 problem.setTitle(ErrorTitleConstants.PARENT_REFERENCE_CODE_NOT_FOUND);
-                return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
+                return Either.left(ReferenceCodeView.createFail(problem, referenceCodeUpdate));
             }
             if (parentReferenceCode.get().getId().getReferenceCode().equals(referenceCodeUpdate.getReferenceCode())) {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent reference code cannot be the same as the reference code itself: %s".formatted(referenceCodeUpdate.getReferenceCode()));
                 problem.setTitle("PARENT_REFERENCE_CODE_CANNOT_BE_SELF");
-                return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
+                return Either.left(ReferenceCodeView.createFail(problem, referenceCodeUpdate));
             }
             if (Optional.ofNullable(parentReferenceCode.get().getParentReferenceCode()).orElse("").equals(referenceCodeUpdate.getReferenceCode())) {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent reference code cannot have a cycle with itself: %s".formatted(referenceCodeUpdate.getReferenceCode()));
                 problem.setTitle("CIRCULAR_REFERENCE");
-                return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
+                return Either.left(ReferenceCodeView.createFail(problem, referenceCodeUpdate));
             }
+        }
+        return Either.right(null);
+    }
+
+    @Transactional
+    public ReferenceCodeView updateReferenceCode(String orgId, ReferenceCodeUpdate referenceCodeUpdate) {
+
+        Either<ReferenceCodeView, Void> eventCodeUpdateChecks = checkEventCodeUpdate(orgId, referenceCodeUpdate);
+        if (eventCodeUpdateChecks.isLeft()) {
+            return eventCodeUpdateChecks.getLeft();
         }
 
         Optional<ReferenceCode> referenceCodeOpt = referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, referenceCodeUpdate.getReferenceCode());

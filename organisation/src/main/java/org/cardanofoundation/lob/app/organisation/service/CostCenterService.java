@@ -66,23 +66,9 @@ public class CostCenterService {
             costCenter.setName(costCenterUpdate.getName());
 
             // check if parent exists
-            if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-                Optional<CostCenter> parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
-                if (parent.isEmpty()) {
-                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()));
-                    problem.setTitle(ErrorTitleConstants.PARENT_COST_CENTER_CODE_NOT_FOUND);
-                    return CostCenterView.createFail(costCenterUpdate, problem);
-                }
-                if (parent.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
-                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent cost center cannot be the same as the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()));
-                    problem.setTitle("PARENT_COST_CENTER_CANNOT_BE_SELF");
-                    return CostCenterView.createFail(costCenterUpdate, problem);
-                }
-                if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(costCenterUpdate.getCustomerCode())) {
-                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent cost center cannot have a circular reference with the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()));
-                    problem.setTitle("CIRCULAR_REFERENCE");
-                    return CostCenterView.createFail(costCenterUpdate, problem);
-                }
+            Either<CostCenterView, Void> parentExistsCheck = checkIfParentExists(orgId, costCenterUpdate);
+            if(parentExistsCheck.isLeft()) {
+                return parentExistsCheck.getLeft();
             }
             costCenter.setParentCustomerCode(costCenterUpdate.getParentCustomerCode() == null || costCenterUpdate.getParentCustomerCode().isBlank() ? null : costCenterUpdate.getParentCustomerCode());
             costCenter.setActive(costCenterUpdate.getActive());
@@ -91,7 +77,28 @@ public class CostCenterService {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Cost Center with customer code %s not found.".formatted(costCenterUpdate.getCustomerCode()));
         problem.setTitle("COST_CENTER_CODE_NOT_FOUND");
         return CostCenterView.createFail(costCenterUpdate, problem);
+    }
 
+    private Either<CostCenterView, Void> checkIfParentExists(String orgId, CostCenterUpdate costCenterUpdate) {
+        if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
+            Optional<CostCenter> parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
+            if (parent.isEmpty()) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()));
+                problem.setTitle(ErrorTitleConstants.PARENT_COST_CENTER_CODE_NOT_FOUND);
+                return Either.left(CostCenterView.createFail(costCenterUpdate, problem));
+            }
+            if (parent.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent cost center cannot be the same as the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()));
+                problem.setTitle("PARENT_COST_CENTER_CANNOT_BE_SELF");
+                return Either.left(CostCenterView.createFail(costCenterUpdate, problem));
+            }
+            if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(costCenterUpdate.getCustomerCode())) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent cost center cannot have a circular reference with the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()));
+                problem.setTitle("CIRCULAR_REFERENCE");
+                return Either.left(CostCenterView.createFail(costCenterUpdate, problem));
+            }
+        }
+        return Either.right(null);
     }
 
     @Transactional
@@ -111,23 +118,9 @@ public class CostCenterService {
         costCenter.setActive(costCenterUpdate.getActive());
 
         // check if parent exists
-        if (costCenterUpdate.getParentCustomerCode() != null && !costCenterUpdate.getParentCustomerCode().isBlank()) {
-            Optional<CostCenter> parent = costCenterRepository.findById(new CostCenter.Id(orgId, costCenterUpdate.getParentCustomerCode()));
-            if (parent.isEmpty()) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Parent project code with customer code %s not found.".formatted(costCenterUpdate.getParentCustomerCode()));
-                problem.setTitle(ErrorTitleConstants.PARENT_COST_CENTER_CODE_NOT_FOUND);
-                return CostCenterView.createFail(costCenterUpdate, problem);
-            }
-            if (parent.get().getId().getCustomerCode().equals(costCenterUpdate.getCustomerCode())) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent cost center cannot be the same as the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()));
-                problem.setTitle("PARENT_COST_CENTER_CANNOT_BE_SELF");
-                return CostCenterView.createFail(costCenterUpdate, problem);
-            }
-            if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(costCenterUpdate.getCustomerCode())) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent cost center cannot have a circular reference with the cost center itself: %s".formatted(costCenterUpdate.getCustomerCode()));
-                problem.setTitle("CIRCULAR_REFERENCE");
-                return CostCenterView.createFail(costCenterUpdate, problem);
-            }
+        Either<CostCenterView, Void> parentExistsCheck = checkIfParentExists(orgId, costCenterUpdate);
+        if(parentExistsCheck.isLeft()) {
+            return parentExistsCheck.getLeft();
         }
         costCenter.setParentCustomerCode(costCenterUpdate.getParentCustomerCode() == null || costCenterUpdate.getParentCustomerCode().isBlank() ? null : costCenterUpdate.getParentCustomerCode());
 
