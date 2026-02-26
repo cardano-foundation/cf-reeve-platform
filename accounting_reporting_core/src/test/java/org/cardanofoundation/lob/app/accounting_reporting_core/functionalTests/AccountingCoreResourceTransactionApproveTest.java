@@ -36,8 +36,7 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
                 .then()
                 .statusCode(200)
                 .body("id[0]", equalTo("ApproveTx"))
-                .body("success[0]", equalTo(true))
-        ;
+                .body("success[0]", equalTo(true));
         given()
                 .contentType("application/json")
                 .when()

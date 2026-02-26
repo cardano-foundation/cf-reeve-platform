@@ -59,119 +59,174 @@ public class TransactionRepositoryGateway {
     }
 
     @Transactional
-    // TODO optimise performance because we have to load transaction from db each time and we don't save it in bulk
-    protected Either<IdentifiableProblem, TransactionEntity> approveTransaction(String transactionId) {
-        log.info("Approving transaction: {}", transactionId);
-
-        Optional<TransactionEntity> txM = accountingCoreTransactionRepository.findById(transactionId);
-
-        if (txM.isEmpty()) {
-            return transactionNotFoundResponse(transactionId);
-        }
-
-        TransactionEntity tx = txM.orElseThrow();
-
-        if (tx.getAutomatedValidationStatus() == FAILED) {
-            return transactionFailedResponse(transactionId);
-        }
-
-        if (tx.hasAnyRejection()) {
-            return transactionRejectedResponse(transactionId);
-        }
-
-        tx.setTransactionApproved(true);
-
-        TransactionEntity savedTx = accountingCoreTransactionRepository.save(tx);
-
-        return Either.right(savedTx);
-    }
-
-    @Transactional
-    // TODO optimise performance because we have to load transaction from db each time and we don't save it in bulk
-    protected Either<IdentifiableProblem, TransactionEntity> approveTransactionsDispatch(String transactionId) {
-        log.info("Approving transaction to dispatch: {}", transactionId);
-
-        Optional<TransactionEntity> txM = accountingCoreTransactionRepository.findById(transactionId);
-
-        if (txM.isEmpty()) {
-            return transactionNotFoundResponse(transactionId);
-        }
-
-        TransactionEntity tx = txM.orElseThrow();
-
-        if (tx.getAutomatedValidationStatus() == FAILED) {
-            return transactionFailedResponse(transactionId);
-        }
-
-        if (tx.hasAnyRejection()) {
-            return transactionRejectedResponse(transactionId);
-        }
-
-        if (Boolean.FALSE.equals(tx.getTransactionApproved())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(METHOD_NOT_ALLOWED, "Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId));
-            problem.setTitle("TX_NOT_APPROVED");
-
-            return Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
-        }
-
-        tx.setLedgerDispatchApproved(true);
-
-        TransactionEntity savedTx = accountingCoreTransactionRepository.save(tx);
-
-        return Either.right(savedTx);
-    }
-
-    @Transactional
     public List<Either<IdentifiableProblem, TransactionEntity>> approveTransactions(TransactionsRequest transactionsRequest) {
-        Set<TransactionsRequest.TransactionId> transactionIds = transactionsRequest.getTransactionIds();
+        // Extract and sort transaction IDs for consistent lock ordering
+        List<String> sortedTransactionIds = transactionsRequest.getTransactionIds().stream()
+                .map(TransactionsRequest.TransactionId::getId)
+                .sorted()
+                .toList();
+
+        List<TransactionEntity> lockedTransactions;
+        try {
+            // Lock all transactions upfront in a single query with pessimistic lock
+            log.info("Attempting to acquire pessimistic locks for transactions: {}", sortedTransactionIds);
+            lockedTransactions = accountingCoreTransactionRepository
+                    .findAllByIdWithPessimisticLock(new HashSet<>(sortedTransactionIds));
+            log.info("Acquired pessimistic locks for {} transactions, ids: {}", lockedTransactions.size(), 
+                    lockedTransactions.stream().map(TransactionEntity::getId).collect(Collectors.toList()));
+        } catch (DataAccessException dae) {
+            log.error("Error acquiring locks for transactions: {}", sortedTransactionIds, dae);
+            // Create error responses for all transactions
+            List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
+            for (String transactionId : sortedTransactionIds) {
+                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
+            }
+            return errorResults;
+        }
+
+        // Create lookup map for O(1) access
+        Map<String, TransactionEntity> transactionMap = lockedTransactions.stream()
+                .collect(Collectors.toMap(tx -> tx.getId().trim(), tx -> tx));
 
         ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<>();
         Set<String> batchIds = new HashSet<>();
-        for (TransactionsRequest.TransactionId transactionId : transactionIds) {
-            try {
-                Either<IdentifiableProblem, TransactionEntity> transactionEntities = approveTransaction(transactionId.getId());
-                if(transactionEntities.isRight()) {
-                    batchIds.addAll(transactionEntities.get().getBatches().stream().map(TransactionBatchEntity::getId).collect(Collectors.toSet()));
-                }
-                transactionsApprovalResponseListE.add(transactionEntities);
-            } catch (DataAccessException dae) {
-                log.error("Error approving transaction: {}", transactionId, dae);
 
-                ProblemDetail problem = FailureResponses.createTransactionDBError(transactionId.getId(), dae);
+        // Process transactions in the same sorted order they were locked
+        for (String transactionId : sortedTransactionIds) {
+            TransactionEntity tx = transactionMap.get(transactionId);
 
-                transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
+            if (tx == null) {
+                transactionsApprovalResponseListE.add(transactionNotFoundResponse(transactionId));
+                continue;
             }
+
+            if (tx.getAutomatedValidationStatus() == FAILED) {
+                transactionsApprovalResponseListE.add(transactionFailedResponse(transactionId));
+                continue;
+            }
+
+            if (tx.hasAnyRejection()) {
+                transactionsApprovalResponseListE.add(transactionRejectedResponse(transactionId));
+                continue;
+            }
+
+            tx.setTransactionApproved(true);
+            batchIds.addAll(tx.getBatches().stream()
+                    .map(TransactionBatchEntity::getId)
+                    .collect(Collectors.toSet()));
+
+            transactionsApprovalResponseListE.add(Either.right(tx));
         }
 
-        batchIds.forEach(batchId -> transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
+        try {
+            // Flush all changes at once
+            accountingCoreTransactionRepository.saveAll(lockedTransactions);
 
+            // Update batch statuses
+            batchIds.forEach(batchId -> transactionBatchService
+                    .invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
+        } catch (DataAccessException dae) {
+            log.error("Error saving approved transactions: {}", sortedTransactionIds, dae);
+            // Return error responses for all transactions
+            List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
+            for (String transactionId : sortedTransactionIds) {
+                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
+            }
+            return errorResults;
+        }
 
         return transactionsApprovalResponseListE;
     }
 
     @Transactional
     public List<Either<IdentifiableProblem, TransactionEntity>> approveTransactionsDispatch(TransactionsRequest transactionsRequest) {
-        Set<TransactionsRequest.TransactionId> transactionIds = transactionsRequest.getTransactionIds();
+        // Extract and sort transaction IDs for consistent lock ordering
+        List<String> sortedTransactionIds = transactionsRequest.getTransactionIds().stream()
+                .map(TransactionsRequest.TransactionId::getId)
+                .sorted()
+                .toList();
+
+        List<TransactionEntity> lockedTransactions;
+        try {
+            // Lock all transactions upfront in a single query with pessimistic lock
+            lockedTransactions = accountingCoreTransactionRepository
+                    .findAllByIdWithPessimisticLock(new HashSet<>(sortedTransactionIds));
+        } catch (DataAccessException dae) {
+            log.error("Error acquiring locks for transactions dispatch: {}", sortedTransactionIds, dae);
+            // Create error responses for all transactions
+            List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
+            for (String transactionId : sortedTransactionIds) {
+                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
+            }
+            return errorResults;
+        }
+
+        // Create lookup map for O(1) access
+        Map<String, TransactionEntity> transactionMap = lockedTransactions.stream()
+                .collect(Collectors.toMap(tx -> tx.getId().trim(), tx -> tx));
 
         ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<>();
+        Set<String> batchIds = new HashSet<>();
 
-        for (TransactionsRequest.TransactionId transactionId : transactionIds) {
-            try {
-                Either<IdentifiableProblem, TransactionEntity> transactionEntities = approveTransactionsDispatch(transactionId.getId());
+        // Process transactions in the same sorted order they were locked
+        for (String transactionId : sortedTransactionIds) {
+            TransactionEntity tx = transactionMap.get(transactionId);
 
-                transactionsApprovalResponseListE.add(transactionEntities);
-            } catch (DataAccessException dae) {
-                log.error("Error approving transaction publish / dispatch: {}", transactionId, dae);
-
-                ProblemDetail problem = createTransactionDBError(transactionId.getId(), dae);
-
-                transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
+            if (tx == null) {
+                transactionsApprovalResponseListE.add(transactionNotFoundResponse(transactionId));
+                continue;
             }
+
+            if (tx.getAutomatedValidationStatus() == FAILED) {
+                transactionsApprovalResponseListE.add(transactionFailedResponse(transactionId));
+                continue;
+            }
+
+            if (tx.hasAnyRejection()) {
+                transactionsApprovalResponseListE.add(transactionRejectedResponse(transactionId));
+                continue;
+            }
+
+            if (Boolean.FALSE.equals(tx.getTransactionApproved())) {
+                ThrowableProblem problem = Problem.builder()
+                        .withTitle("TX_NOT_APPROVED")
+                        .withDetail("Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId))
+                        .withStatus(METHOD_NOT_ALLOWED)
+                        .with("transactionId", transactionId)
+                        .build();
+
+                transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
+                continue;
+            }
+
+            tx.setLedgerDispatchApproved(true);
+            batchIds.addAll(tx.getBatches().stream()
+                    .map(TransactionBatchEntity::getId)
+                    .collect(Collectors.toSet()));
+
+            transactionsApprovalResponseListE.add(Either.right(tx));
         }
-        // updating all batches
-        transactionsApprovalResponseListE.stream().filter(Either::isRight)
-                .flatMap(txEntity -> txEntity.get().getBatches().stream().map(TransactionBatchEntity::getId)).collect(Collectors.toSet())
-                .forEach(batchId -> transactionBatchService.invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
+
+        try {
+            // Flush all changes at once
+            accountingCoreTransactionRepository.saveAll(lockedTransactions);
+
+            // Update batch statuses
+            batchIds.forEach(batchId -> transactionBatchService
+                    .invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
+        } catch (DataAccessException dae) {
+            log.error("Error saving approved transactions for dispatch: {}", sortedTransactionIds, dae);
+            // Return error responses for all transactions
+            List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
+            for (String transactionId : sortedTransactionIds) {
+                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
+            }
+            return errorResults;
+        }
 
         return transactionsApprovalResponseListE;
     }

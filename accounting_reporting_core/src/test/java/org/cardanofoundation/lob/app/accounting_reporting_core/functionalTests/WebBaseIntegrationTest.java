@@ -43,7 +43,7 @@ public class WebBaseIntegrationTest {
     @LocalServerPort
     protected int serverPort;
     protected static WireMockServer wireMockServer;
-    protected int randomWebMockPort = 19000;
+    protected int randomWebMockPort = 49000;
     @Autowired
     private PostgreSQLContainer postgresContainer;
 
