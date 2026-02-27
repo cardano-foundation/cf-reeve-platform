@@ -128,8 +128,8 @@ public class ReportingService {
 
         ReportEntity entity = reportMapper.toEntity(reportDtoWithFields, existingReport, template);
         // Resetting rejection in case it was rejected
-        existingReport.setRejected(false);
-        existingReport.setRejectionReason(null);
+        entity.setRejected(false);
+        entity.setRejectionReason(null);
 
         // Handle versioning: if overwriting a published report, increment version
         handleVersioning(entity, dto, existingReport);
