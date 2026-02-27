@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,7 +18,10 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
+import org.javers.core.Changes;
 import org.javers.core.Javers;
+import org.javers.core.diff.Diff;
+import org.javers.core.json.JsonConverter;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -38,7 +40,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.recon
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent;
@@ -766,13 +767,11 @@ class TransactionReconcilationServiceTest {
         when(transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate))
                 .thenReturn(Set.of());
 
-        when(transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate))
-                .thenReturn(Set.of());
-
         transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId, 1L);
 
         assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.COMPLETED);
-        verify(transactionRepositoryGateway).findAllByDateRange(organisationId, fromDate, toDate);
+        // missingTxs is empty → processIndexerReconciliation returns early before calling the indexer
+        verify(indexerReconcilationServiceMock, never()).reconcileWithIndexer(anyString(), any(), any(), anySet());
     }
 
     @Test
@@ -801,7 +800,200 @@ class TransactionReconcilationServiceTest {
         verify(transactionRepositoryGateway).findAllByDateRange(organisationId, fromDate, toDate);
     }
 
-    // ============== reconcileWithIndexer tests ==============
+    @Test
+    void testReconcileChunk_shouldAddSourceReconcilationFailViolation_whenHashMismatch() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER"); // causes hash mismatch
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+
+        Diff diff = mock(Diff.class);
+        Changes changes = mock(Changes.class);
+        JsonConverter jsonConverter = mock(JsonConverter.class);
+        when(javers.compare(any(), any())).thenReturn(diff);
+        when(diff.getChanges()).thenReturn(changes);
+        when(javers.getJsonConverter()).thenReturn(jsonConverter);
+        when(jsonConverter.toJson(any())).thenReturn("{}");
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(reconcilationEntity.getViolations()).hasSize(1);
+        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
+                .isEqualTo(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
+        verify(javers).compare(any(), any());
+    }
+
+    @Test
+    void testReconcileChunk_withIndexerEnabled_shouldHandleIndexerApiFailure() {
+        enableIndexer();
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+        // no existing reconciliation → getSinkReconcilationStatus returns NOK
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("internal1");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
+                .thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Indexer down")));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        // tx has sink=NOK (no prior reconciliation) → SINK_RECONCILATION_FAIL violation added on indexer failure
+        assertThat(reconcilationEntity.getViolations()).hasSize(1);
+        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
+                .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
+        verify(indexerReconcilationServiceMock).reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet());
+    }
+
+    @Test
+    void testReconcileChunk_withIndexerEnabled_shouldMarkNokWhenTxNotInIndexerResults() {
+        enableIndexer();
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("internal1");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+        // indexer returns OK but tx1 is absent from the result map
+        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
+                .thenReturn(Either.right(Map.of()));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
+        assertThat(reconcilationEntity.getViolations()).hasSize(1);
+        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
+                .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
+    }
+
+    @Test
+    void testWrapUpReconcilation_withIndexerEnabled_shouldCallIndexerForNonEmptyMissingTxs() {
+        enableIndexer();
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        reconcilationEntity.setStatus(ReconcilationStatus.STARTED);
+        reconcilationEntity.setFrom(Optional.of(fromDate));
+        reconcilationEntity.setTo(Optional.of(toDate));
+        reconcilationEntity.setProcessedTxCount(0L);
+
+        when(transactionReconcilationRepository.findById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val missingTx = TransactionEntity.builder()
+                .id("tx1")
+                .internalTransactionNumber("internal1")
+                .extractorType(ExtractorType.NETSUITE.name())
+                .ledgerDispatchApproved(false)
+                .transactionType(TransactionType.VendorPayment)
+                .entryDate(fromDate)
+                .build();
+
+        when(transactionRepositoryGateway.findAllByDateRangeAndNotReconciledYet(organisationId, fromDate, toDate))
+                .thenReturn(Set.of(missingTx));
+        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
+                .thenReturn(Either.right(Map.of("tx1", new IndexerReconcilationResult(ReconcilationCode.OK, null))));
+
+        transactionReconcilationService.wrapUpReconcilation(reconcilationId, organisationId, 0L);
+
+        verify(indexerReconcilationServiceMock).reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet());
+        assertThat(missingTx.getReconcilation()).isPresent();
+        assertThat(missingTx.getReconcilation().get().getSink()).contains(ReconcilationCode.OK);
+        assertThat(reconcilationEntity.getStatus()).isEqualTo(ReconcilationStatus.COMPLETED);
+    }
 
     private void enableIndexer() {
         ReflectionTestUtils.setField(transactionReconcilationService, "indexerEnabled", true);
@@ -862,231 +1054,5 @@ class TransactionReconcilationServiceTest {
                 .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
     }
 
-    @Test
-    void testReconcileWithIndexer_shouldReturnEarlyWhenEntityNotFound() {
-        enableIndexer();
-        String reconcilationId = "reconcilation123";
-
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.empty());
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, "org123",
-                LocalDate.now().minusDays(5), LocalDate.now());
-
-        verify(transactionRepositoryGateway, never()).findAllByDateRange(anyString(), any(), any());
-    }
-
-    @Test
-    void testReconcileWithIndexer_shouldReturnEarlyWhenNoAttachedTransactions() {
-        enableIndexer();
-        String reconcilationId = "reconcilation123";
-
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.of(reconcilationEntity));
-        when(transactionRepositoryGateway.findAllByDateRange(anyString(), any(), any()))
-                .thenReturn(Set.of());
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, "org123",
-                LocalDate.now().minusDays(5), LocalDate.now());
-
-        verify(indexerReconcilationServiceMock, never()).reconcileWithIndexer(anyString(), any(), any(), anySet());
-    }
-
-    @Test
-    void testReconcileWithIndexer_shouldReturnEarlyWhenIndexerDisabled() {
-        // indexerEnabled defaults to false, indexerReconcilationService defaults to null/empty
-        String reconcilationId = "reconcilation123";
-
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.of(reconcilationEntity));
-
-        val tx = createTransactionEntity("tx1", "internal1");
-        when(transactionRepositoryGateway.findAllByDateRange(anyString(), any(), any()))
-                .thenReturn(Set.of(tx));
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, "org123",
-                LocalDate.now().minusDays(5), LocalDate.now());
-
-        verify(transactionRepositoryGateway, never()).storeAll(anySet());
-    }
-
-    @Test
-    void testReconcileWithIndexer_shouldHandleIndexerFailureWithNokSinkViolations() {
-        enableIndexer();
-        String reconcilationId = "reconcilation123";
-        String organisationId = "org123";
-        LocalDate fromDate = LocalDate.now().minusDays(5);
-        LocalDate toDate = LocalDate.now();
-
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
-        reconcilationEntity.setViolations(new LinkedHashSet<>());
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.of(reconcilationEntity));
-
-        val tx = createTransactionEntity("tx1", "internal1");
-        tx.setReconcilation(Optional.of(Reconcilation.builder()
-                .source(ReconcilationCode.OK)
-                .sink(ReconcilationCode.NOK)
-                .build()));
-
-        when(transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate))
-                .thenReturn(Set.of(tx));
-
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Connection refused");
-
-        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
-                .thenReturn(Either.left(problem));
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
-
-        assertThat(reconcilationEntity.getViolations()).hasSize(1);
-        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
-                .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
-        verify(transactionReconcilationRepository).saveAndFlush(reconcilationEntity);
-    }
-
-    @Test
-    void testReconcileWithIndexer_shouldSkipViolationWhenSinkIsOkOnFailure() {
-        enableIndexer();
-        String reconcilationId = "reconcilation123";
-        String organisationId = "org123";
-        LocalDate fromDate = LocalDate.now().minusDays(5);
-        LocalDate toDate = LocalDate.now();
-
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
-        reconcilationEntity.setViolations(new LinkedHashSet<>());
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.of(reconcilationEntity));
-
-        val tx = createTransactionEntity("tx1", "internal1");
-        tx.setReconcilation(Optional.of(Reconcilation.builder()
-                .source(ReconcilationCode.OK)
-                .sink(ReconcilationCode.OK)
-                .build()));
-
-        when(transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate))
-                .thenReturn(Set.of(tx));
-
-        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
-                .thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.SERVICE_UNAVAILABLE)));
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
-
-        assertThat(reconcilationEntity.getViolations()).isEmpty();
-        verify(transactionReconcilationRepository).saveAndFlush(reconcilationEntity);
-    }
-
-    @Test
-    void testReconcileWithIndexer_shouldSetSinkOkForMatchingTransactions() {
-        enableIndexer();
-        String reconcilationId = "reconcilation123";
-        String organisationId = "org123";
-        LocalDate fromDate = LocalDate.now().minusDays(5);
-        LocalDate toDate = LocalDate.now();
-
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
-        reconcilationEntity.setViolations(new LinkedHashSet<>());
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.of(reconcilationEntity));
-
-        val tx = createTransactionEntity("tx1", "internal1");
-        tx.setReconcilation(Optional.of(Reconcilation.builder()
-                .source(ReconcilationCode.OK)
-                .build()));
-
-        when(transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate))
-                .thenReturn(Set.of(tx));
-
-        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
-                .thenReturn(Either.right(Map.of(
-                        "tx1", new IndexerReconcilationResult(ReconcilationCode.OK, null)
-                )));
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
-
-        assertThat(tx.getReconcilation()).isPresent();
-        assertThat(tx.getReconcilation().get().getSink()).contains(ReconcilationCode.OK);
-        assertThat(tx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
-        assertThat(tx.getLastReconcilation()).isPresent();
-        assertThat(reconcilationEntity.getViolations()).isEmpty();
-        verify(transactionRepositoryGateway).storeAll(anySet());
-        verify(transactionReconcilationRepository).saveAndFlush(reconcilationEntity);
-    }
-
-    @Test
-    void testReconcileWithIndexer_shouldSetSinkNokAndAddViolationForNokResult() {
-        enableIndexer();
-        String reconcilationId = "reconcilation123";
-        String organisationId = "org123";
-        LocalDate fromDate = LocalDate.now().minusDays(5);
-        LocalDate toDate = LocalDate.now();
-
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
-        reconcilationEntity.setViolations(new LinkedHashSet<>());
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.of(reconcilationEntity));
-
-        val tx = createTransactionEntity("tx1", "internal1");
-        when(transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate))
-                .thenReturn(Set.of(tx));
-
-        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
-                .thenReturn(Either.right(Map.of(
-                        "tx1", new IndexerReconcilationResult(ReconcilationCode.NOK, "Amount mismatch")
-                )));
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
-
-        assertThat(tx.getReconcilation()).isPresent();
-        assertThat(tx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
-        assertThat(reconcilationEntity.getViolations()).hasSize(1);
-        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
-                .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
-    }
-
-    @Test
-    void testReconcileWithIndexer_shouldAddViolationWhenTxNotInResults() {
-        enableIndexer();
-        String reconcilationId = "reconcilation123";
-        String organisationId = "org123";
-        LocalDate fromDate = LocalDate.now().minusDays(5);
-        LocalDate toDate = LocalDate.now();
-
-        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
-        reconcilationEntity.setViolations(new LinkedHashSet<>());
-        when(transactionReconcilationRepository.findById(reconcilationId))
-                .thenReturn(Optional.of(reconcilationEntity));
-
-        val tx = createTransactionEntity("tx1", "internal1");
-        when(transactionRepositoryGateway.findAllByDateRange(organisationId, fromDate, toDate))
-                .thenReturn(Set.of(tx));
-
-        when(indexerReconcilationServiceMock.reconcileWithIndexer(eq(organisationId), eq(fromDate), eq(toDate), anySet()))
-                .thenReturn(Either.right(Map.of()));
-
-        transactionReconcilationService.reconcileWithIndexer(reconcilationId, organisationId, fromDate, toDate);
-
-        assertThat(tx.getReconcilation()).isPresent();
-        assertThat(tx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
-        assertThat(reconcilationEntity.getViolations()).hasSize(1);
-        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
-                .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
-    }
-
-    // ============== Helper methods ==============
-
-    private TransactionEntity createTransactionEntity(String id, String internalNumber) {
-        val tx = new TransactionEntity();
-        tx.setId(id);
-        tx.setInternalTransactionNumber(internalNumber);
-        tx.setTransactionType(TransactionType.VendorPayment);
-        tx.setEntryDate(LocalDate.now());
-        val item = new TransactionItemEntity();
-        item.setAmountLcy(BigDecimal.ZERO);
-        tx.setItems(Set.of(item));
-        return tx;
-    }
 
 }
