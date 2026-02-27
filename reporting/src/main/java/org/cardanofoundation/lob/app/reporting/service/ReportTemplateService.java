@@ -34,6 +34,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
@@ -88,13 +89,6 @@ public class ReportTemplateService {
         }
 
         return Either.right(null);
-    }
-
-    private boolean hasDuplicate(ReportTemplateFieldDto field, Set<String> seenAccountMappings) {
-        if(field.getAccounts().stream().anyMatch(s -> !seenAccountMappings.add(s))) {
-            return true;
-        }
-        return field.getChildFields().stream().anyMatch(f -> hasDuplicate(f, seenAccountMappings));
     }
 
     private Either<ProblemDetail, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
@@ -249,10 +243,6 @@ public class ReportTemplateService {
         if(prohibitedFieldChanged.isLeft()) {
             return Either.left(prohibitedFieldChanged.getLeft());
         }
-
-        // Check if there are any reports using this template
-        List<ReportEntity> existingReports =
-                reportingRepository.findByReportTemplateId(existing.getId());
         try {
             ReportTemplateType.valueOf(dto.getReportTemplateType());
         } catch (IllegalArgumentException e) {
@@ -260,7 +250,13 @@ public class ReportTemplateService {
             problem.setTitle("Invalid Report Template Type");
             return Either.left(problem);
         }
-        if (!existingReports.isEmpty()) {
+
+        // Check if there are any reports using this template
+        List<ReportEntity> existingReports =
+                reportingRepository.findByReportTemplateId(existing.getId());
+        // Prevent a version update if the update only is about mappings
+        boolean isOnlyChangingMappings = isChangingOnlyMappings(existing.getFields(), dto.getFields());
+        if (!existingReports.isEmpty() && !isOnlyChangingMappings) {
             // Reports exist - create a new version
             log.info("Template '{}' has {} existing reports, creating new version {} -> {}",
                     dto.getName(), existingReports.size(), existing.getVer(), existing.getVer() + 1);
@@ -285,6 +281,18 @@ public class ReportTemplateService {
             reportTemplateRepository.save(existing);
         }
         return Either.right(reportTemplateMapper.toResponseDto(saved));
+    }
+
+    private boolean isChangingOnlyMappings(List<ReportTemplateFieldEntity> fields, List<ReportTemplateFieldDto> dtoFields) {
+        if(dtoFields == null || fields.size() != dtoFields.size()) {
+            return false;
+        }
+        for(int i = 0; i < fields.size(); i++) {
+            if(fields.get(i).computeContentHash() != dtoFields.get(i).computeContentHash()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Either<ProblemDetail, Void> checkIfProhibitedFieldChanged(ReportTemplateEntity existing, ReportTemplateDto dto) {
