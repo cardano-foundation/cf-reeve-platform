@@ -57,6 +57,7 @@ public class ReportTemplateService {
     private final ReportingRepository reportingRepository;
     private final Validator validator;
     private final ReportTemplateTypeValidator reportTemplateTypeValidator;
+    private final ReportingService reportingService;
 
     private Either<ProblemDetail, Void> validateReport(ReportTemplateDto dto) {
         Either<ProblemDetail, Void> errorDetails = validateReportTemplateDto(dto);
@@ -258,14 +259,15 @@ public class ReportTemplateService {
         boolean isOnlyChangingMappings = isChangingOnlyMappings(existing.getFields(), dto.getFields());
         if (!existingReports.isEmpty() && !isOnlyChangingMappings) {
             // Reports exist - create a new version
-            log.info("Template '{}' has {} existing reports, creating new version {} -> {}",
+            log.info("Template '{}' has {} existing reports & more changes than just mappings, creating new version {} -> {}",
                     dto.getName(), existingReports.size(), existing.getVer(), existing.getVer() + 1);
 
             templateToSave = reportTemplateMapper.toEntity(dto, null);
             templateToSave.setVer(existing.getVer() + 1);
         } else {
             // No reports exist - update existing template in place
-            log.info("Template '{}' has no existing reports, updating in place", dto.getName());
+            log.info("Template '{}' has no existing reports or only changes in mappings, updating in place", dto.getName());
+            // Use toEntity with existing template to perform intelligent field merging
             templateToSave = reportTemplateMapper.toEntity(dto, existing);
         }
         Either<ProblemDetail, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
@@ -274,6 +276,9 @@ public class ReportTemplateService {
         }
 
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
+        if(!existingReports.isEmpty() && isOnlyChangingMappings) {
+            existingReports.forEach(report -> reportingService.reprocess(report.getOrganisationId(), report.getId()));
+        }
         // Setting "old" version to inactive after save
         if(saved.getVer() > existing.getVer()) {
             existing.setActive(false);

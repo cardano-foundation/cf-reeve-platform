@@ -47,4 +47,8 @@ public class ReprocessJob {
     public void addAll(Set<TxStatusUpdate> txStatusUpdates) {
         finalizedTransactionsUpdates.addAll(txStatusUpdates.stream().map(TxStatusUpdate::getTxId).toList());
     }
+
+    public void addAll(List<String> txIds) {
+        finalizedTransactionsUpdates.addAll(txIds);
+    }
 }
