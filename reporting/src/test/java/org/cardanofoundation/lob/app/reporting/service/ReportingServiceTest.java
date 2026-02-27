@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepos
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportRejectRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
@@ -677,4 +678,52 @@ class ReportingServiceTest {
         assertTrue(result.isLeft());
         assertEquals("REPORT_TEMPLATE_NOT_FOUND", result.getLeft().getTitle());
     }
+
+    @Test
+    void reject_reportNotFound() {
+        ReportRejectRequest request = mock(ReportRejectRequest.class);
+
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(request.getReportId()).thenReturn("report123");
+        when(reportRepository.findByOrganisationIdAndId("org123", "report123")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.reject(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("REPORT_NOT_FOUND", result.getLeft().getTitle());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void reject_reportAlreadyPublished() {
+        ReportRejectRequest request = mock(ReportRejectRequest.class);
+        ReportEntity entity = mock(ReportEntity.class);
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(request.getReportId()).thenReturn("report123");
+        when(reportRepository.findByOrganisationIdAndId("org123", "report123")).thenReturn(Optional.of(entity));
+        when(entity.isLedgerDispatchApproved()).thenReturn(true);
+
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.reject(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("REPORT_ALREADY_PUBLISHED", result.getLeft().getTitle());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void reject_success() {
+        ReportRejectRequest request = mock(ReportRejectRequest.class);
+        ReportEntity entity = mock(ReportEntity.class);
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(request.getReportId()).thenReturn("report123");
+        when(reportRepository.findByOrganisationIdAndId("org123", "report123")).thenReturn(Optional.of(entity));
+        when(entity.isLedgerDispatchApproved()).thenReturn(false);
+
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.reject(request);
+
+        assertTrue(result.isRight());
+        verify(entity).setRejected(true);
+        verify(reportRepository).save(any());
+    }
+
 }
