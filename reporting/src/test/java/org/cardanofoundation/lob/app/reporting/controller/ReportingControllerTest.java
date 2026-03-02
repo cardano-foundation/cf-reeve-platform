@@ -31,8 +31,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
-import org.cardanofoundation.lob.app.reporting.dto.ReportRejectRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
 import org.cardanofoundation.lob.app.reporting.service.ReportingService;
@@ -384,7 +384,7 @@ class ReportingControllerTest {
 
     @Test
     void reject_problem() {
-        ReportRejectRequest request = mock(ReportRejectRequest.class);
+        ReportIdRequest request = mock(ReportIdRequest.class);
 
         when(reportService.reject(request)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
@@ -394,7 +394,7 @@ class ReportingControllerTest {
 
     @Test
     void reject_success() {
-        ReportRejectRequest request = mock(ReportRejectRequest.class);
+        ReportIdRequest request = mock(ReportIdRequest.class);
 
         when(reportService.reject(request)).thenReturn(Either.right(mock(ReportResponseDto.class)));
 

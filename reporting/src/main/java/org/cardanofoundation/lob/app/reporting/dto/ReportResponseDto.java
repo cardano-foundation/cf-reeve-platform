@@ -70,9 +70,6 @@ public class ReportResponseDto {
     @Schema(description = "Indicates if the report has been rejected", example = "false")
     private Boolean isRejected;
 
-    @Schema(description = "Reason for rejecting the report", example = "The report contains inaccurate data or does not meet the required standards.", nullable = true)
-    private String rejectionReason;
-
     @Schema(description = "User who rejected the report", example = "Max Mustermann", nullable = true)
     private String rejectedBy;
 

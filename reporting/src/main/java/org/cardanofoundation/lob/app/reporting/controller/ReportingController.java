@@ -46,7 +46,6 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
-import org.cardanofoundation.lob.app.reporting.dto.ReportRejectRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
@@ -449,7 +448,7 @@ public class ReportingController {
     public ResponseEntity<?> reject(
             @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Request containing report id and organisation ID",
-                    required = true) ReportRejectRequest request) {
+                    required = true) ReportIdRequest request) {
         log.info(
                 "POST /api/reports/reject - Org: {}, Report ID: {}",
                 request.getOrganisationId(), request.getReportId());

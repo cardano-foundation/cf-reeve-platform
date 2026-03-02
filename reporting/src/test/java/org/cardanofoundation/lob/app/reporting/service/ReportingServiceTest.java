@@ -37,7 +37,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepos
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
-import org.cardanofoundation.lob.app.reporting.dto.ReportRejectRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
@@ -681,7 +681,7 @@ class ReportingServiceTest {
 
     @Test
     void reject_reportNotFound() {
-        ReportRejectRequest request = mock(ReportRejectRequest.class);
+        ReportIdRequest request = mock(ReportIdRequest.class);
 
         when(request.getOrganisationId()).thenReturn("org123");
         when(request.getReportId()).thenReturn("report123");
@@ -696,7 +696,7 @@ class ReportingServiceTest {
 
     @Test
     void reject_reportAlreadyPublished() {
-        ReportRejectRequest request = mock(ReportRejectRequest.class);
+        ReportIdRequest request = mock(ReportIdRequest.class);
         ReportEntity entity = mock(ReportEntity.class);
         when(request.getOrganisationId()).thenReturn("org123");
         when(request.getReportId()).thenReturn("report123");
@@ -712,7 +712,7 @@ class ReportingServiceTest {
 
     @Test
     void reject_success() {
-        ReportRejectRequest request = mock(ReportRejectRequest.class);
+        ReportIdRequest request = mock(ReportIdRequest.class);
         ReportEntity entity = mock(ReportEntity.class);
         when(request.getOrganisationId()).thenReturn("org123");
         when(request.getReportId()).thenReturn("report123");

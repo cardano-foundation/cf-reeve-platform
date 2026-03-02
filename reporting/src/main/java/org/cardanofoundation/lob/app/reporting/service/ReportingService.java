@@ -36,7 +36,6 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
-import org.cardanofoundation.lob.app.reporting.dto.ReportRejectRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseStatisticView;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
@@ -125,7 +124,6 @@ public class ReportingService {
         ReportEntity entity = reportMapper.toEntity(reportDtoWithFields, existingReport, template);
         // Resetting rejection in case it was rejected
         entity.setRejected(false);
-        entity.setRejectionReason(null);
         entity.setRejectedBy(null);
 
         // Handle versioning: if overwriting a published report, increment version
@@ -880,8 +878,8 @@ public class ReportingService {
         }
 
         // Resetting if it's rejected to allow for re-evaluation - user can reject again after reprocessing if it still doesn't pass validation
-        report.setRejectionReason(null);
         report.setRejected(false);
+        report.setRejectedBy(null);
 
         // If data mode is SYSTEM, regenerate field values
         if (report.getDataMode() == DataMode.SYSTEM) {
@@ -958,7 +956,7 @@ public class ReportingService {
         }
     }
 
-    public Either<ProblemDetail, ReportResponseDto> reject(ReportRejectRequest request) {
+    public Either<ProblemDetail, ReportResponseDto> reject(ReportIdRequest request) {
         Optional<ReportEntity> reportO = reportRepository.findByOrganisationIdAndId(request.getOrganisationId(), request.getReportId());
         if (reportO.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(request.getReportId()));
@@ -974,7 +972,6 @@ public class ReportingService {
 
         report.setReadyToPublish(false);
         report.setRejected(true);
-        report.setRejectionReason(request.getRejectionReason());
         report.setRejectedBy(authenticationUserService.getCurrentUser());
         report = reportRepository.save(report);
 
