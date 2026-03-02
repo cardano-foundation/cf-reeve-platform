@@ -321,7 +321,7 @@ class DbSynchronisationUseCaseServiceTest {
         assertThat(savedTx.getTransactionApproved()).isFalse();
         assertThat(savedTx.getLedgerDispatchReceipt()).isEmpty();
         assertThat(savedTx.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.NOT_DISPATCHED);
-        assertThat(savedTx.getReconcilation()).isEmpty();
+        assertThat(savedTx.getReconcilation()).isPresent();
     }
 
     @Test
