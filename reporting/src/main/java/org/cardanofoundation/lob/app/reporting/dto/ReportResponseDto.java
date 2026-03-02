@@ -73,6 +73,9 @@ public class ReportResponseDto {
     @Schema(description = "Reason for rejecting the report", example = "The report contains inaccurate data or does not meet the required standards.", nullable = true)
     private String rejectionReason;
 
+    @Schema(description = "User who rejected the report", example = "Max Mustermann", nullable = true)
+    private String rejectedBy;
+
     @Schema(description = "Blockchain transaction ID if published", example = "4f5e6d7c8b9a0b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6", nullable = true)
     private String blockchainTxId;
 

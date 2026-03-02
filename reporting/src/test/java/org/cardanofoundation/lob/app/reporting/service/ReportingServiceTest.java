@@ -718,11 +718,12 @@ class ReportingServiceTest {
         when(request.getReportId()).thenReturn("report123");
         when(reportRepository.findByOrganisationIdAndId("org123", "report123")).thenReturn(Optional.of(entity));
         when(entity.isLedgerDispatchApproved()).thenReturn(false);
-
+        when(authenticationUserService.getCurrentUser()).thenReturn("User123");
         Either<ProblemDetail, ReportResponseDto> result = reportingService.reject(request);
 
         assertTrue(result.isRight());
         verify(entity).setRejected(true);
+        verify(entity).setRejectedBy("User123");
         verify(reportRepository).save(any());
     }
 

@@ -29,10 +29,8 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
@@ -68,11 +66,10 @@ public class ReportingService {
     private final ReportingRepository reportRepository;
     private final ReportTemplateRepository reportTemplateRepository;
     private final ReportMapper reportMapper;
-    private final ChartOfAccountRepository chartOfAccountRepository;
     private final TransactionItemRepository transactionItemRepository;
     private final AuthenticationUserService authenticationUserService;
     private final ApplicationEventPublisher applicationEventPublisher;
-    private final TransactionRepositoryGateway transactionRepositoryGateway;
+    private final AuthenticationUserService authService;
 
     public ReportResponseDto create(ReportDto dto) {
         log.info("Creating report: {}", dto.getName());
@@ -978,7 +975,9 @@ public class ReportingService {
         report.setReadyToPublish(false);
         report.setRejected(true);
         report.setRejectionReason(request.getRejectionReason());
+        report.setRejectedBy(authService.getCurrentUser());
         report = reportRepository.save(report);
+
         return Either.right(reportMapper.toResponseDto(report));
     }
 }
