@@ -354,38 +354,6 @@ public class ReportingController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result.get());
     }
 
-    @Operation(summary = "Reject a specific report",
-            description = "Marking a report as rejected",
-            responses = {
-                    @ApiResponse(responseCode = "201",
-                            description = "Report marked as rejected successfully",
-                            content = @Content(mediaType = APPLICATION_JSON_VALUE,
-                                    schema = @Schema(implementation = ReportResponseDto.class))),
-                    @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
-                    @ApiResponse(responseCode = "403",
-                            description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
-                    @ApiResponse(responseCode = "404", description = "Report not found")})
-    @PostMapping(value = "/reject", produces = APPLICATION_JSON_VALUE,
-            consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
-    public ResponseEntity<?> reject(
-            @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    description = "Request containing report id and organisation ID",
-                    required = true) ReportRejectRequest request) {
-        log.debug(
-                "POST /api/reports/reject - Org: {}, Report ID: {}",
-                request.getOrganisationId(), request.getReportId());
-
-        Either<ProblemDetail, ReportResponseDto> result = reportService.reject(request);
-
-        if (result.isLeft()) {
-            ProblemDetail problem = result.getLeft();
-            return ResponseEntity.status(problem.getStatus()).body(problem);
-        }
-
-        return ResponseEntity.status(HttpStatus.OK).body(result.get());
-    }
-
     @Operation(
         summary = "Reprocess a report",
         description = "Re-evaluates validation rules for a report and updates the readyToPublish state and failedValidationRules. Can only be used on unpublished reports.",
@@ -462,5 +430,37 @@ public class ReportingController {
                 .header("Content-Disposition", "attachment; filename=reports_" + organisationId + ".csv")
                 .contentType(MediaType.TEXT_PLAIN)
                 .body(result);
+    }
+
+    @Operation(summary = "Reject a specific report",
+            description = "Marking a report as rejected",
+            responses = {
+                    @ApiResponse(responseCode = "201",
+                            description = "Report marked as rejected successfully",
+                            content = @Content(mediaType = APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ReportResponseDto.class))),
+                    @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
+                    @ApiResponse(responseCode = "403",
+                            description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
+                    @ApiResponse(responseCode = "404", description = "Report not found")})
+    @PostMapping(value = "/reject", produces = APPLICATION_JSON_VALUE,
+            consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    public ResponseEntity<?> reject(
+            @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Request containing report id and organisation ID",
+                    required = true) ReportRejectRequest request) {
+        log.info(
+                "POST /api/reports/reject - Org: {}, Report ID: {}",
+                request.getOrganisationId(), request.getReportId());
+
+        Either<ProblemDetail, ReportResponseDto> result = reportService.reject(request);
+
+        if (result.isLeft()) {
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
+        }
+
+        return ResponseEntity.status(HttpStatus.OK).body(result.get());
     }
 }

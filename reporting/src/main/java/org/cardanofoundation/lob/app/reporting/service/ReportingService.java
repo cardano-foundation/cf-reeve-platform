@@ -69,7 +69,6 @@ public class ReportingService {
     private final TransactionItemRepository transactionItemRepository;
     private final AuthenticationUserService authenticationUserService;
     private final ApplicationEventPublisher applicationEventPublisher;
-    private final AuthenticationUserService authService;
 
     public ReportResponseDto create(ReportDto dto) {
         log.info("Creating report: {}", dto.getName());
@@ -127,6 +126,7 @@ public class ReportingService {
         // Resetting rejection in case it was rejected
         entity.setRejected(false);
         entity.setRejectionReason(null);
+        entity.setRejectedBy(null);
 
         // Handle versioning: if overwriting a published report, increment version
         handleVersioning(entity, dto, existingReport);
@@ -975,7 +975,7 @@ public class ReportingService {
         report.setReadyToPublish(false);
         report.setRejected(true);
         report.setRejectionReason(request.getRejectionReason());
-        report.setRejectedBy(authService.getCurrentUser());
+        report.setRejectedBy(authenticationUserService.getCurrentUser());
         report = reportRepository.save(report);
 
         return Either.right(reportMapper.toResponseDto(report));
