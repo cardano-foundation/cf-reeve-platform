@@ -240,7 +240,9 @@ class TransactionReconcilationServiceTest {
     }
 
     @Test
-    void testReconcileChunk_csvExtractorTypeShouldBypassSourceReconciliation() {
+    void testReconcileChunk_csvExtractorType_setsSourceOkWhenTransactionDataMatches() {
+        // CSV transactions go through the same hash-based source reconciliation as NETSUITE.
+        // When attached and detached data are identical the hash comparison yields OK.
         String reconcilationId = "reconcilation123";
         String organisationId = "org123";
         LocalDate fromDate = LocalDate.now().minusDays(5);
@@ -262,9 +264,10 @@ class TransactionReconcilationServiceTest {
         attachedTx.setOrganisation(organisation);
         attachedTx.setItems(Set.of());
 
+        // detachedTx has the same ERP-relevant data → hashes match → source = OK
         val detachedTx = new TransactionEntity();
         detachedTx.setId("tx1");
-        detachedTx.setInternalTransactionNumber("internal1-different");
+        detachedTx.setInternalTransactionNumber("internal1");
         detachedTx.setExtractorType(ExtractorType.CSV.name());
         detachedTx.setOrganisation(organisation);
         detachedTx.setItems(Set.of());
@@ -280,6 +283,10 @@ class TransactionReconcilationServiceTest {
 
         assertThat(attachedTx.getReconcilation()).isPresent();
         assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+        // No SOURCE_RECONCILATION_FAIL violation should be added when hashes match
+        assertThat(reconcilationEntity.getViolations()).noneMatch(
+                v -> v.getRejectionCode() == ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL
+        );
 
         verify(transactionRepositoryGateway).storeAll(List.of(attachedTx));
     }

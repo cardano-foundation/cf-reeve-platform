@@ -1001,4 +1001,55 @@ class AccountingCorePresentationViewServiceTest {
         assertNull(view.getReconciliationDate());
         assertEquals(TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK, view.getReconciliationFinalStatus());
     }
+
+    @Test
+    void allReconciliationTransaction_unreconciled_deduplicatesTransactionWithMultipleViolations() {
+        // A transaction with two violation codes (e.g. SINK + SOURCE) produces two rows from the
+        // JOIN r.violations rv query. The result set must still return only one unique transaction.
+        TransactionEntity txEntity = mock(TransactionEntity.class);
+        when(txEntity.getId()).thenReturn("TX-DUP-001");
+        when(txEntity.getExtractorType()).thenReturn("NETSUITE");
+        when(txEntity.getOverallStatus()).thenReturn(TransactionStatus.OK);
+        when(txEntity.getAutomatedValidationStatus()).thenReturn(TxValidationStatus.VALIDATED);
+        when(txEntity.getReconcilation()).thenReturn(Optional.empty());
+        when(txEntity.getLastReconcilation()).thenReturn(Optional.empty());
+
+        ReconcilationViolation violation1 = ReconcilationViolation.builder()
+                .transactionId("TX-DUP-001")
+                .transactionInternalNumber("INT-DUP-001")
+                .transactionEntryDate(LocalDate.of(2025, 1, 1))
+                .transactionType(TransactionType.VendorBill)
+                .rejectionCode(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL)
+                .amountLcySum(BigDecimal.valueOf(500))
+                .build();
+
+        ReconcilationViolation violation2 = ReconcilationViolation.builder()
+                .transactionId("TX-DUP-001")
+                .transactionInternalNumber("INT-DUP-001")
+                .transactionEntryDate(LocalDate.of(2025, 1, 1))
+                .transactionType(TransactionType.VendorBill)
+                .rejectionCode(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL)
+                .amountLcySum(BigDecimal.valueOf(500))
+                .build();
+
+        // Same tx appears twice because it has two violations — simulating the JOIN behaviour
+        TransactionWithViolationDto dto1 = new TransactionWithViolationDto(txEntity, violation1, LocalDateTime.of(2025, 3, 3, 10, 0, 0));
+        TransactionWithViolationDto dto2 = new TransactionWithViolationDto(txEntity, violation2, LocalDateTime.of(2025, 3, 3, 10, 0, 0));
+
+        when(reconcilationRepository.findCalcReconciliationStatistic())
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(dto1, dto2)));
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        // Despite two DTOs from the query, only one unique transaction must appear in the result
+        assertEquals(1, result.getTransactions().size());
+        assertEquals("TX-DUP-001", result.getTransactions().iterator().next().getId());
+    }
 }

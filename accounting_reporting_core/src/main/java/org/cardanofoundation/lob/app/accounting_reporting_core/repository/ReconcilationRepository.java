@@ -107,6 +107,7 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                     LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
                     WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
                     AND rv.rejectionCode = 'SINK_RECONCILATION_FAIL'
+                    AND NOT EXISTS (SELECT 1 FROM r.violations rv2 WHERE rv2.transactionId = rv.transactionId AND rv2.rejectionCode = 'SOURCE_RECONCILATION_FAIL')
                     AND (tr IS NULL OR NOT EXISTS (SELECT 1 FROM tr.violations tv WHERE tv.code = 'TX_NOT_IN_ERP'))
                     GROUP BY rv.transactionId)
                 ) as inProcessing,

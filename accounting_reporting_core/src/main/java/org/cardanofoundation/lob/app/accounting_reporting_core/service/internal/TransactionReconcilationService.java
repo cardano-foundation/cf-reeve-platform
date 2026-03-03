@@ -229,8 +229,7 @@ public class TransactionReconcilationService {
             log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",
                     attachedTx.getId(), attachedTx.getInternalTransactionNumber(), attachedTxHash, detachedTxHash);
 
-            ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash) || attachedTx.getExtractorType().equals(ExtractorType.CSV.name())
-                    ? ReconcilationCode.OK : ReconcilationCode.NOK;
+            ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash) ? ReconcilationCode.OK : ReconcilationCode.NOK;
 
             if (sourceReconcilationStatus == ReconcilationCode.NOK) {
                 Diff sourceDiff = javers.compare(attachedTx, detachedTx);
