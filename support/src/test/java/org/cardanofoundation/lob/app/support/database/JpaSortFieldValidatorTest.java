@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.support.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -198,9 +199,108 @@ class JpaSortFieldValidatorTest {
         assertEquals(25, converted.getPageSize());
     }
 
-}
+    @Test
+    void convertPageable_reconciliationFinalStatus_usesCaseWhenSortAsc() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by("transaction.reconcilation.finalStatus"));
 
-// ---------- Test JPA Entities ----------
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestReconcilationRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        String expectedExpression = "(CASE WHEN transaction.reconcilation.finalStatus = 'OK' THEN 1 ELSE 2 END)";
+        Sort.Order order = converted.getSort().getOrderFor(expectedExpression);
+        assertNotNull(order);
+        assertTrue(order.isAscending());
+        assertNull(converted.getSort().getOrderFor("transaction.reconcilation.finalStatus"));
+    }
+
+    @Test
+    void convertPageable_reconciliationFinalStatus_usesCaseWhenSortDesc() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "transaction.reconcilation.finalStatus"));
+
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestReconcilationRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        String expectedExpression = "(CASE WHEN transaction.reconcilation.finalStatus = 'OK' THEN 1 ELSE 2 END)";
+        Sort.Order order = converted.getSort().getOrderFor(expectedExpression);
+        assertNotNull(order);
+        assertTrue(order.isDescending());
+    }
+
+    @Test
+    void convertPageable_reconciliationFinalStatus_viaFieldMapping() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by("reconciliationStatus"));
+
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable,
+                Map.of("reconciliationStatus", "transaction.reconcilation.finalStatus"),
+                TestReconcilationRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        String expectedExpression = "(CASE WHEN transaction.reconcilation.finalStatus = 'OK' THEN 1 ELSE 2 END)";
+        Sort.Order order = converted.getSort().getOrderFor(expectedExpression);
+        assertNotNull(order);
+        assertTrue(order.isAscending());
+        assertNull(converted.getSort().getOrderFor("reconciliationStatus"));
+    }
+
+    @Test
+    void isSortable_reconciliationEntityValidFields() {
+        assertTrue(validator.isSortable(TestReconcilationRootEntity.class, "transaction.reconcilation.finalStatus"));
+        assertFalse(validator.isSortable(TestReconcilationRootEntity.class, "transaction.reconcilation.nonExistent"));
+        assertFalse(validator.isSortable(TestReconcilationRootEntity.class, "nonExistent"));
+    }
+
+    @Test
+    void convertPageable_reconciliationFinalStatus_invalidProperty_returnsError() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by("transaction.reconcilation.nonExistent"));
+
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestReconcilationRootEntity.class);
+
+        assertTrue(result.isLeft());
+        assertEquals("Invalid sort: transaction.reconcilation.nonExistent", result.getLeft().getDetail());
+    }
+
+    @Test
+    void convertPageable_reconciliationFinalStatus_preservesPageInfo() {
+        PageRequest pageable = PageRequest.of(3, 25,
+                Sort.by("transaction.reconcilation.finalStatus"));
+
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestReconcilationRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        assertEquals(3, converted.getPageNumber());
+        assertEquals(25, converted.getPageSize());
+    }
+
+    @Test
+    void convertPageable_reconciliationFinalStatus_mixedWithRegularSort() {
+        PageRequest pageable = PageRequest.of(0, 10,
+                Sort.by(
+                        Sort.Order.asc("transaction.reconcilation.finalStatus"),
+                        Sort.Order.desc("id")
+                ));
+
+        Either<ProblemDetail, Pageable> result = validator.convertPageable(pageable, Map.of(), TestReconcilationRootEntity.class);
+
+        assertTrue(result.isRight());
+        Pageable converted = result.get();
+        String expectedCaseExpression = "(CASE WHEN transaction.reconcilation.finalStatus = 'OK' THEN 1 ELSE 2 END)";
+        Sort.Order caseOrder = converted.getSort().getOrderFor(expectedCaseExpression);
+        assertNotNull(caseOrder);
+        assertTrue(caseOrder.isAscending());
+        Sort.Order idOrder = converted.getSort().getOrderFor("id");
+        assertNotNull(idOrder);
+        assertTrue(idOrder.isDescending());
+    }
+
+}
 
 @Entity
 class TestRootEntity {
@@ -224,3 +324,30 @@ class NestedEntity {
 }
 
 enum StatusEnum {A, B}
+
+@Entity
+class TestReconcilationRootEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    Long id;
+
+    @Embedded
+    TestTransactionEmbedded transaction;
+}
+
+@Embeddable
+class TestTransactionEmbedded {
+
+    @Embedded
+    TestReconcilationEmbedded reconcilation;
+}
+
+@Embeddable
+class TestReconcilationEmbedded {
+
+    @Enumerated(EnumType.STRING)
+    FinalStatusEnum finalStatus;
+}
+
+enum FinalStatusEnum { OK, NOK }
