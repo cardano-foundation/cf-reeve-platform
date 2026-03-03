@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,17 +46,16 @@ public class ReportTemplateMapper {
         template.setReportTemplateType(ReportTemplateType.valueOf(dto.getReportTemplateType()));
         template.setActive(dto.isActive());
         template.setDataMode(DataMode.valueOf(dto.getDataMode()));
-        if (dto.getFields() != null) {
-            List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
-                .map(columnDto -> toColumnEntity(columnDto, template, null))
-                .toList();
 
-            // Update the existing collection instead of replacing it
-            // This is required for cascade="all-delete-orphan" to work properly
-            if (template.getFields() != null) {
-                template.getFields().clear();
-                template.getFields().addAll(newColumns);
+        if (dto.getFields() != null) {
+            // If updating existing template, intelligently merge fields instead of replacing
+            if (existingTemplate != null && template.getFields() != null) {
+                mergeFieldsInPlace(template.getFields(), dto.getFields(), template);
             } else {
+                // Creating new template or no existing fields - just map all new fields
+                List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
+                    .map(columnDto -> toColumnEntity(columnDto, template, null))
+                    .toList();
                 template.setFields(newColumns);
             }
         }
@@ -76,6 +76,88 @@ public class ReportTemplateMapper {
 
         return template;
     }
+
+    /**
+     * Intelligently merges DTO fields into existing entity fields in-place.
+     * - Updates existing fields in-place (preserves entity relationships)
+     * - Creates new fields that don't exist
+     * - Removes fields that are no longer in the DTO
+     */
+    private void mergeFieldsInPlace(List<ReportTemplateFieldEntity> existingFields,
+                                    List<ReportTemplateFieldDto> dtoFields,
+                                    ReportTemplateEntity template) {
+        if (dtoFields == null) {
+            dtoFields = new ArrayList<>();
+        }
+
+        // Create a map of existing fields by name for quick lookup
+        Map<String, ReportTemplateFieldEntity> existingFieldMap = existingFields.stream()
+                .collect(Collectors.toMap(ReportTemplateFieldEntity::getName, f -> f));
+
+        // Track which existing fields are still in the DTO
+        Set<String> dtoFieldNames = dtoFields.stream()
+                .map(ReportTemplateFieldDto::getFieldName)
+                .collect(Collectors.toSet());
+
+        // Remove fields that are no longer in the DTO
+        existingFields.removeIf(field -> !dtoFieldNames.contains(field.getName()));
+
+        // Update or create fields
+        List<ReportTemplateFieldEntity> updatedFields = new ArrayList<>();
+        for (ReportTemplateFieldDto dtoField : dtoFields) {
+            ReportTemplateFieldEntity existingField = existingFieldMap.get(dtoField.getFieldName());
+
+            if (existingField != null) {
+                // Update existing field in-place
+                updateFieldInPlace(existingField, dtoField, template);
+                updatedFields.add(existingField);
+            } else {
+                // Create new field
+                ReportTemplateFieldEntity newField = toColumnEntity(dtoField, template, null);
+                updatedFields.add(newField);
+            }
+        }
+
+        // Replace the list with updated fields (maintains order from DTO)
+        existingFields.clear();
+        existingFields.addAll(updatedFields);
+    }
+
+    /**
+     * Updates an existing field entity with data from the DTO in-place.
+     * Recursively handles child fields.
+     */
+    private void updateFieldInPlace(ReportTemplateFieldEntity existingField,
+                                    ReportTemplateFieldDto dtoField,
+                                    ReportTemplateEntity template) {
+        existingField.setName(dtoField.getFieldName());
+        existingField.setDateRange(Optional.ofNullable(dtoField.getDateRange()).orElse(ReportFieldDateRange.PERIOD));
+        existingField.setNegated(dtoField.isNegated());
+
+        // Update account mappings
+        Set<ChartOfAccount> accounts = new HashSet<>();
+        if (dtoField.getAccounts() != null && !dtoField.getAccounts().isEmpty()) {
+            Set<ChartOfAccount.Id> ids = dtoField.getAccounts().stream()
+                    .map(code -> new ChartOfAccount.Id(template.getOrganisationId(), code))
+                    .collect(Collectors.toSet());
+            accounts = new HashSet<>(chartOfAccountRepository.findAllById(ids));
+        }
+        existingField.setMappingAccounts(accounts);
+
+        // Recursively merge child fields
+        if (dtoField.getChildFields() != null && !dtoField.getChildFields().isEmpty()) {
+            if (existingField.getChildFields() == null) {
+                existingField.setChildFields(new ArrayList<>());
+            }
+            mergeFieldsInPlace(existingField.getChildFields(), dtoField.getChildFields(), template);
+        } else {
+            // Clear child fields if DTO has none
+            if (existingField.getChildFields() != null) {
+                existingField.getChildFields().clear();
+            }
+        }
+    }
+
 
     public ReportTemplateResponseDto toResponseDto(ReportTemplateEntity entity) {
         if (entity == null) {
