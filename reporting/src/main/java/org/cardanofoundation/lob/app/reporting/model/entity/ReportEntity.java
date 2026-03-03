@@ -81,6 +81,9 @@ public class ReportEntity extends CommonEntity {
     @Builder.Default
     private boolean ledgerDispatchApproved = false;
     @Builder.Default
+    private boolean rejected = false;
+    private String rejectedBy;
+    @Builder.Default
     @Enumerated(STRING)
     private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;
     private String blockchainType;

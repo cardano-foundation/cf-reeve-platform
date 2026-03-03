@@ -109,6 +109,8 @@ public class ReportMapper {
                 .blockchainTxId(entity.getBlockchainHash())
                 .ledgerDispatchStatus(entity.getLedgerDispatchStatus())
                 .publishError(entity.getPublishError() != null ? entity.getPublishError().name() : null)
+                .isRejected(entity.isRejected())
+                .rejectedBy(entity.getRejectedBy())
                 .fields(topLevelFields)
                 .failedValidationRules(Optional.ofNullable(entity.getFailedValidationRules()).orElse(List.of()).stream().map(reportTemplateMapper::toValidationRuleDto).toList())
                 .createdAt(entity.getCreatedAt())

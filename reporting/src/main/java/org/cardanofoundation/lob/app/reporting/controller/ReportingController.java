@@ -44,8 +44,8 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStat
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
-import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
@@ -338,7 +338,7 @@ public class ReportingController {
     public ResponseEntity<?> publish(
             @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Request containing report id and organisation ID",
-                    required = true) ReportPublishRequest request) {
+                    required = true) ReportIdRequest request) {
         log.debug(
                 "POST /api/reports/publish - Org: {}, Report ID: {}",
                 request.getOrganisationId(), request.getReportId());
@@ -429,5 +429,37 @@ public class ReportingController {
                 .header("Content-Disposition", "attachment; filename=reports_" + organisationId + ".csv")
                 .contentType(MediaType.TEXT_PLAIN)
                 .body(result);
+    }
+
+    @Operation(summary = "Reject a specific report",
+            description = "Marking a report as rejected",
+            responses = {
+                    @ApiResponse(responseCode = "201",
+                            description = "Report marked as rejected successfully",
+                            content = @Content(mediaType = APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ReportResponseDto.class))),
+                    @ApiResponse(responseCode = "400", description = "Invalid request parameters"),
+                    @ApiResponse(responseCode = "403",
+                            description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
+                    @ApiResponse(responseCode = "404", description = "Report not found")})
+    @PostMapping(value = "/reject", produces = APPLICATION_JSON_VALUE,
+            consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    public ResponseEntity<?> reject(
+            @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    description = "Request containing report id and organisation ID",
+                    required = true) ReportIdRequest request) {
+        log.info(
+                "POST /api/reports/reject - Org: {}, Report ID: {}",
+                request.getOrganisationId(), request.getReportId());
+
+        Either<ProblemDetail, ReportResponseDto> result = reportService.reject(request);
+
+        if (result.isLeft()) {
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
+        }
+
+        return ResponseEntity.status(HttpStatus.OK).body(result.get());
     }
 }

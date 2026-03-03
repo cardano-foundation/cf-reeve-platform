@@ -29,15 +29,13 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
-import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
-import org.cardanofoundation.lob.app.reporting.dto.ReportPublishRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseStatisticView;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
@@ -67,11 +65,9 @@ public class ReportingService {
     private final ReportingRepository reportRepository;
     private final ReportTemplateRepository reportTemplateRepository;
     private final ReportMapper reportMapper;
-    private final ChartOfAccountRepository chartOfAccountRepository;
     private final TransactionItemRepository transactionItemRepository;
     private final AuthenticationUserService authenticationUserService;
     private final ApplicationEventPublisher applicationEventPublisher;
-    private final TransactionRepositoryGateway transactionRepositoryGateway;
 
     public ReportResponseDto create(ReportDto dto) {
         log.info("Creating report: {}", dto.getName());
@@ -126,6 +122,9 @@ public class ReportingService {
         ReportEntity existingReport = findExistingReport(dto);
 
         ReportEntity entity = reportMapper.toEntity(reportDtoWithFields, existingReport, template);
+        // Resetting rejection in case it was rejected
+        entity.setRejected(false);
+        entity.setRejectedBy(null);
 
         // Handle versioning: if overwriting a published report, increment version
         handleVersioning(entity, dto, existingReport);
@@ -819,7 +818,7 @@ public class ReportingService {
         };
     }
 
-    public Either<ProblemDetail, ReportResponseDto> publish(ReportPublishRequest request) {
+    public Either<ProblemDetail, ReportResponseDto> publish(ReportIdRequest request) {
         Optional<ReportEntity> reportO = reportRepository.findByOrganisationIdAndId(request.getOrganisationId(), request.getReportId());
         if (reportO.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(request.getReportId()));
@@ -877,6 +876,10 @@ public class ReportingService {
             problem.setTitle(Constants.REPORT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
+
+        // Resetting if it's rejected to allow for re-evaluation - user can reject again after reprocessing if it still doesn't pass validation
+        report.setRejected(false);
+        report.setRejectedBy(null);
 
         // If data mode is SYSTEM, regenerate field values
         if (report.getDataMode() == DataMode.SYSTEM) {
@@ -953,4 +956,25 @@ public class ReportingService {
         }
     }
 
+    public Either<ProblemDetail, ReportResponseDto> reject(ReportIdRequest request) {
+        Optional<ReportEntity> reportO = reportRepository.findByOrganisationIdAndId(request.getOrganisationId(), request.getReportId());
+        if (reportO.isEmpty()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(request.getReportId()));
+            problem.setTitle(Constants.REPORT_NOT_FOUND);
+            return Either.left(problem);
+        }
+        ReportEntity report = reportO.get();
+        if(report.isLedgerDispatchApproved()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report with ID %s has already been published and cannot be rejected".formatted(request.getReportId()));
+            problem.setTitle(Constants.REPORT_ALREADY_PUBLISHED);
+            return Either.left(problem);
+        }
+
+        report.setReadyToPublish(false);
+        report.setRejected(true);
+        report.setRejectedBy(authenticationUserService.getCurrentUser());
+        report = reportRepository.save(report);
+
+        return Either.right(reportMapper.toResponseDto(report));
+    }
 }
