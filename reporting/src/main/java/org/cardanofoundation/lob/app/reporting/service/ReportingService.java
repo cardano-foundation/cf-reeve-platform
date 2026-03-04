@@ -593,7 +593,7 @@ public class ReportingService {
                                          Boolean isReadyToPublish,
                                          Boolean ledgerDispatchApproved,
                                          Pageable pageable) {
-        Page<ReportEntity> allFilteredReports = reportRepository.findAll(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageable);
+        Page<ReportEntity> allFilteredReports = reportRepository.findAll(organisationId, null, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, pageable);
         ReportResponseStatisticView statistics = reportRepository.findStatistics(organisationId);
         return ReportListResponseDto.builder()
                 .reports(allFilteredReports.stream().map(reportMapper::toResponseDto).toList())
