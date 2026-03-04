@@ -38,7 +38,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Opera
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReconciliationStatisticDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
@@ -408,31 +407,39 @@ public class AccountingCorePresentationViewService {
             TransactionBatchEntity transactionBatchEntity,
             List<TransactionProcessingStatus> status, Pageable pageable,
             BatchFilterRequest batchFilterRequest) {
-        return accountingCoreTransactionRepository.findAllByBatchId(
-                transactionBatchEntity.getId(), status,
-                batchFilterRequest.getInternalTransactionNumber(),
-                batchFilterRequest.getTransactionTypes(),
-                batchFilterRequest.getDocumentNumbers(),
-                batchFilterRequest.getDocumentNumber(),
-                batchFilterRequest.getCurrencyCustomerCodes(),
-                batchFilterRequest.getMinFCY(), batchFilterRequest.getMaxFCY(),
-                batchFilterRequest.getMinLCY(), batchFilterRequest.getMaxLCY(),
-                batchFilterRequest.getMinTotalLcy(),
-                batchFilterRequest.getMaxTotalLcy(),
-                Optional.ofNullable(batchFilterRequest.getDateFrom())
-                        .orElse(LocalDate.of(1970, 1, 1)).atStartOfDay(),
-                Optional.ofNullable(batchFilterRequest.getDateTo())
-                        .orElse(LocalDate.now()).atStartOfDay(),
-                batchFilterRequest.getVatCustomerCodes(),
-                batchFilterRequest.getParentCostCenterCustomerCodes(),
-                batchFilterRequest.getCostCenterCustomerCodes(),
-                batchFilterRequest.getCounterPartyCustomerCodes(),
-                batchFilterRequest.getCounterPartyTypes(),
-                batchFilterRequest.getDebitAccountCodes(),
-                batchFilterRequest.getCreditAccountCodes(),
-                batchFilterRequest.getEventCodes(),
-                batchFilterRequest.getProjectCustomerCodes(),
-                batchFilterRequest.getParentProjectCustomerCodes(), pageable);
+        if(batchFilterRequest == null) {
+            return accountingCoreTransactionRepository.findAllByBatchId(
+                    Optional.ofNullable(transactionBatchEntity).map(TransactionBatchEntity::getId).orElse(null),
+                    status, pageable);
+        } else {
+            return accountingCoreTransactionRepository.findAllByBatchId(
+                    Optional.ofNullable(transactionBatchEntity).map(TransactionBatchEntity::getId).orElse(null),
+                    status,
+                    batchFilterRequest.getInternalTransactionNumber(),
+                    batchFilterRequest.getTransactionTypes(),
+                    batchFilterRequest.getDocumentNumbers(),
+                    batchFilterRequest.getDocumentNumber(),
+                    batchFilterRequest.getCurrencyCustomerCodes(),
+                    batchFilterRequest.getMinFCY(), batchFilterRequest.getMaxFCY(),
+                    batchFilterRequest.getMinLCY(), batchFilterRequest.getMaxLCY(),
+                    batchFilterRequest.getMinTotalLcy(),
+                    batchFilterRequest.getMaxTotalLcy(),
+                    Optional.ofNullable(batchFilterRequest.getDateFrom())
+                            .orElse(LocalDate.of(1970, 1, 1)).atStartOfDay(),
+                    Optional.ofNullable(batchFilterRequest.getDateTo())
+                            .orElse(LocalDate.now()).atStartOfDay(),
+                    batchFilterRequest.getVatCustomerCodes(),
+                    batchFilterRequest.getParentCostCenterCustomerCodes(),
+                    batchFilterRequest.getCostCenterCustomerCodes(),
+                    batchFilterRequest.getCounterPartyCustomerCodes(),
+                    batchFilterRequest.getCounterPartyTypes(),
+                    batchFilterRequest.getDebitAccountCodes(),
+                    batchFilterRequest.getCreditAccountCodes(),
+                    batchFilterRequest.getEventCodes(),
+                    batchFilterRequest.getProjectCustomerCodes(),
+                    batchFilterRequest.getParentProjectCustomerCodes(),
+                    pageable);
+        }
     }
 
     private TransactionReconciliationTransactionsView getTransactionReconciliationView(
@@ -926,9 +933,11 @@ public class AccountingCorePresentationViewService {
 
     }
 
-    public void downloadCsvTransactions(@Valid String orgId, List<TxValidationStatus> txStatusList, List<TransactionType> transactionTypes, LocalDate dateFrom, LocalDate dateTo, Boolean published, OutputStream outputStream) {
-        List<TransactionEntity> allFilteredTxEntities = accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange(orgId, txStatusList, transactionTypes,
-                dateFrom, dateTo, published, Pageable.unpaged());
+    public void downloadCsvTransactions(@Valid String orgId, String batchId, List<TransactionProcessingStatus> txStatus, BatchFilterRequest batchFilterRequest, OutputStream outputStream) {
+        TransactionBatchEntity transactionBatchEntity = transactionBatchRepositoryGateway.findById(Optional.ofNullable(batchId).orElse("")).orElse(null);
+        Page<TransactionEntity> transactions = this.getTransaction(
+                transactionBatchEntity, txStatus, Pageable.unpaged(),
+                batchFilterRequest);
         try (Writer writer = new OutputStreamWriter(outputStream)) {
             CSVWriter csvWriter = new CSVWriter(writer);
             String[] header = {"Transaction Number",
@@ -955,7 +964,7 @@ public class AccountingCorePresentationViewService {
                     "Ledger Dispatch Status",
                     "Blockchain Hash"};
             csvWriter.writeNext(header, false);
-            for (TransactionEntity transactionEntity : allFilteredTxEntities) {
+            for (TransactionEntity transactionEntity : transactions) {
                 for (TransactionItemEntity item : transactionEntity.getItems()) {
                     boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
                     String [] data = {

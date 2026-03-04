@@ -75,7 +75,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     @Query("""
         SELECT t FROM accounting_reporting_core.TransactionEntity t
         JOIN t.batches b
-        WHERE b.id = :batchId
+        WHERE (:batchId IS NULL OR b.id = :batchId)
         AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
         AND (:types IS NULL OR t.transactionType IN :types)
         AND (:internalTransactionNumber IS NULL OR LOWER(t.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:internalTransactionNumber AS string), '%')))
@@ -148,6 +148,18 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             @Param("eventCodes") List<String> eventCodes,
             @Param("projectCustomerCodes") List<String> projectCustomerCodes,
             @Param("parentProjectCustomerCodes") List<String> parentProjectCustomerCodes,
+            Pageable page
+    );
+
+    @Query("""
+        SELECT t FROM accounting_reporting_core.TransactionEntity t
+        JOIN t.batches b
+        WHERE (:batchId IS NULL OR b.id = :batchId)
+        AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
+        """)
+    Page<TransactionEntity> findAllByBatchId(
+            @Param("batchId") String batchId,
+            @Param("txStatus") List<TransactionProcessingStatus> txStatus,
             Pageable page
     );
 
