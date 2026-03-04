@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.support.database;
 
-import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 
@@ -101,24 +100,15 @@ public class JpaSortFieldValidator {
                         .ofNullable(fieldMappings.get(order.getProperty()))
                         .orElse(order.getProperty());
 
-                boolean isEnum = false;
-                try {
-                    String[] parts = property.split("\\.");
-                    Class<?> currentClass = classType;
 
-                    for (int i = 0; i < parts.length; i++) {
-                        Field field = currentClass
-                                .getDeclaredField(parts[i]);
-                        currentClass = field.getType();
-
-                        if (i == parts.length - 1) {
-                            isEnum = currentClass.isEnum();
-                        }
+                if (isEnumField(classType,property)) {
+                    // Special handling for reconciliation field to sort "OK" first and "NOK"/null values last
+                    if (property.equals("transaction.reconcilation.finalStatus")) {
+                        return JpaSort.unsafe(order.getDirection(),
+                                "(CASE WHEN " + property + " = 'OK' THEN 1 ELSE 2 END)")
+                                .iterator().next();
                     }
-                } catch (NoSuchFieldException ignored) {
-                }
 
-                if (isEnum) {
                     return JpaSort.unsafe(order.getDirection(),
                                     "function('enum_to_text', " + property
                                             + ")")
@@ -133,5 +123,17 @@ public class JpaSortFieldValidator {
         }
 
         return Either.right(page);
+    }
+
+    private boolean isEnumField(Class<?> clazz, String propertyPath) {
+        try {
+            Class<?> current = clazz;
+            for (String part : propertyPath.split("\\.")) {
+                current = current.getDeclaredField(part).getType();
+            }
+            return current.isEnum();
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
