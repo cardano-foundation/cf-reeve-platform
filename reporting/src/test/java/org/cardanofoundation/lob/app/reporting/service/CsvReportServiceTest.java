@@ -325,10 +325,10 @@ class CsvReportServiceTest {
 
     @Test
     void downloadReportsAsCsv_emptyList() {
-        when(reportingRepository.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(Page.empty());
+        when(reportingRepository.findAll("org123", null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(Page.empty());
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        service.downloadReportAsCsv("org123", null, null, null, null, null, null, null, null, null, outputStream);
+        service.downloadReportAsCsv("org123", null, null,null, null, null, null, null, null, null, null, outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -360,10 +360,10 @@ class CsvReportServiceTest {
 
 
         when(reportEntity.getFields()).thenReturn(List.of(field1));
-        when(reportingRepository.findAll("org123", null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(reportEntity), PageRequest.of(0,1), 1));
+        when(reportingRepository.findAll("org123", null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(reportEntity), PageRequest.of(0,1), 1));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        service.downloadReportAsCsv("org123", null, null, null, null, null, null, null, null, null, outputStream);
+        service.downloadReportAsCsv("org123", null, null, null, null, null, null, null, null, null, null, outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");

@@ -406,6 +406,7 @@ public class ReportingController {
                                                                             description = "Filter by organisation ID",
                                                                             example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
                                                                     ) String organisationId,
+                                                                @RequestParam(value = "reportId", required = false) String reportId,
                                                                 @RequestParam(value = "year", required = false) List<Short> years,
                                                                 @RequestParam(value = "intervalType", required = false) List<IntervalType> intervalTypes,
                                                                 @RequestParam(value = "period", required = false) List<Short> periods,
@@ -423,7 +424,7 @@ public class ReportingController {
                     .body(null);
         }
 
-        StreamingResponseBody result = outputstream -> csvReportService.downloadReportAsCsv(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, outputstream);
+        StreamingResponseBody result = outputstream -> csvReportService.downloadReportAsCsv(organisationId, reportId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, outputstream);
 
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=reports_" + organisationId + ".csv")

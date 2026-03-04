@@ -365,14 +365,14 @@ class ReportingControllerTest {
     void downloadCsvReports_noAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null);
+        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null,null, null, null, null, null, null, null, null);
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
     }
 
     @Test
     void downloadCsvReports_success() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null);
+        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null, null);
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertEquals("text/plain", response.getHeaders().getContentType().toString());
         assertEquals(
