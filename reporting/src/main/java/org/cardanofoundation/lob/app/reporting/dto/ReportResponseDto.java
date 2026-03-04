@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -36,6 +37,9 @@ public class ReportResponseDto {
 
     @Schema(description = "Report template type", example = "BALANCE_SHEET")
     private ReportTemplateType reportTemplateType;
+
+    @Schema(description = "Indicates if the report template is inactive", example = "false")
+    private boolean isTemplateActive = true;
 
     @Schema(description = "Report name", example = "Q1 2024 Financial Report", required = true)
     private String name;
