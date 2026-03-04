@@ -84,10 +84,10 @@ public class AccountingCoreResource {
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Download transactions as a CSV file with possible filtering", summary = "Download transactions as a CSV file")
-    @GetMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
+    @PostMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<StreamingResponseBody> downloadTransactionsCsv(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                                         @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
+                                                                         @RequestParam(name = "batchId", required = false) String batchId,
                                                                          @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
                                                                          @RequestBody BatchFilterRequest batchFilterRequest){
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {

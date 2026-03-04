@@ -934,7 +934,7 @@ public class AccountingCorePresentationViewService {
     }
 
     public void downloadCsvTransactions(@Valid String orgId, String batchId, List<TransactionProcessingStatus> txStatus, BatchFilterRequest batchFilterRequest, OutputStream outputStream) {
-        TransactionBatchEntity transactionBatchEntity = transactionBatchRepositoryGateway.findById(batchId).orElse(null);
+        TransactionBatchEntity transactionBatchEntity = transactionBatchRepositoryGateway.findById(Optional.ofNullable(batchId).orElse("")).orElse(null);
         Page<TransactionEntity> transactions = this.getTransaction(
                 transactionBatchEntity, txStatus, Pageable.unpaged(),
                 batchFilterRequest);
