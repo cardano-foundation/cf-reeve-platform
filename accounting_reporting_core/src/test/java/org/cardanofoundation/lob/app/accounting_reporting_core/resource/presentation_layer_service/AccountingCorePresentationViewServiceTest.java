@@ -1108,4 +1108,64 @@ class AccountingCorePresentationViewServiceTest {
         assertEquals(1, result.getTransactions().size());
         assertEquals("TX-DUP-001", result.getTransactions().iterator().next().getId());
     }
+
+    @Test
+    void getReconciliationTransactionsSelector_txNull_violationPresent_usesViolationPath() {
+        // Reproduces the NPE: tx is null (transaction doesn't exist in the system) but a violation exists.
+        // Before the fix, violations.tx().getReconcilation() would throw NullPointerException.
+        LocalDateTime lastReconciledDate = LocalDateTime.of(2024, 11, 20, 9, 0, 0);
+
+        ReconcilationViolation violation = ReconcilationViolation.builder()
+                .transactionId("TX-NULL-001")
+                .transactionInternalNumber("INT-NULL-001")
+                .transactionEntryDate(LocalDate.of(2024, 11, 1))
+                .transactionType(TransactionType.Journal)
+                .rejectionCode(ReconcilationRejectionCode.TX_NOT_IN_ERP)
+                .amountLcySum(BigDecimal.valueOf(150))
+                .build();
+
+        TransactionWithViolationDto dto = new TransactionWithViolationDto(null, violation, lastReconciledDate);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic())
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(dto)));
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        assertEquals(1, result.getTransactions().size());
+        TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
+        assertEquals("TX-NULL-001", view.getId());
+        assertEquals(lastReconciledDate, view.getReconciliationDate());
+        assertEquals(TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK, view.getReconciliationFinalStatus());
+    }
+
+    @Test
+    void getReconciliationTransactionsSelector_txNull_violationNull_returnsFallbackView() {
+        // tx is null and no violation either — both guard conditions skip, fallback view is returned.
+        TransactionWithViolationDto dto = new TransactionWithViolationDto(null, null, null);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic())
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(dto)));
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        assertEquals(1, result.getTransactions().size());
+        TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
+        assertEquals("", view.getId());
+        assertNull(view.getReconciliationDate());
+        assertEquals(TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK, view.getReconciliationFinalStatus());
+    }
 }

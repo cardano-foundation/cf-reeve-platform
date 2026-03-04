@@ -1061,5 +1061,64 @@ class TransactionReconcilationServiceTest {
                 .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
     }
 
+    @Test
+    void testReconcileChunk_csvExtractorType_setsSourceNokWhenTransactionDataDiffers() {
+        // CSV transactions use the same hash-based source reconciliation as NETSUITE.
+        // When attached and detached data differ, a SOURCE_RECONCILATION_FAIL violation must be raised.
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.CSV.name());
+        attachedTx.setLedgerDispatchStatus(LedgerDispatchStatus.FINALIZED);
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+        attachedTx.setTransactionType(TransactionType.Journal);
+        attachedTx.setEntryDate(fromDate);
+
+        // detachedTx has a different internal number → hashes differ → source = NOK
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("internal1-MODIFIED");
+        detachedTx.setExtractorType(ExtractorType.CSV.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+        detachedTx.setTransactionType(TransactionType.Journal);
+        detachedTx.setEntryDate(fromDate);
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+
+        Diff diff = mock(Diff.class);
+        Changes changes = mock(Changes.class);
+        JsonConverter jsonConverter = mock(JsonConverter.class);
+        when(javers.compare(any(), any())).thenReturn(diff);
+        when(diff.getChanges()).thenReturn(changes);
+        when(javers.getJsonConverter()).thenReturn(jsonConverter);
+        when(jsonConverter.toJson(any())).thenReturn("{}");
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.NOK);
+        assertThat(reconcilationEntity.getViolations()).anyMatch(
+                v -> v.getRejectionCode() == ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL
+        );
+    }
+
 
 }
