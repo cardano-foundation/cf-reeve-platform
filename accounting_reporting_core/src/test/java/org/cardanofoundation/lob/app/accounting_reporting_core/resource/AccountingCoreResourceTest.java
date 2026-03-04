@@ -30,8 +30,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
@@ -238,16 +236,7 @@ class AccountingCoreResourceTest {
     void downloadTransactionsCsv_noAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), null, null, null);
-        assertTrue(response.getStatusCode().is4xxClientError());
-        assertNotNull(response.getBody());
-    }
-
-    @Test
-    void downloadTransactionsCsv_invalidDateFormat() {
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-
-        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", List.of(), List.of(), "INVALID", null, null);
+        ResponseEntity<?> response = accountingCoreResource.downloadTransactionsCsv("org123", null, null, null);
         assertTrue(response.getStatusCode().is4xxClientError());
         assertNotNull(response.getBody());
     }
@@ -255,8 +244,6 @@ class AccountingCoreResourceTest {
     @Test
     void downloadTransactionsCsv_success() throws Exception {
         String orgId = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94";
-        List<TxValidationStatus> txStatusList = List.of();
-        List<TransactionType> transactionTypes = List.of();
 
         // Mock security check to allow access
         when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
@@ -264,10 +251,9 @@ class AccountingCoreResourceTest {
         // Call the method
         ResponseEntity<StreamingResponseBody> response = accountingCoreResource.downloadTransactionsCsv(
                 orgId,
-                txStatusList,
-                transactionTypes,
-                null,
-                null, null
+                "123",
+                List.of(),
+                null
         );
 
         // Verify response
@@ -289,7 +275,7 @@ class AccountingCoreResourceTest {
 
         // Verify the service was called
         verify(accountingCorePresentationViewService)
-                .downloadCsvTransactions(eq(orgId), eq(txStatusList), eq(transactionTypes), eq(null), eq(null), any(), any());
+                .downloadCsvTransactions(eq(orgId), eq("123"), eq(List.of()), eq(null), any());
     }
 
 
