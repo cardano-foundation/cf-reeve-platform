@@ -700,7 +700,7 @@ public class AccountingCorePresentationViewService {
     private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(
             TransactionWithViolationDto violations) {
         // fallback, if the transaction doesn't exist in Reeve
-        if (Optional.ofNullable(violations.tx()).isPresent()) {
+        if (violations.tx().getReconcilation().isPresent()) {
             return getTransactionReconciliationView(violations.tx());
         }
         if (Optional.ofNullable(violations.violation()).isPresent()) {
