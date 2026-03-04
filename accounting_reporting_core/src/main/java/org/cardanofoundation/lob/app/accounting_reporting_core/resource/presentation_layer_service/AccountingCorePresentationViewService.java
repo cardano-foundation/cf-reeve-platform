@@ -10,6 +10,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -492,7 +493,7 @@ public class AccountingCorePresentationViewService {
     }
 
     private TransactionReconciliationTransactionsView getTransactionReconciliationViolationView(
-            ReconcilationViolation reconcilationViolation) {
+            ReconcilationViolation reconcilationViolation, LocalDateTime lastReconciledDate) {
         return new TransactionReconciliationTransactionsView(
                 reconcilationViolation.getTransactionId(),
                 reconcilationViolation.getTransactionInternalNumber(),
@@ -506,7 +507,7 @@ public class AccountingCorePresentationViewService {
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 Set.of(ReconciliationRejectionCodeRequest.of(
                         reconcilationViolation.getRejectionCode(), false)),
-                null, new LinkedHashSet<>(), new LinkedHashSet<>()
+                lastReconciledDate, new LinkedHashSet<>(), new LinkedHashSet<>()
 
         );
     }
@@ -703,7 +704,7 @@ public class AccountingCorePresentationViewService {
             return getTransactionReconciliationView(violations.tx());
         }
         if (Optional.ofNullable(violations.violation()).isPresent()) {
-            return getTransactionReconciliationViolationView(violations.violation());
+            return getTransactionReconciliationViolationView(violations.violation(), violations.lastReconciledDate());
         }
         return getTransactionReconciliationViolationView();
     }

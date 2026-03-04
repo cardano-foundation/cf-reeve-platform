@@ -143,8 +143,6 @@ public class DbSynchronisationUseCaseService {
                             attached.setTransactionApproved(false);
                             attached.setLedgerDispatchReceipt(null);
                             attached.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
-                            attached.setReconcilation(Optional.empty());
-                            attached.setLastReconcilation(Optional.empty());
                             attached.updateProcessingStatus();
                         }
                         toProcessTransactions.add(attached);
