@@ -6,9 +6,11 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.ent
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.val;
 
@@ -55,6 +57,75 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
     }
+
+    @Test
+    void approveTransaction_shouldReturnNotFound_whenTransactionDoesNotExist() {
+        // Arrange
+        TransactionId transactionId = new TransactionId("nonexistent_tx_id");
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setTransactionIds(Set.of(transactionId));
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(
+                transactionsRequest.getTransactionIds().stream().map(TransactionId::getId).collect(Collectors.toSet())))
+                .thenReturn(new ArrayList<>());
+
+        // Act
+        List<Either<IdentifiableProblem, TransactionEntity>> results = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+
+        // Assert
+        assertThat(results).hasSize(1);
+        Either<IdentifiableProblem, TransactionEntity> result = results.get(0);
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND");
+    }
+
+    @Test
+    void approveTransaction_shouldReturnFailure_whenTransactionIsFailed() {
+        // Arrange
+        TransactionId transactionId = new TransactionId("failed_tx_id");
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setTransactionIds(Set.of(transactionId));
+
+        TransactionEntity failedTransaction = new TransactionEntity();
+        failedTransaction.setId(transactionId.getId());
+        failedTransaction.setAutomatedValidationStatus(TxValidationStatus.FAILED);
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+                .thenReturn(List.of(failedTransaction));
+
+        // Act
+        List<Either<IdentifiableProblem, TransactionEntity>> results = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+
+        // Assert
+        assertThat(results).hasSize(1);
+        Either<IdentifiableProblem, TransactionEntity> result = results.get(0);
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("CANNOT_APPROVE_FAILED_TX");
+    }
+
+    @Test
+    void approveTransaction_shouldApproveTransaction_whenTransactionIsValid() {
+        // Arrange
+        TransactionId transactionId = new TransactionId("valid_tx_id");
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setTransactionIds(Set.of(transactionId));
+
+        TransactionEntity validTransaction = new TransactionEntity();
+        validTransaction.setId(transactionId.getId());
+        validTransaction.setOverallStatus(OK);
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+                .thenReturn(List.of(validTransaction));
+        when(accountingCoreTransactionRepository.saveAll(List.of(validTransaction))).thenReturn(List.of(validTransaction));
+
+        // Act
+        List<Either<IdentifiableProblem, TransactionEntity>> results = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+
+        // Assert
+        assertThat(results).hasSize(1);
+        Either<IdentifiableProblem, TransactionEntity> result = results.get(0);
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get()).isSameAs(validTransaction);
+        verify(accountingCoreTransactionRepository, times(1)).saveAll(anyList());
+    }
+
 
     @Test
     void approveTransactions_shouldApproveValidTransactionsAndHandleErrors() {
@@ -185,6 +256,40 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Assert
         assertThat(result).isEmpty();
     }
+
+    
+    @Test
+    void approveTransaction_shouldReturnRejectionResponse_whenTransactionHasRejection() {
+        // Arrange
+        TransactionId transactionId = new TransactionId("rejected_tx_id");
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setTransactionIds(Set.of(transactionId));
+
+        TransactionEntity rejectedTransaction = new TransactionEntity();
+        rejectedTransaction.setId(transactionId.getId());
+        rejectedTransaction.setOverallStatus(OK);
+        rejectedTransaction.setTransactionApproved(false);
+
+        TransactionItemEntity transactionItemEntity = new TransactionItemEntity();
+        transactionItemEntity.setId("rejected_item_id");
+        transactionItemEntity.setRejection(Optional.of(new Rejection(INCORRECT_AMOUNT)));
+        transactionItemEntity.setTransaction(rejectedTransaction);
+
+        rejectedTransaction.setItems(Set.of(transactionItemEntity));
+
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+                .thenReturn(List.of(rejectedTransaction));
+
+        // Act
+        List<Either<IdentifiableProblem, TransactionEntity>> results = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+
+        // Assert
+        assertThat(results).hasSize(1);
+        Either<IdentifiableProblem, TransactionEntity> result = results.get(0);
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("CANNOT_APPROVE_REJECTED_TX");
+    }
+
 
     @Test
     void approveTransactionsDispatch_shouldReturnError_whenDispatchingUnapprovedTransaction() {
@@ -331,6 +436,82 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("DB_ERROR");
 
+        verify(accountingCoreTransactionRepository, times(1)).saveAll(anyList());
+    }
+
+        // start
+
+    @Test
+    void approveTransaction_shouldReturnRejectionResponse_whenAnyTransactionItemHasRejection() {
+        // Arrange
+        TransactionId transactionId = new TransactionId("rejected_tx_id");
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setTransactionIds(Set.of(transactionId));
+
+        TransactionEntity transaction = new TransactionEntity();
+        transaction.setId(transactionId.getId());
+        transaction.setOverallStatus(OK);
+
+        TransactionItemEntity itemWithRejection = new TransactionItemEntity();
+        itemWithRejection.setId("rejected_item_id1");
+        itemWithRejection.setRejection(Optional.of(new Rejection(INCORRECT_AMOUNT)));
+        itemWithRejection.setTransaction(transaction);
+
+        TransactionItemEntity validItem = new TransactionItemEntity();
+        validItem.setId("rejected_item_id2");
+        validItem.setRejection(Optional.empty());
+        validItem.setTransaction(transaction);
+
+        transaction.setItems(Set.of(itemWithRejection, validItem));
+
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+                .thenReturn(List.of(transaction));
+
+        // Act
+        List<Either<IdentifiableProblem, TransactionEntity>> results = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+
+        // Assert
+        assertThat(results).hasSize(1);
+        Either<IdentifiableProblem, TransactionEntity> result = results.get(0);
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("CANNOT_APPROVE_REJECTED_TX");
+    }
+
+    @Test
+    void approveTransaction_shouldApproveTransaction_whenAllTransactionItemsAreValid() {
+        // Arrange
+        TransactionId transactionId = new TransactionId("valid_tx_id");
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setTransactionIds(Set.of(transactionId));
+
+        TransactionEntity transaction = new TransactionEntity();
+        transaction.setId(transactionId.getId());
+        transaction.setOverallStatus(OK);
+
+        TransactionItemEntity validItem1 = new TransactionItemEntity();
+        validItem1.setId("valid_item_1");
+        validItem1.setRejection(Optional.empty());
+        validItem1.setTransaction(transaction);
+
+        TransactionItemEntity validItem2 = new TransactionItemEntity();
+        validItem2.setId("valid_item_2");
+        validItem2.setRejection(Optional.empty());
+        validItem2.setTransaction(transaction);
+
+        transaction.setItems(Set.of(validItem1, validItem2));
+
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+                .thenReturn(List.of(transaction));
+        when(accountingCoreTransactionRepository.saveAll(List.of(transaction))).thenReturn(List.of(transaction));
+
+        // Act
+        List<Either<IdentifiableProblem, TransactionEntity>> results = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+
+        // Assert
+        assertThat(results).hasSize(1);
+        Either<IdentifiableProblem, TransactionEntity> result = results.get(0);
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get()).isSameAs(transaction);
         verify(accountingCoreTransactionRepository, times(1)).saveAll(anyList());
     }
 
