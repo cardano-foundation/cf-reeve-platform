@@ -72,8 +72,7 @@ public class TransactionRepositoryGateway {
             log.info("Attempting to acquire pessimistic locks for transactions: {}", sortedTransactionIds);
             lockedTransactions = accountingCoreTransactionRepository
                     .findAllByIdWithPessimisticLock(new HashSet<>(sortedTransactionIds));
-            log.info("Acquired pessimistic locks for {} transactions, ids: {}", lockedTransactions.size(), 
-                    lockedTransactions.stream().map(TransactionEntity::getId).collect(Collectors.toList()));
+            log.info("Acquired pessimistic locks for {} transactions", lockedTransactions.size());
         } catch (DataAccessException dae) {
             log.error("Error acquiring locks for transactions: {}", sortedTransactionIds, dae);
             // Create error responses for all transactions

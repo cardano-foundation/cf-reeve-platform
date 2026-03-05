@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.functionalTests;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalToCompressingWhiteSpace;
 import static org.hamcrest.core.IsEqual.equalTo;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,7 +49,8 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                 .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("PublishTx"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("PublishTx"))
                 .body("success[0]", equalTo(true))
         ;
         given()
@@ -88,7 +90,8 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                 .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("PublishTx"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("PublishTx"))
                 .body("success[0]", equalTo(true))
         ;
 
@@ -130,7 +133,8 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                 .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("PublishTx"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("PublishTx"))
                 .body("success[0]", equalTo(true))
         ;
         given()
@@ -162,7 +166,8 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                 .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("ApproveTx"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("ApproveTx"))
                 .body("success[0]", equalTo(false))
                 .body("error[0].title", equalTo("TX_NOT_APPROVED"))
 
@@ -187,7 +192,8 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                 .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("ReadyToApprove_1_8a283b41eab57add98278561ab51d23f3f3daa461b84aca"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("ReadyToApprove_1_8a283b41eab57add98278561ab51d23f3f3daa461b84aca"))
                 .body("success[0]", equalTo(false))
                 .body("error[0].title", equalTo("TX_NOT_FOUND"))
         ;
@@ -211,7 +217,8 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                 .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("InvalidTx"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("InvalidTx"))
                 .body("success[0]", equalTo(false))
                 .body("error[0].title", equalTo("CANNOT_APPROVE_FAILED_TX"))
         ;
@@ -235,7 +242,8 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
                 .post("/api/v1/transactions/publish")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("InvalidTx"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("InvalidTx"))
                 .body("success[0]", equalTo(false))
                 .body("error[0].title", equalTo("CANNOT_APPROVE_FAILED_TX"))
         ;
