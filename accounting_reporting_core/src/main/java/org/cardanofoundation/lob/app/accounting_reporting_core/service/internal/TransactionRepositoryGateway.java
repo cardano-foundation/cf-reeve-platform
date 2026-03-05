@@ -20,8 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
-import org.springframework.http.ProblemDetail;
-
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rejection;

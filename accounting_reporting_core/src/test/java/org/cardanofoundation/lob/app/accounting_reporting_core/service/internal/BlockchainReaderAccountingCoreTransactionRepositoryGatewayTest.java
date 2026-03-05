@@ -139,7 +139,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         TransactionEntity validTransaction = new TransactionEntity();
         validTransaction.setId(validTransactionId.getId());
         validTransaction.setOverallStatus(OK);
-        
+
         // Mock findAllByIdWithPessimisticLock to return only the valid transaction
         // The failed transaction ID won't be found
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(validTransactionId.getId(), failedTransactionId.getId())))
@@ -178,7 +178,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         validTransaction.setId(transactionId.getId());
         validTransaction.setOverallStatus(OK);
         validTransaction.setTransactionApproved(true);
-        
+
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
                 .thenReturn(List.of(validTransaction));
 
@@ -257,7 +257,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         assertThat(result).isEmpty();
     }
 
-    
+
     @Test
     void approveTransactions_shouldReturnRejectionResponse_whenTransactionHasRejection() {
         // Arrange
@@ -302,7 +302,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         unapprovedTransaction.setId(transactionId.getId());
         unapprovedTransaction.setOverallStatus(OK);
         unapprovedTransaction.setTransactionApproved(false); // Not approved
-        
+
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
                 .thenReturn(List.of(unapprovedTransaction));
 
@@ -386,10 +386,10 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         TransactionEntity transaction = new TransactionEntity();
         transaction.setId(transactionId.getId());
         transaction.setOverallStatus(OK);
-        
+
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
                 .thenReturn(List.of(transaction));
-        
+
         // Simulate DataAccessException during saveAll
         when(accountingCoreTransactionRepository.saveAll(anyList()))
                 .thenThrow(new DataAccessException("Database error during save") {
@@ -418,10 +418,10 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         validTransaction.setId(transactionId.getId());
         validTransaction.setOverallStatus(OK);
         validTransaction.setTransactionApproved(true);
-        
+
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
                 .thenReturn(List.of(validTransaction));
-        
+
         // Simulate DataAccessException during saveAll
         when(accountingCoreTransactionRepository.saveAll(anyList()))
                 .thenThrow(new DataAccessException("Database error during save") {
