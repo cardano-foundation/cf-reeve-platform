@@ -59,7 +59,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     }
 
     @Test
-    void approveTransaction_shouldReturnNotFound_whenTransactionDoesNotExist() {
+    void approveTransactions_shouldReturnNotFound_whenTransactionDoesNotExist() {
         // Arrange
         TransactionId transactionId = new TransactionId("nonexistent_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
@@ -79,7 +79,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     }
 
     @Test
-    void approveTransaction_shouldReturnFailure_whenTransactionIsFailed() {
+    void approveTransactions_shouldReturnFailure_whenTransactionIsFailed() {
         // Arrange
         TransactionId transactionId = new TransactionId("failed_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
@@ -102,7 +102,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     }
 
     @Test
-    void approveTransaction_shouldApproveTransaction_whenTransactionIsValid() {
+    void approveTransactions_shouldApproveTransaction_whenTransactionIsValid() {
         // Arrange
         TransactionId transactionId = new TransactionId("valid_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
@@ -259,7 +259,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
 
     
     @Test
-    void approveTransaction_shouldReturnRejectionResponse_whenTransactionHasRejection() {
+    void approveTransactions_shouldReturnRejectionResponse_whenTransactionHasRejection() {
         // Arrange
         TransactionId transactionId = new TransactionId("rejected_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
@@ -442,7 +442,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // start
 
     @Test
-    void approveTransaction_shouldReturnRejectionResponse_whenAnyTransactionItemHasRejection() {
+    void approveTransactions_shouldReturnRejectionResponse_whenAnyTransactionItemHasRejection() {
         // Arrange
         TransactionId transactionId = new TransactionId("rejected_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
@@ -478,7 +478,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     }
 
     @Test
-    void approveTransaction_shouldApproveTransaction_whenAllTransactionItemsAreValid() {
+    void approveTransactions_shouldApproveTransaction_whenAllTransactionItemsAreValid() {
         // Arrange
         TransactionId transactionId = new TransactionId("valid_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
