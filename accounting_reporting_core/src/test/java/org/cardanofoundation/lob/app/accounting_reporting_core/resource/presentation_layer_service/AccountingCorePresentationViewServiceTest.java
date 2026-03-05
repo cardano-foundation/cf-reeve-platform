@@ -1168,4 +1168,92 @@ class AccountingCorePresentationViewServiceTest {
         assertNull(view.getReconciliationDate());
         assertEquals(TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK, view.getReconciliationFinalStatus());
     }
+
+    @Test
+    void allReconciliationTransaction_reconciledFilter_withBLOCKCHAINSource() {
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 12, 31);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(
+                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("BLOCKCHAIN"), any(Pageable.class))
+        ).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
+        when(body.getDateFrom()).thenReturn(Optional.of(dateFrom));
+        when(body.getDateTo()).thenReturn(Optional.of(dateTo));
+        when(body.getSource()).thenReturn(Optional.of(ReconciliationFilterSource.BLOCKCHAIN));
+        when(body.getTransactionTypes()).thenReturn(Set.of());
+        when(body.getReconciliationRejectionCode()).thenReturn(Set.of());
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        verify(reconcilationRepository).findAllReconcilation(
+                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("BLOCKCHAIN"), any(Pageable.class));
+    }
+
+    @Test
+    void allReconciliationTransaction_unreconciledFilter_withBLOCKCHAINSource() {
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 12, 31);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(
+                eq(null), eq(dateFrom), eq(dateTo), eq("BLOCKCHAIN"), eq(null), eq(null), any(Pageable.class))
+        ).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+        when(body.getDateFrom()).thenReturn(Optional.of(dateFrom));
+        when(body.getDateTo()).thenReturn(Optional.of(dateTo));
+        when(body.getSource()).thenReturn(Optional.of(ReconciliationFilterSource.BLOCKCHAIN));
+        when(body.getTransactionTypes()).thenReturn(Set.of());
+        when(body.getReconciliationRejectionCode()).thenReturn(Set.of());
+        when(body.getTransactionId()).thenReturn(null);
+
+        accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        verify(reconcilationRepository).findAllReconciliationSpecial(
+                eq(null), eq(dateFrom), eq(dateTo), eq("BLOCKCHAIN"), eq(null), eq(null), any(Pageable.class));
+    }
+
+    @Test
+    void getReconciliationTransactionsSelector_txPresent_unknownExtractorType_usesDataSourceUnknown() {
+        // When extractorType is not a valid DataSourceView value, the catch block sets DataSourceView.UNKNOWN.
+        Reconcilation reconcilation = Reconcilation.builder()
+                .source(ReconcilationCode.OK)
+                .sink(ReconcilationCode.OK)
+                .finalStatus(ReconcilationCode.OK)
+                .build();
+
+        TransactionEntity txEntity = mock(TransactionEntity.class);
+        when(txEntity.getId()).thenReturn("TX-UNK-001");
+        when(txEntity.getExtractorType()).thenReturn("NOT_A_VALID_SOURCE");
+        when(txEntity.getOverallStatus()).thenReturn(TransactionStatus.OK);
+        when(txEntity.getAutomatedValidationStatus()).thenReturn(TxValidationStatus.VALIDATED);
+        when(txEntity.getReconcilation()).thenReturn(Optional.of(reconcilation));
+        when(txEntity.getLastReconcilation()).thenReturn(Optional.empty());
+
+        TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, null, null);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic())
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(dto)));
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        assertEquals(1, result.getTransactions().size());
+        TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
+        assertEquals("TX-UNK-001", view.getId());
+        assertEquals(org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.DataSourceView.UNKNOWN, view.getDataSource());
+    }
 }

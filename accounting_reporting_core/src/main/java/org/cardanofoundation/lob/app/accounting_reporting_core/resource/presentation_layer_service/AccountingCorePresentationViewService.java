@@ -703,6 +703,7 @@ public class AccountingCorePresentationViewService {
         if (Optional.ofNullable(violations.tx()).isPresent() && violations.tx().getReconcilation().isPresent()) {
             return getTransactionReconciliationView(violations.tx());
         }
+
         if (Optional.ofNullable(violations.violation()).isPresent()) {
             return getTransactionReconciliationViolationView(violations.violation(), violations.lastReconciledDate());
         }
