@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
+import org.springframework.http.ProblemDetail;
+
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rejection;
@@ -78,7 +80,7 @@ public class TransactionRepositoryGateway {
             // Create error responses for all transactions
             List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
             for (String transactionId : sortedTransactionIds) {
-                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                ProblemDetail problem = createTransactionDBError(transactionId, dae);
                 errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
             }
             return errorResults;
@@ -130,7 +132,7 @@ public class TransactionRepositoryGateway {
             // Return error responses for all transactions
             List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
             for (String transactionId : sortedTransactionIds) {
-                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                ProblemDetail problem = createTransactionDBError(transactionId, dae);
                 errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
             }
             return errorResults;
@@ -157,7 +159,7 @@ public class TransactionRepositoryGateway {
             // Create error responses for all transactions
             List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
             for (String transactionId : sortedTransactionIds) {
-                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                ProblemDetail problem = createTransactionDBError(transactionId, dae);
                 errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
             }
             return errorResults;
@@ -190,12 +192,9 @@ public class TransactionRepositoryGateway {
             }
 
             if (Boolean.FALSE.equals(tx.getTransactionApproved())) {
-                ThrowableProblem problem = Problem.builder()
-                        .withTitle("TX_NOT_APPROVED")
-                        .withDetail("Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId))
-                        .withStatus(METHOD_NOT_ALLOWED)
-                        .with("transactionId", transactionId)
-                        .build();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(METHOD_NOT_ALLOWED, "Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId));
+                problem.setTitle("TX_NOT_APPROVED");
+                problem.setProperty("transactionId", transactionId);
 
                 transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
                 continue;
@@ -221,7 +220,7 @@ public class TransactionRepositoryGateway {
             // Return error responses for all transactions
             List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
             for (String transactionId : sortedTransactionIds) {
-                ThrowableProblem problem = createTransactionDBError(transactionId, dae);
+                ProblemDetail problem = createTransactionDBError(transactionId, dae);
                 errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
             }
             return errorResults;
