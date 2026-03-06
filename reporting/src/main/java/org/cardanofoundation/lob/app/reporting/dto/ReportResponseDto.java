@@ -37,6 +37,9 @@ public class ReportResponseDto {
     @Schema(description = "Report template type", example = "BALANCE_SHEET")
     private ReportTemplateType reportTemplateType;
 
+    @Schema(description = "Indicates if the report template is inactive", example = "false")
+    private boolean isTemplateActive = true;
+
     @Schema(description = "Report name", example = "Q1 2024 Financial Report", required = true)
     private String name;
 
