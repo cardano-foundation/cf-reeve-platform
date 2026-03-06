@@ -232,7 +232,7 @@ public class TransactionReconcilationService {
                 // When a rollback tx is imported via CSV, item IDs are computed using the raw txNumber.
                 // For reconciliation to match, we recompute the detached item IDs using the same formula.
                 String transactionId = detachedTx.getId();
-                Map<String, TransactionItemEntity> itemsByErpId = detachedTx.getItems().stream()
+                Map<String, TransactionItemEntity> itemsByErpId = detachedTx.getAllItems().stream()
                         .collect(Collectors.toMap(TransactionItemEntity::getId, i -> i));
                 for (int k = 0; k < itemsByErpId.size(); k++) {
                     String erpItemId = TransactionItem.id(transactionId, String.valueOf(k));
