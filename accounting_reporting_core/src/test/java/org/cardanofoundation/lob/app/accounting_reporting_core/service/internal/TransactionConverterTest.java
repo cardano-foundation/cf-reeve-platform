@@ -145,5 +145,17 @@ class TransactionConverterTest {
 
         Assertions.assertEquals(expectedTxNumber, txEntity.getInternalTransactionNumber());
         Assertions.assertEquals(TransactionProcessingStatus.ROLLBACK, txEntity.getProcessingStatus().orElse(null));
+        Assertions.assertEquals(rollbackSuffix, txEntity.getRollbackSuffix());
+    }
+
+    @Test
+    void testCopyFields_shouldCopyRollbackSuffix() {
+        TransactionEntity attached = new TransactionEntity();
+        TransactionEntity detached = new TransactionEntity();
+        detached.setRollbackSuffix("C");
+
+        transactionConverter.copyFields(attached, detached);
+
+        Assertions.assertEquals("C", attached.getRollbackSuffix());
     }
 }
