@@ -1168,6 +1168,7 @@ class TransactionReconcilationServiceTest {
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
         attachedTx.setAllItems(new HashSet<>(Set.of(attachedItem)));
+        attachedItem.setTransaction(attachedTx);
 
         // CSV reconciliation path: detachedTx already has rollback suffix applied
         // (TransactionConverter.rollbackTransaction() was called before reconcileChunk)
@@ -1180,6 +1181,7 @@ class TransactionReconcilationServiceTest {
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
         detachedTx.setAllItems(new HashSet<>(Set.of(detachedItem)));
+        detachedItem.setTransaction(detachedTx);
 
         when(transactionRepositoryGateway.findByAllId(Set.of(txId)))
                 .thenReturn(List.of(attachedTx));
@@ -1239,6 +1241,10 @@ class TransactionReconcilationServiceTest {
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
         attachedTx.setAllItems(new HashSet<>(Set.of(attachedItem0, attachedItem1, attachedItem2, attachedItem3)));
+        attachedItem0.setTransaction(attachedTx);
+        attachedItem1.setTransaction(attachedTx);
+        attachedItem2.setTransaction(attachedTx);
+        attachedItem3.setTransaction(attachedTx);
 
         // detachedTx (ERP-style IDs: SHA3(txId::k)) — same 3 erased + 1 OK, same content
         val detachedItem0 = erasedItem(TransactionItem.id(txId, "0"));
@@ -1253,6 +1259,10 @@ class TransactionReconcilationServiceTest {
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
         detachedTx.setAllItems(new HashSet<>(Set.of(detachedItem0, detachedItem1, detachedItem2, detachedItem3)));
+        detachedItem0.setTransaction(detachedTx);
+        detachedItem1.setTransaction(detachedTx);
+        detachedItem2.setTransaction(detachedTx);
+        detachedItem3.setTransaction(detachedTx);
 
         when(transactionRepositoryGateway.findByAllId(Set.of(txId)))
                 .thenReturn(List.of(attachedTx));
@@ -1275,6 +1285,7 @@ class TransactionReconcilationServiceTest {
         item.setFxRate(BigDecimal.ZERO);
         item.setAmountFcy(BigDecimal.ZERO);
         item.setAmountLcy(BigDecimal.ZERO);
+        item.setOperationType(OperationType.DEBIT);
         item.setStatus(TxItemValidationStatus.ERASED_SUM_APPLIED);
         return item;
     }
@@ -1380,6 +1391,7 @@ class TransactionReconcilationServiceTest {
         attachedItem.setFxRate(BigDecimal.ZERO);
         attachedItem.setAmountFcy(BigDecimal.ZERO);
         attachedItem.setAmountLcy(BigDecimal.ZERO);
+        attachedItem.setOperationType(OperationType.DEBIT);
 
         val attachedTx = new TransactionEntity();
         attachedTx.setId(txId);
@@ -1391,6 +1403,7 @@ class TransactionReconcilationServiceTest {
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
         attachedTx.setItems(new HashSet<>(Set.of(attachedItem)));
+        attachedItem.setTransaction(attachedTx);
 
         // Detached item uses ERP-style ID: SHA3(txId::0)
         val detachedItem = new TransactionItemEntity();
@@ -1398,6 +1411,7 @@ class TransactionReconcilationServiceTest {
         detachedItem.setFxRate(BigDecimal.ZERO);
         detachedItem.setAmountFcy(BigDecimal.ZERO);
         detachedItem.setAmountLcy(BigDecimal.ZERO);
+        detachedItem.setOperationType(OperationType.DEBIT);
 
         val detachedTx = new TransactionEntity();
         detachedTx.setId(txId);
@@ -1406,6 +1420,7 @@ class TransactionReconcilationServiceTest {
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
         detachedTx.setItems(new HashSet<>(Set.of(detachedItem)));
+        detachedItem.setTransaction(detachedTx);
 
         when(transactionRepositoryGateway.findByAllId(Set.of(txId)))
                 .thenReturn(List.of(attachedTx));

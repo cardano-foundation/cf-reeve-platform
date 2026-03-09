@@ -126,6 +126,8 @@ class ERPSourceTransactionVersionCalculatorTest {
         );
 
         tx.setItems(Set.of(txItem1, txItem2));
+        txItem1.setTransaction(tx);
+        txItem2.setTransaction(tx);
 
         return tx;
     }

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 import org.cardanofoundation.lob.app.support.crypto.SHA3;
 
 @Slf4j
@@ -36,19 +37,22 @@ public class ERPSourceTransactionVersionCalculator {
     private static String compute(TransactionItemEntity item) {
         val b = new StringBuilder();
 
-        if (item.getTransaction().getInternalTransactionNumber().equals("FXREVAL3726-C")) {
-            log.info("\n\n\n################ En el compute\n\n");
-            //b.append(item.getId());
+        // For rollback (CSV-republish) transactions, item IDs differ between the CSV-imported
+        // DB record and the ERP source, so we cannot use item.getId() in the hash.
+        // For all other transactions the ID is stable across paths and is included.
+        if (item.getTransaction().getRollbackSuffix() != null) {
+            return SHA3.digestAsHex(b.toString());
+
         }
-        //b.append(item.getId());
+        b.append(item.getId());
 
-        //item.getAccountCredit().ifPresent(acc -> b.append(compute(acc)));
-        //item.getAccountDebit().ifPresent(acc -> b.append(compute(acc)));
+        item.getAccountCredit().ifPresent(acc -> b.append(compute(acc)));
+        item.getAccountDebit().ifPresent(acc -> b.append(compute(acc)));
 
-        //b.append(BigDecimals.normalise(item.getFxRate()));
+        b.append(BigDecimals.normalise(item.getFxRate()));
 
-        //b.append(BigDecimals.normalise(item.getAmountFcy()));
-        //b.append(BigDecimals.normalise(item.getAmountLcy()));
+        b.append(BigDecimals.normalise(item.getAmountFcy()));
+        b.append(BigDecimals.normalise(item.getAmountLcy()));
 
         item.getCostCenter().ifPresent(cc -> b.append(compute(cc)));
         item.getProject().ifPresent(p -> b.append(compute(p)));

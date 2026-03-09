@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rec
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @Service
@@ -225,6 +226,39 @@ public class TransactionReconcilationService {
             TransactionEntity detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
             detachedTx.setLastReconcilation(Optional.empty()); // Also clear on detached to prevent Javers null ID issues with Hibernate proxies
 
+            if (attachedTx.getRollbackSuffix() != null) {
+                // Derive the original tx number from the attached (DB) tx, which already has the rollback suffix.
+                // We cannot use detachedTx.getInternalTransactionNumber() because it may already have the
+                // rollback suffix applied (CSV path) or not (NetSuite path). Using attachedTx is always correct.
+                String rollbackSuffix = attachedTx.getRollbackSuffix();
+                String attachedTxNumber = attachedTx.getInternalTransactionNumber(); // e.g. "TXNUM-C"
+                String originalTxNumber = attachedTxNumber.substring(0, attachedTxNumber.length() - rollbackSuffix.length() - 1);
+                detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + rollbackSuffix);
+                detachedTx.setRollbackSuffix(rollbackSuffix);
+
+                // Remap detachedTx item IDs to match the DB item IDs.
+                // The CSV republish may send items in a different line order than the original import,
+                // so the item IDs (which embed the line index) differ. We match by content instead:
+                // accountDebit + accountCredit + amountLcy + operationType uniquely identify each item.
+                Map<String, String> dbItemIdByContentKey = attachedTx.getAllItems().stream()
+                        .collect(Collectors.toMap(
+                                TransactionReconcilationService::itemContentKey,
+                                TransactionItemEntity::getId,
+                                (a, b) -> a
+                        ));
+
+                for (TransactionItemEntity erpItem : detachedTx.getAllItems()) {
+                    String key = itemContentKey(erpItem);
+                    String dbItemId = dbItemIdByContentKey.get(key);
+                    if (dbItemId != null) {
+                        erpItem.setId(dbItemId);
+                    } else {
+                        log.warn("No matching DB item for ERP item, txId:{}, erpItemId:{}, contentKey:{}",
+                                detachedTx.getId(), erpItem.getId(), key);
+                    }
+                }
+
+            }
             String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
             String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
             log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",
@@ -237,12 +271,8 @@ public class TransactionReconcilationService {
                 Changes changes = sourceDiff.getChanges();
                 String jsonDiff = javers.getJsonConverter().toJson(changes);
 
-                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), "sourceDiff.prettyPrint()");
+                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), sourceDiff.prettyPrint());
 
-                if (detachedTx.getInternalTransactionNumber().equals("FXREVAL3726-C")) {
-                    log.info("\n\n\n################# ESTE ES\n{}", sourceDiff.prettyPrint());
-
-                }
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(attachedTx.getId())
                         .rejectionCode(SOURCE_RECONCILATION_FAIL)
@@ -521,6 +551,13 @@ public class TransactionReconcilationService {
 
         log.info("Indexer reconciliation completed. Total: {}, OK: {}, NOK: {}",
                 results.size(), okCount, nokCount);
+    }
+
+    private static String itemContentKey(TransactionItemEntity item) {
+        return item.getAccountDebit().map(a -> a.getCode()).orElse("") + "|"
+                + item.getAccountCredit().map(a -> a.getCode()).orElse("") + "|"
+                + BigDecimals.normalise(item.getAmountLcy()) + "|"
+                + item.getOperationType().name();
     }
 
     private String formatChanges(Changes changes) {
