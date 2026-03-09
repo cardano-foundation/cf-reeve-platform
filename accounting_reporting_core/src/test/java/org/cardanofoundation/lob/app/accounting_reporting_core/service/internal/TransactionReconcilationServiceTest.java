@@ -34,11 +34,13 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
@@ -1126,6 +1128,167 @@ class TransactionReconcilationServiceTest {
     }
 
     // ============== rollback suffix reconciliation tests ==============
+
+    /**
+     * Regression test: when reconciliation is triggered via CSV (not NetSuite), the detached tx
+     * already has the rollback suffix applied to its internalTransactionNumber (e.g. "TXNUM-C").
+     * The old code read originalTxNumber from detachedTx, producing "TXNUM-C-C" — a double-suffix
+     * that caused a hash mismatch. The fix derives originalTxNumber from the attached (DB) tx
+     * by stripping the known rollback suffix, so the result is always "TXNUM-C" regardless of
+     * whether the detached tx came from CSV (already suffixed) or NetSuite (not yet suffixed).
+     */
+    @Test
+    void testReconcileChunk_withRollbackSuffix_csvPath_detachedAlreadySuffixed_shouldSucceed() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        String txNumber = "TXNUM";
+        String rollbackSuffix = "C";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        String txId = Transaction.id(organisationId, txNumber);
+
+        // DB (attached): CSV-imported, already has rollback suffix and CSV-style item IDs
+        val attachedItem = okItem(TransactionItem.id(txNumber, "0"), BigDecimal.TEN);
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId(txId);
+        attachedTx.setInternalTransactionNumber(txNumber + "-" + rollbackSuffix);
+        attachedTx.setRollbackSuffix(rollbackSuffix);
+        attachedTx.setExtractorType(ExtractorType.CSV.name());
+        attachedTx.setLedgerDispatchStatus(LedgerDispatchStatus.FINALIZED);
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+        attachedTx.setAllItems(new HashSet<>(Set.of(attachedItem)));
+
+        // CSV reconciliation path: detachedTx already has rollback suffix applied
+        // (TransactionConverter.rollbackTransaction() was called before reconcileChunk)
+        val detachedItem = okItem(TransactionItem.id(txNumber, "0"), BigDecimal.TEN);
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId(txId);
+        detachedTx.setInternalTransactionNumber(txNumber + "-" + rollbackSuffix); // already suffixed
+        detachedTx.setRollbackSuffix(rollbackSuffix);
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+        detachedTx.setAllItems(new HashSet<>(Set.of(detachedItem)));
+
+        when(transactionRepositoryGateway.findByAllId(Set.of(txId)))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of(txId, true)));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        // internalTransactionNumber must be "TXNUM-C" (not "TXNUM-C-C") → hashes match → source = OK
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+        assertThat(reconcilationEntity.getViolations()).noneMatch(
+                v -> v.getRejectionCode() == ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL
+        );
+    }
+
+
+    /**
+     * Regression test for the getAllItems() bug fix.
+     * When a rollback transaction has erased items at lower line positions (k=0,1,2) and
+     * the only OK item is at a higher position (k=3), the item ID remapping loop must still
+     * find and remap the OK item. This requires iterating over all item positions using
+     * getAllItems(), not just the count of OK items via getItems().
+     */
+    @Test
+    void testReconcileChunk_withRollbackSuffix_okItemAtHigherPosition_shouldRemapAndSucceed() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        String txNumber = "TXNUM";
+        String rollbackSuffix = "C";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        String txId = Transaction.id(organisationId, txNumber);
+
+        // Build 4 items: k=0,1,2 are ERASED, k=3 is the only OK item (VAT-line scenario).
+        // attachedTx (CSV-style IDs: SHA3(txNumber::k))
+        val attachedItem0 = erasedItem(TransactionItem.id(txNumber, "0"));
+        val attachedItem1 = erasedItem(TransactionItem.id(txNumber, "1"));
+        val attachedItem2 = erasedItem(TransactionItem.id(txNumber, "2"));
+        val attachedItem3 = okItem(TransactionItem.id(txNumber, "3"), BigDecimal.TEN);
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId(txId);
+        attachedTx.setInternalTransactionNumber(txNumber + "-" + rollbackSuffix);
+        attachedTx.setRollbackSuffix(rollbackSuffix);
+        attachedTx.setExtractorType(ExtractorType.CSV.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+        attachedTx.setAllItems(new HashSet<>(Set.of(attachedItem0, attachedItem1, attachedItem2, attachedItem3)));
+
+        // detachedTx (ERP-style IDs: SHA3(txId::k)) — same 3 erased + 1 OK, same content
+        val detachedItem0 = erasedItem(TransactionItem.id(txId, "0"));
+        val detachedItem1 = erasedItem(TransactionItem.id(txId, "1"));
+        val detachedItem2 = erasedItem(TransactionItem.id(txId, "2"));
+        val detachedItem3 = okItem(TransactionItem.id(txId, "3"), BigDecimal.TEN);
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId(txId);
+        detachedTx.setInternalTransactionNumber(txNumber);
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+        detachedTx.setAllItems(new HashSet<>(Set.of(detachedItem0, detachedItem1, detachedItem2, detachedItem3)));
+
+        when(transactionRepositoryGateway.findByAllId(Set.of(txId)))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of(txId, true)));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        // After remapping the OK item from k=3 ERP-style → CSV-style, hashes match → source = OK
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+        assertThat(reconcilationEntity.getViolations()).noneMatch(
+                v -> v.getRejectionCode() == ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL
+        );
+    }
+
+    private static TransactionItemEntity erasedItem(String id) {
+        val item = new TransactionItemEntity();
+        item.setId(id);
+        item.setFxRate(BigDecimal.ZERO);
+        item.setAmountFcy(BigDecimal.ZERO);
+        item.setAmountLcy(BigDecimal.ZERO);
+        item.setStatus(TxItemValidationStatus.ERASED_SUM_APPLIED);
+        return item;
+    }
+
+    private static TransactionItemEntity okItem(String id, BigDecimal amount) {
+        val item = new TransactionItemEntity();
+        item.setId(id);
+        item.setFxRate(BigDecimal.ONE);
+        item.setAmountFcy(amount);
+        item.setAmountLcy(amount);
+        item.setOperationType(OperationType.DEBIT);
+        item.setStatus(TxItemValidationStatus.OK);
+        return item;
+    }
 
     /**
      * When attachedTx has a rollbackSuffix, reconcileChunk must append the suffix to

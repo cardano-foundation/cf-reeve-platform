@@ -20,6 +20,7 @@ import io.vavr.control.Either;
 import org.javers.core.Changes;
 import org.javers.core.Javers;
 import org.javers.core.diff.Diff;
+import org.javers.core.diff.changetype.ValueChange;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
@@ -225,8 +226,13 @@ public class TransactionReconcilationService {
             detachedTx.setLastReconcilation(Optional.empty()); // Also clear on detached to prevent Javers null ID issues with Hibernate proxies
 
             if (attachedTx.getRollbackSuffix() != null){
-                String originalTxNumber = detachedTx.getInternalTransactionNumber();
-                detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + attachedTx.getRollbackSuffix());
+                // Derive the original tx number from the attached (DB) tx, which already has the rollback suffix.
+                // We cannot use detachedTx.getInternalTransactionNumber() because it may already have the
+                // rollback suffix applied (CSV path) or not (NetSuite path). Using attachedTx is always correct.
+                String rollbackSuffix = attachedTx.getRollbackSuffix();
+                String attachedTxNumber = attachedTx.getInternalTransactionNumber(); // e.g. "TXNUM-C"
+                String originalTxNumber = attachedTxNumber.substring(0, attachedTxNumber.length() - rollbackSuffix.length() - 1);
+                detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + rollbackSuffix);
 
                 // Remap detachedTx item IDs from ERP-style (transactionId-based) to CSV-style (txNumber-based).
                 // When a rollback tx is imported via CSV, item IDs are computed using the raw txNumber.
@@ -254,7 +260,7 @@ public class TransactionReconcilationService {
                 Changes changes = sourceDiff.getChanges();
                 String jsonDiff = javers.getJsonConverter().toJson(changes);
 
-                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), sourceDiff.prettyPrint());
+                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), formatChanges(changes));
 
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(attachedTx.getId())
@@ -534,6 +540,19 @@ public class TransactionReconcilationService {
 
         log.info("Indexer reconciliation completed. Total: {}, OK: {}, NOK: {}",
                 results.size(), okCount, nokCount);
+    }
+
+    private String formatChanges(Changes changes) {
+        return changes.stream()
+                .filter(change -> change instanceof ValueChange)
+                .map(change -> (ValueChange) change)
+                .map(vc -> {
+                    String propertyName = vc.getPropertyName();
+                    Object leftValue = vc.getLeft(); // value in DB
+                    Object rightValue = vc.getRight(); // value in ERP
+                    return String.format("%s: %s -> %s", propertyName, leftValue, rightValue);
+                })
+                .collect(Collectors.joining(", "));
     }
 
 }
