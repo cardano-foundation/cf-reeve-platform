@@ -255,7 +255,7 @@ public class TransactionReconcilationService {
                         if (detachedTx.getInternalTransactionNumber().equals("FXREVAL3726-C")) {
                             log.info("\n\n\n PARECE QUE ESTE SÍ\n viejo: {}\n nuevo: {}", item.getId(), TransactionItem.id(originalTxNumber, String.valueOf(k)));
                         }
-                        item.setId(TransactionItem.id(originalTxNumber, String.valueOf(k)));
+                        item.setId(TransactionItem.id(transactionId, String.valueOf(k)));
                     }
                 }
 
