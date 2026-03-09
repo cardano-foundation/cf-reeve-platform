@@ -225,52 +225,6 @@ public class TransactionReconcilationService {
             TransactionEntity detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
             detachedTx.setLastReconcilation(Optional.empty()); // Also clear on detached to prevent Javers null ID issues with Hibernate proxies
 
-            if (attachedTx.getRollbackSuffix() != null) {
-                // Derive the original tx number from the attached (DB) tx, which already has the rollback suffix.
-                // We cannot use detachedTx.getInternalTransactionNumber() because it may already have the
-                // rollback suffix applied (CSV path) or not (NetSuite path). Using attachedTx is always correct.
-                String rollbackSuffix = attachedTx.getRollbackSuffix();
-                String attachedTxNumber = attachedTx.getInternalTransactionNumber(); // e.g. "TXNUM-C"
-                String originalTxNumber = attachedTxNumber.substring(0, attachedTxNumber.length() - rollbackSuffix.length() - 1);
-                detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + rollbackSuffix);
-                detachedTx.setRollbackSuffix(rollbackSuffix);
-
-                // Remap detachedTx item IDs from ERP-style (transactionId-based) to CSV-style (txNumber-based).
-                // When a rollback tx is imported via CSV, item IDs are computed using the raw txNumber.
-                // For reconciliation to match, we recompute the detached item IDs using the same formula.
-                String transactionId = detachedTx.getId();
-                Map<String, TransactionItemEntity> itemsByErpId = detachedTx.getAllItems().stream()
-                        .collect(Collectors.toMap(TransactionItemEntity::getId, i -> i));
-
-                /*
-                detachedTx.getAllItems().stream().forEach(transactionItemEntity -> {
-                    transactionItemEntity.setId(TransactionItem.id(transactionId, "1"));
-                });
-                */
-
-                for (int k = 0; k < itemsByErpId.size(); k++) {
-                    String erpItemId = TransactionItem.id(transactionId, String.valueOf(k));
-                    TransactionItemEntity item = itemsByErpId.get(erpItemId);
-                    if (item != null) {
-                        if (detachedTx.getInternalTransactionNumber().equals("FXREVAL3726-C")) {
-                            log.info("\n\n\n PARECE QUE ESTE SÍ\n viejo: {}\n nuevo: {}", item.getId(), TransactionItem.id(originalTxNumber, String.valueOf(k)));
-                        }
-                        item.setId(TransactionItem.id(originalTxNumber, String.valueOf(k)));
-                    }
-                }
-
-                if (detachedTx.getInternalTransactionNumber().equals("FXREVAL3726-C")) {
-                    log.info("\n\n\n######Empie\n");
-                    log.info("\n\n detached: {}\n attached: {}\n original: {} \n", detachedTx.getInternalTransactionNumber(), attachedTx.getInternalTransactionNumber(), originalTxNumber);
-                    attachedTx.getItems().forEach(transactionItemEntity -> {
-                        log.info("\n item: {}]", transactionItemEntity.getId());
-                    });
-                    log.info("\n\n\n######2\n");
-                    detachedTx.getItems().forEach(transactionItemEntity -> {
-                        log.info("\n item: {}]", transactionItemEntity.getId());
-                    });
-                }
-            }
             String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
             String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
             log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",

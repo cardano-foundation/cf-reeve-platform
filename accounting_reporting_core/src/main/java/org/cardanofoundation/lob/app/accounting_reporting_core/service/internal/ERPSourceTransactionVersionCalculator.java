@@ -50,9 +50,9 @@ public class ERPSourceTransactionVersionCalculator {
         //b.append(BigDecimals.normalise(item.getAmountFcy()));
         //b.append(BigDecimals.normalise(item.getAmountLcy()));
 
-        //item.getCostCenter().ifPresent(cc -> b.append(compute(cc)));
-        //item.getProject().ifPresent(p -> b.append(compute(p)));
-        //item.getDocument().ifPresent(d -> b.append(compute(d)));
+        item.getCostCenter().ifPresent(cc -> b.append(compute(cc)));
+        item.getProject().ifPresent(p -> b.append(compute(p)));
+        item.getDocument().ifPresent(d -> b.append(compute(d)));
 
         return SHA3.digestAsHex(b.toString());
     }
