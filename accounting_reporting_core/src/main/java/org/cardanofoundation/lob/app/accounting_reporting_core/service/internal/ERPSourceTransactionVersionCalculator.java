@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
-import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 import org.cardanofoundation.lob.app.support.crypto.SHA3;
 
 @Slf4j
@@ -37,19 +36,23 @@ public class ERPSourceTransactionVersionCalculator {
     private static String compute(TransactionItemEntity item) {
         val b = new StringBuilder();
 
-        b.append(item.getId());
+        if (item.getTransaction().getInternalTransactionNumber().equals("FXREVAL3726-C")) {
+            log.info("\n\n\n################ En el compute\n\n");
+            //b.append(item.getId());
+        }
+        //b.append(item.getId());
 
-        item.getAccountCredit().ifPresent(acc -> b.append(compute(acc)));
-        item.getAccountDebit().ifPresent(acc -> b.append(compute(acc)));
+        //item.getAccountCredit().ifPresent(acc -> b.append(compute(acc)));
+        //item.getAccountDebit().ifPresent(acc -> b.append(compute(acc)));
 
-        b.append(BigDecimals.normalise(item.getFxRate()));
+        //b.append(BigDecimals.normalise(item.getFxRate()));
 
-        b.append(BigDecimals.normalise(item.getAmountFcy()));
-        b.append(BigDecimals.normalise(item.getAmountLcy()));
+        //b.append(BigDecimals.normalise(item.getAmountFcy()));
+        //b.append(BigDecimals.normalise(item.getAmountLcy()));
 
-        item.getCostCenter().ifPresent(cc -> b.append(compute(cc)));
-        item.getProject().ifPresent(p -> b.append(compute(p)));
-        item.getDocument().ifPresent(d -> b.append(compute(d)));
+        //item.getCostCenter().ifPresent(cc -> b.append(compute(cc)));
+        //item.getProject().ifPresent(p -> b.append(compute(p)));
+        //item.getDocument().ifPresent(d -> b.append(compute(d)));
 
         return SHA3.digestAsHex(b.toString());
     }

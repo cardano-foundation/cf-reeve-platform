@@ -255,7 +255,7 @@ public class TransactionReconcilationService {
                         if (detachedTx.getInternalTransactionNumber().equals("FXREVAL3726-C")) {
                             log.info("\n\n\n PARECE QUE ESTE SÍ\n viejo: {}\n nuevo: {}", item.getId(), TransactionItem.id(originalTxNumber, String.valueOf(k)));
                         }
-                        item.setId(TransactionItem.id(transactionId, String.valueOf(k)));
+                        item.setId(TransactionItem.id(originalTxNumber, String.valueOf(k)));
                     }
                 }
 
@@ -265,18 +265,10 @@ public class TransactionReconcilationService {
                     attachedTx.getItems().forEach(transactionItemEntity -> {
                         log.info("\n item: {}]", transactionItemEntity.getId());
                     });
-
+                    log.info("\n\n\n######2\n");
                     detachedTx.getItems().forEach(transactionItemEntity -> {
                         log.info("\n item: {}]", transactionItemEntity.getId());
                     });
-                    attachedTx.setItems(attachedTx.getItems().stream()
-                            .sorted(Comparator.comparing(TransactionItemEntity::getId))
-                            .collect(Collectors.toCollection(LinkedHashSet::new)));
-
-                    detachedTx.setItems(detachedTx.getItems().stream()
-                            .sorted(Comparator.comparing(TransactionItemEntity::getId))
-                            .collect(Collectors.toCollection(LinkedHashSet::new)));
-
                 }
             }
             String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
@@ -291,10 +283,10 @@ public class TransactionReconcilationService {
                 Changes changes = sourceDiff.getChanges();
                 String jsonDiff = javers.getJsonConverter().toJson(changes);
 
-                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), "formatChanges(changes)");
+                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), "sourceDiff.prettyPrint()");
 
                 if (detachedTx.getInternalTransactionNumber().equals("FXREVAL3726-C")) {
-                    log.info("\n\n\n################# ESTE ES\n{}", "formatChanges(changes)");
+                    log.info("\n\n\n################# ESTE ES\n{}", sourceDiff.prettyPrint());
 
                 }
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
