@@ -97,6 +97,7 @@ class TransactionVersionPropertyBasedTest {
         t1.setOrganisation(org1);
         t1.setInternalTransactionNumber("FxRevaluation-1");
         t1.setItems(Set.of(txItem1));
+        txItem1.setTransaction(t1);
 
         val tHash1 = ERPSourceTransactionVersionCalculator.compute(t1);
 

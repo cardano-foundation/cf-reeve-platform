@@ -281,6 +281,8 @@ class DbSynchronisationUseCaseServiceTest {
                         .build())
                 .build();
 
+        txItem.setTransaction(tx);
+
         val txModified = TransactionEntity.builder()
                 .id(txId)
                 .items(new HashSet<>(Set.of(txItem2)))
@@ -302,6 +304,7 @@ class DbSynchronisationUseCaseServiceTest {
                         .currencyId("ISO_4217:CHF")
                         .build())
                 .build();
+        txItem2.setTransaction(txModified);
 
         when(accountingCoreTransactionRepository.findAllById(any()))
                 .thenReturn(List.of(tx));
@@ -374,6 +377,7 @@ class DbSynchronisationUseCaseServiceTest {
                         .currencyId("ISO_4217:CHF")
                         .build())
                 .build();
+        txItem.setTransaction(existingTx);
 
         // Incoming modified transaction (different internal number to simulate change)
         val incomingTx = TransactionEntity.builder()
@@ -432,6 +436,7 @@ class DbSynchronisationUseCaseServiceTest {
                         .currencyId("ISO_4217:CHF")
                         .build())
                 .build();
+        txItem.setTransaction(existingTx);
 
         // Incoming transaction marked for ROLLBACK (different internalTransactionNumber to be considered changed)
         val incomingTx = TransactionEntity.builder()
@@ -500,6 +505,7 @@ class DbSynchronisationUseCaseServiceTest {
                         .currencyId("ISO_4217:CHF")
                         .build())
                 .build();
+        txItem.setTransaction(existingTx);
 
         // Incoming transaction marked for ROLLBACK (different internalTransactionNumber to be considered changed)
         val incomingTx = TransactionEntity.builder()
@@ -572,6 +578,7 @@ class DbSynchronisationUseCaseServiceTest {
                         .currencyId("ISO_4217:CHF")
                         .build())
                 .build();
+        txItem.setTransaction(existingTx);
 
         // Incoming modified transaction (different internalTransactionNumber to be considered changed)
         val incomingTx = TransactionEntity.builder()
@@ -672,6 +679,7 @@ class DbSynchronisationUseCaseServiceTest {
                 .ledgerDispatchStatus(DISPATCHED)
                 .organisation(org)
                 .build();
+        txItem.setTransaction(existingTx);
 
         // Incoming ROLLBACK transaction - identical fields so isChanged = false
         val incomingTx = TransactionEntity.builder()
@@ -730,6 +738,7 @@ class DbSynchronisationUseCaseServiceTest {
                 .ledgerDispatchStatus(DISPATCHED)
                 .organisation(org)
                 .build();
+        txItem.setTransaction(existingTx);
 
         // Incoming ROLLBACK transaction - different internalTransactionNumber so isChanged = true
         val incomingTx = TransactionEntity.builder()
@@ -1028,6 +1037,7 @@ class DbSynchronisationUseCaseServiceTest {
                         .currencyId("ISO_4217:CHF")
                         .build())
                 .build());
+        txItem.setTransaction(existingTx);
 
         val incomingTx = TransactionEntity.builder()
                 .id(txId)
