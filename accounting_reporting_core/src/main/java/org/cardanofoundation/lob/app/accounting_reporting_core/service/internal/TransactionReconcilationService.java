@@ -531,24 +531,4 @@ public class TransactionReconcilationService {
                 results.size(), okCount, nokCount);
     }
 
-    private static String itemContentKey(TransactionItemEntity item) {
-        return item.getAccountDebit().map(a -> a.getCode()).orElse("") + "|"
-                + item.getAccountCredit().map(a -> a.getCode()).orElse("") + "|"
-                + BigDecimals.normalise(item.getAmountLcy()) + "|"
-                + item.getOperationType().name();
-    }
-
-    private String formatChanges(Changes changes) {
-        return changes.stream()
-                .filter(change -> change instanceof ValueChange)
-                .map(change -> (ValueChange) change)
-                .map(vc -> {
-                    String propertyName = vc.getPropertyName();
-                    Object leftValue = vc.getLeft(); // value in DB
-                    Object rightValue = vc.getRight(); // value in ERP
-                    return String.format("%s: %s -> %s", propertyName, leftValue, rightValue);
-                })
-                .collect(Collectors.joining(", "));
-    }
-
 }
