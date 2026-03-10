@@ -42,6 +42,17 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
                                               @Param("endDate") LocalDate endDate);
 
     @Query("""
+            SELECT t FROM accounting_reporting_core.TransactionEntity t
+            WHERE t.organisation.id = :organisationId
+            AND t.entryDate BETWEEN :startDate AND :endDate
+            ORDER BY t.createdAt ASC, t.id ASC
+            """)
+    Set<TransactionEntity> findByEntryDateRange(@Param("organisationId") String organisactionId,
+                                                                   @Param("startDate") LocalDate startDate,
+                                                                   @Param("endDate") LocalDate endDate);
+
+
+    @Query("""
         SELECT t FROM accounting_reporting_core.TransactionEntity t
         WHERE t.organisation.id = :organisationId
         AND t.entryDate BETWEEN :startDate AND :endDate
@@ -145,11 +156,28 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             WHERE t.organisation.id = :organisationId
             AND (:validationStatuses IS NULL OR t.automatedValidationStatus in (:validationStatuses))
             AND (:transactionTypes IS NULL OR t.transactionType in (:transactionTypes))
+            AND t.entryDate >= COALESCE(:dateFrom, t.entryDate)
+            AND t.entryDate <= COALESCE(:dateTo, t.entryDate)
+            AND (:published IS NULL OR t.ledgerDispatchApproved = :published)
             """)
-    List<TransactionEntity> findAllByStatus(@Param("organisationId") String organisationId,
-                                            @Param("validationStatuses") List<TxValidationStatus> validationStatuses,
-                                            @Param("transactionTypes") List<TransactionType> transactionTypes,
-                                            Pageable pageable);
+    List<TransactionEntity> findAllByStatusAndTypeAndInDateRange(@Param("organisationId") String organisationId,
+                                                                 @Param("validationStatuses") List<TxValidationStatus> validationStatuses,
+                                                                 @Param("transactionTypes") List<TransactionType> transactionTypes,
+                                                                 @Param("dateFrom") LocalDate dateFrom,
+                                                                @Param("dateTo") LocalDate dateTo,
+                                                                 @Param("published") Boolean published,
+                                                                 Pageable pageable);
+
+    @Query("""
+            SELECT t FROM accounting_reporting_core.TransactionEntity t
+            WHERE t.organisation.id = :organisationId
+            AND (:validationStatuses IS NULL OR t.automatedValidationStatus in (:validationStatuses))
+            AND (:transactionTypes IS NULL OR t.transactionType in (:transactionTypes))
+            """)
+    List<TransactionEntity> findAllByStatusAndType(@Param("organisationId") String organisationId,
+                                                                 @Param("validationStatuses") List<TxValidationStatus> validationStatuses,
+                                                                 @Param("transactionTypes") List<TransactionType> transactionTypes,
+                                                                 Pageable pageable);
 
         @Query("""
             SELECT DISTINCT t.internalTransactionNumber FROM accounting_reporting_core.TransactionEntity t

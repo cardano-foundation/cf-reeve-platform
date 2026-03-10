@@ -24,7 +24,6 @@ spring:
       - classpath:db/migration/{vendor}/common
       - classpath:db/migration/{vendor}/test
     driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
-    clean-on-validation-error: true
 
 netsuite:
   altavia:

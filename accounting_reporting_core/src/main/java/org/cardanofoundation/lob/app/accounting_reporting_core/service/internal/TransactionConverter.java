@@ -34,7 +34,7 @@ public class TransactionConverter {
     @Value("${lob.blockchain-publisher.rollback.enabled:false}")
     private Optional<Boolean> rollbackEnabled;
 
-    public FilteringParameters convertToDbDetached(SystemExtractionParameters systemExtractionParameters,
+    public FilteringParameters convertToDbDetached(org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters systemExtractionParameters,
                                                    UserExtractionParameters userExtractionParameters) {
         return FilteringParameters.builder()
                 .organisationId(userExtractionParameters.getOrganisationId())
@@ -48,7 +48,7 @@ public class TransactionConverter {
     }
 
     public FilteringParameters convertToDbDetached(UserExtractionParameters userExtractionParameters,
-                                                   Optional<SystemExtractionParameters> systemExtractionParameters) {
+                                                   Optional<org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters> systemExtractionParameters) {
         return systemExtractionParameters.map(se -> {
             return convertToDbDetached(se, userExtractionParameters);
         }).orElseGet(() -> convertToDbDetached(userExtractionParameters));
@@ -304,6 +304,7 @@ public class TransactionConverter {
 
     public void rollbackTransaction(TransactionEntity txEntity, Transaction transaction) {
         txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber() + "-" + transaction.getRollbackSuffix());
+        txEntity.setRollbackSuffix(transaction.getRollbackSuffix());
         txEntity.setProcessingStatus(TransactionProcessingStatus.ROLLBACK);
 
     }
@@ -321,6 +322,7 @@ public class TransactionConverter {
         attached.setLedgerDispatchStatus(detached.getLedgerDispatchStatus());
         attached.setAccountingPeriod(detached.getAccountingPeriod());
         attached.setInternalTransactionNumber(detached.getInternalTransactionNumber());
+        attached.setRollbackSuffix(detached.getRollbackSuffix());
         attached.setExtractorType(detached.getExtractorType());
 
         attached.getViolations().clear();

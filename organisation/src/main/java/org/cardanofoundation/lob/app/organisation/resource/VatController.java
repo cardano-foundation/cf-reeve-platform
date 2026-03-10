@@ -4,14 +4,11 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
@@ -28,8 +25,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.zalando.problem.Status;
-import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
@@ -40,7 +35,6 @@ import org.cardanofoundation.lob.app.organisation.service.VatService;
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.organisation.enabled", havingValue = "true", matchIfMissing = true)
 public class VatController {
 
     private final VatService vatService;
@@ -60,13 +54,13 @@ public class VatController {
                                                      @RequestParam(value = "active", required = false) Boolean active,
                                                      @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return vatService.findAllByOrganisationId(orgId, customerCode, minRate, maxRate, description, countryCodes, active, pageable).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
 
     }
 
     @Operation(summary = "Download vat CSV file", description = "Download vat codes as a CSV file")
-    @GetMapping(value = "/organisations/{orgId}/vat-codes/download", produces = "test/csv")
+    @GetMapping(value = "/{orgId}/vat-codes/download", produces = "test/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<StreamingResponseBody> downloadVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "customerCode", required = false) String customerCode,
@@ -93,7 +87,7 @@ public class VatController {
                                            @Valid @RequestBody VatUpdate vatUpdate) {
 
         VatView vatView = vatService.insert(orgId, vatUpdate, false);
-        return vatView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(vatView))
                 .orElse(ResponseEntity.ok(vatView));
     }
@@ -111,7 +105,7 @@ public class VatController {
                                                  @Valid @RequestBody VatUpdate vatUpdate) {
 
         VatView vatView = vatService.update(orgId, vatUpdate);
-        return vatView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(vatView))
                 .orElse(ResponseEntity.ok(vatView));
     }

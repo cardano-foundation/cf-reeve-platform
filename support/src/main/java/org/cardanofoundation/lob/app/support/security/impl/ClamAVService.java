@@ -1,7 +1,5 @@
 package org.cardanofoundation.lob.app.support.security.impl;
 
-import static org.zalando.problem.Status.BAD_REQUEST;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,11 +13,12 @@ import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 
@@ -64,17 +63,15 @@ public class ClamAVService implements AntiVirusScanner {
         }
     }
 
-    public Either<Problem, byte[]> readFileBytes(Optional<MultipartFile> file) {
+    public Either<ProblemDetail, byte[]> readFileBytes(Optional<MultipartFile> file) {
         byte[] fileBytes;
         try {
             if(file.isPresent() && file.map(f -> !f.isEmpty()).orElse(false)) {
                 fileBytes = file.get().getBytes();
                 if (!isFileSafe(fileBytes)) {
-                    return Either.left(Problem.builder()
-                            .withTitle("FILE_VIRUS_DETECTED")
-                            .withDetail("The uploaded file contains a virus and cannot be processed.")
-                            .withStatus(BAD_REQUEST)
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The uploaded file contains a virus and cannot be processed.");
+                    problem.setTitle("FILE_VIRUS_DETECTED");
+                    return Either.left(problem);
                 } else {
                     return Either.right(fileBytes);
                 }
@@ -82,11 +79,9 @@ public class ClamAVService implements AntiVirusScanner {
                 return Either.right(null);
             }
         } catch (IOException e) {
-            return Either.left(Problem.builder()
-                    .withTitle("FILE_READ_ERROR")
-                    .withDetail("Error reading file")
-                    .withStatus(BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Error reading file");
+            problem.setTitle("FILE_READ_ERROR");
+            return Either.left(problem);
         }
     }
 

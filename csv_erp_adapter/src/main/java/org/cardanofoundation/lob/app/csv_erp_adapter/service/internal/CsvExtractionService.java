@@ -10,7 +10,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -23,15 +22,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import com.google.common.cache.Cache;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
@@ -41,12 +39,13 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils;
 import org.cardanofoundation.lob.app.csv_erp_adapter.config.Constants;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.ExtractionData;
 import org.cardanofoundation.lob.app.csv_erp_adapter.domain.TransactionLine;
+import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.organisation.util.SystemExtractionParametersFactory;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
@@ -67,36 +66,34 @@ public class CsvExtractionService {
     private int sendBatchSize;
 
     public void validateIngestion(String correlationId, String organisationId, byte[] file) {
-        List<Problem> errors = new ArrayList<>();
+        List<ProblemDetail> errors = new ArrayList<>();
 
-        Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
+        Either<ProblemDetail, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
         if(systemExtractionParametersE.isLeft()) {
             errors.add(systemExtractionParametersE.getLeft());
         }
 
         if(Objects.isNull(file) || file.length == 0) {
-            errors.add(Problem.builder()
-                    .withTitle(Constants.EMPTY_FILE)
-                    .withDetail("The provided file is empty.")
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.BAD_REQUEST, "The provided file is empty.");
+            problem.setTitle(Constants.EMPTY_FILE);
+            errors.add(problem);
         } else {
-            Either<Problem, List<TransactionLine>> lists = csvParser.parseCsv(file, TransactionLine.class);
+            Either<ProblemDetail, List<TransactionLine>> lists = csvParser.parseCsv(file, TransactionLine.class);
             if(lists.isLeft()) {
                 errors.add(lists.getLeft());
             } else {
                 List<TransactionLine> transactionLines = lists.get();
                 if (transactionLines.isEmpty()) {
-                    errors.add(Problem.builder()
-                            .withTitle(Constants.NO_TRANSACTION_LINES)
-                            .withDetail("The provided CSV file does not contain any transaction lines.")
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.BAD_REQUEST, "The provided CSV file does not contain any transaction lines.");
+                    problem.setTitle(Constants.NO_TRANSACTION_LINES);
+                    errors.add(problem);
                 }
             }
         }
 
         ValidateIngestionResponseEvent validateIngestionResponseEvent = ValidateIngestionResponseEvent.builder()
                 .correlationId(correlationId)
-                .errors(errors.stream().map(Problem::getDetail).toList())
+                .errors(errors.stream().map(ProblemDetail::getDetail).toList())
                 .valid(errors.isEmpty())
                 .build();
         applicationEventPublisher.publishEvent(validateIngestionResponseEvent);
@@ -104,9 +101,12 @@ public class CsvExtractionService {
 
     public void startNewExtraction(@NotNull String organisationId, String user, @NotNull UserExtractionParameters userExtractionParameters, byte[] file) {
         String batchId = digestAsHex(UUID.randomUUID().toString());
-        Either<Problem, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
+        Either<ProblemDetail, SystemExtractionParameters> systemExtractionParametersE = systemExtractionParametersFactory.createSystemExtractionParameters(organisationId);
 
         if (systemExtractionParametersE.isLeft()) {
+
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR, "organisationId" + organisationId);
+            problem.setTitle(Constants.EMPTY_FILE);
 
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION, user))
@@ -114,10 +114,7 @@ public class CsvExtractionService {
                     .extractorType(ExtractorType.CSV)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_SYSTEM_PARAMETERS, this.getBag(Problem.builder()
-                            .withTitle(Constants.EMPTY_FILE)
-                            .withDetail("organisationId" +  organisationId)
-                            .build(),Constants.EMPTY_FILE)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_SYSTEM_PARAMETERS, ErrorUtils.getBag(problem, Constants.EMPTY_FILE)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -127,16 +124,16 @@ public class CsvExtractionService {
 
         if(Objects.isNull(file) || file.length == 0) {
             log.error("File is empty");
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.BAD_REQUEST, Constants.BATCH_ID + batchId);
+            problem.setTitle(Constants.EMPTY_FILE);
+
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION, user))
                     .batchId(batchId)
                     .extractorType(ExtractorType.CSV)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.EMPTY_FILE, this.getBag(Problem.builder()
-                            .withTitle(Constants.EMPTY_FILE)
-                            .withDetail(Constants.BATCH_ID +  batchId)
-                            .build(),Constants.EMPTY_FILE)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.EMPTY_FILE, ErrorUtils.getBag(problem, Constants.EMPTY_FILE)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -170,16 +167,16 @@ public class CsvExtractionService {
         ExtractionData extractionData = temporaryFileCache.getIfPresent(batchId);
         if (extractionData == null) {
             log.error("BatchId {} not found in temporary file cache", batchId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.NOT_FOUND, Constants.BATCH_ID + batchId);
+            problem.setTitle(Constants.BATCH_NOT_FOUND);
+
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
                     .batchId(batchId)
                     .extractorType(ExtractorType.CSV)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.BATCH_NOT_FOUND, this.getBag(Problem.builder()
-                            .withTitle(Constants.BATCH_NOT_FOUND)
-                            .withDetail(Constants.BATCH_ID +  batchId)
-                            .build(),Constants.BATCH_NOT_FOUND)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.BATCH_NOT_FOUND, ErrorUtils.getBag(problem, Constants.BATCH_NOT_FOUND)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -191,34 +188,34 @@ public class CsvExtractionService {
 
         if (!extractionData.organisationId().equals(organisationId)) {
             log.error("BatchId {} not found in temporary file cache for organisationId {}", batchId, organisationId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.FORBIDDEN, Constants.BATCH_ID + batchId);
+            problem.setTitle(Constants.ORGANISATION_MISMATCH);
+
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
                     .batchId(batchId)
                     .extractorType(ExtractorType.CSV)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH,this.getBag(Problem.builder()
-                            .withTitle(Constants.ORGANISATION_MISMATCH)
-                            .withDetail(Constants.BATCH_ID +  batchId)
-                            .build(),Constants.ORGANISATION_MISMATCH)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH, ErrorUtils.getBag(problem, Constants.ORGANISATION_MISMATCH)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
 
-        Either<Problem, List<TransactionLine>> lists = csvParser.parseCsv(extractionData.file(), TransactionLine.class);
+        Either<ProblemDetail, List<TransactionLine>> lists = csvParser.parseCsv(extractionData.file(), TransactionLine.class);
         if(lists.isLeft()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.BAD_REQUEST, Constants.BATCH_ID + batchId);
+            problem.setTitle(Constants.CSV_PARSING_ERROR);
+
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
                     .batchId(batchId)
                     .extractorType(ExtractorType.CSV)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, this.getBag(Problem.builder()
-                            .withTitle(Constants.CSV_PARSING_ERROR)
-                            .withDetail(Constants.BATCH_ID +  batchId)
-                            .build(),Constants.CSV_PARSING_ERROR)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, ErrorUtils.getBag(problem, Constants.CSV_PARSING_ERROR)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -228,23 +225,23 @@ public class CsvExtractionService {
 
         if (transactionLines.isEmpty()) {
             log.error("No transaction lines found in CSV file");
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.BAD_REQUEST, Constants.BATCH_ID + batchId);
+            problem.setTitle(Constants.NO_TRANSACTION_LINES);
+
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
                     .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION))
                     .batchId(batchId)
                     .extractorType(ExtractorType.CSV)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, this.getBag(Problem.builder()
-                            .withTitle(Constants.NO_TRANSACTION_LINES)
-                            .withDetail(Constants.BATCH_ID +  batchId)
-                            .build(),Constants.NO_TRANSACTION_LINES)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, ErrorUtils.getBag(problem, Constants.NO_TRANSACTION_LINES)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
 
-        Either<Problem, List<Transaction>> transactions = transactionConverter.convertToTransaction(organisationId, batchId, transactionLines);
+        Either<ProblemDetail, List<Transaction>> transactions = transactionConverter.convertToTransaction(organisationId, batchId, transactionLines);
         if (transactions.isLeft()) {
             log.error("Error converting transaction lines to transactions: {}", transactions.getLeft().getDetail());
             TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
@@ -253,7 +250,7 @@ public class CsvExtractionService {
                     .extractorType(ExtractorType.CSV)
                     .organisationId(organisationId)
                     .userExtractionParameters(userExtractionParameters)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, this.getBag(transactions.getLeft(),Constants.TRANSACTION_CONVERSION_ERROR)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR,  ErrorUtils.getBag(transactions.getLeft(), Constants.TRANSACTION_CONVERSION_ERROR)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -319,14 +316,14 @@ public class CsvExtractionService {
         log.info("Continue reconcilation..., reconcilationId: {}", reconcilationId);
         if (extractionData == null) {
             log.error("NetSuite ingestion not found, reconcilationId: {}", reconcilationId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.NOT_FOUND, Constants.RECONCILATION_ID + reconcilationId);
+            problem.setTitle(Constants.RECONCILATION_NOT_FOUND);
+
             ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.RECONCILATION_NOT_FOUND, this.getBag(Problem.builder()
-                            .withTitle(Constants.RECONCILATION_NOT_FOUND)
-                            .withDetail(Constants.RECONCILATION_ID +  reconcilationId)
-                            .build(),Constants.RECONCILATION_NOT_FOUND)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.RECONCILATION_NOT_FOUND, ErrorUtils.getBag(problem, Constants.RECONCILATION_NOT_FOUND)))
                     .build();
 
             applicationEventPublisher.publishEvent(reconcilationFailedEvent);
@@ -338,30 +335,30 @@ public class CsvExtractionService {
 
         if (!extractionData.organisationId().equals(organisationId)) {
             log.error("Reconcilation {} not found in temporary file cache for organisationId {}", reconcilationId, organisationId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.FORBIDDEN, Constants.RECONCILATION_ID + reconcilationId);
+            problem.setTitle(Constants.ORGANISATION_MISMATCH);
+
             ReconcilationFailedEvent batchFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH, this.getBag(Problem.builder()
-                            .withTitle(Constants.ORGANISATION_MISMATCH)
-                            .withDetail(Constants.RECONCILATION_ID +  reconcilationId)
-                            .build(),Constants.ORGANISATION_MISMATCH)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.ORGANISATION_MISMATCH, ErrorUtils.getBag(problem, Constants.ORGANISATION_MISMATCH)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
 
-        Either<Problem, List<TransactionLine>> lists = csvParser.parseCsv(extractionData.file(), TransactionLine.class);
+        Either<ProblemDetail, List<TransactionLine>> lists = csvParser.parseCsv(extractionData.file(), TransactionLine.class);
         if(lists.isLeft()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.BAD_REQUEST, Constants.RECONCILATION_ID + reconcilationId);
+            problem.setTitle(Constants.CSV_PARSING_ERROR);
+
             ReconcilationFailedEvent batchFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, this.getBag(Problem.builder()
-                            .withTitle(Constants.CSV_PARSING_ERROR)
-                            .withDetail(Constants.RECONCILATION_ID +  reconcilationId)
-                            .build(),Constants.CSV_PARSING_ERROR)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.CSV_PARSING_ERROR, ErrorUtils.getBag(problem, Constants.CSV_PARSING_ERROR)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -371,31 +368,28 @@ public class CsvExtractionService {
 
         if (transactionLines.isEmpty()) {
             log.error("No transaction lines found in CSV file");
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.BAD_REQUEST, Constants.RECONCILATION_ID + reconcilationId);
+            problem.setTitle(Constants.NO_TRANSACTION_LINES);
+
             ReconcilationFailedEvent batchFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, this.getBag(Problem.builder()
-                            .withTitle(Constants.NO_TRANSACTION_LINES)
-                            .withDetail(Constants.RECONCILATION_ID +  reconcilationId)
-                            .build(),Constants.NO_TRANSACTION_LINES)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.NO_TRANSACTION_LINES, ErrorUtils.getBag(problem, Constants.NO_TRANSACTION_LINES)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
 
-        Either<Problem, List<Transaction>> transactions = transactionConverter.convertToTransaction(organisationId, reconcilationId, transactionLines);
+        Either<ProblemDetail, List<Transaction>> transactions = transactionConverter.convertToTransaction(organisationId, reconcilationId, transactionLines);
         if (transactions.isLeft()) {
             log.error("Error converting transaction lines to transactions: {}", transactions.getLeft().getDetail());
             ReconcilationFailedEvent batchFailedEvent = ReconcilationFailedEvent.builder()
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION))
                     .reconciliationId(reconcilationId)
                     .organisationId(organisationId)
-                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR,  this.getBag(Problem.builder()
-                            .withTitle(Constants.TRANSACTION_CONVERSION_ERROR)
-                            .withDetail(Constants.RECONCILATION_ID +  reconcilationId)
-                            .build(),Constants.TRANSACTION_CONVERSION_ERROR)))
+                    .error(new FatalError(ADAPTER_ERROR, Constants.TRANSACTION_CONVERSION_ERROR, ErrorUtils.getBag(transactions.getLeft(), Constants.TRANSACTION_CONVERSION_ERROR)))
                     .build();
 
             applicationEventPublisher.publishEvent(batchFailedEvent);
@@ -418,9 +412,5 @@ public class CsvExtractionService {
                     .build());
         }
         log.info("NetSuite ingestion fully completed.");
-    }
-
-    private Map<String, Object> getBag(Problem problem, String code) {
-        return ErrorUtils.getBag(problem, code);
     }
 }

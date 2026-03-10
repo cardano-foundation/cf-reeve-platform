@@ -1,16 +1,14 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,8 +31,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.zalando.problem.Status;
-import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
@@ -45,7 +41,6 @@ import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.organisation.enabled", havingValue = "true", matchIfMissing = true)
 public class CurrencyController {
 
     private final CurrencyService currencyService;
@@ -61,7 +56,7 @@ public class CurrencyController {
                                               @RequestParam(value = "isoCode", required = false) List<String> isoCodes,
                                               @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return currencyService.getAllCurrencies(orgId, code, isoCodes, pageable).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
     }
 
@@ -86,7 +81,7 @@ public class CurrencyController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         CurrencyView currencyView = currencyService.insertCurrency(orgId, currencyUpdate, false);
-        return currencyView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return currencyView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(currencyView))
                 .orElse(ResponseEntity.ok(currencyView));
     }
@@ -100,7 +95,7 @@ public class CurrencyController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<CurrencyView> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         CurrencyView currencyView = currencyService.updateCurrency(orgId, currencyUpdate);
-        return currencyView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return currencyView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(currencyView))
                 .orElse(ResponseEntity.ok(currencyView));
     }
@@ -114,7 +109,7 @@ public class CurrencyController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         return currencyService.insertViaCsv(orgId, file).fold(
-                problem -> ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(HttpStatus.BAD_REQUEST.value()).body(problem),
                 ResponseEntity::ok
         );
     }

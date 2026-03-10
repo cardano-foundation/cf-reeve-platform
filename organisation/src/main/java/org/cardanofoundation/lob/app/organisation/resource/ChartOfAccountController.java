@@ -1,17 +1,17 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,8 +27,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
@@ -39,7 +37,6 @@ import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.organisation.enabled", havingValue = "true", matchIfMissing = true)
 public class ChartOfAccountController {
 
     private final ChartOfAccountsService chartOfAccountsService;
@@ -90,13 +87,13 @@ public class ChartOfAccountController {
                                                 @RequestParam(value = "active" ,required = false) Boolean active,
                                                 @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return chartOfAccountsService.getAllChartOfAccount(orgId, customerCode, name, currencies, counterPartyIds, types, subTypes, referenceCodes, active, pageable).fold(problem ->
-                        ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                        ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
 
     }
 
     @Operation(summary = "Download chart of accounts CSV file", description = "Download chart of accounts as a CSV file")
-    @GetMapping(value = "/organisations/{orgId}/chart-of-accounts/download", produces = "test/csv")
+    @GetMapping(value = "/{orgId}/chart-of-accounts/download", produces = "test/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<StreamingResponseBody> downloadChartOfAccountsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                             @RequestParam(value = "customerCode", required = false) String customerCode,
@@ -126,7 +123,7 @@ public class ChartOfAccountController {
 
         ChartOfAccountView chartOfAccountView = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
         if (chartOfAccountView.getError().isPresent()) {
-            return ResponseEntity.status(chartOfAccountView.getError().get().getStatus().getStatusCode()).body(chartOfAccountView);
+            return ResponseEntity.status(chartOfAccountView.getError().get().getStatus()).body(chartOfAccountView);
         }
 
         return ResponseEntity.ok(chartOfAccountView);
@@ -142,9 +139,9 @@ public class ChartOfAccountController {
     public ResponseEntity<?> insertChartOfAccountByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {
 
-        Either<List<Problem>, List<ChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> chartOfAccountE = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         if (chartOfAccountE.isLeft()) {
-            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(chartOfAccountE.getLeft());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST.value()).body(chartOfAccountE.getLeft());
         }
         return ResponseEntity.ok(chartOfAccountE.get());
     }
@@ -162,7 +159,7 @@ public class ChartOfAccountController {
 
         ChartOfAccountView referenceCode = chartOfAccountsService.updateChartOfAccount(orgId, chartOfAccountUpdate);
         if (referenceCode.getError().isPresent()) {
-            return ResponseEntity.status(referenceCode.getError().get().getStatus().getStatusCode()).body(referenceCode);
+            return ResponseEntity.status(referenceCode.getError().get().getStatus()).body(referenceCode);
         }
 
         return ResponseEntity.ok(referenceCode);

@@ -30,7 +30,9 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -41,8 +43,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.responses.TokenReponse;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TransactionDataSearchResult;
@@ -144,12 +144,12 @@ public class NetSuiteClient {
         }
     }
 
-    public Either<Problem, Optional<List<String>>> retrieveLatestNetsuiteTransactionLines(LocalDate extractionFrom, LocalDate extractionTo) {
+    public Either<ProblemDetail, Optional<List<String>>> retrieveLatestNetsuiteTransactionLines(LocalDate extractionFrom, LocalDate extractionTo) {
         boolean hasMore;
         List<String> lines = new ArrayList<>();
         int start = 0;
         do {
-            Either<Problem, Optional<String>> retrievedData = retrieveTransactionLineData(extractionFrom, extractionTo, Optional.of(start));
+            Either<ProblemDetail, Optional<String>> retrievedData = retrieveTransactionLineData(extractionFrom, extractionTo, Optional.of(start));
             if (retrievedData.isLeft()) {
                 return Either.left(retrievedData.getLeft());
             } else {
@@ -178,17 +178,15 @@ public class NetSuiteClient {
         return Either.right(Optional.of(lines));
     }
 
-    public Either<Problem, Void> testConnection() {
+    public Either<ProblemDetail, Void> testConnection() {
         ResponseEntity<String> response = null;
         try {
             response = callForTransactionLinesData(LocalDate.now(), LocalDate.now(), Optional.empty());
         } catch (IOException e) {
             log.error("Error calling NetSuite API: {}", e.getMessage());
-            return Either.left(Problem.builder()
-                    .withStatus(Status.INTERNAL_SERVER_ERROR)
-                    .withTitle(NETSUITE_API_ERROR)
-                    .withDetail(e.getMessage())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            problem.setTitle(NETSUITE_API_ERROR);
+            return Either.left(problem);
         }
 
         if(response.getStatusCode().is2xxSuccessful() || response.getStatusCode().is1xxInformational()) {
@@ -196,24 +194,20 @@ public class NetSuiteClient {
             return Either.right(null);
         } else {
             log.error("Netsuite response error...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
-            return Either.left(Problem.builder()
-                    .withStatus(Status.valueOf(response.getStatusCode().value()))
-                    .withTitle(NETSUITE_API_ERROR)
-                    .withDetail(response.getBody())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), response.getBody());
+            problem.setTitle(NETSUITE_API_ERROR);
+            return Either.left(problem);
         }
     }
 
-    private Either<Problem, Optional<String>> retrieveTransactionLineData(LocalDate extractionFrom, LocalDate extractionTo, Optional<Integer> start) {
+    private Either<ProblemDetail, Optional<String>> retrieveTransactionLineData(LocalDate extractionFrom, LocalDate extractionTo, Optional<Integer> start) {
         ResponseEntity<String> response;
         try {
             response = callForTransactionLinesData(extractionFrom, extractionTo, start);
         } catch (IOException e) {
-            return Either.left(Problem.builder()
-                    .withStatus(Status.INTERNAL_SERVER_ERROR)
-                    .withTitle(NETSUITE_API_ERROR)
-                    .withDetail(e.getMessage())
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            problem.setTitle(NETSUITE_API_ERROR);
+            return Either.left(problem);
         }
 
         if (response.getStatusCode().is2xxSuccessful()) {
@@ -233,22 +227,18 @@ public class NetSuiteClient {
                         return Either.right(Optional.empty());
                     }
 
-                    return Either.left(Problem.builder()
-                            .withStatus(Status.valueOf(response.getStatusCode().value()))
-                            .withTitle(NETSUITE_API_ERROR)
-                            .withDetail(String.format("Error customerCode: %d, message: %s", error, text))
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), String.format("Error customerCode: %d, message: %s", error, text));
+                    problem.setTitle(NETSUITE_API_ERROR);
+                    return Either.left(problem);
                 }
 
                 return Either.right(Optional.of(body));
             } catch (JsonProcessingException e) {
                 log.error(ERROR_PARSING_JSON_RESPONSE_FROM_NET_SUITE_API, e.getMessage());
 
-                return Either.left(Problem.builder()
-                        .withStatus(Status.valueOf(response.getStatusCode().value()))
-                        .withTitle(NETSUITE_API_ERROR)
-                        .withDetail(e.getMessage())
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), e.getMessage());
+                problem.setTitle(NETSUITE_API_ERROR);
+                return Either.left(problem);
             }
         }
         if (response.getStatusCode().is1xxInformational()) {
@@ -256,11 +246,9 @@ public class NetSuiteClient {
             return Either.right(Optional.empty());
         }
 
-        return Either.left(Problem.builder()
-                .withStatus(Status.valueOf(response.getStatusCode().value()))
-                .withTitle(NETSUITE_API_ERROR)
-                .withDetail(response.getBody())
-                .build());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), response.getBody());
+        problem.setTitle(NETSUITE_API_ERROR);
+        return Either.left(problem);
     }
 
     private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) throws IOException {

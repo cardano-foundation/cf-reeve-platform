@@ -99,7 +99,7 @@ class OrganisationResourceTest {
         when(organisationService.findById("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9")).thenReturn(Optional.of(org));
 
         ResponseEntity<?> responseEntity = organisationResource.organisationCreate(request);
-        assertEquals(404, responseEntity.getStatusCode().value());
+        assertEquals(400, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -110,7 +110,7 @@ class OrganisationResourceTest {
         when(organisationService.createOrganisation(request)).thenReturn(Optional.empty());
         when(organisationService.findById("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9")).thenReturn(Optional.empty());
         ResponseEntity<?> responseEntity = organisationResource.organisationCreate(request);
-        assertEquals(404, responseEntity.getStatusCode().value());
+        assertEquals(400, responseEntity.getStatusCode().value());
     }
 
     @Test

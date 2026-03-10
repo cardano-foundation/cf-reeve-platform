@@ -22,6 +22,8 @@ import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -31,8 +33,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,7 +82,7 @@ class CurrencyServiceTest {
                 new Currency(new Currency.Id("org123", "USD"), "USD", true)
         )));
         when(jpaSortFieldValidator.validateEntity(Currency.class, Pageable.unpaged(), CURRENCY_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
-        Either<Problem, List<CurrencyView>> currencies = currencyService.getAllCurrencies("org123", null, null, Pageable.unpaged());
+        Either<ProblemDetail, List<CurrencyView>> currencies = currencyService.getAllCurrencies("org123", null, null, Pageable.unpaged());
         assertTrue(currencies.isRight());
         assertEquals(1, currencies.get().size());
         assertEquals("USD", currencies.get().getFirst().getIsoCode());
@@ -250,13 +250,13 @@ class CurrencyServiceTest {
     @Test
     void insertViaCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.left(Problem.valueOf(Status.BAD_REQUEST)));
+        when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
-        Either<Problem, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
+        Either<ProblemDetail, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
 
         assertNotNull(response);
         assertTrue(response.isLeft());
-        assertEquals(Status.BAD_REQUEST, response.getLeft().getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST.value(), response.getLeft().getStatus());
     }
 
     @Test
@@ -273,7 +273,7 @@ class CurrencyServiceTest {
         Currency savedCurrency = new Currency(new Currency.Id("org123", "USD"), "USD123", true);
         when(currencyRepository.save(any(Currency.class))).thenReturn(savedCurrency);
 
-        Either<Problem, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
+        Either<ProblemDetail, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
 
         assertNotNull(response);
         assertTrue(response.isRight());
@@ -296,7 +296,7 @@ class CurrencyServiceTest {
         when(csvParser.parseCsv(file, CurrencyUpdate.class)).thenReturn(Either.right(List.of(currencyUpdate)));
 
 
-        Either<Problem, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
+        Either<ProblemDetail, List<CurrencyView>> response = currencyService.insertViaCsv("org123", file);
 
         assertNotNull(response);
         assertTrue(response.isRight());

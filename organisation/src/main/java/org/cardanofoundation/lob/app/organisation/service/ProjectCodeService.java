@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -24,8 +26,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
@@ -55,13 +55,13 @@ public class ProjectCodeService {
     }
 
 
-    public Either<Problem, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String name, String parentCustomerCode, Pageable pageable) {
-        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Project.class, pageable, PROJECT_MAPPINGS);
+    public Either<ProblemDetail, List<ProjectView>> getAllProjects(String organisationId, String customerCode, String name, String parentCustomerCode, Boolean active, Pageable pageable) {
+        Either<ProblemDetail, Pageable> pageables = jpaSortFieldValidator.validateEntity(Project.class, pageable, PROJECT_MAPPINGS);
         if(pageables.isLeft()) {
             return Either.left(pageables.getLeft());
         }
         pageable = pageables.get();
-        return Either.right(projectRepository.findAllByOrganisationId(organisationId, customerCode, name, parentCustomerCode, pageable).map(ProjectView::fromEntity).toList());
+        return Either.right(projectRepository.findAllByOrganisationId(organisationId, customerCode, name, parentCustomerCode, active, pageable).map(ProjectView::fromEntity).toList());
     }
 
     @Transactional
@@ -73,14 +73,9 @@ public class ProjectCodeService {
             if(isUpsert) {
                 project = projectFound.get();
             } else {
-                return ProjectView.createFail(
-                        projectUpdate,
-                        Problem.builder()
-                                .withStatus(Status.CONFLICT)
-                                .withTitle(ErrorTitleConstants.PROJECT_CODE_ALREADY_EXISTS)
-                                .withDetail("Project code with customer code %s already exists.".formatted(projectUpdate.getCustomerCode()))
-                                .build()
-                );
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Project code with customer code %s already exists.".formatted(projectUpdate.getCustomerCode()));
+                problem.setTitle(ErrorTitleConstants.PROJECT_CODE_ALREADY_EXISTS);
+                return ProjectView.createFail(projectUpdate, problem);
             }
         }
         project.setName(projectUpdate.getName());
@@ -91,35 +86,20 @@ public class ProjectCodeService {
             Optional<Project> parent = getProject(orgId, projectUpdate.getParentCustomerCode());
             if(parent.isPresent()) {
                 if (parent.get().getId().getCustomerCode().equals(projectUpdate.getCustomerCode())) {
-                    return ProjectView.createFail(
-                            projectUpdate,
-                            Problem.builder()
-                                    .withStatus(Status.BAD_REQUEST)
-                                    .withTitle("PARENT_PROJECT_CANNOT_BE_SELF")
-                                    .withDetail("The parent project cannot be the same as the project itself: %s".formatted(projectUpdate.getCustomerCode()))
-                                    .build()
-                    );
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent project cannot be the same as the project itself: %s".formatted(projectUpdate.getCustomerCode()));
+                    problem.setTitle("PARENT_PROJECT_CANNOT_BE_SELF");
+                    return ProjectView.createFail(projectUpdate, problem);
                 }
                 if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(projectUpdate.getCustomerCode())) {
-                    return ProjectView.createFail(
-                            projectUpdate,
-                            Problem.builder()
-                                    .withStatus(Status.BAD_REQUEST)
-                                    .withTitle("CIRCULAR_REFERENCE")
-                                    .withDetail("The parent project with customer code %s creates a circular reference.".formatted(projectUpdate.getParentCustomerCode()))
-                                    .build()
-                    );
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent project with customer code %s creates a circular reference.".formatted(projectUpdate.getParentCustomerCode()));
+                    problem.setTitle("CIRCULAR_REFERENCE");
+                    return ProjectView.createFail(projectUpdate, problem);
                 }
                 project.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
             } else {
-                return ProjectView.createFail(
-                        projectUpdate,
-                        Problem.builder()
-                                .withStatus(Status.NOT_FOUND)
-                                .withTitle(ErrorTitleConstants.PARENT_PROJECT_CODE_NOT_FOUND)
-                                .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
-                                .build()
-                );
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()));
+                problem.setTitle(ErrorTitleConstants.PARENT_PROJECT_CODE_NOT_FOUND);
+                return ProjectView.createFail(projectUpdate, problem);
             }
 
         } else {
@@ -143,35 +123,20 @@ public class ProjectCodeService {
                 Optional<Project> parent = getProject(orgId, projectUpdate.getParentCustomerCode());
                 if(parent.isPresent()) {
                     if (parent.get().getId().getCustomerCode().equals(projectUpdate.getCustomerCode())) {
-                        return ProjectView.createFail(
-                                projectUpdate,
-                                Problem.builder()
-                                        .withStatus(Status.BAD_REQUEST)
-                                        .withTitle("PARENT_PROJECT_CANNOT_BE_SELF")
-                                        .withDetail("The parent project cannot be the same as the project itself: %s".formatted(projectUpdate.getCustomerCode()))
-                                        .build()
-                        );
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent project cannot be the same as the project itself: %s".formatted(projectUpdate.getCustomerCode()));
+                        problem.setTitle("PARENT_PROJECT_CANNOT_BE_SELF");
+                        return ProjectView.createFail(projectUpdate, problem);
                     }
                     if (Optional.ofNullable(parent.get().getParentCustomerCode()).orElse("").equals(projectUpdate.getCustomerCode())) {
-                        return ProjectView.createFail(
-                                projectUpdate,
-                                Problem.builder()
-                                        .withStatus(Status.BAD_REQUEST)
-                                        .withTitle("CIRCULAR_REFERENCE")
-                                        .withDetail("The parent project with customer code %s creates a circular reference.".formatted(projectUpdate.getParentCustomerCode()))
-                                        .build()
-                        );
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The parent project with customer code %s creates a circular reference.".formatted(projectUpdate.getParentCustomerCode()));
+                        problem.setTitle("CIRCULAR_REFERENCE");
+                        return ProjectView.createFail(projectUpdate, problem);
                     }
                     projectEntityUpdated.setParentCustomerCode(Objects.requireNonNull(parent.get().getId()).getCustomerCode());
                 } else {
-                    return ProjectView.createFail(
-                            projectUpdate,
-                            Problem.builder()
-                                    .withStatus(Status.NOT_FOUND)
-                                    .withTitle(ErrorTitleConstants.PARENT_PROJECT_CODE_NOT_FOUND)
-                                    .withDetail("Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()))
-                                    .build()
-                    );
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Parent project code with customer code %s not found.".formatted(projectUpdate.getParentCustomerCode()));
+                    problem.setTitle(ErrorTitleConstants.PARENT_PROJECT_CODE_NOT_FOUND);
+                    return ProjectView.createFail(projectUpdate, problem);
                 }
             } else {
                 // Unlink it
@@ -180,38 +145,31 @@ public class ProjectCodeService {
 
             return ProjectView.fromEntity(projectRepository.save(projectEntityUpdated));
         } else {
-            return ProjectView.createFail(
-                    projectUpdate,
-                    Problem.builder()
-                            .withStatus(Status.NOT_FOUND)
-                            .withTitle(ErrorTitleConstants.PROJECT_CODE_NOT_FOUND)
-                            .withDetail("Project code with customer code %s not found.".formatted(projectUpdate.getCustomerCode()))
-                            .build()
-            );
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project code with customer code %s not found.".formatted(projectUpdate.getCustomerCode()));
+            problem.setTitle(ErrorTitleConstants.PROJECT_CODE_NOT_FOUND);
+            return ProjectView.createFail(projectUpdate, problem);
         }
     }
 
     @Transactional
-    public Either<Problem, List<ProjectView>> createProjectCodeFromCsv(String orgId, MultipartFile file) {
+    public Either<ProblemDetail, List<ProjectView>> createProjectCodeFromCsv(String orgId, MultipartFile file) {
         return csvParser.parseCsv(file, ProjectUpdate.class).fold(
-                Either::left,
+                problemDetail -> Either.left(problemDetail),
                 projectUpdates -> Either.right(projectUpdates.stream().map(projectUpdate -> {
                     Errors errors = validator.validateObject(projectUpdate);
                     List<ObjectError> allErrors = errors.getAllErrors();
                     if (!allErrors.isEmpty()) {
-                        return ProjectView.createFail(projectUpdate, Problem.builder()
-                                .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
-                                .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
-                                .withStatus(Status.BAD_REQUEST)
-                                .build());
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
+                        problem.setTitle(ErrorTitleConstants.VALIDATION_ERROR);
+                        return ProjectView.createFail(projectUpdate, problem);
                     }
                     return insertProject(orgId, projectUpdate, true);
                 }).toList())
         );
     }
 
-    public void downloadCsv(String orgId, String customerCode, String name, String parentCustomerCode, OutputStream outputStream) {
-        Page<Project> allProjects = projectRepository.findAllByOrganisationId(orgId, customerCode, name, parentCustomerCode, Pageable.unpaged());
+    public void downloadCsv(String orgId, String customerCode, String name, String parentCustomerCode, Boolean active, OutputStream outputStream) {
+        Page<Project> allProjects = projectRepository.findAllByOrganisationId(orgId, customerCode, name, parentCustomerCode, active, Pageable.unpaged());
         try(Writer writer = new OutputStreamWriter(outputStream)) {
             CSVWriter csvWriter = new CSVWriter(writer);
             String[] header = {"Customer code", "Name", "Parent customer code", "Active"};

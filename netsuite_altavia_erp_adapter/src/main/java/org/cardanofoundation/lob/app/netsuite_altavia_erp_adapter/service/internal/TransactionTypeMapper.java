@@ -19,6 +19,7 @@ public class TransactionTypeMapper implements Function<String, Optional<Transact
             case "FxReval" -> Optional.of(TransactionType.FxRevaluation);
             case "Transfer" -> Optional.of(TransactionType.Transfer);
             case "CustPymt" -> Optional.of(TransactionType.CustomerPayment);
+            case "CustCred" -> Optional.of(TransactionType.CustomerCredit);
             case "ExpRept" -> Optional.of(TransactionType.ExpenseReport);
             case "VendPymt" -> Optional.of(TransactionType.VendorPayment);
             case "VendCred" -> Optional.of(TransactionType.BillCredit);

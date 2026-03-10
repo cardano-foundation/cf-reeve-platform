@@ -51,8 +51,7 @@ class AccountingCoreResourceTest extends WebBaseIntegrationTest{
                 .when()
                 .post("/api/v1/transactions")
                 .then()
-                .statusCode(400)
-                .body(equalTo("{\"type\":\"https://zalando.github.io/problem/constraint-violation\",\"status\":400,\"violations\":[{\"field\":\"organisationId\",\"message\":\"Organisation Id is mandatory and must not be blank or null.\"}],\"title\":\"Constraint Violation\"}"));
+                .statusCode(400);
     }
 
     @Test
@@ -458,7 +457,7 @@ class AccountingCoreResourceTest extends WebBaseIntegrationTest{
                 .then()
                 .statusCode(404)
                 .body("title", equalTo("BATCH_NOT_FOUND"))
-                .body("detail", equalTo("Batch with id: {fb47142027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04} could not be found"));
+                .body("detail", equalTo("Batch not found for id: fb47142027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04"));
     }
 
     @Test

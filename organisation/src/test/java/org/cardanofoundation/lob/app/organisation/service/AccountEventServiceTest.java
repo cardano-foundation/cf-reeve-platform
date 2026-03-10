@@ -13,6 +13,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -22,7 +24,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -98,9 +99,9 @@ class AccountEventServiceTest {
     @Test
     void insertAccountEventByCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.left(Problem.builder().build()));
+        when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
-        Either<List<Problem>, List<AccountEventView>> ret = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<ProblemDetail>, List<AccountEventView>> ret = accountEventService.insertAccountEventByCsv(ORG_ID, file);
 
         assertTrue(ret.isLeft());
         assertEquals(1, ret.getLeft().size());
@@ -121,7 +122,7 @@ class AccountEventServiceTest {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
 
-        Either<List<Problem>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<ProblemDetail>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
 
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
@@ -140,7 +141,7 @@ class AccountEventServiceTest {
 
         when(csvParser.parseCsv(file, EventCodeUpdate.class)).thenReturn(Either.right(List.of(update)));
 
-        Either<List<Problem>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<ProblemDetail>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
 
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
@@ -167,7 +168,7 @@ class AccountEventServiceTest {
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
         when(accountEventRepository.save(any(AccountEvent.class))).thenReturn(mockAccountEvent);
 
-        Either<List<Problem>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
+        Either<List<ProblemDetail>, List<AccountEventView>> sets = accountEventService.insertAccountEventByCsv(ORG_ID, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }
@@ -197,7 +198,7 @@ class AccountEventServiceTest {
     void testGetAllEventCodes() {
         when(accountEventRepository.findAllByOrganisationId(ORG_ID, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(mockAccountEvent)));
         when(jpaSortFieldValidator.validateEntity(AccountEvent.class, Pageable.unpaged(), ACCOUNT_EVENT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
-        Either<Problem, List<AccountEventView>> result = accountEventService.getAllAccountEvent(ORG_ID, null, null, null, null, null, Pageable.unpaged());
+        Either<ProblemDetail, List<AccountEventView>> result = accountEventService.getAllAccountEvent(ORG_ID, null, null, null, null, null, Pageable.unpaged());
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
@@ -339,7 +340,7 @@ class AccountEventServiceTest {
     }
 
     @Test
-    void shouldWriteCurrenciesToCsv() throws Exception {
+    void shouldWriteEventsToCsv() throws Exception {
         // given
 
         String orgId = "org123";
@@ -368,9 +369,9 @@ class AccountEventServiceTest {
         String[] lines = csv.split("\\R");
 
         assertThat(lines).hasSize(3);
-        assertThat(lines[0]).isEqualTo("Debit Reference Code,Credit Reference Code,Name,Active");
-        assertThat(lines[1]).isEqualTo("event1,event1,event1,true");
-        assertThat(lines[2]).isEqualTo("event2,event2,event2,true");
+        assertThat(lines[0]).isEqualTo("Debit Reference Code,Credit Reference Code,Name,Customer Code,Active");
+        assertThat(lines[1]).isEqualTo("event1,event1,event1,,true");
+        assertThat(lines[2]).isEqualTo("event2,event2,event2,,true");
 
     }
 }

@@ -5,7 +5,6 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -14,7 +13,6 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.Block
 @Service("blockchain_publisher.TransactionDispatcherJob")
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.blockchain_publisher.enabled", havingValue = "true", matchIfMissing = true)
 public class TransactionDispatcherJob {
 
     private final BlockchainTransactionsDispatcher blockchainTransactionsDispatcher;

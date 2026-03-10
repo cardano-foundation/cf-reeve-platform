@@ -1,12 +1,11 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
-import static org.zalando.problem.Status.BAD_REQUEST;
-import static org.zalando.problem.Status.NOT_FOUND;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -14,10 +13,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -31,8 +30,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.AccountingCorePresentationViewService;
@@ -51,8 +48,6 @@ import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true",
-                matchIfMissing = true)
 @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAuditorRole())")
 public class ExtractionController {
 
@@ -74,12 +69,11 @@ public class ExtractionController {
                         @Valid @RequestBody ExtractionTransactionsRequest transactionsRequest,
                         @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
                 try {
-                        Either<Problem, Pageable> pageableEither =
+                        Either<ProblemDetail, Pageable> pageableEither =
                                 jpaSortFieldValidator.convertPageable(pageable, PageableFieldMappings.EXTRACTION_SEARCH_FIELD_MAPPINGS, TransactionItemEntity.class);
                         if (pageableEither.isLeft()) {
                                 return ResponseEntity.status(
-                                                Objects.requireNonNull(pageableEither.getLeft()
-                                                                .getStatus()).getStatusCode())
+                                                pageableEither.getLeft().getStatus())
                                                 .body(pageableEither.getLeft());
                         } else {
                                 pageable = pageableEither.get();
@@ -111,26 +105,24 @@ public class ExtractionController {
                                 .findByOrganisationId(body.getOrganisationId());
 
                 if (orgM.isEmpty()) {
-                        ThrowableProblem issue = Problem.builder()
-                                        .withTitle("ORGANISATION_NOT_FOUND")
-                                        .withDetail("Unable to find Organisation by Id: %s"
-                                                        .formatted(body.getOrganisationId()))
-                                        .withStatus(NOT_FOUND).build();
+                        ProblemDetail issue = ProblemDetail.forStatusAndDetail(NOT_FOUND, "Unable to find Organisation by Id: %s"
+                                .formatted(body.getOrganisationId()));
+                        issue.setTitle("ORGANISATION_NOT_FOUND");
 
                         return ResponseEntity.status(
-                                        Objects.requireNonNull(issue.getStatus()).getStatusCode())
+                                        issue.getStatus())
                                         .body(issue);
                 }
 
                 Organisation org = orgM.orElseThrow();
 
-                Either<Problem, Void> extractionResultE =
+                Either<ProblemDetail, Void> extractionResultE =
                                 accountingCorePresentationService.extractionTrigger(body);
                 if (extractionResultE.isLeft()) {
-                        Problem problem = extractionResultE.getLeft();
+                        ProblemDetail problem = extractionResultE.getLeft();
                         log.error("Extraction trigger failed with problem: {}", problem);
                         return ResponseEntity.status(
-                                        Objects.requireNonNull(problem.getStatus()).getStatusCode())
+                                        problem.getStatus())
                                         .body(problem);
                 } else {
                         log.info("Extraction triggered successfully for organisation: {}",
@@ -173,12 +165,12 @@ public class ExtractionController {
 
         private ResponseEntity<ExtractionValidationResponse> extractionValidationProcessing(
                         ExtractionRequest body) {
-                Either<List<Problem>, Void> extractionValidation =
+                Either<List<ProblemDetail>, Void> extractionValidation =
                                 accountingCorePresentationService.extractionValidation(body);
                 if (extractionValidation.isLeft()) {
-                        List<Problem> problems = extractionValidation.getLeft();
+                        List<ProblemDetail> problems = extractionValidation.getLeft();
                         log.error("Extraction validation failed with problems: {}", problems);
-                        return ResponseEntity.status(BAD_REQUEST.getStatusCode())
+                        return ResponseEntity.status(BAD_REQUEST.value())
                                         .body(new ExtractionValidationResponse(false, problems));
                 } else {
                         return ResponseEntity.ok(new ExtractionValidationResponse(true, List.of()));

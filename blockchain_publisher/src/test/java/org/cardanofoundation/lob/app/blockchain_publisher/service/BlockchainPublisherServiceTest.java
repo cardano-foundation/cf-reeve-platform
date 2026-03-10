@@ -34,8 +34,6 @@ public class BlockchainPublisherServiceTest {
     private TransactionConverter transactionConverter;
     @Mock
     private ReportConverter reportConverter;
-    @Mock
-    private ReportV2Converter reportV2Converter;
 
     @InjectMocks
     private BlockchainPublisherService blockchainPublisherService;

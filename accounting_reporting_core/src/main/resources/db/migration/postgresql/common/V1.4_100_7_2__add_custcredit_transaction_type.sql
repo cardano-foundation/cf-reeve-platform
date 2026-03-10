@@ -1,0 +1,1 @@
+ALTER TYPE accounting_core_transaction_type ADD VALUE 'CustomerCredit';

@@ -8,9 +8,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import org.springframework.http.ProblemDetail;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
@@ -59,6 +60,6 @@ public class ReportTemplateResponseDto {
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ValidationRuleDto> validationRules;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
 }

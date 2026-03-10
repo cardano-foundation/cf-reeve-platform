@@ -1,16 +1,16 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import java.util.List;
-import java.util.Objects;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -25,8 +25,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
@@ -38,7 +36,6 @@ import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.organisation.enabled", havingValue = "true", matchIfMissing = true)
 public class AccountEventController {
 
     private final AccountEventService eventCodeService;
@@ -59,13 +56,13 @@ public class AccountEventController {
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable
     ) {
         return eventCodeService.getAllAccountEvent(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, pageable).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
 
     }
 
     @Operation(summary = "Download event codes CSV file", description = "Download event codes as a CSV file")
-    @GetMapping(value = "/organisations/{orgId}/event-codes/download", produces = "test/csv")
+    @GetMapping(value = "/{orgId}/event-codes/download", produces = "test/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<StreamingResponseBody> downloadEventCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                        @RequestParam(value = "customerCode", required = false) String customerCode,
@@ -92,7 +89,7 @@ public class AccountEventController {
 
         AccountEventView eventCode = eventCodeService.insertAccountEvent(orgId, eventCodeUpdate, false);
         if (eventCode.getError().isPresent()) {
-            return ResponseEntity.status(eventCode.getError().get().getStatus().getStatusCode()).body(eventCode);
+            return ResponseEntity.status(eventCode.getError().get().getStatus()).body(eventCode);
         }
 
         return ResponseEntity.ok(eventCode);
@@ -108,10 +105,10 @@ public class AccountEventController {
     public ResponseEntity<?> insertReferenceCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                       @RequestParam(value = "file") MultipartFile file) {
 
-        Either<List<Problem>, List<AccountEventView>> eventCodeE = eventCodeService.insertAccountEventByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<AccountEventView>> eventCodeE = eventCodeService.insertAccountEventByCsv(orgId, file);
         if (eventCodeE.isLeft()) {
-            List<Problem> errors = eventCodeE.getLeft();
-            return ResponseEntity.status(Status.BAD_REQUEST.getStatusCode()).body(errors);
+            List<ProblemDetail> errors = eventCodeE.getLeft();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST.value()).body(errors);
         }
         return ResponseEntity.ok(eventCodeE.get());
     }
@@ -127,7 +124,7 @@ public class AccountEventController {
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
         AccountEventView eventCode = eventCodeService.updateAccountEvent(orgId, eventCodeUpdate);
         if (eventCode.getError().isPresent()) {
-            return ResponseEntity.status(eventCode.getError().get().getStatus().getStatusCode()).body(eventCode);
+            return ResponseEntity.status(eventCode.getError().get().getStatus()).body(eventCode);
         }
         return ResponseEntity.ok(eventCode);
     }

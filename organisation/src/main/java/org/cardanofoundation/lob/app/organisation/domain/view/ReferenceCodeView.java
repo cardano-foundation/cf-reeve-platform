@@ -7,7 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ReferenceCode;
 import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUpdate;
@@ -23,7 +23,7 @@ public class ReferenceCodeView {
     String parentReferenceCode;
     boolean isActive;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static ReferenceCodeView fromEntity(ReferenceCode referenceCode) {
         ReferenceCodeViewBuilder builder = ReferenceCodeView.builder()
@@ -37,7 +37,7 @@ public class ReferenceCodeView {
         return builder.build();
     }
 
-    public static ReferenceCodeView createFail(Problem error, ReferenceCodeUpdate referenceCodeUpdate) {
+    public static ReferenceCodeView createFail(ProblemDetail error, ReferenceCodeUpdate referenceCodeUpdate) {
         return ReferenceCodeView.builder()
                 .referenceCode(referenceCodeUpdate.getReferenceCode())
                 .description(referenceCodeUpdate.getName())

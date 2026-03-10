@@ -26,13 +26,14 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@EqualsAndHashCode
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Audited
 public class ReconcilationViolation {
 
     @NotBlank
     @Getter
     @Setter
+    @EqualsAndHashCode.Include
     private String transactionId;
 
     @NotNull
@@ -40,6 +41,7 @@ public class ReconcilationViolation {
     @Getter
     @Setter
     @JdbcType(PostgreSQLEnumJdbcType.class)
+    @EqualsAndHashCode.Include
     private ReconcilationRejectionCode rejectionCode;
 
     @Type(value = io.hypersistence.utils.hibernate.type.json.JsonType.class)

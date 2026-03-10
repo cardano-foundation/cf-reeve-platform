@@ -7,8 +7,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.springframework.http.ProblemDetail;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 
@@ -23,9 +24,9 @@ public class CurrencyView {
     private String isoCode;
     private boolean active;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
-    public static CurrencyView createFail(Problem error, CurrencyUpdate currencyUpdate) {
+    public static CurrencyView createFail(ProblemDetail error, CurrencyUpdate currencyUpdate) {
         return new CurrencyView(currencyUpdate.getCode(), currencyUpdate.getIsoCode(), Optional.ofNullable(currencyUpdate.getActive()).orElse(false),Optional.of(error));
     }
 

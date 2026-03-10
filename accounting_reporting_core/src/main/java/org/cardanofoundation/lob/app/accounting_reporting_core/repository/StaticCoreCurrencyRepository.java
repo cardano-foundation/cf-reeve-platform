@@ -43,6 +43,14 @@ public class StaticCoreCurrencyRepository implements CoreCurrencyRepository {
         currencies.add(
                 new CoreCurrency(
                         ISO_24165,
+                        "NIG",
+                        Optional.of("HWGL1C2CK"), // Not existing for Night, so setting it to the same as ADA
+                        "Midnight")
+        );
+
+        currencies.add(
+                new CoreCurrency(
+                        ISO_24165,
                         "BTC",
                         Optional.of("4H95J0R2X"),
                         "Bitcoin")

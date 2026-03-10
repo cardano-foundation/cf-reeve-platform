@@ -13,5 +13,5 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa")
     testImplementation("org.springframework.boot:spring-boot-starter-validation")
-
+    testImplementation(project(":organisation"))  // Explicitly include organisation for tests
 }

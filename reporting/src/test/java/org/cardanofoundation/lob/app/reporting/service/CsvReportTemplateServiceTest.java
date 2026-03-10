@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -18,7 +20,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,7 +59,7 @@ class CsvReportTemplateServiceTest {
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.empty());
         when(request.getOrganisationId()).thenReturn("org123");
 
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isLeft());
         assertEquals("ORGANISATION_NOT_FOUND", result.getLeft().getTitle());
@@ -71,13 +72,31 @@ class CsvReportTemplateServiceTest {
         MultipartFile file = mock(MultipartFile.class);
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
         when(request.getOrganisationId()).thenReturn("org123");
-        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.left(Problem.builder().withTitle("CSV_PARSE_ERROR").build()));
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV_PARSE_ERROR")));
         when(request.getFile()).thenReturn(file);
 
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isLeft());
-        assertEquals("CSV_PARSE_ERROR", result.getLeft().getTitle());
+        assertEquals("CSV_PARSE_ERROR", result.getLeft().getDetail());
+    }
+
+    @Test
+    void createCsvTemplates_noContent() {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        Organisation organisation = new Organisation();
+        MultipartFile file = mock(MultipartFile.class);
+
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of()));
+        when(request.getFile()).thenReturn(file);
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
+        assertEquals("CSV file has no content lines.", result.getLeft().getDetail());
     }
 
     @Test
@@ -96,7 +115,7 @@ class CsvReportTemplateServiceTest {
         when(request.getFile()).thenReturn(file);
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
 
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isLeft());
         assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
@@ -118,7 +137,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("WRONG_TYPE");
 
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
         List<ReportTemplateResponseDto> responseDtos = result.get();
@@ -146,7 +165,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getAccounts()).thenReturn("InvalidMapping");
         when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
         List<ReportTemplateResponseDto> responseDtos = result.get();
@@ -173,7 +192,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
         when(templateCsvLine.getDataMode()).thenReturn("USER");
         when(templateCsvLine.getDateRange()).thenReturn("InvalidMapping");
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
         List<ReportTemplateResponseDto> responseDtos = result.get();
@@ -202,7 +221,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getAccounts()).thenReturn("1233");
         when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
         when(chartOfAccountRepository.findById(any(ChartOfAccount.Id.class))).thenReturn(Optional.empty());
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
         List<ReportTemplateResponseDto> responseDtos = result.get();
@@ -236,7 +255,7 @@ class CsvReportTemplateServiceTest {
         when(chartOfAccountRepository.findById(any(ChartOfAccount.Id.class))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("Parent");
 
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
         List<ReportTemplateResponseDto> responseDtos = result.get();
@@ -273,7 +292,7 @@ class CsvReportTemplateServiceTest {
         when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
         when(reportTemplateMapper.toResponseDto(any())).thenReturn(responseDto);
 
-        Either<Problem, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
         List<ReportTemplateResponseDto> responseDtos = result.get();

@@ -16,6 +16,8 @@ import java.util.Optional;
 import lombok.val;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -24,8 +26,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,9 +36,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserE
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.assistance.AccountingPeriodCalculator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.organisation.util.AccountingPeriodCalculator;
 import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -91,7 +91,7 @@ class AccountingCoreServiceTest {
                 .to(LocalDate.of(2023, 12, 31))
                 .transactionNumbers(mockList)
                 .build();
-        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, null, null);
+        Either<ProblemDetail, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, null, null);
         assertThat(voids.isLeft()).isTrue();
         assertThat(voids.getLeft().getTitle()).isEqualTo("TOO_MANY_TRANSACTIONS");
     }
@@ -106,7 +106,7 @@ class AccountingCoreServiceTest {
         when(mockList.size()).thenReturn(600);
         when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
-        when(antiVirusScanner.readFileBytes(any())).thenReturn(Either.left(Problem.builder().withTitle("FILE_READ_ERROR").build()));
+        when(antiVirusScanner.readFileBytes(any())).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "FILE_READ_ERROR")));
 
         UserExtractionParameters userParams = UserExtractionParameters.builder()
                 .organisationId("org-123")
@@ -114,9 +114,9 @@ class AccountingCoreServiceTest {
                 .to(LocalDate.of(2023, 12, 31))
                 .transactionNumbers(mockList)
                 .build();
-        Either<Problem, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, Optional.of(file), null);
+        Either<ProblemDetail, Void> voids = accountingCoreService.scheduleIngestion(userParams, ExtractorType.NETSUITE, Optional.of(file), null);
         assertThat(voids.isLeft()).isTrue();
-        assertThat(voids.getLeft().getTitle()).isEqualTo("FILE_READ_ERROR");
+        assertThat(voids.getLeft().getDetail()).isEqualTo("FILE_READ_ERROR");
     }
 
     @Test
@@ -126,11 +126,11 @@ class AccountingCoreServiceTest {
 
         when(organisationPublicApi.findByOrganisationId("org-123")).thenReturn(Optional.of(organisation));
         when(accountingPeriodCalculator.calculateAccountingPeriod(any())).thenReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
-        when(antiVirusScanner.readFileBytes(any())).thenReturn(Either.left(Problem.builder().withTitle("FILE_READ_ERROR").build()));
+        when(antiVirusScanner.readFileBytes(any())).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "FILE_READ_ERROR")));
 
-        Either<Problem, Void> voids = accountingCoreService.scheduleReconcilation("org-123", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31), ExtractorType.NETSUITE, Optional.of(file), null);
+        Either<ProblemDetail, Void> voids = accountingCoreService.scheduleReconcilation("org-123", LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31), ExtractorType.NETSUITE, Optional.of(file), null);
         assertThat(voids.isLeft()).isTrue();
-        assertThat(voids.getLeft().getTitle()).isEqualTo("FILE_READ_ERROR");
+        assertThat(voids.getLeft().getDetail()).isEqualTo("FILE_READ_ERROR");
     }
 
     @Test
@@ -141,7 +141,7 @@ class AccountingCoreServiceTest {
         given(antiVirusScanner.readFileBytes(any())).willReturn(Either.right(new byte[0]));
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, Optional.empty(), null);
+        Either<ProblemDetail, Void> result = accountingCoreService.scheduleIngestion(userExtractionParameters, ExtractorType.NETSUITE, Optional.empty(), null);
 
         // Then
         assertThat(result.isRight()).isTrue();
@@ -164,12 +164,12 @@ class AccountingCoreServiceTest {
                 .build();
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
+        Either<ProblemDetail, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_DATE_RANGE");
-        assertThat(result.getLeft().getStatus()).isEqualTo(Status.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
     @Test
@@ -186,12 +186,12 @@ class AccountingCoreServiceTest {
                 .build();
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
+        Either<ProblemDetail, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("ORGANISATION_DATE_MISMATCH");
-        assertThat(result.getLeft().getStatus()).isEqualTo(Status.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
     @Test
@@ -206,12 +206,12 @@ class AccountingCoreServiceTest {
                 .build();
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, Optional.empty(), null);
+        Either<ProblemDetail, Void> result = accountingCoreService.scheduleIngestion(invalidParameters, ExtractorType.NETSUITE, Optional.empty(), null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
-        assertThat(result.getLeft().getStatus()).isEqualTo(Status.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
     @Test
@@ -226,7 +226,7 @@ class AccountingCoreServiceTest {
         given(antiVirusScanner.readFileBytes(any())).willReturn(Either.right(new byte[0]));
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, Optional.empty(), null);
+        Either<ProblemDetail, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, Optional.empty(), null);
 
         // Then
         assertThat(result.isRight()).isTrue();
@@ -247,12 +247,12 @@ class AccountingCoreServiceTest {
         LocalDate toDate = LocalDate.of(2023, 1, 1);
 
         // When
-        Either<Problem, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, null, null);
+        Either<ProblemDetail, Void> result = accountingCoreService.scheduleReconcilation(organisationId, fromDate, toDate, ExtractorType.NETSUITE, null, null);
 
         // Then
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_DATE_RANGE");
-        assertThat(result.getLeft().getStatus()).isEqualTo(Status.BAD_REQUEST);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
 }

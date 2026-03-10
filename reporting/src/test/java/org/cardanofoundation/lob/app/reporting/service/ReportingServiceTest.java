@@ -21,12 +21,12 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -520,7 +520,7 @@ class ReportingServiceTest {
         when(reportRepository.findById("abc")).thenReturn(Optional.of(report));
 
         // When
-        Either<Problem, Void> result = reportingService.delete("abc");
+        Either<ProblemDetail, Void> result = reportingService.delete("abc");
 
         // Then
         assertTrue(result.isRight());
@@ -533,7 +533,7 @@ class ReportingServiceTest {
         when(reportRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Either<Problem, Void> result = reportingService.delete("abc");
+        Either<ProblemDetail, Void> result = reportingService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());
@@ -551,7 +551,7 @@ class ReportingServiceTest {
         when(reportRepository.findById("abc")).thenReturn(Optional.of(publishedReport));
 
         // When
-        Either<Problem, Void> result = reportingService.delete("abc");
+        Either<ProblemDetail, Void> result = reportingService.delete("abc");
 
         // Then
         assertTrue(result.isLeft());
@@ -630,7 +630,7 @@ class ReportingServiceTest {
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.generate(request);
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.generate(request);
 
         // Then
         assertTrue(result.isRight());
@@ -653,7 +653,7 @@ class ReportingServiceTest {
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.generate(request);
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.generate(request);
 
         // Then
         assertTrue(result.isLeft());
@@ -671,7 +671,7 @@ class ReportingServiceTest {
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
 
         // When
-        Either<Problem, ReportResponseDto> result = reportingService.generate(request);
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.generate(request);
 
         // Then
         assertTrue(result.isLeft());

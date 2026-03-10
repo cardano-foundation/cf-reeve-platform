@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,8 +25,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 @Getter
 @Setter
 @AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class TransactionReconciliationTransactionsView {
 
+    @EqualsAndHashCode.Include
     private String id;
     private String internalTransactionNumber;
 

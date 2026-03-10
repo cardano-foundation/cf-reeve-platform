@@ -22,7 +22,7 @@ class ExtractionParametersFilteringServiceTest {
 
     private ExtractionParametersFilteringService service;
     private UserExtractionParameters userExtractionParameters;
-    private SystemExtractionParameters systemExtractionParameters;
+    private org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters systemExtractionParameters;
     private Set<Transaction> transactions;
 
     @BeforeEach
@@ -182,8 +182,8 @@ class ExtractionParametersFilteringServiceTest {
                 .build();
     }
 
-    private SystemExtractionParameters createSystemExtractionParameters() {
-        return SystemExtractionParameters.builder()
+    private org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters createSystemExtractionParameters() {
+        return org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters.builder()
                 .accountPeriodFrom(LocalDate.of(2022, 1, 1))
                 .accountPeriodTo(LocalDate.of(2022, 12, 1))
                 .build();

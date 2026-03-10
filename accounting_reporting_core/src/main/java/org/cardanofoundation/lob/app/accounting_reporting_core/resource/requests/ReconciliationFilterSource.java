@@ -2,5 +2,6 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource.request
 
 public enum ReconciliationFilterSource {
     BLOCKCHAIN,
-    ERP
+    ERP,
+    CSV
 }

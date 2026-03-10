@@ -20,20 +20,19 @@ import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.zalando.problem.jackson.ProblemModule;
 
 @Configuration
 @Slf4j
 public class JsonConfig {
 
     @Bean
-    public Jackson2ObjectMapperBuilder jackson2ObjectMapperBuilder(ProblemModule problem) {
+    public Jackson2ObjectMapperBuilder jackson2ObjectMapperBuilder() {
         log.info("Configuring Jackson2ObjectMapperBuilder");
 
         return new Jackson2ObjectMapperBuilder()
                 .serializationInclusion(JsonInclude.Include.NON_NULL)
                 .featuresToEnable(ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, FAIL_ON_UNKNOWN_PROPERTIES)
-                .modulesToInstall(new JavaTimeModule(), new Jdk8Module(), problem);
+                .modulesToInstall(new JavaTimeModule(), new Jdk8Module());
     }
 
     @Bean

@@ -5,14 +5,11 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
@@ -37,8 +34,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.zalando.problem.Status;
-import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
@@ -49,7 +44,6 @@ import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.organisation.enabled", havingValue = "true", matchIfMissing = true)
 public class CostCenterController {
 
     private final CostCenterService costCenterService;
@@ -68,7 +62,7 @@ public class CostCenterController {
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
 
         return costCenterService.getAllCostCenter(orgId, customerCode, name, parentCustomerCodes, active, pageable).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+                problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
     }
 
@@ -97,7 +91,7 @@ public class CostCenterController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<CostCenterView> insertCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         CostCenterView costCenterView = costCenterService.insertCostCenter(orgId, costCenterUpdate, false);
-        return costCenterView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return costCenterView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(costCenterView))
                 .orElse(ResponseEntity.ok(costCenterView));
     }
@@ -112,7 +106,7 @@ public class CostCenterController {
     public ResponseEntity<CostCenterView> updateCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         CostCenterView costCenterView = costCenterService.updateCostCenter(orgId, costCenterUpdate);
 
-        return costCenterView.getError().map(error -> ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+        return costCenterView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(costCenterView))
                 .orElse(ResponseEntity.ok(costCenterView));
     }

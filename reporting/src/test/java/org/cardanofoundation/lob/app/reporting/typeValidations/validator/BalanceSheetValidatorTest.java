@@ -6,10 +6,11 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +40,7 @@ class BalanceSheetValidatorTest {
         when(reportTemplateEntity.getFields()).thenReturn(List.of(field1));
 
         when(field1.getDateRange()).thenReturn(ReportFieldDateRange.PERIOD);
-        Either<Problem, Void> response = validator.validateReportTemplateType(reportTemplateEntity);
+        Either<ProblemDetail, Void> response = validator.validateReportTemplateType(reportTemplateEntity);
 
         assertEquals(true, response.isLeft());
         assertEquals("ALL_FIELDS_MUST_BE_ACCUMULATED", response.getLeft().getTitle());
@@ -61,7 +62,7 @@ class BalanceSheetValidatorTest {
         when(field2.getDateRange()).thenReturn(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END);
         when(field3.getDateRange()).thenReturn(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END);
 
-        Either<Problem, Void> response = validator.validateReportTemplateType(reportTemplateEntity);
+        Either<ProblemDetail, Void> response = validator.validateReportTemplateType(reportTemplateEntity);
 
         assertEquals(true, response.isRight());
     }

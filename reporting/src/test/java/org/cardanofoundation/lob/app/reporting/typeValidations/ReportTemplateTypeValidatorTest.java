@@ -6,9 +6,10 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +27,7 @@ class ReportTemplateTypeValidatorTest {
         ReportTemplateEntity entity = mock(ReportTemplateEntity.class);
         when(entity.getReportTemplateType()).thenReturn(ReportTemplateType.BALANCE_SHEET);
 
-        Either<Problem, Void> response = validator.validateReportTemplateType(entity);
+        Either<ProblemDetail, Void> response = validator.validateReportTemplateType(entity);
         assertTrue(response.isRight());
     }
 
@@ -41,7 +42,7 @@ class ReportTemplateTypeValidatorTest {
         ReportTemplateEntity entity = mock(ReportTemplateEntity.class);
         when(entity.getReportTemplateType()).thenReturn(ReportTemplateType.INCOME_STATEMENT);
 
-        Either<Problem, Void> response = validator.validateReportTemplateType(entity);
+        Either<ProblemDetail, Void> response = validator.validateReportTemplateType(entity);
         assertTrue(response.isRight());
     }
 }

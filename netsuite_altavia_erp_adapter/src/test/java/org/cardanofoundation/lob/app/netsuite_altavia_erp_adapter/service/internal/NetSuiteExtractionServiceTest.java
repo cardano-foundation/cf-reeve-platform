@@ -16,31 +16,31 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.SystemExtractionParametersFactory;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.Transactions;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteIngestionEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetsuiteIngestionBody;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.IngestionRepository;
+import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
+import org.cardanofoundation.lob.app.organisation.util.SystemExtractionParametersFactory;
 
 @ExtendWith(MockitoExtension.class)
 class NetSuiteExtractionServiceTest {
@@ -71,11 +71,7 @@ class NetSuiteExtractionServiceTest {
 
     @Test
     void testStartNewERPExtraction_errorJson() {
-        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.left(Problem.builder()
-                .withStatus(Status.BAD_REQUEST)
-                .withTitle("testTitle")
-                .withDetail("testDetail")
-                .build()));
+        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
@@ -99,11 +95,7 @@ class NetSuiteExtractionServiceTest {
     @Test
     void testStartNewERPExtraction_errorCreatingExtractionParams() {
         when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class))).thenReturn(Either.right(Optional.of(List.of("TestBody"))));
-        when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.left(Problem.builder()
-                .withStatus(Status.BAD_REQUEST)
-                .withTitle("testTitle")
-                .withDetail("testDetail")
-                .build()));
+        when(systemExtractionParametersFactory.createSystemExtractionParameters("orgId")).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         netSuiteExtractionService.startNewERPExtraction("orgId", "userId", UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
 
@@ -159,11 +151,7 @@ class NetSuiteExtractionServiceTest {
     @Test
     void testContinueERPExtraction_parseSearchFailed() {
         when(ingestionRepository.findById("id")).thenReturn(Optional.of(new NetSuiteIngestionEntity("id", "adapterInstanceId", List.of(new NetsuiteIngestionBody(1L, ingestionBody, "id", "ingestionBodyDebug", "ingestionChecksum")))));
-        when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.left(Problem.builder()
-                .withStatus(Status.BAD_REQUEST)
-                .withTitle("testTitle")
-                .withDetail("testDetail")
-                .build()));
+        when(netSuiteParser.getAllTxLinesFromBodies(any())).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
         netSuiteExtractionService.continueERPExtraction("id", "orgId", UserExtractionParameters.builder().organisationId("org").from(LocalDate.now()).to(LocalDate.now()).build(), SystemExtractionParameters.builder().organisationId("org").build());
 

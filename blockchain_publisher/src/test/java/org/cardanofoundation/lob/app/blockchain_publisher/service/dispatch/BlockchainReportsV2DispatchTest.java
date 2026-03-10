@@ -10,12 +10,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+
 import com.bloxbean.cardano.client.api.exception.ApiException;
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,7 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Submission;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.API3L1TransactionCreator;
@@ -47,7 +49,7 @@ class BlockchainReportsV2DispatchTest {
     private LedgerUpdatedEventPublisher ledgerUpdatedEventPublisher;
 
     @InjectMocks
-    private BlockchainReportsV2Dispatcher dispatcher;
+    private BlockchainReportsDispatcher dispatcher;
 
     @Test
     void dispatchReports_noReportsToDispatch() {
@@ -66,12 +68,12 @@ class BlockchainReportsV2DispatchTest {
     @Test
     void dispatchReports_errorPullBlockchainTransaction() {
         Organisation organisation = mock(Organisation.class);
-        ReportV2Entity reportEntity = mock(ReportV2Entity.class);
+        ReportEntity reportEntity = mock(ReportEntity.class);
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(organisation));
         when(organisation.getId()).thenReturn("org123");
         when(reportEntityRepositoryGateway.findReportsV2ByStatus("org123", 50)).thenReturn(Set.of(reportEntity));
-        when(api3L1TransactionCreator.pullBlockchainTransaction(reportEntity)).thenReturn(Either.left(Problem.builder().withDetail("Detail").build()));
+        when(api3L1TransactionCreator.pullBlockchainTransaction(reportEntity)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
         when(reportEntity.getL1SubmissionData()).thenReturn(Optional.empty());
         dispatcher.dispatchReports();
 
@@ -87,7 +89,7 @@ class BlockchainReportsV2DispatchTest {
     @Test
     void dispatchReports_success() throws ApiException {
         Organisation organisation = mock(Organisation.class);
-        ReportV2Entity reportEntity = mock(ReportV2Entity.class);
+        ReportEntity reportEntity = mock(ReportEntity.class);
         API3BlockchainTransaction api3BlockchainTransaction = mock(API3BlockchainTransaction.class);
         L1Submission l1Submission = new L1Submission("txHash123", Optional.of(1L), true);
         L1SubmissionData l1SubmissionData = mock(L1SubmissionData.class);
@@ -115,7 +117,7 @@ class BlockchainReportsV2DispatchTest {
     @Test
     void dispatchReports_submissionError() throws ApiException {
         Organisation organisation = mock(Organisation.class);
-        ReportV2Entity reportEntity = mock(ReportV2Entity.class);
+        ReportEntity reportEntity = mock(ReportEntity.class);
         API3BlockchainTransaction api3BlockchainTransaction = mock(API3BlockchainTransaction.class);
         L1SubmissionData l1SubmissionData = mock(L1SubmissionData.class);
 

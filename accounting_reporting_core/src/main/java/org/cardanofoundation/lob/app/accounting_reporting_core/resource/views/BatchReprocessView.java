@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 @Getter
 @Setter
@@ -17,7 +17,7 @@ public class BatchReprocessView {
 
     private boolean success;
 
-    private Optional<Problem> error;
+    private Optional<ProblemDetail> error;
 
     public static BatchReprocessView createSuccess(String batchId) {
         return new BatchReprocessView(
@@ -28,7 +28,7 @@ public class BatchReprocessView {
     }
 
     public static BatchReprocessView createFail(String batchId,
-                                                Problem error) {
+                                                ProblemDetail error) {
         return new BatchReprocessView(batchId, false, Optional.of(error));
     }
 

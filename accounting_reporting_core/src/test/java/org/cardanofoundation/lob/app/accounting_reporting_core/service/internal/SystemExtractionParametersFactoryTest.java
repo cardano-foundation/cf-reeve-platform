@@ -6,21 +6,23 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.util.Optional;
 
+import org.springframework.http.ProblemDetail;
+
 import io.vavr.control.Either;
 import org.apache.commons.lang3.Range;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.assistance.AccountingPeriodCalculator;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.organisation.util.AccountingPeriodCalculator;
+import org.cardanofoundation.lob.app.organisation.util.SystemExtractionParametersFactory;
 
 @ExtendWith(MockitoExtension.class)
 class SystemExtractionParametersFactoryTest {
@@ -38,7 +40,7 @@ class SystemExtractionParametersFactoryTest {
 
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.empty());
 
-        Either<Problem, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
+        Either<ProblemDetail, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
 
         Assertions.assertTrue(systemExtractionParameters.isLeft());
     }
@@ -51,7 +53,7 @@ class SystemExtractionParametersFactoryTest {
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(org));
         when(accountingPeriodCalculator.calculateAccountingPeriod(org)).thenReturn(Range.of(LocalDate.EPOCH, now));
 
-        Either<Problem, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
+        Either<ProblemDetail, SystemExtractionParameters> systemExtractionParameters = systemExtractionParametersFactory.createSystemExtractionParameters("org123");
 
         Assertions.assertTrue(systemExtractionParameters.isRight());
         Assertions.assertEquals("org123", systemExtractionParameters.get().getOrganisationId());

@@ -14,6 +14,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -23,7 +25,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,12 +80,12 @@ class ProjectCodeServiceTest {
     @Test
     void testGetAllProjects() {
         List<Project> projects = new ArrayList<>();
-        when(projectRepository.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(projects ));
+        when(projectRepository.findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, null,Pageable.unpaged())).thenReturn(new PageImpl<>(projects ));
         when(jpaSortFieldValidator.validateEntity(Project.class, Pageable.unpaged(), PROJECT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
-        Either<Problem, List<ProjectView>> result = projectCodeService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, Pageable.unpaged());
+        Either<ProblemDetail, List<ProjectView>> result = projectCodeService.getAllProjects("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, null,Pageable.unpaged());
         assertTrue(result.isRight());
         assertEquals(Either.right(projects), result);
-        verify(projectRepository).findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, Pageable.unpaged());
+        verify(projectRepository).findAllByOrganisationId("f3b7485e96cc45b98e825a48a80d856be260b53de5fe45f23287da5b4970b9b0", null, null, null, null, Pageable.unpaged());
         verifyNoMoreInteractions(projectRepository);
     }
 
@@ -265,12 +266,12 @@ class ProjectCodeServiceTest {
     void createProjectCodeFromCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
 
-        when(csvParser.parseCsv(file, ProjectUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("CSV_PARSE_ERROR").build()));
+        when(csvParser.parseCsv(file, ProjectUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV_PARSE_ERROR")));
 
-        Either<Problem, List<ProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
+        Either<ProblemDetail, List<ProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
 
         assertTrue(result.isLeft());
-        assertEquals("CSV_PARSE_ERROR", result.getLeft().getTitle());
+        assertEquals("CSV_PARSE_ERROR", result.getLeft().getDetail());
     }
 
     @Test
@@ -285,7 +286,7 @@ class ProjectCodeServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of(objectError));
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
 
-        Either<Problem, List<ProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
+        Either<ProblemDetail, List<ProjectView>> result = projectCodeService.createProjectCodeFromCsv(organisationId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertNotNull(result.get().get(0).getError());
@@ -312,12 +313,12 @@ class ProjectCodeServiceTest {
         Page<Project> page = new PageImpl<>(List.of(project1, project2));
 
         when(projectRepository.findAllByOrganisationId(
-                any(), any(), any(), any(), any())).thenReturn(page);
+                any(), any(), any(), any(), any(), any())).thenReturn(page);
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
         // when
-        projectCodeService.downloadCsv(orgId, null, null, null, outputStream);
+        projectCodeService.downloadCsv(orgId, null, null, null, null, outputStream);
 
         // then
         String csv = outputStream.toString(StandardCharsets.UTF_8);

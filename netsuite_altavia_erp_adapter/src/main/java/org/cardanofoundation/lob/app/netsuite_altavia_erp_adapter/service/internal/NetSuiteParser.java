@@ -13,12 +13,13 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TransactionDataSearchResult;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TxLine;
@@ -38,25 +39,23 @@ public class NetSuiteParser {
     private final String netsuiteInstanceId;
     private final Clock clock;
 
-    public Either<Problem, List<TxLine>> parseSearchResults(String jsonString) {
+    public Either<ProblemDetail, List<TxLine>> parseSearchResults(String jsonString) {
         try {
             TransactionDataSearchResult transactionDataSearchResult = objectMapper.readValue(jsonString, TransactionDataSearchResult.class);
 
             return Either.right(transactionDataSearchResult.lines());
         } catch (JsonProcessingException e) {
             log.error("Error parsing NetSuite search result: {}", e.getMessage(), e);
-
-            return Either.left(Problem.builder()
-                    .withTitle("JSON_PARSE_ERROR")
-                    .withDetail("JSON rrror parsing NetSuite search error: %s".formatted(e.getMessage()))
-                    .build());
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "JSON error parsing NetSuite search result: %s".formatted(e.getMessage()));
+            problemDetail.setTitle("JSON_PARSE_ERROR");
+            return Either.left(problemDetail);
         }
     }
 
-    public Either<Problem, List<TxLine>> getAllTxLinesFromBodies(List<NetsuiteIngestionBody> ingestionBodies) {
+    public Either<ProblemDetail, List<TxLine>> getAllTxLinesFromBodies(List<NetsuiteIngestionBody> ingestionBodies) {
         List<TxLine> txLines = new ArrayList<>();
         for (NetsuiteIngestionBody ingestionBody : ingestionBodies) {
-            Either<Problem, List<TxLine>> txLinesE = parseSearchResults(requireNonNull(decompress(ingestionBody.getIngestionBody())));
+            Either<ProblemDetail, List<TxLine>> txLinesE = parseSearchResults(requireNonNull(decompress(ingestionBody.getIngestionBody())));
             if (txLinesE.isLeft()) {
                 return txLinesE;
             }

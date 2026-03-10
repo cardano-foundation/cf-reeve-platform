@@ -5,10 +5,17 @@ import static java.util.stream.Collectors.toSet;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.transactionNotFoundResponse;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings.TRANSACTION_ENTITY_FIELD_MAPPINGS;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,16 +25,20 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReconciliationStatisticDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
@@ -167,7 +178,7 @@ public class AccountingCorePresentationViewService {
             count = pagedTransactions.getTotalElements();
             transactions = pagedTransactions.stream()
                     .map(this::getTransactionReconciliationView)
-                    .collect(toSet());
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
         }
         return new ReconciliationResponseView(count,
                 latestReconcilation.flatMap(ReconcilationEntity::getFrom),
@@ -197,10 +208,10 @@ public class AccountingCorePresentationViewService {
     }
 
 
-    public Either<Problem, Optional<BatchView>> batchDetail(String batchId,
-                                                            List<TransactionProcessingStatus> txStatus, Pageable page,
-                                                            BatchFilterRequest batchFilterRequest) {
-        Either<Problem, Pageable> pageableEither =
+    public Either<ProblemDetail, Optional<BatchView>> batchDetail(String batchId,
+                                                                  List<TransactionProcessingStatus> txStatus, Pageable page,
+                                                                  BatchFilterRequest batchFilterRequest) {
+        Either<ProblemDetail, Pageable> pageableEither =
                 jpaSortFieldValidator.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
             return Either.left(pageableEither.getLeft());
@@ -242,7 +253,7 @@ public class AccountingCorePresentationViewService {
                 }));
     }
 
-    public Either<Problem, BatchsDetailView> listAllBatch(BatchSearchRequest body, Pageable pageable) {
+    public Either<ProblemDetail, BatchsDetailView> listAllBatch(BatchSearchRequest body, Pageable pageable) {
         BatchsDetailView batchDetailView = new BatchsDetailView();
         Page<TransactionBatchEntity> transactionBatchEntities =
                 transactionBatchRepositoryGateway.findByFilter(body, pageable);
@@ -281,7 +292,7 @@ public class AccountingCorePresentationViewService {
     }
 
     @Transactional
-    public Either<Problem, Void> extractionTrigger(ExtractionRequest body) {
+    public Either<ProblemDetail, Void> extractionTrigger(ExtractionRequest body) {
         UserExtractionParameters fp = getUserExtractionParameters(body);
 
         return accountingCoreService.scheduleIngestion(fp, body.getExtractorType(),
@@ -303,7 +314,7 @@ public class AccountingCorePresentationViewService {
                 .transactionNumbers(transactionNumbers).build();
     }
 
-    public Either<List<Problem>, Void> extractionValidation(ExtractionRequest body) {
+    public Either<List<ProblemDetail>, Void> extractionValidation(ExtractionRequest body) {
         UserExtractionParameters userExtractionParameters =
                 getUserExtractionParameters(body);
         return accountingCoreService.validateIngestion(userExtractionParameters,
@@ -373,7 +384,7 @@ public class AccountingCorePresentationViewService {
 
     @Transactional
     public BatchReprocessView scheduleReIngestionForFailed(String batchId) {
-        Either<Problem, Void> txM =
+        Either<ProblemDetail, Void> txM =
                 accountingCoreService.scheduleReIngestionForFailed(batchId);
 
         if (txM.isEmpty()) {
@@ -482,7 +493,7 @@ public class AccountingCorePresentationViewService {
     }
 
     private TransactionReconciliationTransactionsView getTransactionReconciliationViolationView(
-            ReconcilationViolation reconcilationViolation) {
+            ReconcilationViolation reconcilationViolation, LocalDateTime lastReconciledDate) {
         return new TransactionReconciliationTransactionsView(
                 reconcilationViolation.getTransactionId(),
                 reconcilationViolation.getTransactionInternalNumber(),
@@ -496,7 +507,7 @@ public class AccountingCorePresentationViewService {
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 Set.of(ReconciliationRejectionCodeRequest.of(
                         reconcilationViolation.getRejectionCode(), false)),
-                null, new LinkedHashSet<>(), new LinkedHashSet<>()
+                lastReconciledDate, new LinkedHashSet<>(), new LinkedHashSet<>()
 
         );
     }
@@ -586,7 +597,7 @@ public class AccountingCorePresentationViewService {
                 (Integer) ((Long) result[4]).intValue(),
                 (Long) result[5],
                 (Integer) ((Long) result[6]).intValue(),
-                 (Long) result[7],
+                (Long) result[7],
                 (Integer) (((Long) result[5]).intValue()
                         + ((Long) result[6]).intValue())
                         + ((Integer) ((Long) result[7]).intValue()));
@@ -688,15 +699,120 @@ public class AccountingCorePresentationViewService {
 
     private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(
             TransactionWithViolationDto violations) {
-        // All of the needed data is within the Transaction. The violation is just a
         // fallback, if the transaction doesn't exist in Reeve
-        if (Optional.ofNullable(violations.tx()).isPresent()) {
+        if (Optional.ofNullable(violations.tx()).isPresent() && violations.tx().getReconcilation().isPresent()) {
             return getTransactionReconciliationView(violations.tx());
         }
+
         if (Optional.ofNullable(violations.violation()).isPresent()) {
-            return getTransactionReconciliationViolationView(violations.violation());
+            return getTransactionReconciliationViolationView(violations.violation(), violations.lastReconciledDate());
         }
         return getTransactionReconciliationViolationView();
+    }
+
+    public Map<String, ReconciliationStatisticView> getReconciliationStatisticByDateRange(ReconciliationStatisticRequest request) {
+        List<ReconciliationStatisticDto> rows = reconcilationRepository.findReconciliationStatisticByDateRange(
+                        request.getOrganisationId(),
+                        request.getDateFrom(),
+                        request.getDateTo())
+                .stream()
+                .map(p -> new ReconciliationStatisticDto(
+                        p.getYear(),
+                        p.getMonth(),
+                        p.getReconciledCount(),
+                        p.getUnreconciledCount()))
+                .toList();
+
+        IntervalType aggregate = request.getAggregate();
+        if (aggregate == null) {
+            return aggregateTotal(rows);
+        }
+
+        boolean multiYear = spansMultipleYears(rows);
+
+        return switch (aggregate) {
+            case MONTH -> aggregateByMonth(rows, multiYear);
+            case QUARTER -> aggregateByQuarter(rows, multiYear);
+            case YEAR -> aggregateByYear(rows);
+        };
+    }
+
+    private boolean spansMultipleYears(List<ReconciliationStatisticDto> rows) {
+        if (rows.isEmpty()) {
+            return false;
+        }
+        int firstYear = rows.getFirst().year();
+        int lastYear = rows.getLast().year();
+        return firstYear != lastYear;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateTotal(List<ReconciliationStatisticDto> rows) {
+        long totalReconciled = 0;
+        long totalUnreconciled = 0;
+        for (ReconciliationStatisticDto row : rows) {
+            totalReconciled += row.reconciledCount();
+            totalUnreconciled += row.unreconciledCount();
+        }
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        result.put("STATISTICS", new ReconciliationStatisticView(totalReconciled, totalUnreconciled));
+        return result;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateByMonth(List<ReconciliationStatisticDto> rows, boolean multiYear) {
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        for (ReconciliationStatisticDto row : rows) {
+            int year = row.year();
+            int month = row.month();
+            long reconciled = row.reconciledCount();
+            long unreconciled = row.unreconciledCount();
+
+            String key = Month.of(month).name();
+            if (multiYear) {
+                key = key + "_" + year;
+            }
+            result.put(key, new ReconciliationStatisticView(reconciled, unreconciled));
+        }
+        return result;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateByQuarter(List<ReconciliationStatisticDto> rows, boolean multiYear) {
+        Map<String, long[]> quarterMap = new LinkedHashMap<>();
+        for (ReconciliationStatisticDto row : rows) {
+            int year = row.year();
+            int month = row.month();
+            int quarter = (month - 1) / 3 + 1;
+
+            String key = "Q" + quarter;
+            if (multiYear) {
+                key = key + "_" + year;
+            }
+            long[] counts = quarterMap.computeIfAbsent(key, k -> new long[2]);
+            counts[0] += row.reconciledCount();
+            counts[1] += row.unreconciledCount();
+        }
+
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        for (Map.Entry<String, long[]> entry : quarterMap.entrySet()) {
+            result.put(entry.getKey(), new ReconciliationStatisticView(entry.getValue()[0], entry.getValue()[1]));
+        }
+        return result;
+    }
+
+    private Map<String, ReconciliationStatisticView> aggregateByYear(List<ReconciliationStatisticDto> rows) {
+        Map<String, long[]> yearMap = new LinkedHashMap<>();
+        for (ReconciliationStatisticDto row : rows) {
+            int year = row.year();
+            String key = String.valueOf(year);
+            long[] counts = yearMap.computeIfAbsent(key, k -> new long[2]);
+            counts[0] += row.reconciledCount();
+            counts[1] += row.unreconciledCount();
+        }
+
+        Map<String, ReconciliationStatisticView> result = new LinkedHashMap<>();
+        for (Map.Entry<String, long[]> entry : yearMap.entrySet()) {
+            result.put(entry.getKey(), new ReconciliationStatisticView(entry.getValue()[0], entry.getValue()[1]));
+        }
+        return result;
     }
 
     public Map<FilterOptions, List<FilteringOptionsListResponse>> getFilterOptions(
@@ -809,5 +925,71 @@ public class AccountingCorePresentationViewService {
         details.setBag(BagParser.parse(details.getBag()));
         return details;
 
+    }
+
+    public void downloadCsvTransactions(@Valid String orgId, List<TxValidationStatus> txStatusList, List<TransactionType> transactionTypes, LocalDate dateFrom, LocalDate dateTo, Boolean published, OutputStream outputStream) {
+        List<TransactionEntity> allFilteredTxEntities = accountingCoreTransactionRepository.findAllByStatusAndTypeAndInDateRange(orgId, txStatusList, transactionTypes,
+                dateFrom, dateTo, published, Pageable.unpaged());
+        try (Writer writer = new OutputStreamWriter(outputStream)) {
+            CSVWriter csvWriter = new CSVWriter(writer);
+            String[] header = {"Transaction Number",
+                    "Transaction Date",
+                    "Transaction Type",
+                    "Fx Rate",
+                    "AmountLCY Debit",
+                    "AmountLCY Credit",
+                    "AmountFCY Debit",
+                    "AmountFCY Credit",
+                    "Debit Code",
+                    "Debit Name",
+                    "Credit Code",
+                    "Credit Name",
+                    "Project Code",
+                    "Document Name",
+                    "Currency",
+                    "VAT Rate",
+                    "VAT Code",
+                    "Cost Center Code",
+                    "Counterparty Code",
+                    "Counterparty Name",
+                    "Extractor Type",
+                    "Ledger Dispatch Status",
+                    "Blockchain Hash"};
+            csvWriter.writeNext(header, false);
+            for (TransactionEntity transactionEntity : allFilteredTxEntities) {
+                for (TransactionItemEntity item : transactionEntity.getItems()) {
+                    boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
+                    String[] data = {
+                            transactionEntity.getInternalTransactionNumber(),
+                            transactionEntity.getEntryDate().toString(),
+                            Optional.ofNullable(transactionEntity.getTransactionType()).map(Enum::name).orElse(""),
+                            item.getFxRate().stripTrailingZeros().toPlainString(),
+                            isCredit ? "" : item.getAmountLcy().stripTrailingZeros().toPlainString(),
+                            isCredit ? item.getAmountLcy().stripTrailingZeros().toPlainString() : "",
+                            isCredit ? "" : item.getAmountFcy().stripTrailingZeros().toPlainString(),
+                            isCredit ? item.getAmountFcy().stripTrailingZeros().toPlainString() : "",
+                            item.getAccountDebit().map(Account::getCode).orElse(""),
+                            item.getAccountDebit().flatMap(Account::getName).orElse(""),
+                            item.getAccountCredit().map(Account::getCode).orElse(""),
+                            item.getAccountCredit().flatMap(Account::getName).orElse(""),
+                            item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                            item.getDocument().map(Document::getNum).orElse(""),
+                            item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
+                            item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
+                            item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
+                            item.getCostCenter().map(costCenter -> costCenter.getCustomerCode()).orElse(""),
+                            item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
+                            item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
+                            transactionEntity.getExtractorType(),
+                            transactionEntity.getLedgerDispatchStatus().name(),
+                            transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
+                    };
+                    csvWriter.writeNext(data, false);
+                }
+            }
+            csvWriter.flush();
+        } catch (Exception e) {
+            log.error("Error while writing transactions to CSV for orgId {}: {}", orgId, e.getMessage(), e);
+        }
     }
 }

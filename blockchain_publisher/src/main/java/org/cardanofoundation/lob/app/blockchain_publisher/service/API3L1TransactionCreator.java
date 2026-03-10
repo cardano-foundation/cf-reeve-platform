@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
-import static org.zalando.problem.Status.INTERNAL_SERVER_ERROR;
+import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,6 +14,8 @@ import jakarta.annotation.PostConstruct;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.http.ProblemDetail;
 
 import co.nstant.in.cbor.model.Map;
 import com.bloxbean.cardano.client.account.Account;
@@ -30,13 +32,11 @@ import com.bloxbean.cardano.client.metadata.helper.MetadataToJsonNoSchemaConvert
 import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
 import com.bloxbean.cardano.client.quicktx.Tx;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reportsV2.ReportV2Entity;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @RequiredArgsConstructor
@@ -68,17 +68,8 @@ public class API3L1TransactionCreator {
         log.info("API3L1TransactionCreator is initialised.");
     }
 
-    public Either<Problem, API3BlockchainTransaction> pullBlockchainTransaction(ReportEntity reportEntity) {
-        return blockchainReaderPublicApi.getChainTip()
-                .flatMap(chainTip -> {
-                    MetadataMap metadataMap = api3MetadataSerialiser
-                            .serialiseToMetadataMap(reportEntity, chainTip.getAbsoluteSlot());
-                    return handleTransactionCreation(metadataMap, chainTip.getAbsoluteSlot());
-                });
-    }
-
-    public Either<Problem, API3BlockchainTransaction> pullBlockchainTransaction(
-            ReportV2Entity reportEntity) {
+    public Either<ProblemDetail, API3BlockchainTransaction> pullBlockchainTransaction(
+            ReportEntity reportEntity) {
         return blockchainReaderPublicApi.getChainTip().flatMap(chainTip -> {
             MetadataMap metadataMap = api3MetadataSerialiser.serialiseToMetadataMap(reportEntity,
                     chainTip.getAbsoluteSlot());
@@ -86,7 +77,7 @@ public class API3L1TransactionCreator {
         });
     }
 
-    private Either<Problem, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,
+    private Either<ProblemDetail, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,
                                                                                  long creationSlot) {
         try {
             Map data = metadataMap.getMap();
@@ -109,12 +100,9 @@ public class API3L1TransactionCreator {
             boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
 
             if (!isValid) {
-                return Either.left(Problem.builder()
-                        .withTitle("INVALID_REPORT_METADATA")
-                        .withDetail("Metadata is not valid according to the transaction schema, we will not create a transaction!")
-                        .withStatus(INTERNAL_SERVER_ERROR)
-                        .build()
-                );
+                ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "Metadata is not valid according to the transaction schema, we will not create a transaction!");
+                problemDetail.setTitle("INVALID_REPORT_METADATA");
+                return Either.left(problemDetail);
             }
 
             log.info("Metadata for tx validated, gonna serialise tx now...");
@@ -128,12 +116,9 @@ public class API3L1TransactionCreator {
             return Either.right(new API3BlockchainTransaction(creationSlot, serialisedTxBytes, organiserAccount.baseAddress()));
         } catch (Exception e) {
             log.error("Error serialising metadata to cbor", e);
-            return Either.left(Problem.builder()
-                    .withTitle("ERROR_SERIALISING_METADATA")
-                    .withDetail(e.getMessage())
-                    .withStatus(INTERNAL_SERVER_ERROR)
-                    .build()
-            );
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "Error serialising metadata to cbor: %s".formatted(e.getMessage()));
+            problemDetail.setTitle("ERROR_SERIALISING_METADATA");
+            return Either.left(problemDetail);
         }
     }
 

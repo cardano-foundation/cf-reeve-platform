@@ -7,7 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-import org.zalando.problem.Problem;
+import org.springframework.http.ProblemDetail;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
@@ -26,9 +26,9 @@ public class VatView {
     private String description;
     private Boolean active;
 
-    private Problem error;
+    private ProblemDetail error;
 
-    public Optional<Problem> getError() {
+    public Optional<ProblemDetail> getError() {
         return Optional.ofNullable(error);
     }
 
@@ -44,7 +44,7 @@ public class VatView {
                 .build();
     }
 
-    public static VatView createFail(VatUpdate vatUpdate, Problem error) {
+    public static VatView createFail(VatUpdate vatUpdate, ProblemDetail error)  {
         return VatView.builder()
                 .customerCode(vatUpdate.getCustomerCode())
                 .rate(Optional.ofNullable(vatUpdate.getRate()).map(BigDecimal::stripTrailingZeros).map(BigDecimal::toPlainString).orElse(null))

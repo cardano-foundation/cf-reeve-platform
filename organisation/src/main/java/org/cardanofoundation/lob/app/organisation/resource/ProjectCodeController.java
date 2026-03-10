@@ -4,14 +4,10 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
-import java.util.Objects;
-import java.util.Optional;
-
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.MediaType;
@@ -36,8 +32,6 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.zalando.problem.Status;
-import org.zalando.problem.StatusType;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
@@ -49,7 +43,6 @@ import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
 @Tag(name = "Organisation", description = "Organisation API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.organisation.enabled", havingValue = "true", matchIfMissing = true)
 public class ProjectCodeController {
 
     private final ProjectCodeService projectCodeService;
@@ -64,20 +57,22 @@ public class ProjectCodeController {
                                             @RequestParam(value = "customerCode", required = false) String customerCode,
                                             @RequestParam(value = "name", required = false) String name,
                                             @RequestParam(value = "parentCustomerCode", required = false) String parentCustomerCode,
+                                            @RequestParam(value = "active", required = false) Boolean active,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, pageable).fold(
-                problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus()).getStatusCode()).body(problem),
+        return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, active, pageable).fold(
+                problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
     }
 
     @Operation(summary = "Download projects CSV file", description = "Download projects as a CSV file")
-    @GetMapping(value = "/organisations/{orgId}/projects/download", produces = "test/csv")
+    @GetMapping(value = "/{orgId}/projects/download", produces = "test/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<StreamingResponseBody> downloadProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "customerCode", required = false) String customerCode,
                                                                      @RequestParam(value = "name", required = false) String name,
-                                                                     @RequestParam(value = "parentCustomerCodes", required = false) String parentCustomerCodes) {
-        StreamingResponseBody responseBody = outputStream -> projectCodeService.downloadCsv(orgId, customerCode, name, parentCustomerCodes, outputStream);
+                                                                     @RequestParam(value = "parentCustomerCodes", required = false) String parentCustomerCodes,
+                                                                     @RequestParam(value = "active", required = false) Boolean active) {
+        StreamingResponseBody responseBody = outputStream -> projectCodeService.downloadCsv(orgId, customerCode, name, parentCustomerCodes, active, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"projects_%s.csv\"".formatted(orgId))
                 .contentType(MediaType.TEXT_PLAIN)
@@ -94,7 +89,7 @@ public class ProjectCodeController {
     public ResponseEntity<ProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         ProjectView projectView = projectCodeService.insertProject(orgId, projectUpdate, false);
         return projectView.getError().map(error ->
-                        ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        ResponseEntity.status(error.getStatus())
                                 .body(projectView))
                 .orElseGet(() -> ResponseEntity.ok(projectView));
     }
@@ -109,7 +104,7 @@ public class ProjectCodeController {
     public ResponseEntity<ProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         ProjectView projectView = projectCodeService.updateProject(orgId, projectUpdate);
         return projectView.getError().map(error ->
-                        ResponseEntity.status(Optional.ofNullable(error.getStatus()).map(StatusType::getStatusCode).orElse(Status.BAD_REQUEST.getStatusCode()))
+                        ResponseEntity.status(error.getStatus())
                                 .body(projectView))
                 .orElseGet(() -> ResponseEntity.ok(projectView));
     }

@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -20,8 +22,6 @@ import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
@@ -57,32 +57,32 @@ public class ReportTemplateService {
     private final Validator validator;
     private final ReportTemplateTypeValidator reportTemplateTypeValidator;
 
-    private Either<Problem, Void> validateReport(ReportTemplateDto dto) {
-        Either<Problem, Void> errorDetails = validateReportTemplateDto(dto);
+    private Either<ProblemDetail, Void> validateReport(ReportTemplateDto dto) {
+        Either<ProblemDetail, Void> errorDetails = validateReportTemplateDto(dto);
         if (errorDetails.isLeft()) return Either.left(errorDetails.getLeft());
 
-        Either<Problem, Void> validDataMode = validateDataMode(dto);
+        Either<ProblemDetail, Void> validDataMode = validateDataMode(dto);
         if (validDataMode.isLeft()) return Either.left(validDataMode.getLeft());
 
         // Validate no duplicate field names under same parent
-        Either<Problem, Void> duplicateValidation = validateNoDuplicateFields(dto.getFields());
+        Either<ProblemDetail, Void> duplicateValidation = validateNoDuplicateFields(dto.getFields());
         if (duplicateValidation.isLeft()) {
             return Either.left(duplicateValidation.getLeft());
         }
 
-        Either<Problem, Void> forbiddenCharacters = validateForbiddenCharacters(dto.getFields());
+        Either<ProblemDetail, Void> forbiddenCharacters = validateForbiddenCharacters(dto.getFields());
         if (forbiddenCharacters.isLeft()) {
             return Either.left(forbiddenCharacters.getLeft());
         }
 
         // Validate subtypes exist
-        Either<Problem, Void> subtypeValidation = validateAccounts(dto.getFields(), dto.getOrganisationId());
+        Either<ProblemDetail, Void> subtypeValidation = validateAccounts(dto.getFields(), dto.getOrganisationId());
         if (subtypeValidation.isLeft()) {
             return Either.left(subtypeValidation.getLeft());
         }
 
         // Validate validation rules
-        Either<Problem, Void> validationRulesValidation = validateValidationRules(dto);
+        Either<ProblemDetail, Void> validationRulesValidation = validateValidationRules(dto);
         if (validationRulesValidation.isLeft()) {
             return Either.left(validationRulesValidation.getLeft());
         }
@@ -97,54 +97,48 @@ public class ReportTemplateService {
         return field.getChildFields().stream().anyMatch(f -> hasDuplicate(f, seenAccountMappings));
     }
 
-    private Either<Problem, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
+    private Either<ProblemDetail, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
         for(ReportTemplateFieldDto field : fields) {
             if(!field.getChildFields().isEmpty()) {
-                Either<Problem, Void> childValidation = validateForbiddenCharacters(field.getChildFields());
+                Either<ProblemDetail, Void> childValidation = validateForbiddenCharacters(field.getChildFields());
                 if (childValidation.isLeft()) {
                     return childValidation;
                 }
             }
             if(Helper.containsForbiddenCharacters(field.getFieldName())) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_FIELD_NAME)
-                        .withDetail("Field name '" + field.getFieldName() + "' contains forbidden characters. Only alphanumeric characters are allowed. Following Characters aren't allowed: " + Helper.FORBIDDEN_CHARACTERS)
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Field name '" + field.getFieldName() + "' contains forbidden characters. Only alphanumeric characters are allowed. Following Characters aren't allowed: " + Helper.FORBIDDEN_CHARACTERS);
+                problem.setTitle(Constants.INVALID_FIELD_NAME);
+                return Either.left(problem);
             }
         }
         return Either.right(null);
     }
 
-    public Either<Problem, ReportTemplateResponseDto> create(ReportTemplateDto dto) {
+    public Either<ProblemDetail, ReportTemplateResponseDto> create(ReportTemplateDto dto) {
         log.info("Creating report template: {}", dto.getName());
-        Either<Problem, Void> validateReport = validateReport(dto);
+        Either<ProblemDetail, Void> validateReport = validateReport(dto);
         if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
         // Check if a template with the same name already exists for this organisation
         Optional<ReportTemplateEntity> existingTemplateOpt =
                 reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
 
         if (existingTemplateOpt.isPresent()) {
-            return Either.left(Problem.builder()
-                    .withTitle("Template Already Exists")
-                    .withDetail("A template with name '" + dto.getName() + "' already exists for this organisation.")
-                    .withStatus(Status.CONFLICT)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "A template with name '" + dto.getName() + "' already exists for this organisation.");
+            problem.setTitle("Template Already Exists");
+            return Either.left(problem);
         }
         try {
             ReportTemplateType.valueOf(dto.getReportTemplateType());
         } catch (IllegalArgumentException e) {
-            return Either.left(Problem.builder()
-                    .withTitle("Invalid Report Template Type")
-                    .withDetail("The report template type '" + dto.getReportTemplateType() + "' is not valid.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The report template type '" + dto.getReportTemplateType() + "' is not valid.");
+            problem.setTitle("Invalid Report Template Type");
+            return Either.left(problem);
         }
 
         // New template - create with version 1
         log.info("Creating new template: {}", dto.getName());
         ReportTemplateEntity templateToSave = reportTemplateMapper.toEntity(dto, null);
-        Either<Problem, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
+        Either<ProblemDetail, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
         if(reportTypeValidated.isLeft()) {
             return Either.left(reportTypeValidated.getLeft());
         }
@@ -152,7 +146,7 @@ public class ReportTemplateService {
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
-    private Either<Problem, Void> validateDataMode(ReportTemplateDto dto) {
+    private Either<ProblemDetail, Void> validateDataMode(ReportTemplateDto dto) {
         DataMode dataMode;
         try {
             dataMode = DataMode.valueOf(dto.getDataMode());
@@ -160,18 +154,14 @@ public class ReportTemplateService {
             return Either.left(Helper.buildDataModeError(dto.getDataMode()));
         }
         if(dataMode.equals(DataMode.SYSTEM) && !hasAllMappings(dto.getFields())) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.INVALID_FIELD_MAPPINGS)
-                    .withDetail("All fields must have mappings when data mode is SYSTEM")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "All fields must have mappings when data mode is SYSTEM");
+            problem.setTitle(Constants.INVALID_FIELD_MAPPINGS);
+            return Either.left(problem);
         }
         if(dataMode.equals(DataMode.USER) && hasMappings(dto.getFields())) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.INVALID_FIELD_MAPPINGS)
-                    .withDetail("No field mappings are allowed in a USER data mode template")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "No field mappings are allowed in a USER data mode template");
+            problem.setTitle(Constants.INVALID_FIELD_MAPPINGS);
+            return Either.left(problem);
         }
         return Either.right(null);
     }
@@ -222,7 +212,7 @@ public class ReportTemplateService {
         return allErrors;
     }
 
-    private Either<Problem, Void> validateReportTemplateDto(ReportTemplateDto dto) {
+    private Either<ProblemDetail, Void> validateReportTemplateDto(ReportTemplateDto dto) {
         Errors errors = validator.validateObject(dto);
         List<ObjectError> allErrors = new ArrayList<>(errors.getAllErrors());
         allErrors.addAll(getValidationErrorsOfFields(dto.getFields()));
@@ -230,18 +220,16 @@ public class ReportTemplateService {
             String errorDetails = allErrors.stream()
                     .map(ObjectError::getDefaultMessage)
                     .collect(Collectors.joining(", "));
-            return Either.left(Problem.builder()
-                    .withTitle("Validation Error")
-                    .withDetail(errorDetails)
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, errorDetails);
+            problem.setTitle("Validation Error");
+            return Either.left(problem);
         }
         return Either.right(null);
     }
 
-    public Either<Problem, ReportTemplateResponseDto> update(ReportTemplateDto dto) {
+    public Either<ProblemDetail, ReportTemplateResponseDto> update(ReportTemplateDto dto) {
         log.info("Updating report template: {}", dto.getName());
-        Either<Problem, Void> validateReport = validateReport(dto);
+        Either<ProblemDetail, Void> validateReport = validateReport(dto);
         if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
 
         // Check if the template to be updated exists
@@ -249,17 +237,15 @@ public class ReportTemplateService {
                 reportTemplateRepository.findLatestByOrganisationIdAndId(dto.getOrganisationId(), dto.getId());
 
         if (existingTemplateOpt.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("Template Not Found")
-                    .withDetail("No template with id '" + dto.getId() + "' exists for this organisation. Use POST to create.")
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "No template with id '" + dto.getId() + "' exists for this organisation. Use POST to create.");
+            problem.setTitle("Template Not Found");
+            return Either.left(problem);
         }
 
         ReportTemplateEntity existing = existingTemplateOpt.get();
         ReportTemplateEntity templateToSave;
 
-        Either<Problem, Void> prohibitedFieldChanged = checkIfProhibitedFieldChanged(existing, dto);
+        Either<ProblemDetail, Void> prohibitedFieldChanged = checkIfProhibitedFieldChanged(existing, dto);
         if(prohibitedFieldChanged.isLeft()) {
             return Either.left(prohibitedFieldChanged.getLeft());
         }
@@ -270,11 +256,9 @@ public class ReportTemplateService {
         try {
             ReportTemplateType.valueOf(dto.getReportTemplateType());
         } catch (IllegalArgumentException e) {
-            return Either.left(Problem.builder()
-                    .withTitle("Invalid Report Template Type")
-                    .withDetail("The report template type '" + dto.getReportTemplateType() + "' is not valid.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The report template type '" + dto.getReportTemplateType() + "' is not valid.");
+            problem.setTitle("Invalid Report Template Type");
+            return Either.left(problem);
         }
         if (!existingReports.isEmpty()) {
             // Reports exist - create a new version
@@ -288,7 +272,7 @@ public class ReportTemplateService {
             log.info("Template '{}' has no existing reports, updating in place", dto.getName());
             templateToSave = reportTemplateMapper.toEntity(dto, existing);
         }
-        Either<Problem, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
+        Either<ProblemDetail, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
         if(reportTypeValidated.isLeft()) {
             return Either.left(reportTypeValidated.getLeft());
         }
@@ -303,27 +287,21 @@ public class ReportTemplateService {
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
-    private Either<Problem, Void> checkIfProhibitedFieldChanged(ReportTemplateEntity existing, ReportTemplateDto dto) {
+    private Either<ProblemDetail, Void> checkIfProhibitedFieldChanged(ReportTemplateEntity existing, ReportTemplateDto dto) {
         if(!existing.getName().equals(dto.getName())) {
-            return Either.left(Problem.builder()
-                    .withTitle("NAME_CHANGE_NOT_ALLOWED")
-                    .withDetail("Changing the name of a report template is not allowed. Please create a new template if you want a different name.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Changing the name of a report template is not allowed. Please create a new template if you want a different name.");
+            problem.setTitle("NAME_CHANGE_NOT_ALLOWED");
+            return Either.left(problem);
         }
         if(!existing.getDataMode().name().equals(dto.getDataMode())) {
-            return Either.left(Problem.builder()
-                    .withTitle("DATA_MODE_CHANGE_NOT_ALLOWED")
-                    .withDetail("Changing the data mode of a report template is not allowed. Please create a new template if you want a different data mode.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Changing the data mode of a report template is not allowed. Please create a new template if you want a different data mode.");
+            problem.setTitle("DATA_MODE_CHANGE_NOT_ALLOWED");
+            return Either.left(problem);
         }
         if(!existing.getReportTemplateType().name().equals(dto.getReportTemplateType())) {
-            return Either.left(Problem.builder()
-                    .withTitle("REPORT_TEMPLATE_TYPE_CHANGE_NOT_ALLOWED")
-                    .withDetail("Changing the report template type of a report template is not allowed. Please create a new template if you want a different report template type.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Changing the report template type of a report template is not allowed. Please create a new template if you want a different report template type.");
+            problem.setTitle("REPORT_TEMPLATE_TYPE_CHANGE_NOT_ALLOWED");
+            return Either.left(problem);
         }
         return Either.right(null);
     }
@@ -356,16 +334,14 @@ public class ReportTemplateService {
                 .build();
     }
 
-    public Either<Problem, Void> delete(String id) {
+    public Either<ProblemDetail, Void> delete(String id) {
         log.info("Deleting report template id: {}", id);
 
         Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(id);
         if (templateOpt.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("TEMPLATE_NOT_FOUND")
-                    .withDetail("Report template with ID " + id + " does not exist")
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Report template with ID " + id + " does not exist");
+            problem.setTitle("TEMPLATE_NOT_FOUND");
+            return Either.left(problem);
         }
 
         // Check if there are any reports using this template
@@ -373,12 +349,10 @@ public class ReportTemplateService {
                 reportingRepository.findByReportTemplateId(id);
 
         if (!existingReports.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("TEMPLATE_IN_USE")
-                    .withDetail("Cannot delete template with ID " + id + " because it has " +
-                            existingReports.size() + " associated report(s)")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Cannot delete template with ID " + id + " because it has " +
+                    existingReports.size() + " associated report(s)");
+            problem.setTitle("TEMPLATE_IN_USE");
+            return Either.left(problem);
         }
 
         reportTemplateRepository.deleteById(id);
@@ -390,15 +364,15 @@ public class ReportTemplateService {
         return reportTemplateRepository.existsByOrganisationIdAndName(organisationId, name);
     }
 
-    private Either<Problem, Void> validateNoDuplicateFields(List<ReportTemplateFieldDto> fields) {
-        Either<Problem, Void> duplicateFieldsNamesRecursive = validateNoDuplicateFieldsNamesRecursive(fields, null);
+    private Either<ProblemDetail, Void> validateNoDuplicateFields(List<ReportTemplateFieldDto> fields) {
+        Either<ProblemDetail, Void> duplicateFieldsNamesRecursive = validateNoDuplicateFieldsNamesRecursive(fields, null);
         if (duplicateFieldsNamesRecursive.isLeft()) {
             return duplicateFieldsNamesRecursive;
         }
         return Either.right(null);
     }
 
-    private Either<Problem, Void> validateNoDuplicateFieldsNamesRecursive(List<ReportTemplateFieldDto> fields, String parentName) {
+    private Either<ProblemDetail, Void> validateNoDuplicateFieldsNamesRecursive(List<ReportTemplateFieldDto> fields, String parentName) {
         if (fields == null || fields.isEmpty()) {
             return Either.right(null);
         }
@@ -408,17 +382,15 @@ public class ReportTemplateService {
         for (ReportTemplateFieldDto field : fields) {
             if (fieldNames.contains(field.getFieldName())) {
                 String parentInfo = parentName != null ? " under parent '" + parentName + "'" : " at root level";
-                return Either.left(Problem.builder()
-                        .withTitle("DUPLICATE_FIELD_NAME")
-                        .withDetail("Duplicate field name '" + field.getFieldName() + "'" + parentInfo + ". Field names must be unique within the same parent.")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Duplicate field name '" + field.getFieldName() + "'" + parentInfo + ". Field names must be unique within the same parent.");
+                problem.setTitle("DUPLICATE_FIELD_NAME");
+                return Either.left(problem);
             }
             fieldNames.add(field.getFieldName());
 
             // Recursively validate child fields
             if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
-                Either<Problem, Void> childValidation = validateNoDuplicateFieldsNamesRecursive(
+                Either<ProblemDetail, Void> childValidation = validateNoDuplicateFieldsNamesRecursive(
                         field.getChildFields(),
                         field.getFieldName()
                 );
@@ -431,7 +403,7 @@ public class ReportTemplateService {
         return Either.right(null);
     }
 
-    private Either<Problem, Void> validateAccounts(List<ReportTemplateFieldDto> fields, String orgId) {
+    private Either<ProblemDetail, Void> validateAccounts(List<ReportTemplateFieldDto> fields, String orgId) {
         if (fields == null || fields.isEmpty()) {
             return Either.right(null);
         }
@@ -461,11 +433,9 @@ public class ReportTemplateService {
                 .collect(Collectors.toSet());
 
         if (!missingAccounts.isEmpty()) {
-            return Either.left(Problem.builder()
-                    .withTitle("INVALID_ACCOUNTS")
-                    .withDetail("The following chart of account do not exist: " + missingAccounts)
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The following chart of account do not exist: " + missingAccounts);
+            problem.setTitle("INVALID_ACCOUNTS");
+            return Either.left(problem);
         }
 
         return Either.right(null);
@@ -486,7 +456,7 @@ public class ReportTemplateService {
         }
     }
 
-    private Either<Problem, Void> validateValidationRules(ReportTemplateDto dto) {
+    private Either<ProblemDetail, Void> validateValidationRules(ReportTemplateDto dto) {
         if (dto.getValidationRules() == null || dto.getValidationRules().isEmpty()) {
             return Either.right(null);
         }
@@ -498,40 +468,32 @@ public class ReportTemplateService {
         for (ValidationRuleDto rule : dto.getValidationRules()) {
             // Validate rule has a name
             if (rule.getName() == null || rule.getName().trim().isEmpty()) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_VALIDATION_RULE)
-                        .withDetail("Validation rule must have a name")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation rule must have a name");
+                problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+                return Either.left(problem);
             }
 
             // Validate operator
             try {
                 ComparisonOperator.valueOf(rule.getOperator());
             } catch (IllegalArgumentException e) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_VALIDATION_RULE)
-                        .withDetail("Invalid comparison operator: " + rule.getOperator() + ". Must be one of: GREATER_THAN_OR_EQUAL, EQUAL, LESS_THAN_OR_EQUAL")
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid comparison operator: " + rule.getOperator() + ". Must be one of: GREATER_THAN_OR_EQUAL, EQUAL, LESS_THAN_OR_EQUAL");
+                problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+                return Either.left(problem);
             }
 
             // Validate left side terms
             if (rule.getLeftSideTerms() == null || rule.getLeftSideTerms().isEmpty()) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_VALIDATION_RULE)
-                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_S_SIDE.formatted(rule.getName(), "left"))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_S_SIDE.formatted(rule.getName(), "left"));
+                problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+                return Either.left(problem);
             }
 
             // Validate right side terms
             if (rule.getRightSideTerms() == null || rule.getRightSideTerms().isEmpty()) {
-                return Either.left(Problem.builder()
-                        .withTitle(Constants.INVALID_VALIDATION_RULE)
-                        .withDetail(Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_S_SIDE.formatted(rule.getName(), "right"))
-                        .withStatus(Status.BAD_REQUEST)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, Constants.VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_S_SIDE.formatted(rule.getName(), "right"));
+                problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+                return Either.left(problem);
             }
 
             // Validate all terms reference existing fields
@@ -541,30 +503,24 @@ public class ReportTemplateService {
 
             for (ValidationRuleTermDto term : allTerms) {
                 if (term.getFieldName() == null || term.getFieldName().trim().isEmpty()) {
-                    return Either.left(Problem.builder()
-                            .withTitle(Constants.INVALID_VALIDATION_RULE)
-                            .withDetail("Validation Rule term must have names.")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation Rule term must have names.");
+                    problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+                    return Either.left(problem);
                 }
                 List<String> namesNotExist = Arrays.stream(term.getFieldName().split("\\.")).filter(s -> !allFieldNames.contains(s)).toList();
                 if (!namesNotExist.isEmpty()) {
-                    return Either.left(Problem.builder()
-                            .withTitle(Constants.INVALID_VALIDATION_RULE)
-                            .withDetail("Validation rule '" + rule.getName() + "' references field names '" + namesNotExist + "' which do not exist in the template")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation rule '" + rule.getName() + "' references field names '" + namesNotExist + "' which do not exist in the template");
+                    problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+                    return Either.left(problem);
                 }
 
                 // Validate operation
                 try {
                     TermOperation.valueOf(term.getOperation());
                 } catch (IllegalArgumentException e) {
-                    return Either.left(Problem.builder()
-                            .withTitle(Constants.INVALID_VALIDATION_RULE)
-                            .withDetail("Invalid term operation: " + term.getOperation() + ". Must be one of: ADD, SUBTRACT")
-                            .withStatus(Status.BAD_REQUEST)
-                            .build());
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid term operation: " + term.getOperation() + ". Must be one of: ADD, SUBTRACT");
+                    problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+                    return Either.left(problem);
                 }
             }
         }
@@ -572,11 +528,9 @@ public class ReportTemplateService {
         Set<String> validationRuleNames = new HashSet<>();
         Optional<ValidationRuleDto> duplicateName = dto.getValidationRules().stream().filter(rule -> !validationRuleNames.add(rule.getName())).findFirst();
         if(duplicateName.isPresent()) {
-            return Either.left(Problem.builder()
-                    .withTitle(Constants.INVALID_VALIDATION_RULE)
-                    .withDetail("Duplicate validation rule name found: '" + duplicateName.get().getName() + "'. Each validation rule must have a unique name.")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Duplicate validation rule name found: '" + duplicateName.get().getName() + "'. Each validation rule must have a unique name.");
+            problem.setTitle(Constants.INVALID_VALIDATION_RULE);
+            return Either.left(problem);
         }
 
         return Either.right(null);

@@ -28,10 +28,7 @@ import org.cardanofoundation.signify.cesr.util.CoreUtil;
 @Slf4j
 @RequiredArgsConstructor
 @Service
-@ConditionalOnProperty(name = {
-    "lob.blockchain-publisher.keri.enabled",
-    "lob.blockchain-publisher.enabled"
-}, havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(name = "lob.blockchain-publisher.keri.enabled", havingValue = "true", matchIfMissing = false)
 public class KeriService {
 
 

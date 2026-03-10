@@ -1,46 +1,31 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.job;
 
-import java.time.LocalDate;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.PublishError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.LedgerService;
-import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.ReportService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionBatchService;
-import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
 public class TxStatusUpdaterJob {
 
     private final Map<String, TxStatusUpdate> txStatusUpdatesMap = new ConcurrentHashMap<>();
     private final LedgerService ledgerService;
     private final TransactionBatchService transactionBatchService;
-    private final ReportRepository reportRepository;
-    private final ReportService reportService;
 
     @Value("${lob.blockchain.tx-status-updater.max-map-size:1000}")
     private int maxMapSize;
@@ -66,32 +51,6 @@ public class TxStatusUpdaterJob {
 
             transactionBatchService.updateBatchesPerTransactions(updates);
             updates.forEach(txStatusUpdatesMap::remove);
-
-            // Updating respective reports - Could be refactored to a separate method
-            Set<ReportEntity> reportEntitiesToBeUpdated = new HashSet<>();
-            for(TransactionEntity tx : transactionEntities) {
-                if (tx.getLedgerDispatchStatus() == LedgerDispatchStatus.FINALIZED) {
-                    LocalDate date = tx.getEntryDate();
-                    int year = date.getYear();
-                    int month = date.getMonthValue();
-                    int quarter = (month - 1) / 3 + 1;
-                    reportEntitiesToBeUpdated.addAll(reportRepository.findNotPublishedByOrganisationIdAndContainingDate(tx.getOrganisation().getId(), year, quarter, month));
-                }
-            }
-
-            reportEntitiesToBeUpdated.forEach(report -> {
-                log.info("Checking if report {} is ready to publish", report.getId());
-                Either<Problem, Void> isReadyToPublish = reportService.canPublish(report);
-                if (isReadyToPublish.isLeft()) {
-                    log.warn("Report {} is not ready to publish: {}", report.getId(), isReadyToPublish.getLeft().getTitle());
-                    report.setPublishError(PublishError.valueOf(isReadyToPublish.getLeft().getTitle()));
-                    report.setIsReadyToPublish(false);
-                } else {
-                    report.setIsReadyToPublish(true);
-                }
-
-                reportRepository.save(report);
-            });
 
         } catch (Exception e) {
             log.error("Failed to process TxStatusUpdates - entries will be retained in the map", e);

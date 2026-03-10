@@ -13,6 +13,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -22,7 +24,6 @@ import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -246,11 +247,11 @@ class CostCenterServiceTest {
     @Test
     void createCostCenterFromCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.left(Problem.builder().withTitle("Parse Error").build()));
+        when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parse Error")));
 
-        Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
+        Either<ProblemDetail, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
         assertTrue(result.isLeft());
-        assertEquals("Parse Error", result.getLeft().getTitle());
+        assertEquals("Parse Error", result.getLeft().getDetail());
     }
 
     @Test
@@ -269,7 +270,7 @@ class CostCenterServiceTest {
         when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.right(List.of(costCenterUpdate)));
         when(costCenterRepository.save(any())).thenReturn(costCenter);
 
-        Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
+        Either<ProblemDetail, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals(costCenter.getName(), result.get().get(0).getName());
@@ -288,7 +289,7 @@ class CostCenterServiceTest {
 
         when(csvParser.parseCsv(file, CostCenterUpdate.class)).thenReturn(Either.right(List.of(costCenterUpdate)));
 
-        Either<Problem, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
+        Either<ProblemDetail, List<CostCenterView>> result = costCenterService.createCostCenterFromCsv(organisationId, file);
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertEquals("Default Message", result.get().get(0).getError().get().getDetail());

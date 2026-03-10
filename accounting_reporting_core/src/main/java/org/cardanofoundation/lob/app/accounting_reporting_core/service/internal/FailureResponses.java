@@ -2,15 +2,14 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 
 import static org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem.IdType.TRANSACTION;
 import static org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem.IdType.TRANSACTION_ITEM;
-import static org.zalando.problem.Status.METHOD_NOT_ALLOWED;
 
 import java.util.List;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
@@ -26,43 +25,35 @@ public final class FailureResponses {
     private static final String TRANSACTION_ID = "transactionId";
 
     public static Either<IdentifiableProblem, TransactionEntity> transactionFailedResponse(String transactionId) {
-        ThrowableProblem problem = Problem.builder()
-                .withTitle("CANNOT_APPROVE_FAILED_TX")
-                .withDetail("Cannot approve a failed transaction, transactionId: %s".formatted(transactionId))
-                .with(TRANSACTION_ID, transactionId)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Cannot approve a failed transaction, transactionId: %s".formatted(transactionId));
+        problem.setTitle("CANNOT_APPROVE_FAILED_TX");
+        problem.setProperty(TRANSACTION_ID, transactionId);
 
         return Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
     }
 
     public static Either<IdentifiableProblem, TransactionEntity> transactionRejectedResponse(String transactionId) {
-        ThrowableProblem problem = Problem.builder()
-                .withTitle("CANNOT_APPROVE_REJECTED_TX")
-                .withDetail("Cannot approve a rejected transaction, transactionId: %s".formatted(transactionId))
-                .withStatus(METHOD_NOT_ALLOWED)
-                .with(TRANSACTION_ID, transactionId)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.METHOD_NOT_ALLOWED, "Cannot approve a rejected transaction, transactionId: %s".formatted(transactionId));
+        problem.setTitle("CANNOT_APPROVE_REJECTED_TX");
+        problem.setProperty(TRANSACTION_ID, transactionId);
 
         return Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
     }
 
     public static Either<IdentifiableProblem, TransactionEntity> transactionNotFoundResponse(String txId) {
-        ThrowableProblem problem = Problem.builder()
-                .withTitle("TX_NOT_FOUND")
-                .withDetail("Transaction with id %s not found".formatted(txId))
-                .with(TRANSACTION_ID, txId)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction with id %s not found".formatted(txId));
+        problem.setTitle("TX_NOT_FOUND");
+        problem.setProperty(TRANSACTION_ID, txId);
 
         return Either.left(new IdentifiableProblem(txId, problem, TRANSACTION));
     }
 
-    public static ThrowableProblem createTransactionDBError(String transactionId, DataAccessException dae) {
-        return Problem.builder()
-                .withTitle("DB_ERROR")
-                .withDetail("DB error approving transaction publish:%s".formatted(transactionId))
-                .with(TRANSACTION_ID, transactionId)
-                .with("error", dae.getMessage())
-                .build();
+    public static ProblemDetail createTransactionDBError(String transactionId, DataAccessException dae) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "DB error approving transaction publish:%s".formatted(transactionId));
+        problem.setTitle("DB_ERROR");
+        problem.setProperty(TRANSACTION_ID, transactionId);
+        problem.setProperty("error", dae.getMessage());
+        return problem;
     }
 
     public static List<Either<IdentifiableProblem, TransactionItemEntity>> transactionNotFoundResponse(TransactionItemsRejectionRequest transactionItemsRejectionRequest,
@@ -70,11 +61,9 @@ public final class FailureResponses {
         return transactionItemsRejectionRequest.getTransactionItemsRejections()
                 .stream()
                 .map(txItemRejectionRequest -> {
-                    ThrowableProblem problem = Problem.builder()
-                            .withTitle("TX_NOT_FOUND")
-                            .withDetail("Transaction with id %s not found".formatted(transactionId))
-                            .with(TRANSACTION_ID, transactionId)
-                            .build();
+                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction with id %s not found".formatted(transactionId));
+                    problem.setTitle("TX_NOT_FOUND");
+                    problem.setProperty(TRANSACTION_ID, transactionId);
 
                     return Either.<IdentifiableProblem, TransactionItemEntity>left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
                 }).toList();
@@ -82,24 +71,20 @@ public final class FailureResponses {
 
     public static Either<IdentifiableProblem, TransactionItemEntity> transactionItemCannotRejectAlreadyApprovedForDispatchResponse(String transactionId,
                                                                                                                                    String txItemId) {
-        ThrowableProblem problem = Problem.builder()
-                .withTitle("TX_ALREADY_APPROVED_CANNOT_REJECT_TX_ITEM")
-                .withDetail("Cannot reject transaction item %s because transaction %s has already been approved for dispatch".formatted(txItemId, transactionId))
-                .with(TRANSACTION_ID, transactionId)
-                .with("transactionItemId", txItemId)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.METHOD_NOT_ALLOWED, "Cannot reject transaction item %s because transaction %s has already been approved for dispatch".formatted(txItemId, transactionId));
+        problem.setTitle("TX_ALREADY_APPROVED_CANNOT_REJECT_TX_ITEM");
+        problem.setProperty(TRANSACTION_ID, transactionId);
+        problem.setProperty("transactionItemId", txItemId);
 
         return Either.left(new IdentifiableProblem(txItemId, problem, TRANSACTION_ITEM));
     }
 
     public static Either<IdentifiableProblem, TransactionItemEntity> transactionItemNotFoundResponse(String transactionId,
                                                                                                      String txItemId) {
-        ThrowableProblem problem = Problem.builder()
-                .withTitle("TX_ITEM_NOT_FOUND")
-                .withDetail("Transaction item with id %s not found".formatted(txItemId))
-                .with(TRANSACTION_ID, transactionId)
-                .with("transactionItemId", txItemId)
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction item with id %s not found".formatted(txItemId));
+        problem.setTitle("TX_ITEM_NOT_FOUND");
+        problem.setProperty(TRANSACTION_ID, transactionId);
+        problem.setProperty("transactionItemId", txItemId);
 
         return Either.left(new IdentifiableProblem(txItemId, problem, TRANSACTION_ITEM));
     }

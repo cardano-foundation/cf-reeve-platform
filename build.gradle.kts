@@ -100,8 +100,8 @@ subprojects {
         }
     }
 
-    extra["springBootVersion"] = "3.3.3"
-    extra["springCloudVersion"] = "2023.0.0"
+    extra["springBootVersion"] = "3.5.8"
+    extra["springCloudVersion"] = "2025.0.1"
     extra["jMoleculesVersion"] = "2023.1.0"
     extra["flyway.version"] = "10.20.1"
     extra["testcontainers.version"] = "1.21.4"
@@ -131,7 +131,6 @@ subprojects {
         testImplementation("org.testcontainers:postgresql")
 
         runtimeOnly("org.springframework.boot:spring-boot-properties-migrator")
-        implementation("org.zalando:problem-spring-web-starter:0.29.1")
         implementation("io.vavr:vavr:0.10.4")
         implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
@@ -157,7 +156,7 @@ subprojects {
 
         compileOnly("org.projectlombok:lombok:1.18.32")
         annotationProcessor("org.projectlombok:lombok:1.18.32")
-        implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
+        implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.15")
         testCompileOnly("org.projectlombok:lombok:1.18.32")
         testAnnotationProcessor("org.projectlombok:lombok:1.18.32")
         testImplementation("io.rest-assured:rest-assured:5.5.0")

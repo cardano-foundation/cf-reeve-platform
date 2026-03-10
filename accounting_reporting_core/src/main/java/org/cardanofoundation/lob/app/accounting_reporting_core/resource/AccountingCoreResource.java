@@ -1,14 +1,15 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.OK;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
-import static org.zalando.problem.Status.NOT_FOUND;
-import static org.zalando.problem.Status.OK;
-import static org.zalando.problem.Status.UNAUTHORIZED;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -16,13 +17,16 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,13 +40,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
-import org.zalando.problem.StatusType;
-import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
@@ -55,6 +56,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -62,7 +64,6 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(value = "lob.accounting_reporting_core.enabled", havingValue = "true", matchIfMissing = true)
 public class AccountingCoreResource {
 
     private final AccountingCorePresentationViewService accountingCorePresentationService;
@@ -85,6 +86,52 @@ public class AccountingCoreResource {
     }
 
     @Tag(name = "Transactions", description = "Transactions API")
+    @Operation(description = "Download transactions as a CSV file with possible filtering", summary = "Download transactions as a CSV file")
+    @GetMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<StreamingResponseBody> downloadTransactionsCsv(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
+                                                                         @RequestParam(name = "status", required = false) List<TxValidationStatus> txStatusList,
+                                                                         @RequestParam(name = "transactionType", required = false) List<TransactionType> transactionTypes,
+                                                                         @RequestParam(name = "dateFrom", required = false) String dateFrom,
+                                                                         @RequestParam(name = "dateTo", required = false) String dateTo,
+                                                                         @RequestParam(name = "published", required = false) Boolean published){
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(outputStream -> {
+                ObjectNode response = objectMapper.createObjectNode();
+                response.put("title", "NO_ACCESS_TO_ORG");
+                response.put("detail", "The user doesn't have access to this org");
+                response.put("status", UNAUTHORIZED.value());
+                outputStream.write(objectMapper.writeValueAsBytes(response));
+            });
+        }
+        LocalDate dateFromD = null;
+        LocalDate dateToD = null;
+        try {
+            if(dateFrom != null) {
+                dateFromD = FlexibleDateParser.parse(dateFrom);
+            }
+            if(dateTo != null) {
+                dateToD = FlexibleDateParser.parse(dateTo);
+            }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(BAD_REQUEST.value()).body(outputStream -> {
+                ObjectNode response = objectMapper.createObjectNode();
+                response.put("title", "INVALID_DATE_FORMAT");
+                response.put("detail", "One or both of the provided dates are in an invalid format. Please use one of the following formats: dd/MM/yyyy, MM-dd-yyyy, yyyy-MM-dd, dd.MM.yyyy");
+                response.put("status", BAD_REQUEST.value());
+                outputStream.write(objectMapper.writeValueAsBytes(response));
+            });
+        }
+        LocalDate finalDateFromD = dateFromD;
+        LocalDate finalDateToD = dateToD;
+        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, finalDateFromD, finalDateToD, published, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"transactions_%s.csv\"".formatted(orgId))
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(responseBody);
+    }
+
+    @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "List all Document Numbers in transactions", responses = {
             @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE, array = @ArraySchema(schema = @Schema(implementation = String.class)))}
             )
@@ -94,22 +141,18 @@ public class AccountingCoreResource {
     public ResponseEntity<FilterOptionsResponse> getFilterOptions(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                   @Valid @RequestParam(name = "filterOptions") List<FilterOptions> filterOptionsList)  {
         if(!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(UNAUTHORIZED.getStatusCode()).body(FilterOptionsResponse.builder()
-                            .error(Problem.builder()
-                                    .withTitle("NO_ACCESS_TO_ORG")
-                                    .withDetail("The user doesn't have access to this org")
-                                    .withStatus(UNAUTHORIZED).build())
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(FilterOptionsResponse.builder()
+                            .error(problemDetail)
                     .build());
         }
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(orgId);
 
         if (orgM.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
-                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId))
-                    .withStatus(NOT_FOUND)
-                    .build();
-            return ResponseEntity.status(NOT_FOUND.getStatusCode()).body(FilterOptionsResponse.builder()
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));
+            issue.setTitle(Constants.ORGANISATION_NOT_FOUND);
+            return ResponseEntity.status(NOT_FOUND.value()).body(FilterOptionsResponse.builder()
                     .error(issue).build());
         }
         Map<FilterOptions, List<FilteringOptionsListResponse>> filterOptionsFound = accountingCorePresentationService.getFilterOptions(filterOptionsList, orgId);
@@ -127,13 +170,10 @@ public class AccountingCoreResource {
     public ResponseEntity<?> transactionDetailSpecific(@Valid @PathVariable("id") @Parameter(example = "7e9e8bcbb38a283b41eab57add98278561ab51d23a16f3e3baf3daa461b84ab4") String id) {
         Optional<TransactionView> transactionEntity = accountingCorePresentationService.transactionDetailSpecific(id);
         if (transactionEntity.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("TX_NOT_FOUND")
-                    .withDetail("Transaction with id: {%s} could not be found".formatted(id))
-                    .withStatus(NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction not found for id: %s".formatted(id));
+            issue.setTitle("TX_NOT_FOUND");
 
-            return ResponseEntity.status(Objects.requireNonNull(issue.getStatus()).getStatusCode()).body(issue);
+            return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
         return ResponseEntity.ok().body(transactionEntity);
@@ -203,23 +243,20 @@ public class AccountingCoreResource {
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(body.getOrganisationId());
 
         if (orgM.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle(Constants.ORGANISATION_NOT_FOUND)
-                    .withDetail(Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(body.getOrganisationId()))
-                    .withStatus(NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(NOT_FOUND, Constants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(body.getOrganisationId()));
+            issue.setTitle(Constants.ORGANISATION_NOT_FOUND);
 
-            return ResponseEntity.status(Objects.requireNonNull(issue.getStatus()).getStatusCode()).body(issue);
+            return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
         Organisation org = orgM.orElseThrow();
 
-        Either<Problem, Void> extractionResultE = accountingCorePresentationService.extractionTrigger(body);
+        Either<ProblemDetail, Void> extractionResultE = accountingCorePresentationService.extractionTrigger(body);
 
         return extractionResultE.fold(
                 problem -> {
                     return ResponseEntity
-                            .status(Objects.requireNonNull(problem.getStatus()).getStatusCode())
+                            .status(problem.getStatus())
                             .body(problem);
                 },
                 success -> {
@@ -252,7 +289,7 @@ public class AccountingCoreResource {
         List<TransactionProcessView> transactionProcessViews = accountingCorePresentationService.approveTransactions(transactionsRequest);
 
         return ResponseEntity
-                .status(HttpStatusCode.valueOf(OK.getStatusCode()))
+                .status(HttpStatusCode.valueOf(OK.value()))
                 .body(transactionProcessViews);
     }
 
@@ -270,7 +307,7 @@ public class AccountingCoreResource {
         List<TransactionProcessView> transactionProcessViewList = accountingCorePresentationService.approveTransactionsPublish(transactionsRequest);
 
         return ResponseEntity
-                .status(HttpStatusCode.valueOf(OK.getStatusCode()))
+                .status(HttpStatusCode.valueOf(OK.value()))
                 .body(transactionProcessViewList);
     }
 
@@ -288,7 +325,7 @@ public class AccountingCoreResource {
         TransactionItemsProcessRejectView transactionProcessViewsResult = accountingCorePresentationService.rejectTransactionItems(transactionItemsRejectionRequest);
 
         return ResponseEntity
-                .status(HttpStatusCode.valueOf(OK.getStatusCode()))
+                .status(HttpStatusCode.valueOf(OK.value()))
                 .body(transactionProcessViewsResult);
     }
 
@@ -308,17 +345,15 @@ public class AccountingCoreResource {
 
         body.setLimit(pageable.getPageSize());
         body.setPage(pageable.getPageNumber());
-        Either<Problem, Pageable> convertPageable = jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class);
+        Either<ProblemDetail, Pageable> convertPageable = jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class);
         if( convertPageable.isLeft()) {
-            Problem problem = convertPageable.getLeft();
-            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
-                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+            ProblemDetail problem = convertPageable.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
         }
-        Either<Problem, BatchsDetailView> batchesE = accountingCorePresentationService.listAllBatch(body, convertPageable.get());
+        Either<ProblemDetail, BatchsDetailView> batchesE = accountingCorePresentationService.listAllBatch(body, convertPageable.get());
         if( batchesE.isLeft()) {
-            Problem problem = batchesE.getLeft();
-            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
-                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+            ProblemDetail problem = batchesE.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
         }
         return ResponseEntity.ok().body(batchesE.get());
     }
@@ -339,7 +374,7 @@ public class AccountingCoreResource {
         BatchReprocessView transactionProcessViewsResult = accountingCorePresentationService.scheduleReIngestionForFailed(batchId);
 
         return ResponseEntity
-                .status(HttpStatusCode.valueOf(OK.getStatusCode()))
+                .status(HttpStatusCode.valueOf(OK.value()))
                 .body(transactionProcessViewsResult);
     }
 
@@ -371,32 +406,25 @@ public class AccountingCoreResource {
             pageable = Pageable.unpaged();
         }
         if(Optional.ofNullable(batchFilterRequest.getDateFrom()).isPresent() && Optional.ofNullable(batchFilterRequest.getDateTo()).isPresent() && batchFilterRequest.getDateFrom().isAfter(batchFilterRequest.getDateTo())) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("INVALID_DATE_RANGE")
-                    .withDetail("The 'dateFrom' must be before 'dateTo'")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The 'dateFrom' must be before 'dateTo'");
+            issue.setTitle("INVALID_DATE_RANGE");
 
             return ResponseEntity
-                    .status(Objects.requireNonNull(issue.getStatus()).getStatusCode())
+                    .status(issue.getStatus())
                     .body(issue);
         }
-        Either<Problem, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable, batchFilterRequest);
+        Either<ProblemDetail, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable, batchFilterRequest);
         if (txBatchEO.isLeft()) {
-            Problem problem = txBatchEO.getLeft();
-            return ResponseEntity.status(Optional.ofNullable(problem.getStatus()).map(StatusType::getStatusCode)
-                    .orElse(Status.BAD_REQUEST.getStatusCode())).body(problem);
+            ProblemDetail problem = txBatchEO.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
         }
         Optional<BatchView> txBatchO = txBatchEO.get();
         if (txBatchO.isEmpty()) {
-            ThrowableProblem issue = Problem.builder()
-                    .withTitle("BATCH_NOT_FOUND")
-                    .withDetail("Batch with id: {%s} could not be found".formatted(batchId))
-                    .withStatus(NOT_FOUND)
-                    .build();
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Batch not found for id: %s".formatted(batchId));
+                issue.setTitle("BATCH_NOT_FOUND");
 
             return ResponseEntity
-                    .status(Objects.requireNonNull(issue.getStatus()).getStatusCode())
+                    .status(issue.getStatus())
                     .body(issue);
         }
 

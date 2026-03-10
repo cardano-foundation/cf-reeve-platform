@@ -19,6 +19,8 @@ import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
@@ -27,7 +29,6 @@ import org.springframework.web.multipart.MultipartFile;
 import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -117,12 +118,9 @@ class ChartOfAccountsServiceTest {
     @Test
     void insertChartOfAccountByCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
-        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.left(Problem.builder()
-                .withTitle("Error")
-                .withStatus(org.zalando.problem.Status.BAD_REQUEST)
-                .build()));
+        when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Detail")));
 
-        Either<List<Problem>, List<ChartOfAccountView>> views = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> views = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
 
         assertTrue(views.isLeft());
         assertEquals(1, views.getLeft().size());
@@ -138,7 +136,7 @@ class ChartOfAccountsServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
         doThrow(new IllegalArgumentException("Error")).when(updateCsv).fillOpeningBalance();
-        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
         assertEquals("OPENING_BALANCE_ERROR", sets.get().iterator().next().getError().get().getTitle());
@@ -156,7 +154,7 @@ class ChartOfAccountsServiceTest {
         when(objectError.getDefaultMessage()).thenReturn("Default Message");
         when(csvParser.parseCsv(file, ChartOfAccountUpdateCsv.class)).thenReturn(Either.right(List.of(updateCsv)));
 
-        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
         assertEquals("VALIDATION_ERROR", sets.get().iterator().next().getError().get().getTitle());
@@ -178,7 +176,7 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, "TYPE")).thenReturn(Optional.of(typeMock));
         when(chartOfAccountSubTypeRepository.findFirstByNameAndOrganisationIdAndParentName(orgId, "SUBTYPE", "TYPE")).thenReturn(Optional.of(subTypeMock));
 
-        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
         assertEquals("ORGANISATION_NOT_FOUND", sets.get().iterator().next().getError().get().getTitle());
@@ -211,7 +209,7 @@ class ChartOfAccountsServiceTest {
                 .thenReturn(Optional.empty());
         when(chartOfAccountRepository.save(any(ChartOfAccount.class))).thenReturn(chartOfAccount);
 
-        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }
@@ -230,7 +228,7 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountTypeRepository.findFirstByOrganisationIdAndName(orgId, "TYPE")).thenReturn(Optional.empty());
         when(updateCsv.getEventRefCode()).thenReturn(chartOfAccountUpdate.getEventRefCode());
 
-        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }
@@ -251,7 +249,7 @@ class ChartOfAccountsServiceTest {
         when(chartOfAccountSubTypeRepository.findFirstByNameAndOrganisationIdAndParentName(orgId, "SUBTYPE", "TYPE")).thenReturn(Optional.empty());
         when(updateCsv.getEventRefCode()).thenReturn(chartOfAccountUpdate.getEventRefCode());
 
-        Either<List<Problem>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
+        Either<List<ProblemDetail>, List<ChartOfAccountView>> sets = chartOfAccountsService.insertChartOfAccountByCsv(orgId, file);
         assertTrue(sets.isRight());
         assertEquals(1, sets.get().size());
     }
@@ -300,7 +298,7 @@ class ChartOfAccountsServiceTest {
         List<ChartOfAccount> accounts = List.of(chartOfAccount);
         when(chartOfAccountRepository.findAllByOrganisationIdFiltered(orgId,  null, null, null, null, null, null,  null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(accounts));
         when(jpaSortFieldValidator.validateEntity(ChartOfAccount.class, Pageable.unpaged(), CHART_OF_ACCOUNT_MAPPINGS)).thenReturn(Either.right(Pageable.unpaged()));
-        Either<Problem, List<ChartOfAccountView>> result = chartOfAccountsService.getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, null, Pageable.unpaged());
+        Either<ProblemDetail, List<ChartOfAccountView>> result = chartOfAccountsService.getAllChartOfAccount(orgId,  null, null, null, null, null, null, null, null, Pageable.unpaged());
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());

@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.Errors;
@@ -24,8 +26,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
@@ -50,8 +50,8 @@ public class VatService {
         return vatRepository.findByIdAndActive(new Vat.Id(organisationId, customerCode),true);
     }
 
-    public Either<Problem, List<VatView>> findAllByOrganisationId(String organisationId, String customerCode, Double minRate, Double maxRate, String description, List<String> countryCodes, Boolean active, Pageable pageable) {
-        Either<Problem, Pageable> pageables = jpaSortFieldValidator.validateEntity(Vat.class, pageable, VAT_MAPPINGS);
+    public Either<ProblemDetail, List<VatView>> findAllByOrganisationId(String organisationId, String customerCode, Double minRate, Double maxRate, String description, List<String> countryCodes, Boolean active, Pageable pageable) {
+        Either<ProblemDetail, Pageable> pageables = jpaSortFieldValidator.validateEntity(Vat.class, pageable, VAT_MAPPINGS);
         if(pageables.isLeft()) {
             return Either.left(pageables.getLeft());
         }
@@ -75,27 +75,21 @@ public class VatService {
             if(isUpsert) {
                 vatEntity = foundEntity.get();
             } else {
-                return VatView.createFail(vatUpdate, Problem.builder()
-                        .withTitle(ErrorTitleConstants.ORGANISATION_VAT_ALREADY_EXISTS)
-                        .withDetail("The organisation vat with code :%s already exists".formatted(vatUpdate.getCustomerCode()))
-                        .withStatus(Status.CONFLICT)
-                        .build());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The organisation vat with code :%s already exists".formatted(vatUpdate.getCustomerCode()));
+                problem.setTitle(ErrorTitleConstants.ORGANISATION_VAT_ALREADY_EXISTS);
+                return VatView.createFail(vatUpdate, problem);
             }
         }
 
         if (vatUpdate.getCountryCode() != null && !Locale.getISOCountries(Locale.IsoCountryCode.PART1_ALPHA2).contains(vatUpdate.getCountryCode())) {
-            return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle(ErrorTitleConstants.COUNTRY_CODE_NOT_FOUND)
-                    .withDetail("The organisation vat country_code with code %s do not exists".formatted(vatUpdate.getCountryCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "The organisation vat country_code with code %s do not exists".formatted(vatUpdate.getCountryCode()));
+            problem.setTitle(ErrorTitleConstants.COUNTRY_CODE_NOT_FOUND);
+            return VatView.createFail(vatUpdate, problem);
         }
         if (vatUpdate.getRate().doubleValue() < 0) {
-            return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle(ErrorTitleConstants.VAT_RATE_CANNOT_BE_NEGATIVE)
-                    .withDetail("The organisation vat rate cannot be negative")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The organisation vat rate cannot be negative");
+            problem.setTitle(ErrorTitleConstants.VAT_RATE_CANNOT_BE_NEGATIVE);
+            return VatView.createFail(vatUpdate, problem);
         }
 
         vatEntity.setRate(vatUpdate.getRate());
@@ -111,27 +105,21 @@ public class VatService {
         Optional<Vat> organisationVat = vatRepository.findById(new Vat.Id(organisationId, vatUpdate.getCustomerCode()));
 
         if (organisationVat.isEmpty()) {
-            return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle(ErrorTitleConstants.ORGANISATION_VAT_DO_NOT_EXISTS)
-                    .withDetail("The organisation vat with code %s do not exists".formatted(vatUpdate.getCustomerCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "The organisation vat with code %s do not exists".formatted(vatUpdate.getCustomerCode()));
+            problem.setTitle(ErrorTitleConstants.ORGANISATION_VAT_DO_NOT_EXISTS);
+            return VatView.createFail(vatUpdate, problem);
         }
 
         if (vatUpdate.getCountryCode() != null && !Locale.getISOCountries(Locale.IsoCountryCode.PART1_ALPHA2).contains(vatUpdate.getCountryCode())) {
-            return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle(ErrorTitleConstants.COUNTRY_CODE_NOT_FOUND)
-                    .withDetail("The organisation vat country_code with code %s do not exists".formatted(vatUpdate.getCountryCode()))
-                    .withStatus(Status.NOT_FOUND)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "The organisation vat country_code with code %s do not exists".formatted(vatUpdate.getCountryCode()));
+            problem.setTitle(ErrorTitleConstants.COUNTRY_CODE_NOT_FOUND);
+            return VatView.createFail(vatUpdate, problem);
         }
 
         if (vatUpdate.getRate().doubleValue() < 0) {
-            return VatView.createFail(vatUpdate, Problem.builder()
-                    .withTitle(ErrorTitleConstants.VAT_RATE_CANNOT_BE_NEGATIVE)
-                    .withDetail("The organisation vat rate cannot be negative")
-                    .withStatus(Status.BAD_REQUEST)
-                    .build());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The organisation vat rate cannot be negative");
+            problem.setTitle(ErrorTitleConstants.VAT_RATE_CANNOT_BE_NEGATIVE);
+            return VatView.createFail(vatUpdate, problem);
         }
 
         Vat vatEntity = organisationVat.get();
@@ -145,18 +133,16 @@ public class VatService {
     }
 
     @Transactional
-    public Either<Problem, List<VatView>> insertVatCodesCsv(String organisationId, MultipartFile file) {
+    public Either<ProblemDetail, List<VatView>> insertVatCodesCsv(String organisationId, MultipartFile file) {
         return csvParser.parseCsv(file, VatUpdate.class).fold(
-                Either::left,
+                problemDetail -> Either.left(problemDetail),
                 organisationVatUpdates -> Either.right(organisationVatUpdates.stream().map(vatUpdate -> {
                     Errors errors = validator.validateObject(vatUpdate);
                     List<ObjectError> allErrors = errors.getAllErrors();
                     if (!allErrors.isEmpty()) {
-                        return VatView.createFail(vatUpdate,Problem.builder()
-                                .withTitle(ErrorTitleConstants.VALIDATION_ERROR)
-                                .withDetail(allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")))
-                                .withStatus(Status.BAD_REQUEST)
-                                .build());
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
+                        problem.setTitle(ErrorTitleConstants.VALIDATION_ERROR);
+                        return VatView.createFail(vatUpdate, problem);
                     }
                     return insert(organisationId, vatUpdate, true);
                 }).toList())
@@ -172,7 +158,7 @@ public class VatService {
             for (Vat vat: vatCodes) {
                 String[] data = {
                         vat.getId().getCustomerCode(),
-                        vat.getRate().toString(),
+                        vat.getRate().stripTrailingZeros().toPlainString(),
                         vat.getDescription(),
                         vat.getCountryCode(),
                         String.valueOf(vat.getActive())

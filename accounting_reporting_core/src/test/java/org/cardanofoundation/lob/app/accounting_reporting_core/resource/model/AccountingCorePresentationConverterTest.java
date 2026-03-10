@@ -20,6 +20,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -27,8 +29,6 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -263,7 +263,7 @@ class AccountingCorePresentationConverterTest {
         when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(batchId, null, null, null, null, null, null, null, null, null, null, null, null, LocalDate.of(1970, 1, 1).atStartOfDay(), LocalDate.now().atStartOfDay(), null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
-        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), new BatchFilterRequest());
+        Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), new BatchFilterRequest());
         assertTrue(resultE.isRight());
         Optional<BatchView> result = resultE.get();
         assertEquals(true, result.isPresent());
@@ -295,17 +295,15 @@ class AccountingCorePresentationConverterTest {
 
     @Test
     void testBatchDetail_convertPageableReturnsError() {
-        Problem problem = Problem.builder()
-                .withStatus(Status.BAD_REQUEST)
-                .withTitle("Invalid Sort Property")
-                .withDetail("Invalid sort: invalidField")
-                .build();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid sort: invalidField");
+        problem.setTitle("Invalid Sort Property");
+
 
         when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
                 .thenReturn(Either.left(problem));
 
         Pageable pageable = PageRequest.of(0, 10, Sort.by("invalidField"));
-        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("batch-id", null, pageable, new BatchFilterRequest());
+        Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("batch-id", null, pageable, new BatchFilterRequest());
 
         assertTrue(resultE.isLeft());
         assertEquals("Invalid sort: invalidField", resultE.getLeft().getDetail());
@@ -317,7 +315,7 @@ class AccountingCorePresentationConverterTest {
                 .thenReturn(Either.right(Pageable.unpaged()));
         when(transactionBatchRepositoryGateway.findById("nonexistent-batch")).thenReturn(Optional.empty());
 
-        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("nonexistent-batch", null, Pageable.unpaged(), new BatchFilterRequest());
+        Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("nonexistent-batch", null, Pageable.unpaged(), new BatchFilterRequest());
 
         assertTrue(resultE.isRight());
         assertTrue(resultE.get().isEmpty());
@@ -364,7 +362,7 @@ class AccountingCorePresentationConverterTest {
         when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1, transaction2), sortedPageable, 2));
 
-        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, sortedPageable, new BatchFilterRequest());
+        Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, sortedPageable, new BatchFilterRequest());
 
         assertTrue(resultE.isRight());
         assertTrue(resultE.get().isPresent());
@@ -404,7 +402,7 @@ class AccountingCorePresentationConverterTest {
         when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1)));
 
-        Either<Problem, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, txStatus, Pageable.unpaged(), new BatchFilterRequest());
+        Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, txStatus, Pageable.unpaged(), new BatchFilterRequest());
 
         assertTrue(resultE.isRight());
         assertTrue(resultE.get().isPresent());
@@ -431,7 +429,7 @@ class AccountingCorePresentationConverterTest {
         Page<TransactionBatchEntity> page = new PageImpl<>(List.of(transactionBatchEntity), pageable, 1);
         when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, pageable)).thenReturn(page);
 
-        Either<Problem, BatchsDetailView> batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, pageable);
+        Either<ProblemDetail, BatchsDetailView> batchsDetailView = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, pageable);
         List<BatchView> result = batchsDetailView.get().getBatchs();
 
         assertEquals(1, result.size());
@@ -468,12 +466,9 @@ class AccountingCorePresentationConverterTest {
 
     @Test
     void testBatchReprocessNoExist() {
-
-        Mockito.when(accountingCoreService.scheduleReIngestionForFailed("extractionRequest")).thenReturn(Either.left(Problem.builder()
-                .withTitle("TX_BATCH_NOT_FOUND")
-                .withDetail("Transaction batch with id: extractionRequest not found")
-                .withStatus(Status.NOT_FOUND)
-                .build()));
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction batch with id: extractionRequest not found");
+        problemDetail.setTitle("TX_BATCH_NOT_FOUND");
+        Mockito.when(accountingCoreService.scheduleReIngestionForFailed("extractionRequest")).thenReturn(Either.left(problemDetail));
         accountingCorePresentationConverter.scheduleReIngestionForFailed("extractionRequest");
         Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleReIngestionForFailed("extractionRequest");
     }

@@ -3,7 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus.FAILED;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.FailureResponses.*;
 import static org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem.IdType.TRANSACTION;
-import static org.zalando.problem.Status.METHOD_NOT_ALLOWED;
+import static org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED;
 
 import java.time.LocalDate;
 import java.util.*;
@@ -14,12 +14,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.ThrowableProblem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
@@ -53,7 +52,10 @@ public class TransactionRepositoryGateway {
 
     @Transactional
     public void storeAll(Collection<TransactionEntity> txs) {
-        accountingCoreTransactionRepository.saveAll(txs);
+        List<TransactionEntity> sortedTxs = txs.stream()
+                .sorted(Comparator.comparing(TransactionEntity::getId))
+                .toList();
+        accountingCoreTransactionRepository.saveAllAndFlush(sortedTxs);
     }
 
     @Transactional
@@ -106,12 +108,8 @@ public class TransactionRepositoryGateway {
         }
 
         if (Boolean.FALSE.equals(tx.getTransactionApproved())) {
-            ThrowableProblem problem = Problem.builder()
-                    .withTitle("TX_NOT_APPROVED")
-                    .withDetail("Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId))
-                    .withStatus(METHOD_NOT_ALLOWED)
-                    .with("transactionId", transactionId)
-                    .build();
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(METHOD_NOT_ALLOWED, "Cannot approve for dispatch / publish a transaction that has not been approved before, transactionId: %s".formatted(transactionId));
+            problem.setTitle("TX_NOT_APPROVED");
 
             return Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION));
         }
@@ -139,7 +137,7 @@ public class TransactionRepositoryGateway {
             } catch (DataAccessException dae) {
                 log.error("Error approving transaction: {}", transactionId, dae);
 
-                ThrowableProblem problem = FailureResponses.createTransactionDBError(transactionId.getId(), dae);
+                ProblemDetail problem = FailureResponses.createTransactionDBError(transactionId.getId(), dae);
 
                 transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
             }
@@ -165,7 +163,7 @@ public class TransactionRepositoryGateway {
             } catch (DataAccessException dae) {
                 log.error("Error approving transaction publish / dispatch: {}", transactionId, dae);
 
-                ThrowableProblem problem = createTransactionDBError(transactionId.getId(), dae);
+                ProblemDetail problem = createTransactionDBError(transactionId.getId(), dae);
 
                 transactionsApprovalResponseListE.add(Either.left(new IdentifiableProblem(transactionId.getId(), problem, TRANSACTION)));
             }
@@ -229,7 +227,7 @@ public class TransactionRepositoryGateway {
                                                    List<TxValidationStatus> validationStatuses,
                                                    List<TransactionType> transactionType, PageRequest pageRequest) {
         // TODO add Pagerequest once the frontend is ready
-        return accountingCoreTransactionRepository.findAllByStatus(organisationId, validationStatuses, transactionType, pageRequest);
+        return accountingCoreTransactionRepository.findAllByStatusAndType(organisationId, validationStatuses, transactionType, pageRequest);
     }
 
     public List<TransactionEntity> listAll() {
@@ -240,6 +238,12 @@ public class TransactionRepositoryGateway {
                                                                         LocalDate from,
                                                                         LocalDate to) {
         return accountingCoreTransactionRepository.findByEntryDateRangeAndNotReconciledYet(organisationId, from, to);
+    }
+
+    public Set<TransactionEntity> findAllByDateRange(String organisationId,
+                                                                        LocalDate from,
+                                                                        LocalDate to) {
+        return accountingCoreTransactionRepository.findByEntryDateRange(organisationId, from, to);
     }
 
 }

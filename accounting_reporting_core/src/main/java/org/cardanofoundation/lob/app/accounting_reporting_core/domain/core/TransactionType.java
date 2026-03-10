@@ -9,6 +9,7 @@ public enum TransactionType {
     FxRevaluation,
     Transfer,
     CustomerPayment,
+    CustomerCredit,
     ExpenseReport,
     VendorPayment,
     CustomerInvoice,

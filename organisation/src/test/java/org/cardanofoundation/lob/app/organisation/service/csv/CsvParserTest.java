@@ -8,13 +8,13 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.List;
 
+import org.springframework.http.ProblemDetail;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.zalando.problem.Problem;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +43,7 @@ class CsvParserTest {
     void parseCsv_emptyFile() {
         MultipartFile file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(true);
-        Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
+        Either<ProblemDetail, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
 
         Assertions.assertTrue(parse.isLeft());
         Assertions.assertEquals("File is null", parse.getLeft().getDetail());
@@ -55,7 +55,7 @@ class CsvParserTest {
         MultipartFile file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(false);
         when(antiVirusScanner.isFileSafe(any())).thenReturn(true);
-        Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
+        Either<ProblemDetail, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
 
         Assertions.assertTrue(parse.isLeft());
         Assertions.assertEquals("CSV_PARSING_ERROR", parse.getLeft().getTitle());
@@ -72,7 +72,7 @@ class CsvParserTest {
                 .readAllBytes();
         when(file.getBytes()).thenReturn(bytes);
         when(antiVirusScanner.isFileSafe(bytes)).thenReturn(true);
-        Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
+        Either<ProblemDetail, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
 
         Assertions.assertTrue(parse.isRight());
         Assertions.assertEquals(2, parse.get().size());
@@ -96,7 +96,7 @@ class CsvParserTest {
         when(file.getBytes()).thenReturn(bytes);
         when(antiVirusScanner.isFileSafe(bytes)).thenReturn(false);
 
-        Either<Problem, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
+        Either<ProblemDetail, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
 
         Assertions.assertTrue(parse.isLeft());
         Assertions.assertEquals("MALICIOUS_FILE_DETECTED", parse.getLeft().getTitle());

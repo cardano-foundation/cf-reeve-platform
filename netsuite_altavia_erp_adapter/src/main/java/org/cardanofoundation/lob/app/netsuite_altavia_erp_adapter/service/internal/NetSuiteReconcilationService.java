@@ -17,10 +17,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.ProblemDetail;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
@@ -65,12 +65,12 @@ public class NetSuiteReconcilationService {
 
         String reconcilationRequestId = digestAsHex(UUID.randomUUID().toString());
 
-        Either<Problem, Optional<List<String>>> netSuiteJsonE = netSuiteClient.retrieveLatestNetsuiteTransactionLines(reconcileFrom, reconcileTo);
+        Either<ProblemDetail, Optional<List<String>>> netSuiteJsonE = netSuiteClient.retrieveLatestNetsuiteTransactionLines(reconcileFrom, reconcileTo);
 
         if (netSuiteJsonE.isLeft()) {
             log.error("Error retrieving data from NetSuite API: {}", netSuiteJsonE.getLeft().getDetail());
 
-            Problem problem = netSuiteJsonE.getLeft();
+            ProblemDetail problem = netSuiteJsonE.getLeft();
 
             Map<String, Object> bag = Map.of(
                     Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
@@ -93,7 +93,7 @@ public class NetSuiteReconcilationService {
         if (bodyM.isEmpty()) {
             log.warn("No data to read from NetSuite API..., bailing out!");
 
-            Problem problem = netSuiteJsonE.getLeft();
+            ProblemDetail problem = netSuiteJsonE.getLeft();
 
             Map<String, Object> bag = Map.of(
                     Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
@@ -154,12 +154,7 @@ public class NetSuiteReconcilationService {
     ) {
         try {
             log.info("Continue reconcilation..., reconcilationId: {}", reconcilationId);
-            log.info("\n\n\nCheat time\n\n");
-            try {
-                Thread.sleep(4000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+
             Optional<NetSuiteIngestionEntity> netsuiteIngestionM = ingestionRepository.findById(reconcilationId);
             if (netsuiteIngestionM.isEmpty()) {
                 log.error("NetSuite ingestion not found, reconcilationId: {}", reconcilationId);
@@ -182,10 +177,10 @@ public class NetSuiteReconcilationService {
 
             NetSuiteIngestionEntity netsuiteIngestion = netsuiteIngestionM.orElseThrow();
 
-            Either<Problem, List<TxLine>> transactionDataSearchResultE = netSuiteParser.getAllTxLinesFromBodies(netsuiteIngestion.getIngestionBodies());
+            Either<ProblemDetail, List<TxLine>> transactionDataSearchResultE = netSuiteParser.getAllTxLinesFromBodies(netsuiteIngestion.getIngestionBodies());
 
             if (transactionDataSearchResultE.isEmpty()) {
-                Problem problem = transactionDataSearchResultE.getLeft();
+                ProblemDetail problem = transactionDataSearchResultE.getLeft();
 
                 Map<String, Object> bag = Map.of(
                         Constants.NETSUITE_BAG_RECONCILATION_ID, reconcilationId,

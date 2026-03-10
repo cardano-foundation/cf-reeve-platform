@@ -1,8 +1,5 @@
 package org.cardanofoundation.lob.app.support.database;
 
-import static org.zalando.problem.Status.BAD_REQUEST;
-
-import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 
@@ -16,11 +13,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
-import org.zalando.problem.Problem;
-import org.zalando.problem.Status;
 
 
 @Service
@@ -29,7 +26,7 @@ public class JpaSortFieldValidator {
 
     private final EntityManager entityManager;
 
-    public Either<Problem, Pageable> validateEntity(Class entityClass, Pageable pageable, Map<String, String> mappings) {
+    public Either<ProblemDetail, Pageable> validateEntity(Class entityClass, Pageable pageable, Map<String, String> mappings) {
         if(pageable.getSort().isSorted()) {
             Optional<Sort.Order> notSortableProperty = pageable.getSort().get().filter(order -> {
                 String property = Optional.ofNullable(mappings.get(order.getProperty())).orElse(order.getProperty());
@@ -38,11 +35,10 @@ public class JpaSortFieldValidator {
 
             }).findFirst();
             if (notSortableProperty.isPresent()) {
-                return Either.left(Problem.builder()
-                        .withStatus(Status.BAD_REQUEST)
-                        .withTitle("Invalid Sort Property")
-                        .withDetail("Invalid sort: " + notSortableProperty.get().getProperty())
-                        .build());
+                ProblemDetail problemDetail = ProblemDetail
+                        .forStatusAndDetail(HttpStatusCode.valueOf(400), "Invalid sort: " + notSortableProperty.get().getProperty());
+                problemDetail.setTitle("Invalid Sort Property");
+                return Either.left(problemDetail);
             }
             pageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                     Sort.by(pageable.getSort().get().map(order -> new Sort.Order(order.getDirection(),
@@ -78,7 +74,7 @@ public class JpaSortFieldValidator {
     }
 
 
-    public Either<Problem, Pageable> convertPageable(Pageable page,
+    public Either<ProblemDetail, Pageable> convertPageable(Pageable page,
                                                      Map<String, String> fieldMappings, Class<?> classType) {
         if (page.getSort().isSorted()) {
             Optional<Sort.Order> notSortableProperty =
@@ -93,11 +89,10 @@ public class JpaSortFieldValidator {
                     }).findFirst();
 
             if (notSortableProperty.isPresent()) {
-                return Either.left(Problem.builder().withStatus(BAD_REQUEST)
-                        .withTitle("Invalid Sort Property")
-                        .withDetail("Invalid sort: " + notSortableProperty
-                                .get().getProperty())
-                        .build());
+                ProblemDetail problemDetail = ProblemDetail
+                        .forStatusAndDetail(HttpStatusCode.valueOf(400), "Invalid sort: " + notSortableProperty.get().getProperty());
+                problemDetail.setTitle("Invalid Sort Property");
+                return Either.left(problemDetail);
             }
 
             Sort sort = Sort.by(page.getSort().get().map(order -> {
@@ -105,24 +100,15 @@ public class JpaSortFieldValidator {
                         .ofNullable(fieldMappings.get(order.getProperty()))
                         .orElse(order.getProperty());
 
-                boolean isEnum = false;
-                try {
-                    String[] parts = property.split("\\.");
-                    Class<?> currentClass = classType;
 
-                    for (int i = 0; i < parts.length; i++) {
-                        Field field = currentClass
-                                .getDeclaredField(parts[i]);
-                        currentClass = field.getType();
-
-                        if (i == parts.length - 1) {
-                            isEnum = currentClass.isEnum();
-                        }
+                if (isEnumField(classType,property)) {
+                    // Special handling for reconciliation field to sort "OK" first and "NOK"/null values last
+                    if (property.equals("transaction.reconcilation.finalStatus")) {
+                        return JpaSort.unsafe(order.getDirection(),
+                                "(CASE WHEN " + property + " = 'OK' THEN 1 ELSE 2 END)")
+                                .iterator().next();
                     }
-                } catch (NoSuchFieldException ignored) {
-                }
 
-                if (isEnum) {
                     return JpaSort.unsafe(order.getDirection(),
                                     "function('enum_to_text', " + property
                                             + ")")
@@ -137,5 +123,17 @@ public class JpaSortFieldValidator {
         }
 
         return Either.right(page);
+    }
+
+    private boolean isEnumField(Class<?> clazz, String propertyPath) {
+        try {
+            Class<?> current = clazz;
+            for (String part : propertyPath.split("\\.")) {
+                current = current.getDeclaredField(part).getType();
+            }
+            return current.isEnum();
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

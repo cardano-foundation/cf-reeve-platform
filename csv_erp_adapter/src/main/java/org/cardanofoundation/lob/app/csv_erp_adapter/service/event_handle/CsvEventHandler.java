@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.csv_erp_adapter.service.event_handle;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -20,7 +19,6 @@ import org.cardanofoundation.lob.app.csv_erp_adapter.service.internal.CsvExtract
 @Slf4j
 @RequiredArgsConstructor
 @Service
-@ConditionalOnProperty(value = "lob.csv.enabled", havingValue = "true", matchIfMissing = true)
 public class CsvEventHandler implements ReeveErpAdapter {
 
     private final CsvExtractionService csvExtractionService;

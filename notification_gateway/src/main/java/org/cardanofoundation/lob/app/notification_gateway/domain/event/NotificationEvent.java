@@ -1,7 +1,7 @@
 //package org.cardanofoundation.lob.app.notification_gateway.domain.event;
 //
 //import org.cardanofoundation.lob.app.notification_gateway.domain.core.NotificationSeverity;
-//import org.zalando.problem.Problem;
+//import org.springframework.http.ProblemDetail;
 //import org.jmolecules.event.annotation.DomainEvent;
 //
 //import java.util.Map;
@@ -26,7 +26,7 @@
 //) {
 //
 //    public static NotificationEvent create(NotificationSeverity severity,
-//                                           Problem problem) {
+//                                           ProblemDetail problem  {
 //        return new NotificationEvent(
 //                UUID.randomUUID(),
 //                severity,

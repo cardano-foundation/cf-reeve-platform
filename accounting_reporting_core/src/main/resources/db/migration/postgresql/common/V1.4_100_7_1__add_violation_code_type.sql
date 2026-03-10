@@ -1,0 +1,1 @@
+ALTER TYPE accounting_core_transaction_violation_code_type ADD VALUE 'TX_NOT_IN_ERP';

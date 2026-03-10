@@ -117,39 +117,38 @@ public class DbSynchronisationUseCaseService {
             boolean notStoredYet = txM.isEmpty();
             /** If is a new transaction || the new one is different from our Db copy  -> then should be processed*/
             boolean isChanged = notStoredYet || (txM.map(tx -> !isIncomingTransactionERPSame(tx, incomingTx)).orElse(false));
+            if (isChanged) {
+                if (TransactionProcessingStatus.ROLLBACK.equals(incomingTx.getProcessingStatus().orElse(null))) {
+                    log.warn("Transaction {} is in ROLLBACK status, it will be processed and can be republished", incomingTx.getId());
+                    isDispatchMarked = false;
+                    publishedTransactionToReset.add(incomingTx.getId());
 
-            if (TransactionProcessingStatus.ROLLBACK.equals(incomingTx.getProcessingStatus().orElse(null))) {
-                log.warn("Transaction {} is in ROLLBACK status, it will be processed and can be republished", incomingTx.getId());
-                isDispatchMarked = false;
-                publishedTransactionToReset.add(incomingTx.getId());
+                }
 
-            }
-
-            if (isDispatchMarked && isChanged) {
-                log.warn("Transaction cannot be altered, it is already marked as dispatched, transactionNumber: {}", incomingTx.getInternalTransactionNumber());
-                txsAlreadyStored.add(incomingTx);
-            }
-
-            if (isChanged && !isDispatchMarked) {
-                if (txM.isPresent()) {
-                    TransactionEntity attached = txM.orElseThrow();
-                    batchesToBeUpdated.addAll(attached.getBatches().stream().map(TransactionBatchEntity::getId).collect(Collectors.toSet()));
-                    transactionConverter.copyFields(attached, incomingTx);
-                    attached.getAllItems().clear();
-                    attached.getAllItems().addAll(incomingTx.getAllItems());
-                    if (TransactionProcessingStatus.ROLLBACK.equals(incomingTx.getProcessingStatus().orElse(null)) && rollbackEnabled.orElse(false)) {
-                        log.info("Rolling back transaction and it should ready to approve: {}", attached);
-                        attached.setLedgerDispatchApproved(false);
-                        attached.setTransactionApproved(false);
-                        attached.setLedgerDispatchReceipt(null);
-                        attached.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
-                        attached.setReconcilation(Optional.empty());
-                        attached.setLastReconcilation(Optional.empty());
-                        attached.updateProcessingStatus();
+                if (isDispatchMarked) {
+                    log.warn("Transaction cannot be altered, it is already marked as dispatched, transactionNumber: {}", incomingTx.getInternalTransactionNumber());
+                    txsAlreadyStored.add(incomingTx);
+                }
+                if (!isDispatchMarked) {
+                    if (txM.isPresent()) {
+                        TransactionEntity attached = txM.orElseThrow();
+                        batchesToBeUpdated.addAll(attached.getBatches().stream().map(TransactionBatchEntity::getId).collect(Collectors.toSet()));
+                        attached.clearAllViolations(Source.ERP);
+                        transactionConverter.copyFields(attached, incomingTx);
+                        attached.getAllItems().clear();
+                        attached.getAllItems().addAll(incomingTx.getAllItems());
+                        if (TransactionProcessingStatus.ROLLBACK.equals(incomingTx.getProcessingStatus().orElse(null)) && rollbackEnabled.orElse(false)) {
+                            log.info("Rolling back transaction and it should ready to approve: {}", attached);
+                            attached.setLedgerDispatchApproved(false);
+                            attached.setTransactionApproved(false);
+                            attached.setLedgerDispatchReceipt(null);
+                            attached.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+                            attached.updateProcessingStatus();
+                        }
+                        toProcessTransactions.add(attached);
+                    } else {
+                        toProcessTransactions.add(incomingTx);
                     }
-                    toProcessTransactions.add(attached);
-                } else {
-                    toProcessTransactions.add(incomingTx);
                 }
             } else {
                 alreadyStoredCount++;
@@ -172,8 +171,8 @@ public class DbSynchronisationUseCaseService {
     }
 
     private Set<TransactionEntity> storeTransactions(String batchId,
-                                   OrganisationTransactions transactions,
-                                   ProcessorFlags flags) {
+                                                     OrganisationTransactions transactions,
+                                                     ProcessorFlags flags) {
         log.info("Updating transaction batch, batchId: {}", batchId);
         ProcessorFlags.Trigger trigger = flags.getTrigger();
         Set<TransactionEntity> txs = transactions.transactions();
@@ -209,6 +208,9 @@ public class DbSynchronisationUseCaseService {
 
     private boolean isIncomingTransactionERPSame(TransactionEntity existingTx,
                                                  TransactionEntity incomingTx) {
+        if (existingTx.hasAnyViolation(Source.ERP)) {
+            return false;
+        }
         String existingTxVersion = ERPSourceTransactionVersionCalculator.compute(existingTx);
         String incomingTxVersion = ERPSourceTransactionVersionCalculator.compute(incomingTx);
 

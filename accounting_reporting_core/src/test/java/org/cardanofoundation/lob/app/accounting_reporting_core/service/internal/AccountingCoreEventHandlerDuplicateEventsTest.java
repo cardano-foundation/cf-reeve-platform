@@ -24,35 +24,28 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.config.JaversConf
 import org.cardanofoundation.lob.app.accounting_reporting_core.config.JpaConfig;
 import org.cardanofoundation.lob.app.accounting_reporting_core.config.TimeConfig;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReportStatusUpdate;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.IntervalType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportMode;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.report.ReportType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.FilteringParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.report.ReportEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.ReportsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.functionalTests.TestContainerConfig;
 import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.ReportRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @SpringBootTest(classes = {JaversConfig.class, TimeConfig.class, JpaConfig.class})
@@ -68,8 +61,6 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
     private AccountingCoreTransactionRepository accountingCoreTransactionRepository;
     @Autowired
     private TransactionBatchRepository transactionBatchRepository;
-    @Autowired
-    private ReportRepository reportRepository;
     @Autowired
     private TxStatusUpdaterJob txStatusUpdaterJob;
     @Autowired
@@ -122,37 +113,6 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         Optional<TransactionEntity> txEntity = accountingCoreTransactionRepository.findById("txId");
         Assertions.assertTrue(txEntity.isPresent());
         Assertions.assertEquals(LedgerDispatchStatus.MARK_DISPATCH, txEntity.get().getLedgerDispatchStatus());
-    }
-
-    @Test
-    void testHandleReportLedgerUpdate() {
-
-        ReportEntity reportEntity = new ReportEntity();
-        reportEntity.setReportId("reportId");
-        reportEntity.setIdControl("idControl");
-        reportEntity.setOrganisation(Organisation.builder().id("testOrg").name("testOrg").countryCode("CH").currencyId("ISO_4217:CHF").taxIdNumber("taxIdNumber").build());
-        reportEntity.setType(ReportType.INCOME_STATEMENT);
-        reportEntity.setIntervalType(IntervalType.MONTH);
-        reportEntity.setYear((short) 2021);
-        reportEntity.setDate(LocalDate.now());
-        reportEntity.setMode(ReportMode.SYSTEM);
-        reportEntity.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
-        reportRepository.saveAndFlush(reportEntity);
-
-        ReportsLedgerUpdatedEvent reportsLedgerUpdatedEvent = ReportsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("1.0", "testUser"))
-                .organisationId("testOrg")
-                // padding the transaction id to 64 characters to match the length of the id in the database
-                .statusUpdates(Set.of(new ReportStatusUpdate(String.format("%-64s", reportEntity.getReportId()), LedgerDispatchStatus.MARK_DISPATCH, null, Set.of())))
-                .build();
-
-        // sending events twice to check if the status is updated correctly and no exceptions are thrown
-        accountingCoreEventHandler.handleReportsLedgerUpdated(reportsLedgerUpdatedEvent);
-        accountingCoreEventHandler.handleReportsLedgerUpdated(reportsLedgerUpdatedEvent);
-
-        Optional<ReportEntity> report = reportRepository.findById("reportId");
-        Assertions.assertTrue(report.isPresent());
-        Assertions.assertEquals(LedgerDispatchStatus.MARK_DISPATCH, report.get().getLedgerDispatchStatus());
     }
 
     @Test
