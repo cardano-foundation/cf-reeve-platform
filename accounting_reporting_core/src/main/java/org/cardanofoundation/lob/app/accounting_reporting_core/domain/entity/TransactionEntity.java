@@ -218,6 +218,12 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Nullable
     private String userComment;
 
+    @Column(name = "rollback_suffix")
+    @Getter
+    @Setter
+    @Nullable
+    private String rollbackSuffix;
+
     @Column(name = "overall_status", nullable = false)
     @Enumerated(STRING)
     @DiffIgnore

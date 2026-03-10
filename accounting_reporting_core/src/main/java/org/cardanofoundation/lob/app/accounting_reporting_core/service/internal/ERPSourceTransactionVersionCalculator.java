@@ -37,6 +37,13 @@ public class ERPSourceTransactionVersionCalculator {
     private static String compute(TransactionItemEntity item) {
         val b = new StringBuilder();
 
+        // For rollback (CSV-republish) transactions, item IDs differ between the CSV-imported
+        // DB record and the ERP source, so we cannot use item.getId() in the hash.
+        // For all other transactions the ID is stable across paths and is included.
+        if (item.getTransaction().getRollbackSuffix() != null) {
+            return SHA3.digestAsHex(b.toString());
+
+        }
         b.append(item.getId());
 
         item.getAccountCredit().ifPresent(acc -> b.append(compute(acc)));

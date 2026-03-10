@@ -1,11 +1,14 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.time.YearMonth;
 import java.util.Optional;
 import java.util.Set;
+
+import org.springframework.test.util.ReflectionTestUtils;
 
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -22,6 +25,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserE
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.FilteringParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,6 +35,8 @@ class TransactionConverterTest {
     private CoreCurrencyService coreCurrencyService;
     @Mock
     OrganisationConverter organisationConverter;
+    @Mock
+    OrganisationPublicApiIF organisationPublicApiIF;
 
     @InjectMocks
     private TransactionConverter transactionConverter;
@@ -145,5 +151,70 @@ class TransactionConverterTest {
 
         Assertions.assertEquals(expectedTxNumber, txEntity.getInternalTransactionNumber());
         Assertions.assertEquals(TransactionProcessingStatus.ROLLBACK, txEntity.getProcessingStatus().orElse(null));
+        Assertions.assertEquals(rollbackSuffix, txEntity.getRollbackSuffix());
+    }
+
+    @Test
+    void testCopyFields_shouldCopyRollbackSuffix() {
+        TransactionEntity attached = new TransactionEntity();
+        TransactionEntity detached = new TransactionEntity();
+        detached.setRollbackSuffix("C");
+
+        transactionConverter.copyFields(attached, detached);
+
+        Assertions.assertEquals("C", attached.getRollbackSuffix());
+    }
+
+    @Test
+    void testConvertToDbDetached_withRollbackEnabled_shouldApplyRollbackSuffixToEntity() {
+        ReflectionTestUtils.setField(transactionConverter, "rollbackEnabled", Optional.of(true));
+
+        String txNumber = "TXNUM";
+        String rollbackSuffix = "C";
+
+        Transaction tx = mock(Transaction.class);
+        when(tx.getId()).thenReturn("tx001");
+        when(tx.getBatchId()).thenReturn("batch123");
+        when(tx.getInternalTransactionNumber()).thenReturn(txNumber);
+        when(tx.getTransactionType()).thenReturn(TransactionType.BillCredit);
+        when(tx.getAccountingPeriod()).thenReturn(YearMonth.parse("2025-03"));
+        when(tx.getRollbackSuffix()).thenReturn(rollbackSuffix);
+        when(tx.getViolations()).thenReturn(Set.of());
+        when(tx.getItems()).thenReturn(Set.of());
+
+        Set<TransactionEntity> result = transactionConverter.convertToDbDetached(Set.of(tx), Optional.empty());
+
+        assertThat(result).hasSize(1);
+        TransactionEntity resultTx = result.iterator().next();
+        assertThat(resultTx.getInternalTransactionNumber()).isEqualTo(txNumber + "-" + rollbackSuffix);
+        assertThat(resultTx.getRollbackSuffix()).isEqualTo(rollbackSuffix);
+        assertThat(resultTx.getProcessingStatus()).contains(TransactionProcessingStatus.ROLLBACK);
+    }
+
+    @Test
+    void testConvertToDbDetached_withRollbackDisabled_shouldNotApplyRollbackSuffix() {
+        ReflectionTestUtils.setField(transactionConverter, "rollbackEnabled", Optional.of(false));
+
+        String txNumber = "TXNUM";
+        String rollbackSuffix = "C";
+
+        Transaction tx = mock(Transaction.class);
+        when(tx.getId()).thenReturn("tx001");
+        when(tx.getBatchId()).thenReturn("batch123");
+        when(tx.getInternalTransactionNumber()).thenReturn(txNumber);
+        when(tx.getTransactionType()).thenReturn(TransactionType.BillCredit);
+        when(tx.getAccountingPeriod()).thenReturn(YearMonth.parse("2025-03"));
+        when(tx.getRollbackSuffix()).thenReturn(rollbackSuffix);
+        when(tx.getViolations()).thenReturn(Set.of());
+        when(tx.getItems()).thenReturn(Set.of());
+
+        Set<TransactionEntity> result = transactionConverter.convertToDbDetached(Set.of(tx), Optional.empty());
+
+        assertThat(result).hasSize(1);
+        TransactionEntity resultTx = result.iterator().next();
+        // rollbackEnabled=false → rollback NOT applied, internal number unchanged
+        assertThat(resultTx.getInternalTransactionNumber()).isEqualTo(txNumber);
+        assertThat(resultTx.getRollbackSuffix()).isNull();
+        assertThat(resultTx.getProcessingStatus()).isEmpty();
     }
 }

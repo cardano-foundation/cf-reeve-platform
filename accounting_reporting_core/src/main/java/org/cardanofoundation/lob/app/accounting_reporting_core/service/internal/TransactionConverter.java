@@ -304,6 +304,7 @@ public class TransactionConverter {
 
     public void rollbackTransaction(TransactionEntity txEntity, Transaction transaction) {
         txEntity.setInternalTransactionNumber(transaction.getInternalTransactionNumber() + "-" + transaction.getRollbackSuffix());
+        txEntity.setRollbackSuffix(transaction.getRollbackSuffix());
         txEntity.setProcessingStatus(TransactionProcessingStatus.ROLLBACK);
 
     }
@@ -321,6 +322,7 @@ public class TransactionConverter {
         attached.setLedgerDispatchStatus(detached.getLedgerDispatchStatus());
         attached.setAccountingPeriod(detached.getAccountingPeriod());
         attached.setInternalTransactionNumber(detached.getInternalTransactionNumber());
+        attached.setRollbackSuffix(detached.getRollbackSuffix());
         attached.setExtractorType(detached.getExtractorType());
 
         attached.getViolations().clear();
