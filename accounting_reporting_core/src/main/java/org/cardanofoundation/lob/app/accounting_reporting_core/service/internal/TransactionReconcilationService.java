@@ -236,28 +236,6 @@ public class TransactionReconcilationService {
                 detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + rollbackSuffix);
                 detachedTx.setRollbackSuffix(rollbackSuffix);
 
-                // Remap detachedTx item IDs to match the DB item IDs.
-                // The CSV republish may send items in a different line order than the original import,
-                // so the item IDs (which embed the line index) differ. We match by content instead:
-                // accountDebit + accountCredit + amountLcy + operationType uniquely identify each item.
-                Map<String, String> dbItemIdByContentKey = attachedTx.getAllItems().stream()
-                        .collect(Collectors.toMap(
-                                TransactionReconcilationService::itemContentKey,
-                                TransactionItemEntity::getId,
-                                (a, b) -> a
-                        ));
-
-                for (TransactionItemEntity erpItem : detachedTx.getAllItems()) {
-                    String key = itemContentKey(erpItem);
-                    String dbItemId = dbItemIdByContentKey.get(key);
-                    if (dbItemId != null) {
-                        erpItem.setId(dbItemId);
-                    } else {
-                        log.warn("No matching DB item for ERP item, txId:{}, erpItemId:{}, contentKey:{}",
-                                detachedTx.getId(), erpItem.getId(), key);
-                    }
-                }
-
             }
             String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
             String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);

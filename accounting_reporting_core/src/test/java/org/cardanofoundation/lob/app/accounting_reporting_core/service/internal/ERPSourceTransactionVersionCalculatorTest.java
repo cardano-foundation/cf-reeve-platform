@@ -33,6 +33,23 @@ class ERPSourceTransactionVersionCalculatorTest {
     }
 
     @Test
+    public void testRollbackTx_hashIsIndependentOfItemIds() {
+        // For rollback (CSV-republish) transactions, item IDs differ between the CSV-imported
+        // DB record and the ERP source, so the hash must be the same regardless of item IDs.
+        val org = Organisation.builder()
+                .id("401cad588bb2152f5c7ea0646ed84dd7f1b233dc73c3463d721f43e117a0e8ad")
+                .build();
+
+        val txWithOriginalIds = createRollbackTx(org, "1", "2");
+        val txWithCsvImportedIds = createRollbackTx(org, "csv-1", "csv-2");
+
+        val hashA = ERPSourceTransactionVersionCalculator.compute(txWithOriginalIds);
+        val hashB = ERPSourceTransactionVersionCalculator.compute(txWithCsvImportedIds);
+
+        assertThat(hashA).isEqualTo(hashB);
+    }
+
+    @Test
     public void testTx1AndTx2() {
         val org = Organisation.builder()
                 .id("401cad588bb2152f5c7ea0646ed84dd7f1b233dc73c3463d721f43e117a0e8ad")
@@ -151,6 +168,91 @@ class ERPSourceTransactionVersionCalculatorTest {
             item.setAmountFcy(BigDecimal.valueOf(0));
             item.setFxRate(BigDecimal.valueOf(1.1234568369827355));
         });
+
+        return tx;
+    }
+
+    private static TransactionEntity createRollbackTx(Organisation org, String item1Id, String item2Id) {
+        val tx = new TransactionEntity();
+        tx.setTransactionType(FxRevaluation);
+        tx.setEntryDate(LocalDate.of(2021, 1, 1));
+        tx.setOrganisation(org);
+        tx.setInternalTransactionNumber("FxRevaluation-1");
+        tx.setRollbackSuffix("ROLLBACK");
+
+        val txItem1 = new TransactionItemEntity();
+        txItem1.setId(item1Id);
+        txItem1.setAmountFcy(BigDecimal.valueOf(0.0));
+        txItem1.setAmountLcy(BigDecimal.valueOf(0.0));
+        txItem1.setFxRate(BigDecimal.valueOf(2.12345));
+
+        txItem1.setAccountDebit(Optional.of(Account.builder()
+                .code("1000")
+                .name("Cash")
+                .refCode("r1000")
+                .build()
+        ));
+
+        txItem1.setAccountCredit(Optional.of(Account.builder()
+                .code("2000")
+                .name("Bank")
+                .refCode("r2000")
+                .build()
+        ));
+
+        txItem1.setDocument(Optional.of(Document.builder()
+                        .num("doc-1")
+                        .vat(Vat.builder()
+                                .customerCode("C100")
+                                .build())
+                        .currency(Currency.builder()
+                                .id("ISO_4217:CHF")
+                                .customerCode("CHF")
+                                .build())
+                        .counterparty(Counterparty.builder()
+                                .customerCode("C100")
+                                .build())
+                .build())
+        );
+
+        val txItem2 = new TransactionItemEntity();
+        txItem2.setId(item2Id);
+        txItem2.setAmountFcy(BigDecimal.valueOf(100.10));
+        txItem2.setAmountLcy(BigDecimal.valueOf(100.20));
+        txItem2.setFxRate(BigDecimal.valueOf(1.123456));
+
+        txItem2.setAccountDebit(Optional.of(Account.builder()
+                .code("2000")
+                .name("Cash")
+                .refCode("21000")
+                .build())
+        );
+
+        txItem2.setAccountCredit(Optional.of(Account.builder()
+                .code("4000")
+                .name("Bank")
+                .refCode("r3000")
+                .build())
+        );
+
+        txItem2.setDocument(Optional.of(Document.builder()
+                .num("doc-2")
+                .vat(Vat.builder()
+                        .customerCode("C200")
+                        .build())
+                .currency(Currency.builder()
+                        .id("ISO_4217:CHF")
+                        .customerCode("CHF")
+                        .build())
+                .counterparty(Counterparty.builder()
+                        .customerCode("C200")
+                        .build())
+                .build())
+        );
+
+        tx.setItems(Set.of(txItem1, txItem2));
+        txItem1.setTransaction(tx);
+        txItem2.setTransaction(tx);
 
         return tx;
     }
