@@ -19,7 +19,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 class ERPSourceTransactionVersionCalculatorTest {
 
     @Test
-    public void testTx1() {
+    void testTx1() {
         val org = Organisation.builder()
                 .id("401cad588bb2152f5c7ea0646ed84dd7f1b233dc73c3463d721f43e117a0e8ad")
                 .build();
@@ -33,7 +33,7 @@ class ERPSourceTransactionVersionCalculatorTest {
     }
 
     @Test
-    public void testRollbackTx_hashIsIndependentOfItemIds() {
+    void testRollbackTx_hashIsIndependentOfItemIds() {
         // For rollback (CSV-republish) transactions, item IDs differ between the CSV-imported
         // DB record and the ERP source, so the hash must be the same regardless of item IDs.
         val org = Organisation.builder()
@@ -50,7 +50,7 @@ class ERPSourceTransactionVersionCalculatorTest {
     }
 
     @Test
-    public void testTx1AndTx2() {
+    void testTx1AndTx2() {
         val org = Organisation.builder()
                 .id("401cad588bb2152f5c7ea0646ed84dd7f1b233dc73c3463d721f43e117a0e8ad")
                 .build();
