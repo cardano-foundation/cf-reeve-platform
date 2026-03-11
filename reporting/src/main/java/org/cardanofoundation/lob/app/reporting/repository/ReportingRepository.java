@@ -56,6 +56,7 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
     @Query("""
         SELECT r FROM ReportEntity r
                 WHERE r.organisationId = :organisationId
+                AND (:reportId IS NULL OR r.id = :reportId)
                 AND (:years IS NULL OR r.year IN :years)
                 AND (:intervalTypes IS NULL OR r.intervalType IN :intervalTypes)
                 AND (:periods IS NULL OR r.period IN :periods)
@@ -67,6 +68,7 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
                 AND (:ledgerDispatchApproved IS NULL OR r.ledgerDispatchApproved = :ledgerDispatchApproved)
         """)
     Page<ReportEntity> findAll(@Param("organisationId") String organisationId,
+                               @Param("reportId") String reportId,
                                @Param("years") List<Short> years,
                                @Param("intervalTypes") List<IntervalType> intervalTypes,
                                @Param("periods") List<Short> periods, @Param("ledgerStatus") LedgerDispatchStatus ledgerStatus,

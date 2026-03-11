@@ -37,6 +37,9 @@ public class ReportResponseDto {
     @Schema(description = "Report template type", example = "BALANCE_SHEET")
     private ReportTemplateType reportTemplateType;
 
+    @Schema(description = "Indicates if the report template is inactive", example = "false")
+    private boolean isTemplateActive = true;
+
     @Schema(description = "Report name", example = "Q1 2024 Financial Report", required = true)
     private String name;
 
@@ -66,6 +69,12 @@ public class ReportResponseDto {
 
     @Schema(description = "Ledger Dispatch status", example = "PENDING", allowableValues = {"NOT_DISPATCHED", "MARK_DISPATCH", "COMPLETED", "FINALIZED", "RETRYING", "FAILED"}, nullable = true)
     private LedgerDispatchStatus ledgerDispatchStatus;
+
+    @Schema(description = "Indicates if the report has been rejected", example = "false")
+    private Boolean isRejected;
+
+    @Schema(description = "User who rejected the report", example = "Max Mustermann", nullable = true)
+    private String rejectedBy;
 
     @Schema(description = "Blockchain transaction ID if published", example = "4f5e6d7c8b9a0b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6", nullable = true)
     private String blockchainTxId;

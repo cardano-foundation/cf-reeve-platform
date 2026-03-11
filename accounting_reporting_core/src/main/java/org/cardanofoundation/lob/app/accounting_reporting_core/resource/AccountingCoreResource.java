@@ -7,7 +7,6 @@ import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,7 +42,6 @@ import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
@@ -56,7 +54,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.utils.Constants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
-import org.cardanofoundation.lob.app.support.date.FlexibleDateParser;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
@@ -87,14 +84,12 @@ public class AccountingCoreResource {
 
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Download transactions as a CSV file with possible filtering", summary = "Download transactions as a CSV file")
-    @GetMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
+    @PostMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<StreamingResponseBody> downloadTransactionsCsv(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
-                                                                         @RequestParam(name = "status", required = false) List<TxValidationStatus> txStatusList,
-                                                                         @RequestParam(name = "transactionType", required = false) List<TransactionType> transactionTypes,
-                                                                         @RequestParam(name = "dateFrom", required = false) String dateFrom,
-                                                                         @RequestParam(name = "dateTo", required = false) String dateTo,
-                                                                         @RequestParam(name = "published", required = false) Boolean published){
+                                                                         @RequestParam(name = "batchId", required = false) String batchId,
+                                                                         @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
+                                                                         @RequestBody BatchFilterRequest batchFilterRequest){
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return ResponseEntity.status(UNAUTHORIZED.value()).body(outputStream -> {
                 ObjectNode response = objectMapper.createObjectNode();
@@ -104,27 +99,16 @@ public class AccountingCoreResource {
                 outputStream.write(objectMapper.writeValueAsBytes(response));
             });
         }
-        LocalDate dateFromD = null;
-        LocalDate dateToD = null;
-        try {
-            if(dateFrom != null) {
-                dateFromD = FlexibleDateParser.parse(dateFrom);
-            }
-            if(dateTo != null) {
-                dateToD = FlexibleDateParser.parse(dateTo);
-            }
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(BAD_REQUEST.value()).body(outputStream -> {
-                ObjectNode response = objectMapper.createObjectNode();
-                response.put("title", "INVALID_DATE_FORMAT");
-                response.put("detail", "One or both of the provided dates are in an invalid format. Please use one of the following formats: dd/MM/yyyy, MM-dd-yyyy, yyyy-MM-dd, dd.MM.yyyy");
-                response.put("status", BAD_REQUEST.value());
-                outputStream.write(objectMapper.writeValueAsBytes(response));
-            });
-        }
-        LocalDate finalDateFromD = dateFromD;
-        LocalDate finalDateToD = dateToD;
-        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId, txStatusList, transactionTypes, finalDateFromD, finalDateToD, published, outputStream);
+        Optional<ResponseEntity<ProblemDetail>> issueO = validateDateRange(batchFilterRequest);
+        if (issueO.isPresent()) return ResponseEntity.status(BAD_REQUEST.value()).body(outputStream -> {
+            ObjectNode response = objectMapper.createObjectNode();
+            response.put("title", "INVALID_DATE_RANGE");
+            response.put("detail", "The 'dateFrom' must be before 'dateTo'");
+            response.put("status", BAD_REQUEST.value());
+            outputStream.write(objectMapper.writeValueAsBytes(response));
+        });
+
+        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId,batchId, txStatus, batchFilterRequest, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"transactions_%s.csv\"".formatted(orgId))
                 .contentType(MediaType.TEXT_PLAIN)
@@ -405,14 +389,8 @@ public class AccountingCoreResource {
         if (Optional.ofNullable(pageable).isEmpty()) {
             pageable = Pageable.unpaged();
         }
-        if(Optional.ofNullable(batchFilterRequest.getDateFrom()).isPresent() && Optional.ofNullable(batchFilterRequest.getDateTo()).isPresent() && batchFilterRequest.getDateFrom().isAfter(batchFilterRequest.getDateTo())) {
-            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The 'dateFrom' must be before 'dateTo'");
-            issue.setTitle("INVALID_DATE_RANGE");
-
-            return ResponseEntity
-                    .status(issue.getStatus())
-                    .body(issue);
-        }
+        Optional<ResponseEntity<ProblemDetail>> issueO = validateDateRange(batchFilterRequest);
+        if (issueO.isPresent()) return issueO.get();
         Either<ProblemDetail, Optional<BatchView>> txBatchEO = accountingCorePresentationService.batchDetail(batchId, txStatus, pageable, batchFilterRequest);
         if (txBatchEO.isLeft()) {
             ProblemDetail problem = txBatchEO.getLeft();
@@ -431,6 +409,18 @@ public class AccountingCoreResource {
         return ResponseEntity
                 .ok()
                 .body(txBatchO.orElseThrow());
+    }
+
+    private static Optional<ResponseEntity<ProblemDetail>> validateDateRange(BatchFilterRequest batchFilterRequest) {
+        if(batchFilterRequest != null && Optional.ofNullable(batchFilterRequest.getDateFrom()).isPresent() && Optional.ofNullable(batchFilterRequest.getDateTo()).isPresent() && batchFilterRequest.getDateFrom().isAfter(batchFilterRequest.getDateTo())) {
+            ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The 'dateFrom' must be before 'dateTo'");
+            issue.setTitle("INVALID_DATE_RANGE");
+
+            return Optional.of(ResponseEntity
+                    .status(issue.getStatus())
+                    .body(issue));
+        }
+        return Optional.empty();
     }
 
 }
