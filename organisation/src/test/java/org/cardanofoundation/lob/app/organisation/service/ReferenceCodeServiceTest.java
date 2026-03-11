@@ -302,6 +302,17 @@ class ReferenceCodeServiceTest {
     }
 
     @Test
+    void testInsertReferenceCode_UpdateExistingDetail() {
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, REF_CODE)).thenReturn(Optional.of(referenceCode));
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+
+        ReferenceCodeView result = referenceCodeService.insertReferenceCode(ORG_ID, referenceCodeUpdate, false);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("Code " + REF_CODE + " already exists.", result.getError().get().getDetail());
+    }
+
+    @Test
     void testInsertReferenceCode_UpdateExistingNotFindParentCode() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, "0102")).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));

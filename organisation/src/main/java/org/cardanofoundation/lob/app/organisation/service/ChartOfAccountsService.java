@@ -201,7 +201,7 @@ public class ChartOfAccountsService {
             if (isUpsert) {
                 chartOfAccount = chartOfAccountOpt.get();
             } else {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The chart of account with code: %s already exists".formatted(chartOfAccountUpdate.getCustomerCode()));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Code %s already exists.".formatted(chartOfAccountUpdate.getCustomerCode()));
                 problem.setTitle("CHART_OF_ACCOUNT_ALREADY_EXISTS");
                 return ChartOfAccountView.createFail(problem, chartOfAccountUpdate);
             }
