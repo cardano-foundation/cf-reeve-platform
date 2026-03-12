@@ -40,10 +40,15 @@ public class LOBOnChainBatchProcessor {
 
                 val lobBatch = metadataDeserialiser.decode(envelopeCborMap);
 
-                for (val lobTx : lobBatch.getTransactions()) {
+                if (lobBatch.isEmpty()) {
+                    log.warn("Failed to decode transaction {}. Block: {}.", txEvent.getTxHash(), event.getEventMetadata());
+                    continue;
+                }
+
+                for (val lobTx : lobBatch.get().getTransactions()) {
                     val tx = new TransactionEntity();
                     tx.setId(lobTx.getId());
-                    tx.setOrganisationId(lobBatch.getOrganisationId());
+                    tx.setOrganisationId(lobBatch.get().getOrganisationId());
                     tx.setL1TransactionHash(txEvent.getTxHash());
                     tx.setL1AbsoluteSlot(txEvent.getSlot());
 
