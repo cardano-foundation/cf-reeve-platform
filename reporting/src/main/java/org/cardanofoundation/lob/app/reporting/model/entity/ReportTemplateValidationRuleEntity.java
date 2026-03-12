@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.model.entity;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -23,6 +24,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @Setter
@@ -53,5 +55,13 @@ public class ReportTemplateValidationRuleEntity extends CommonEntity {
     @JoinColumn(name = "report_template_id", nullable = false)
     @ManyToOne(fetch = FetchType.LAZY)
     private ReportTemplateEntity reportTemplate;
+
+    public int computeContentHash() {
+        return Objects.hash(
+            operator.name(),
+            terms.stream().filter(validationRuleTermEntity -> validationRuleTermEntity.getSide().equals(TermSide.LEFT)).map(ValidationRuleTermEntity::computeContentHash).toList(),
+            terms.stream().filter(validationRuleTermEntity -> validationRuleTermEntity.getSide().equals(TermSide.RIGHT)).map(ValidationRuleTermEntity::computeContentHash).toList()
+        );
+    }
 
 }

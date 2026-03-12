@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.dto;
 
 import java.util.List;
+import java.util.Objects;
 
 import jakarta.validation.constraints.NotNull;
 
@@ -37,4 +38,12 @@ public class ValidationRuleDto {
     @Schema(description = "Terms on the right side of the comparison")
     @NotNull(message = "Right side terms must not be null")
     private List<ValidationRuleTermDto> rightSideTerms;
+
+    public int computeContentHash() {
+        return Objects.hash(
+                operator,
+                leftSideTerms.stream().map(ValidationRuleTermDto::computeContentHash).toList(),
+                rightSideTerms.stream().map(ValidationRuleTermDto::computeContentHash).toList()
+        );
+    }
 }
