@@ -68,7 +68,7 @@ dependencies {
     implementation("io.vavr:vavr:0.10.4")
 
     // yaci-store dependencies
-    val yaciStoreVersion = "0.1.4"
+    val yaciStoreVersion = "0.1.6"
     implementation("com.bloxbean.cardano:yaci-store-spring-boot-starter:$yaciStoreVersion")
     implementation("com.bloxbean.cardano:yaci-store-blocks-spring-boot-starter:$yaciStoreVersion")
     implementation("com.bloxbean.cardano:yaci-store-transaction-spring-boot-starter:$yaciStoreVersion")
