@@ -911,6 +911,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
         assertEquals(lastReconciledDate, view.getReconciliationDate());
         assertEquals("TX-001", view.getId());
+        assertNull(view.getBatchId());
         assertEquals(TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK, view.getReconciliationFinalStatus());
     }
 
@@ -949,6 +950,7 @@ class AccountingCorePresentationViewServiceTest {
     void getReconciliationTransactionsSelector_txPresent_usesTxPathAndIgnoresLastReconciledDate() {
         TransactionEntity txEntity = mock(TransactionEntity.class);
         when(txEntity.getId()).thenReturn("TX-003");
+        when (txEntity.getBatchId()).thenReturn("batch-123");
         when(txEntity.getExtractorType()).thenReturn("NETSUITE");
         when(txEntity.getOverallStatus()).thenReturn(TransactionStatus.OK);
         when(txEntity.getAutomatedValidationStatus()).thenReturn(TxValidationStatus.VALIDATED);
@@ -973,6 +975,7 @@ class AccountingCorePresentationViewServiceTest {
         assertEquals(1, result.getTransactions().size());
         TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
         assertEquals("TX-003", view.getId());
+        assertEquals("batch-123", view.getBatchId());
         // lastReconciledDate from the DTO is not used in this path — the tx's own reconciliation data is used
         assertNull(view.getReconciliationDate());
     }
@@ -998,6 +1001,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
         // fallback view returns empty string id and null reconciliation date
         assertEquals("", view.getId());
+        assertNull(view.getBatchId());
         assertNull(view.getReconciliationDate());
         assertEquals(TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK, view.getReconciliationFinalStatus());
     }
