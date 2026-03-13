@@ -37,10 +37,7 @@ public class IncomeStatementConverter implements ResponseConverter {
             if(i > 0 && !field.getChildFields().isEmpty()) {
                 field.setValue(fields.get(i-1).getValue().add(field.getValue()));
             }
-            // Recursively convert child fields
-            if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
-                field.setChildFields(convertFields(field.getChildFields()));
-            }
+
         }
         return fields;
     }
