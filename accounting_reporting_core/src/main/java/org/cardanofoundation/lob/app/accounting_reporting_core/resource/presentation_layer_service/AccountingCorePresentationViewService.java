@@ -455,6 +455,7 @@ public class AccountingCorePresentationViewService {
         }
         return new TransactionReconciliationTransactionsView(transactionEntity.getId(),
                 transactionEntity.getInternalTransactionNumber(),
+                transactionEntity.getBatchId(),
                 transactionEntity.getEntryDate(),
                 transactionEntity.getTransactionType(), dataSourceView,
                 Optional.of(transactionEntity.getOverallStatus()),
@@ -504,6 +505,7 @@ public class AccountingCorePresentationViewService {
         return new TransactionReconciliationTransactionsView(
                 reconcilationViolation.getTransactionId(),
                 reconcilationViolation.getTransactionInternalNumber(),
+                null,
                 reconcilationViolation.getTransactionEntryDate(),
                 reconcilationViolation.getTransactionType(),
                 DataSourceView.NETSUITE, Optional.empty(), Optional.empty(),
@@ -520,7 +522,7 @@ public class AccountingCorePresentationViewService {
     }
 
     private TransactionReconciliationTransactionsView getTransactionReconciliationViolationView() {
-        return new TransactionReconciliationTransactionsView("", "", LocalDate.now(),
+        return new TransactionReconciliationTransactionsView("", "", null, LocalDate.now(),
                 TransactionType.CardCharge, DataSourceView.NETSUITE,
                 Optional.empty(), Optional.empty(), Optional.empty(), false, false,
                 BigDecimal.valueOf(123), false,
