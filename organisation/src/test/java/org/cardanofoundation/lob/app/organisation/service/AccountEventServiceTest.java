@@ -305,6 +305,21 @@ class AccountEventServiceTest {
     }
 
     @Test
+    void testInsertReferenceCode_CodeAlreadyExistDetail() {
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.of(mockDebitReference));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, CREDIT_REF_CODE)).thenReturn(Optional.of(mockCreditReference));
+        when(accountEventRepository.findByOrgIdAndDebitReferenceCodeAndCreditReferenceCode(ORG_ID, DEBIT_REF_CODE, CREDIT_REF_CODE))
+                .thenReturn(Optional.of(mockAccountEvent));
+        when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));
+
+        AccountEventView result = accountEventService.insertAccountEvent(ORG_ID, mockEventCodeUpdate, false);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("Account with debit reference code " + DEBIT_REF_CODE + " and credit reference code " + CREDIT_REF_CODE + " already exists.", result.getError().get().getDetail());
+        verify(accountEventRepository, never()).save(any());
+    }
+
+    @Test
     void testInsertReferenceCode_FailsWhenDebitReferenceMissing() {
         when(referenceCodeRepository.findByOrgIdAndReferenceCode(ORG_ID, DEBIT_REF_CODE)).thenReturn(Optional.empty());
         when(organisationService.findById(ORG_ID)).thenReturn(Optional.of(mockOrganisation));

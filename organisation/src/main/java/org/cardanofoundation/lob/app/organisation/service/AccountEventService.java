@@ -97,7 +97,7 @@ public class AccountEventService {
 
         // If the account event already exists and we are not upserting, return an error
         if (accountEventOpt.isPresent() && !isUpsert) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Account event already exists for debit reference code: %s and credit reference code: %s".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Account with debit reference code %s and credit reference code %s already exists.".formatted(eventCodeUpdate.getDebitReferenceCode(), eventCodeUpdate.getCreditReferenceCode()));
             problem.setTitle(ErrorTitleConstants.ACCOUNT_EVENT_ALREADY_EXISTS);
             return AccountEventView.createFail(problem, eventCodeUpdate);
         }
