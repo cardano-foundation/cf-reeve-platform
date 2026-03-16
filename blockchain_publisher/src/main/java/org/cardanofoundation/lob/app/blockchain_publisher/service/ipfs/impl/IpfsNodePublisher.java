@@ -25,8 +25,14 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPubli
 public class IpfsNodePublisher implements IpfsPublisher {
 
     private IPFS ipfs;
+
     @Value("${lob.blockchain_publisher.ipfs.local.node}")
     private String node;
+
+    // package-private for testing
+    void setIpfs(IPFS ipfs) {
+        this.ipfs = ipfs;
+    }
 
     @PostConstruct
     public void init() {

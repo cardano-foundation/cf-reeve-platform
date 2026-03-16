@@ -35,6 +35,12 @@ public class BlockfrostPublisher implements IpfsPublisher {
     @Value("${lob.blockchain_publisher.ipfs.blockfrost.project_id}")
     private String blockfrostProjectId;
 
+    private final HttpClient httpClient;
+
+    public BlockfrostPublisher() {
+        this.httpClient = HttpClient.newHttpClient();
+    }
+
     @Override
     public Either<ProblemDetail, String> publish(String content) {
         String boundary = "----JavaBoundary" + UUID.randomUUID();
@@ -59,11 +65,9 @@ public class BlockfrostPublisher implements IpfsPublisher {
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                 .build();
 
-        HttpClient client = HttpClient.newHttpClient();
-        HttpResponse<String> response =
-                null;
+        HttpResponse<String> response = null;
         try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (IOException | InterruptedException e) {
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             problemDetail.setTitle("Error sending request to Blockfrost IPFS");
