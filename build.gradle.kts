@@ -57,6 +57,7 @@ allprojects {
             name = "local"
             url = uri("file://${project.layout.buildDirectory}/repo")
         }
+        maven { url = uri("https://jitpack.io") }
     }
 
 
