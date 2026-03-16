@@ -54,6 +54,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
@@ -954,14 +955,18 @@ public class AccountingCorePresentationViewService {
                     "Debit Name",
                     "Credit Code",
                     "Credit Name",
+                    "Event code",
                     "Project Code",
+                    "Parent Project Code",
                     "Document Name",
                     "Currency",
                     "VAT Rate",
                     "VAT Code",
                     "Cost Center Code",
+                    "Parent Cost Center Code",
                     "Counterparty Code",
                     "Counterparty Name",
+                    "Counterparty Type",
                     "Extractor Type",
                     "Ledger Dispatch Status",
                     "Blockchain Hash"};
@@ -969,6 +974,8 @@ public class AccountingCorePresentationViewService {
             for (TransactionEntity transactionEntity : transactions) {
                 for (TransactionItemEntity item : transactionEntity.getItems()) {
                     boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
+                    Optional<CostCenter> parentCostcenter = item.getCostCenter().flatMap(costCenter -> costCenterRepository.findById(new CostCenter.Id(transactionEntity.getOrganisation().getId(), costCenter.getCustomerCode())));
+                    Optional<Project> parentProject = item.getProject().flatMap(project -> projectRepository.findById(new Project.Id(transactionEntity.getOrganisation().getId(), project.getCustomerCode())));
                     String [] data = {
                         transactionEntity.getInternalTransactionNumber(),
                         transactionEntity.getEntryDate().toString(),
@@ -982,16 +989,20 @@ public class AccountingCorePresentationViewService {
                         item.getAccountDebit().flatMap(Account::getName).orElse(""),
                         item.getAccountCredit().map(Account::getCode).orElse(""),
                         item.getAccountCredit().flatMap(Account::getName).orElse(""),
+                        item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
                         item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                        parentProject.map(project -> project.getId().getCustomerCode()).orElse(""),
                         item.getDocument().map(Document::getNum).orElse(""),
                         item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
                         item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
                         item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
                         item.getCostCenter().map(costCenter -> costCenter.getCustomerCode()).orElse(""),
+                        parentCostcenter.map(costCenter -> costCenter.getId().getCustomerCode()).orElse(""),
                         item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
                         item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
+                        item.getDocument().flatMap(document -> document.getCounterparty().map(counterparty -> counterparty.getType().name())).orElse(""),
                         transactionEntity.getExtractorType(),
-                        transactionEntity.getLedgerDispatchStatus().name(),
+                        transactionEntity.getLedgerDispatchStatus() == LedgerDispatchStatus.NOT_DISPATCHED ? "Not Dispatched" : "Dispatched",
                         transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
                     };
                     csvWriter.writeNext(data, false);
