@@ -12,7 +12,7 @@ springBoot {
 }
 
 group = "org.cardano.foundation"
-version = "1.4.1"
+version = "1.4.3"
 java.sourceCompatibility = JavaVersion.VERSION_21
 
 configurations {
