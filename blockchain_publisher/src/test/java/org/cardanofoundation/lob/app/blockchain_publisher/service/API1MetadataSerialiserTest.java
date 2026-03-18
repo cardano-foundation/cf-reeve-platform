@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty.Type.VENDOR;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.CustomerCredit;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType.FxRevaluation;
 import static org.cardanofoundation.lob.app.blockchain_publisher.service.API1MetadataSerialiser.VERSION;
 
@@ -260,6 +261,48 @@ class API1MetadataSerialiserTest {
 
         assertThat(itemMap.get("amount")).isEqualTo(BigDecimals.normaliseString(item.getAmountFcy()));
         assertThat(itemMap.get("amount_lcy")).isNull();
+    }
+
+    @Test
+    void testSerialiseToMetadataMap_customerCreditTypeIsSerialised() {
+        // Given
+        String organisationId = "org123";
+        Organisation organisation = new Organisation();
+        organisation.setId(organisationId);
+        organisation.setName("Test Organisation");
+        organisation.setTaxIdNumber("123456789");
+        organisation.setCurrencyId("USD");
+        organisation.setCountryCode("US");
+
+        TransactionEntity transaction = new TransactionEntity();
+        transaction.setId("tx1");
+        transaction.setInternalNumber("1");
+        transaction.setBatchId("batch1");
+        transaction.setTransactionType(CustomerCredit);
+        transaction.setEntryDate(LocalDate.now(fixedClock));
+        transaction.setAccountingPeriod(YearMonth.of(2023, 2));
+        transaction.setOrganisation(organisation);
+
+        TransactionItemEntity item = new TransactionItemEntity();
+        item.setId("item1");
+        item.setAmountFcy(new BigDecimal("100.00"));
+        item.setFxRate(new BigDecimal("1.0"));
+        item.setDocument(Document.builder()
+                .num("doc1")
+                .currency(Currency.builder()
+                        .customerCode("USD")
+                        .build())
+                .build()
+        );
+        transaction.setItems(Set.of(item));
+
+        // When
+        MetadataMap result = api1MetadataSerialiser.serialiseToMetadataMap(organisationId, Set.of(transaction), 12345L);
+
+        // Then
+        CBORMetadataList txsList = (CBORMetadataList) result.get("data");
+        MetadataMap txMap = (MetadataMap) txsList.getValueAt(0);
+        assertThat(txMap.get("type")).isEqualTo("CustomerCredit");
     }
 
     private MetadataMap assertContainsItem(String id, CBORMetadataList items) {

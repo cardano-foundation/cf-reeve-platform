@@ -23,6 +23,9 @@ class TransactionTypeMapperTest {
         assertEquals(128, transactionTypeMapper.apply(ExpenseReport));
         assertEquals(256, transactionTypeMapper.apply(VendorPayment));
         assertEquals(512, transactionTypeMapper.apply(BillCredit));
+        assertEquals(1024, transactionTypeMapper.apply(CustomerInvoice));
+        assertEquals(2048, transactionTypeMapper.apply(Unknown));
+        assertEquals(4096, transactionTypeMapper.apply(CustomerCredit));
     }
 
 }

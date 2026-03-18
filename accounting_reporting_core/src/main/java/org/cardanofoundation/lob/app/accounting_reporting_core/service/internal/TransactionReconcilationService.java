@@ -224,6 +224,17 @@ public class TransactionReconcilationService {
             TransactionEntity detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
             detachedTx.setLastReconcilation(Optional.empty()); // Also clear on detached to prevent Javers null ID issues with Hibernate proxies
 
+            if (attachedTx.getRollbackSuffix() != null) {
+                // Derive the original tx number from the attached (DB) tx, which already has the rollback suffix.
+                // We cannot use detachedTx.getInternalTransactionNumber() because it may already have the
+                // rollback suffix applied (CSV path) or not (NetSuite path). Using attachedTx is always correct.
+                String rollbackSuffix = attachedTx.getRollbackSuffix();
+                String attachedTxNumber = attachedTx.getInternalTransactionNumber(); // e.g. "TXNUM-C"
+                String originalTxNumber = attachedTxNumber.substring(0, attachedTxNumber.length() - rollbackSuffix.length() - 1);
+                detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + rollbackSuffix);
+                detachedTx.setRollbackSuffix(rollbackSuffix);
+
+            }
             String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
             String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
             log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",

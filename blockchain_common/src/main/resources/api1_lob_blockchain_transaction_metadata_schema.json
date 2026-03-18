@@ -103,7 +103,8 @@
               "ExpenseReport",
               "VendorPayment",
               "BillCredit",
-              "CustomerInvoice"
+              "CustomerInvoice",
+              "CustomerCredit"
             ]
           },
           "items": {

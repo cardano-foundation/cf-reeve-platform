@@ -209,8 +209,8 @@ public class AccountingCorePresentationViewService {
 
 
     public Either<ProblemDetail, Optional<BatchView>> batchDetail(String batchId,
-                                                            List<TransactionProcessingStatus> txStatus, Pageable page,
-                                                            BatchFilterRequest batchFilterRequest) {
+                                                                  List<TransactionProcessingStatus> txStatus, Pageable page,
+                                                                  BatchFilterRequest batchFilterRequest) {
         Either<ProblemDetail, Pageable> pageableEither =
                 jpaSortFieldValidator.convertPageable(page, TRANSACTION_ENTITY_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
@@ -710,9 +710,10 @@ public class AccountingCorePresentationViewService {
     private TransactionReconciliationTransactionsView getReconciliationTransactionsSelector(
             TransactionWithViolationDto violations) {
         // fallback, if the transaction doesn't exist in Reeve
-        if (Optional.ofNullable(violations.tx()).isPresent()) {
+        if (Optional.ofNullable(violations.tx()).isPresent() && violations.tx().getReconcilation().isPresent()) {
             return getTransactionReconciliationView(violations.tx());
         }
+
         if (Optional.ofNullable(violations.violation()).isPresent()) {
             return getTransactionReconciliationViolationView(violations.violation(), violations.lastReconciledDate());
         }
@@ -974,36 +975,30 @@ public class AccountingCorePresentationViewService {
             for (TransactionEntity transactionEntity : transactions) {
                 for (TransactionItemEntity item : transactionEntity.getItems()) {
                     boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
-                    Optional<CostCenter> parentCostcenter = item.getCostCenter().flatMap(costCenter -> costCenterRepository.findById(new CostCenter.Id(transactionEntity.getOrganisation().getId(), costCenter.getCustomerCode())));
-                    Optional<Project> parentProject = item.getProject().flatMap(project -> projectRepository.findById(new Project.Id(transactionEntity.getOrganisation().getId(), project.getCustomerCode())));
-                    String [] data = {
-                        transactionEntity.getInternalTransactionNumber(),
-                        transactionEntity.getEntryDate().toString(),
-                        Optional.ofNullable(transactionEntity.getTransactionType()).map(Enum::name).orElse(""),
-                        item.getFxRate().stripTrailingZeros().toPlainString(),
-                        isCredit ? "" : item.getAmountLcy().stripTrailingZeros().toPlainString(),
-                        isCredit ? item.getAmountLcy().stripTrailingZeros().toPlainString() : "",
-                        isCredit ? "" : item.getAmountFcy().stripTrailingZeros().toPlainString(),
-                        isCredit ? item.getAmountFcy().stripTrailingZeros().toPlainString() : "",
-                        item.getAccountDebit().map(Account::getCode).orElse(""),
-                        item.getAccountDebit().flatMap(Account::getName).orElse(""),
-                        item.getAccountCredit().map(Account::getCode).orElse(""),
-                        item.getAccountCredit().flatMap(Account::getName).orElse(""),
-                        item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
-                        item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
-                        parentProject.map(project -> project.getId().getCustomerCode()).orElse(""),
-                        item.getDocument().map(Document::getNum).orElse(""),
-                        item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
-                        item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
-                        item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
-                        item.getCostCenter().map(costCenter -> costCenter.getCustomerCode()).orElse(""),
-                        parentCostcenter.map(costCenter -> costCenter.getId().getCustomerCode()).orElse(""),
-                        item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
-                        item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
-                        item.getDocument().flatMap(document -> document.getCounterparty().map(counterparty -> counterparty.getType().name())).orElse(""),
-                        transactionEntity.getExtractorType(),
-                        transactionEntity.getLedgerDispatchStatus() == LedgerDispatchStatus.NOT_DISPATCHED ? "Not Dispatched" : "Dispatched",
-                        transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
+                    String[] data = {
+                            transactionEntity.getInternalTransactionNumber(),
+                            transactionEntity.getEntryDate().toString(),
+                            Optional.ofNullable(transactionEntity.getTransactionType()).map(Enum::name).orElse(""),
+                            item.getFxRate().stripTrailingZeros().toPlainString(),
+                            isCredit ? "" : item.getAmountLcy().stripTrailingZeros().toPlainString(),
+                            isCredit ? item.getAmountLcy().stripTrailingZeros().toPlainString() : "",
+                            isCredit ? "" : item.getAmountFcy().stripTrailingZeros().toPlainString(),
+                            isCredit ? item.getAmountFcy().stripTrailingZeros().toPlainString() : "",
+                            item.getAccountDebit().map(Account::getCode).orElse(""),
+                            item.getAccountDebit().flatMap(Account::getName).orElse(""),
+                            item.getAccountCredit().map(Account::getCode).orElse(""),
+                            item.getAccountCredit().flatMap(Account::getName).orElse(""),
+                            item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                            item.getDocument().map(Document::getNum).orElse(""),
+                            item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
+                            item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
+                            item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
+                            item.getCostCenter().map(costCenter -> costCenter.getCustomerCode()).orElse(""),
+                            item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
+                            item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
+                            transactionEntity.getExtractorType(),
+                            transactionEntity.getLedgerDispatchStatus().name(),
+                            transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
                     };
                     csvWriter.writeNext(data, false);
                 }
