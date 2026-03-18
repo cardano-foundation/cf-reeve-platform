@@ -35,6 +35,7 @@ import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
@@ -257,7 +258,8 @@ public class ReportTemplateService {
                 reportingRepository.findByReportTemplateId(existing.getId());
         // Prevent a version update if the update only is about mappings
         boolean isOnlyChangingMappings = isChangingOnlyMappings(existing.getFields(), dto.getFields());
-        if (!existingReports.isEmpty() && !isOnlyChangingMappings) {
+        boolean isOnlyNameChangeForValidationRules = isChangingOnlyName(existing.getValidationRules(), dto.getValidationRules());
+        if (!existingReports.isEmpty() && (!isOnlyChangingMappings || !isOnlyNameChangeForValidationRules)) {
             // Reports exist - create a new version
             log.info("Template '{}' has {} existing reports & more changes than just mappings, creating new version {} -> {}",
                     dto.getName(), existingReports.size(), existing.getVer(), existing.getVer() + 1);
@@ -286,6 +288,21 @@ public class ReportTemplateService {
             reportTemplateRepository.save(existing);
         }
         return Either.right(reportTemplateMapper.toResponseDto(saved));
+    }
+
+    private boolean isChangingOnlyName(List<ReportTemplateValidationRuleEntity> validationRules, List<ValidationRuleDto> rules) {
+        Set<Integer> validationRuleHashes = validationRules.stream().map(ReportTemplateValidationRuleEntity::computeContentHash).collect(Collectors.toSet());
+        for(ValidationRuleDto rule : rules) {
+            int ruleHash = rule.computeContentHash();
+            if(!validationRuleHashes.remove(ruleHash)) {
+                return false;
+            }
+        }
+        // This means there is a hash in the entity, that isn't in the dto resulting in a remove
+        if(!validationRuleHashes.isEmpty()) {
+            return false;
+        }
+        return true;
     }
 
     private boolean isChangingOnlyMappings(List<ReportTemplateFieldEntity> fields, List<ReportTemplateFieldDto> dtoFields) {
