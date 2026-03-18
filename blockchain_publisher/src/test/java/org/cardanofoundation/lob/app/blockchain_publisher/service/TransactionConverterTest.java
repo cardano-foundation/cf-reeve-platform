@@ -271,6 +271,24 @@ class TransactionConverterTest {
     }
 
     @Test
+    @DisplayName("Should preserve amount FCY for CustomerCredit transaction type (no override unlike FxRevaluation)")
+    void testConvertToDbDetached_TransactionItem_CustomerCredit() {
+        // Arrange
+        TransactionEntity parent = createTestTransactionEntity("tx-1", "org-1");
+        parent.setTransactionType(TransactionType.CustomerCredit);
+        TransactionItem txItem = createTestTransactionItem("item-1");
+
+        when(organisationPublicApi.findByOrganisationId("org-1"))
+                .thenReturn(Optional.empty());
+
+        // Act
+        TransactionItemEntity result = transactionConverter.convertToDbDetached(parent, txItem);
+
+        // Assert - amountFcy should remain the original value, not replaced by amountLcy
+        assertThat(result.getAmountFcy()).isEqualTo(new BigDecimal("100.00"));
+    }
+
+    @Test
     @DisplayName("Should set cost center when present and associated with organisation")
     void testConvertToDbDetached_TransactionItem_WithCostCenter() {
         // Arrange

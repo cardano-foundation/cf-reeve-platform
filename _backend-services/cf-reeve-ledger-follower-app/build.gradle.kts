@@ -12,7 +12,7 @@ springBoot {
 }
 
 group = "org.cardano.foundation"
-version = "1.0.0-SNAPSHOT"
+version = "1.4.3"
 java.sourceCompatibility = JavaVersion.VERSION_21
 
 configurations {
@@ -68,7 +68,7 @@ dependencies {
     implementation("io.vavr:vavr:0.10.4")
 
     // yaci-store dependencies
-    val yaciStoreVersion = "0.1.4"
+    val yaciStoreVersion = "0.1.6"
     implementation("com.bloxbean.cardano:yaci-store-spring-boot-starter:$yaciStoreVersion")
     implementation("com.bloxbean.cardano:yaci-store-blocks-spring-boot-starter:$yaciStoreVersion")
     implementation("com.bloxbean.cardano:yaci-store-transaction-spring-boot-starter:$yaciStoreVersion")
