@@ -32,6 +32,8 @@ public class TransactionReconciliationTransactionsView {
     private String id;
     private String internalTransactionNumber;
 
+    private String batchId;
+
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate entryDate;
 

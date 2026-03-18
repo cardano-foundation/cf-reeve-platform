@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.dto;
 
+import java.util.Objects;
+
 import jakarta.validation.constraints.NotNull;
 
 import lombok.AllArgsConstructor;
@@ -23,4 +25,11 @@ public class ValidationRuleTermDto {
     @Schema(description = "Operation to apply to this field", example = "ADD", allowableValues = {"ADD", "SUBTRACT"})
     @NotNull(message = "Operation must not be null")
     private String operation;
+
+    public int computeContentHash() {
+        return Objects.hash(
+                fieldName,
+                operation
+        );
+    }
 }
