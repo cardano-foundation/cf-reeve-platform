@@ -77,7 +77,6 @@ public class TransactionRepositoryGateway {
         return Either.right(tx);
     }
 
-    @Transactional
     public List<Either<IdentifiableProblem, TransactionEntity>> applyTransactions(TransactionsRequest transactionsRequest, Function<TransactionEntity, Either<IdentifiableProblem, TransactionEntity>> transformer) {
         // Extract and sort transaction IDs for consistent lock ordering
         List<String> sortedTransactionIds = transactionsRequest.getTransactionIds().stream()
