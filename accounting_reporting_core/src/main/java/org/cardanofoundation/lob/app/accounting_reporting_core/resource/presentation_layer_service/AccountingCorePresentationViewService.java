@@ -487,7 +487,20 @@ public class AccountingCorePresentationViewService {
                 transactionEntity.getLastReconcilation()
                         .map(CommonEntity::getCreatedAt).orElse(null),
                 getTransactionItemView(transactionEntity),
-                getViolations(transactionEntity)
+                getViolations(transactionEntity),
+                transactionEntity.getLastReconcilation()
+                        .map(reconcilationEntity -> reconcilationEntity
+                                .getViolations().stream()
+                                .filter(reconcilationViolation -> reconcilationViolation
+                                        .getTransactionId()
+                                        .equals(transactionEntity
+                                                .getId()))
+                                .map(reconcilationViolation -> {
+                                    return reconcilationViolation.getSourceDiff().isPresent() ? reconcilationViolation.getSourceDiff().get() : null;
+                                })
+                                .collect(toSet()))
+                        .orElse(new LinkedHashSet<>())
+
 
         );
     }
@@ -507,8 +520,8 @@ public class AccountingCorePresentationViewService {
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 Set.of(ReconciliationRejectionCodeRequest.of(
                         reconcilationViolation.getRejectionCode(), false)),
-                lastReconciledDate, new LinkedHashSet<>(), new LinkedHashSet<>()
-
+                lastReconciledDate, new LinkedHashSet<>(), new LinkedHashSet<>(),
+                reconcilationViolation.getSourceDiff().stream().collect(toSet())
         );
     }
 
@@ -520,7 +533,7 @@ public class AccountingCorePresentationViewService {
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
-                new LinkedHashSet<>(), null, null, null
+                new LinkedHashSet<>(), null, null, null, null
 
         );
     }

@@ -17,9 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
-import org.javers.core.Changes;
-import org.javers.core.Javers;
-import org.javers.core.diff.Diff;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
@@ -47,7 +44,7 @@ public class TransactionReconcilationService {
     private final TransactionRepositoryGateway transactionRepositoryGateway;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final BlockchainReaderPublicApiIF blockchainReaderPublicApi;
-    private final Javers javers;
+    private final ERPSourceReconciliationDiffCalculator erpDiffCalculator;
     private final Optional<IndexerReconcilationServiceIF> indexerReconcilationService;
     private final TransactionBatchService transactionBatchService;
 
@@ -243,11 +240,9 @@ public class TransactionReconcilationService {
             ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash) ? ReconcilationCode.OK : ReconcilationCode.NOK;
 
             if (sourceReconcilationStatus == ReconcilationCode.NOK) {
-                Diff sourceDiff = javers.compare(attachedTx, detachedTx);
-                Changes changes = sourceDiff.getChanges();
-                String jsonDiff = javers.getJsonConverter().toJson(changes);
+                String jsonDiff = erpDiffCalculator.computeDiff(attachedTx, detachedTx);
 
-                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), sourceDiff.prettyPrint());
+                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), jsonDiff);
 
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(attachedTx.getId())
@@ -493,8 +488,9 @@ public class TransactionReconcilationService {
                 log.warn("Transaction {} ({}) failed indexer reconciliation: {} ", tx.getInternalTransactionNumber(), txId, indexerResult.mismatchReason());
                 reconcilationEntity.addViolation(ReconcilationViolation.builder()
                         .transactionId(txId)
-                        .rejectionCode(SINK_RECONCILATION_FAIL)
+                        .rejectionCode(SINK_RECONCILATION_MISMATCH)
                         .transactionInternalNumber(tx.getInternalTransactionNumber())
+                        .sourceDiff(indexerResult.mismatchReason())
                         .transactionEntryDate(tx.getEntryDate())
                         .transactionType(tx.getTransactionType())
                         .amountLcySum(computeAmountLcySum(tx))

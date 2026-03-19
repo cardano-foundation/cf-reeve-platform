@@ -2,9 +2,11 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -15,6 +17,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.ProblemDetail;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionDto;
@@ -29,16 +34,52 @@ import org.cardanofoundation.lob.app.support.collections.Partitions;
 @RequiredArgsConstructor
 public class OnChainIndexerReconcilationService implements IndexerReconcilationServiceIF {
 
-    private static final String MISMATCH_SEPARATOR = "; ";
-    private static final String INDEXER_LABEL = ", Indexer=";
-    private static final String DB_LABEL = "DB=";
-    private static final String ITEM_PREFIX = "Item ";
-
     private final OnChainIndexerService onChainIndexerService;
     private final IndexerTransactionTransformer indexerTransactionTransformer;
+    private final ObjectMapper objectMapper;
 
     private String cachedIndexerKey;
     private Either<ProblemDetail, List<OnChainTransactionDto>> cachedIndexerTransactions;
+
+    /**
+     * Structured diff for a single field mismatch between DB and indexer.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record FieldMismatch(String field, String reeve, String indexer) {}
+
+    /**
+     * Item count mismatch between DB and indexer for a transaction.
+     */
+    public record ItemCountMismatch(int reeve, int indexer) {}
+
+    /**
+     * Structured diff for a single transaction item. Fields are omitted when null.
+     * - notFound=true + dbItem + indexerItems: item exists in DB but has no matching indexer item
+     * - fieldMismatches: item matched by content key but has field-level differences
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ItemDiff(
+            String itemId,
+            Boolean notFound,
+            TransformedTransactionItem dbItem,
+            List<OnChainTransactionItemDto> indexerItems,
+            List<FieldMismatch> fieldMismatches
+    ) {}
+
+    /**
+     * Top-level reconciliation diff for a transaction. Fields are omitted when null.
+     * - txNotInDb=true: transaction exists in indexer but not in DB
+     * - txFieldMismatches: transaction-level field differences (internalNumber, type, date)
+     * - itemCountMismatch: DB and indexer have different item counts
+     * - itemDiffs: per-item differences (not-found or field mismatches)
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ReconciliationDiff(
+            Boolean txNotInDb,
+            List<FieldMismatch> txFieldMismatches,
+            ItemCountMismatch itemCountMismatch,
+            List<ItemDiff> itemDiffs
+    ) {}
 
     /**
      * Reconciles transactions from the database with transactions from the On-Chain Indexer.
@@ -87,7 +128,6 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
             long okCount = resultPart.values().stream().filter(r -> r.status() == ReconcilationCode.OK).count();
             long nokCount = resultPart.values().stream().filter(r -> r.status() == ReconcilationCode.NOK).count();
             log.info("Processed {} partition of {}\ncompleted. OK: {}, NOK: {}", dbTransactionsPartition.getPartitionIndex(), dbTransactionsPartition.getTotalPartitions(), okCount, nokCount);
-
         });
 
         // Check for orphaned indexer transactions once with all DB transactions
@@ -112,25 +152,18 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
             OnChainTransactionDto indexerTx = indexerTxMap.get(txId);
 
             if (indexerTx == null) {
-                //log.warn("Transaction {} ({}) not found in indexer", dbTx.getInternalTransactionNumber(), txId);
-                results.put(txId, new IndexerReconcilationResult(
-                        ReconcilationCode.NOK,
-                        "Transaction not found in indexer"
-                ));
                 continue;
             }
 
             TransformedTransaction transformedDbTx = indexerTransactionTransformer.transformForIndexerComparison(dbTx);
-            Optional<String> mismatchReason = compareTransaction(transformedDbTx, indexerTx);
+            Optional<ReconciliationDiff> diff = compareTransaction(transformedDbTx, indexerTx);
 
-            if (mismatchReason.isPresent()) {
-                //log.warn("Transaction {} ({}) has mismatch: {}", dbTx.getInternalTransactionNumber(), txId, mismatchReason.get());
+            if (diff.isPresent()) {
                 results.put(txId, new IndexerReconcilationResult(
                         ReconcilationCode.NOK,
-                        mismatchReason.get()
+                        serializeDiff(diff.get())
                 ));
             } else {
-                //log.info("Transaction {} ({}) is OK",dbTx.getInternalTransactionNumber(), txId);
                 results.put(txId, new IndexerReconcilationResult(
                         ReconcilationCode.OK,
                         null
@@ -155,62 +188,51 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
                 log.warn("Transaction {} ({}) found in indexer but not in database", indexerTx.internalNumber(), indexerTx.id());
                 results.put(indexerTx.id(), new IndexerReconcilationResult(
                         ReconcilationCode.NOK,
-                        "Transaction found in indexer but not in database"
+                        serializeDiff(new ReconciliationDiff(true, null, null, null))
                 ));
             }
         }
     }
 
-    private Optional<String> compareTransaction(TransformedTransaction transformedDbTx, OnChainTransactionDto indexerTx) {
-        StringBuilder mismatches = new StringBuilder();
+    private Optional<ReconciliationDiff> compareTransaction(TransformedTransaction transformedDbTx, OnChainTransactionDto indexerTx) {
+        List<FieldMismatch> txFieldMismatches = new ArrayList<>();
 
-        appendMismatchIfNotEqual(mismatches, "Internal number",
+        collectMismatch(txFieldMismatches, "internalNumber",
                 transformedDbTx.getInternalNumber(), indexerTx.internalNumber());
-
-        appendMismatchIfNotEqual(mismatches, "Type",
+        collectMismatch(txFieldMismatches, "type",
                 transformedDbTx.getTransactionType(), indexerTx.type());
-
-        appendMismatchIfNotEqual(mismatches, "Date",
+        collectMismatch(txFieldMismatches, "date",
                 transformedDbTx.getEntryDate(), indexerTx.date());
 
-        //appendMismatchIfNotEqual(mismatches, "Batch ID",
-        //        transformedDbTx.getBatchId(), indexerTx.batchId());
-
-        compareItemsCounts(mismatches, transformedDbTx, indexerTx);
-
-        return mismatches.isEmpty() ? Optional.empty() : Optional.of(mismatches.toString());
-    }
-
-    private void compareItemsCounts(StringBuilder mismatches,
-                                    TransformedTransaction transformedDbTx,
-                                    OnChainTransactionDto indexerTx) {
         List<TransformedTransactionItem> dbItems = transformedDbTx.getItems();
         List<OnChainTransactionItemDto> indexerItems = indexerTx.items();
 
+        ItemCountMismatch itemCountMismatch = null;
+        List<ItemDiff> itemDiffs = List.of();
+
         if (dbItems.size() != indexerItems.size()) {
-            mismatches.append("Items count mismatch: ")
-                    .append(DB_LABEL).append(dbItems.size())
-                    .append(INDEXER_LABEL).append(indexerItems.size())
-                    .append(MISMATCH_SEPARATOR);
+            itemCountMismatch = new ItemCountMismatch(dbItems.size(), indexerItems.size());
         } else {
-            compareItems(dbItems, indexerItems).ifPresent(mismatches::append);
+            itemDiffs = compareItems(dbItems, indexerItems);
         }
+
+        if (txFieldMismatches.isEmpty() && itemCountMismatch == null && itemDiffs.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new ReconciliationDiff(
+                null,
+                txFieldMismatches.isEmpty() ? null : txFieldMismatches,
+                itemCountMismatch,
+                itemDiffs.isEmpty() ? null : itemDiffs
+        ));
     }
 
-    private void appendMismatchIfNotEqual(StringBuilder mismatches, String fieldName, String dbValue, String indexerValue) {
-        if (!dbValue.equals(indexerValue)) {
-            mismatches.append(fieldName).append(" mismatch: ")
-                    .append(DB_LABEL).append(dbValue)
-                    .append(INDEXER_LABEL).append(indexerValue)
-                    .append(MISMATCH_SEPARATOR);
-        }
-    }
-
-    private Optional<String> compareItems(
+    private List<ItemDiff> compareItems(
             List<TransformedTransactionItem> dbItems,
             List<OnChainTransactionItemDto> indexerItems) {
 
-        StringBuilder mismatches = new StringBuilder();
+        List<ItemDiff> itemDiffs = new ArrayList<>();
 
         // Match items by content key instead of ID, because the aggregation process
         // uses iterator().next() which is non-deterministic for Sets.
@@ -219,22 +241,31 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
                 .collect(Collectors.toMap(this::computeIndexerItemContentKey, Function.identity(),
                         (existing, replacement) -> existing)); // Keep first in case of duplicates
 
+        // Pre-compute which indexer items are not matched by any DB item.
+        // These are the candidates shown when a DB item has no counterpart in the indexer.
+        Set<String> matchedIndexerKeys = dbItems.stream()
+                .map(this::computeDbItemContentKey)
+                .filter(indexerItemsMap::containsKey)
+                .collect(Collectors.toSet());
+        List<OnChainTransactionItemDto> unmatchedIndexerItems = indexerItems.stream()
+                .filter(item -> !matchedIndexerKeys.contains(computeIndexerItemContentKey(item)))
+                .toList();
+
         for (TransformedTransactionItem dbItem : dbItems) {
             String contentKey = computeDbItemContentKey(dbItem);
             OnChainTransactionItemDto indexerItem = indexerItemsMap.get(contentKey);
 
             if (indexerItem == null) {
-                mismatches.append(ITEM_PREFIX)
-                        .append(dbItem.getId())
-                        .append(" not found in indexer")
-                        .append(MISMATCH_SEPARATOR);
-                continue;
+                itemDiffs.add(new ItemDiff(dbItem.getId(), true, dbItem, unmatchedIndexerItems, null));
+            } else {
+                List<FieldMismatch> fieldMismatches = compareItemFields(dbItem, indexerItem);
+                if (!fieldMismatches.isEmpty()) {
+                    itemDiffs.add(new ItemDiff(dbItem.getId(), null, null, null, fieldMismatches));
+                }
             }
-
-            compareItemFields(mismatches, dbItem, indexerItem);
         }
 
-        return mismatches.isEmpty() ? Optional.empty() : Optional.of(mismatches.toString());
+        return itemDiffs;
     }
 
     /**
@@ -267,6 +298,27 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
         );
     }
 
+    private List<FieldMismatch> compareItemFields(TransformedTransactionItem dbItem, OnChainTransactionItemDto indexerItem) {
+        List<FieldMismatch> mismatches = new ArrayList<>();
+
+        // amountFcy is NOT in the content key used for matching, so it can differ
+        if (dbItem.getAmountFcy().compareTo(indexerItem.amountFcy()) != 0) {
+            mismatches.add(new FieldMismatch("amountFcy",
+                    dbItem.getAmountFcy().toPlainString(),
+                    indexerItem.amountFcy().toPlainString()));
+        }
+
+        // currency is NOT in the content key (excluded due to DB customerCode vs indexer full ID format)
+        String dbCurrencyId = dbItem.getDocument() != null && dbItem.getDocument().currency() != null
+                ? dbItem.getDocument().currency().id() : null;
+        collectMismatch(mismatches, "currency", dbCurrencyId, indexerItem.currency());
+
+        // Note: fxRate, documentNumber, costCenterCustCode, projectCustCode, eventCode, vatCustCode
+        // are all part of the content key used to match items — if we reach here they are already equal.
+
+        return mismatches;
+    }
+
     /**
      * Normalizes fxRate to handle different representations (BigDecimal vs String, different precision)
      */
@@ -275,7 +327,6 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
             return "";
         }
         try {
-            // Convert to BigDecimal and use stripTrailingZeros for consistent comparison
             BigDecimal rate = fxRate instanceof BigDecimal
                     ? (BigDecimal) fxRate
                     : new BigDecimal(fxRate.toString());
@@ -285,62 +336,22 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
         }
     }
 
+    private void collectMismatch(List<FieldMismatch> mismatches, String field, String reeve, String indexer) {
+        if (!Objects.equals(reeve, indexer)) {
+            mismatches.add(new FieldMismatch(field, reeve, indexer));
+        }
+    }
+
     private String nullSafe(Object value) {
         return value == null ? "" : value.toString();
     }
 
-    private void compareItemFields(StringBuilder mismatches,
-                                   TransformedTransactionItem dbItem,
-                                   OnChainTransactionItemDto indexerItem) {
-        String itemId = dbItem.getId();
-
-        compareAmountFcy(mismatches, itemId, dbItem, indexerItem);
-        compareFxRate(mismatches, itemId, dbItem, indexerItem);
-        appendItemMismatchIfNotEqual(mismatches, itemId, "documentNumber",
-                dbItem.getDocumentNumber(), indexerItem.documentNumber());
-        appendItemMismatchIfNotEqual(mismatches, itemId, "costCenterCustCode",
-                dbItem.getCostCenterCustomerCode(), indexerItem.costCenterCustCode());
-        appendItemMismatchIfNotEqual(mismatches, itemId, "projectCustCode",
-                dbItem.getProjectCustomerCode(), indexerItem.projectCustCode());
-        appendItemMismatchIfNotEqual(mismatches, itemId, "eventCode",
-                dbItem.getEventCode(), indexerItem.eventCode());
-        appendItemMismatchIfNotEqual(mismatches, itemId, "vatCustCode",
-                dbItem.getVatCustomerCode(), indexerItem.vatCustCode());
-    }
-
-    private void compareAmountFcy(StringBuilder mismatches, String itemId,
-                                  TransformedTransactionItem dbItem,
-                                  OnChainTransactionItemDto indexerItem) {
-        if (dbItem.getAmountFcy() != null && dbItem.getAmountFcy().compareTo(indexerItem.amountFcy()) != 0) {
-            appendItemMismatch(mismatches, itemId, "amountFcy", dbItem.getAmountFcy(), indexerItem.amountFcy());
+    private String serializeDiff(ReconciliationDiff diff) {
+        try {
+            return objectMapper.writeValueAsString(diff);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize reconciliation diff", e);
+            return "{\"error\":\"Failed to serialize diff\"}";
         }
-    }
-
-    private void compareFxRate(StringBuilder mismatches, String itemId,
-                               TransformedTransactionItem dbItem,
-                               OnChainTransactionItemDto indexerItem) {
-        if (dbItem.getFxRate() != null) {
-            BigDecimal indexerFxRate = new BigDecimal(indexerItem.fxRate());
-            if (dbItem.getFxRate().compareTo(indexerFxRate) != 0) {
-                appendItemMismatch(mismatches, itemId, "fxRate", dbItem.getFxRate(), indexerFxRate);
-            }
-        }
-    }
-
-    private void appendItemMismatchIfNotEqual(StringBuilder mismatches, String itemId,
-                                              String fieldName, String dbValue, String indexerValue) {
-        if (dbValue != null && !dbValue.equals(indexerValue)) {
-            appendItemMismatch(mismatches, itemId, fieldName, dbValue, indexerValue);
-        }
-    }
-
-    private void appendItemMismatch(StringBuilder mismatches, String itemId,
-                                    String fieldName, Object dbValue, Object indexerValue) {
-        mismatches.append(ITEM_PREFIX)
-                .append(itemId)
-                .append(" ").append(fieldName).append(" mismatch: ")
-                .append(DB_LABEL).append(dbValue)
-                .append(INDEXER_LABEL).append(indexerValue)
-                .append(MISMATCH_SEPARATOR);
     }
 }
