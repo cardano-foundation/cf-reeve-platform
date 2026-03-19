@@ -57,7 +57,7 @@ public class ReportTemplateFieldDto {
         return Objects.hash(
                 hashChildFields(),
                 fieldName,
-                childFields.isEmpty() ? Optional.ofNullable(dateRange).orElse(ReportFieldDateRange.PERIOD) : null, // If dateRange is null, treat it as PERIOD for hashing purposes and ignoring it if there are child fields
+                Optional.ofNullable(dateRange).orElse(ReportFieldDateRange.PERIOD),
                 negated
         );
     }
