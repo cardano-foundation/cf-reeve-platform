@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.functionalTests;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalToCompressingWhiteSpace;
 import static org.hamcrest.core.IsEqual.equalTo;
 
 import lombok.extern.slf4j.Slf4j;
@@ -35,9 +36,9 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
                 .post("/api/v1/transactions/approve")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("ApproveTx"))
-                .body("success[0]", equalTo(true))
-        ;
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("ApproveTx"))
+                .body("success[0]", equalTo(true));
         given()
                 .contentType("application/json")
                 .when()
@@ -65,7 +66,8 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
                 .post("/api/v1/transactions/approve")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("NotExistingTransaction"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("NotExistingTransaction"))
                 .body("success[0]", equalTo(false))
                 .body("error[0].title", equalTo("TX_NOT_FOUND"))
         ;
@@ -88,7 +90,8 @@ class AccountingCoreResourceTransactionApproveTest extends WebBaseIntegrationTes
                 .post("/api/v1/transactions/approve")
                 .then()
                 .statusCode(200)
-                .body("id[0]", equalTo("InvalidTx"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id[0]", equalToCompressingWhiteSpace("InvalidTx"))
                 .body("success[0]", equalTo(false))
                 .body("error[0].title", equalTo("CANNOT_APPROVE_FAILED_TX"))
         ;
