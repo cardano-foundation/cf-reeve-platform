@@ -273,7 +273,7 @@ class AccountingCorePresentationViewServiceTest {
 
         assertEquals(2, lines.length); // Only header line should be present
         assertEquals("Transaction Number,Transaction Date,Transaction Type,Fx Rate,AmountLCY Debit,AmountLCY Credit,AmountFCY Debit,AmountFCY Credit,Debit Code,Debit Name,Credit Code,Credit Name,Event code,Project Code,Parent Project Code,Document Name,Currency,VAT Rate,VAT Code,Cost Center Code,Parent Cost Center Code,Counterparty Code,Counterparty Name,Counterparty Type,Extractor Type,Ledger Dispatch Status,Blockchain Hash", lines[0]);
-        assertEquals("TXN123,2026-01-01,,1,,100,,100,,,,,,,,,0,,,,,,,ERP,Dispatched,", lines[1]);
+        assertEquals("TXN123,2026-01-01,,1,,100,,100,,,,,,,,,,0,,,,,,,ERP,Dispatched,", lines[1]);
     }
 
     // --- getReconciliationStatisticByDateRange tests ---
