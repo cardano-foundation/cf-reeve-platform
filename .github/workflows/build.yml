@@ -80,7 +80,7 @@ jobs:
               GRADLE_TARGETS="$GRADLE_TARGETS jreleaserDeploy"
               ;;
           esac
-          ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test 
+          ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test --console=plain --no-daemon --parallel --build-cache
           echo "VERSION_PUBLISH=$VERSION_PUBLISH" | tee -a $GITHUB_ENV
 
       - name:  🌍 earthly (docker build and push)
