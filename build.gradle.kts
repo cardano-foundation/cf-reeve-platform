@@ -312,15 +312,17 @@ subprojects {
                 name = "localApplicationM2"
                 url = uri("${System.getenv("APPLICATION_PATH")}/.m2/repository")
             }
-            maven {
-                name = "gitlabPrivate"
-                url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
-                credentials(HttpHeaderCredentials::class) {
-                    name = "PRIVATE-TOKEN"
-                    value = System.getenv("GITLAB_MAVEN_REGISTRY_PASS") ?: ""
-                }
-                authentication {
-                    val header by registering(HttpHeaderAuthentication::class)
+            if (!System.getenv("GITLAB_MAVEN_REGISTRY_URL").isNullOrBlank()) {
+                maven {
+                    name = "gitlabPrivate"
+                    url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
+                    credentials(HttpHeaderCredentials::class) {
+                        name = "PRIVATE-TOKEN"
+                        value = System.getenv("GITLAB_MAVEN_REGISTRY_PASS") ?: ""
+                    }
+                    authentication {
+                        val header by registering(HttpHeaderAuthentication::class)
+                    }
                 }
             }
         }
