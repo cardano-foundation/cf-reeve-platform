@@ -992,6 +992,7 @@ public class AccountingCorePresentationViewService {
                             item.getAccountCredit().flatMap(Account::getName).orElse(""),
                             item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
                             item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                            parentProject.map(project -> project.getId().getCustomerCode()).orElse(""),
                             item.getDocument().map(Document::getNum).orElse(""),
                             item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
                             item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
