@@ -42,6 +42,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
@@ -622,6 +623,8 @@ class ReportTemplateServiceTest {
         existing.setName(templateDto.getName());
         existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
         existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
+        existing.setFields(List.of(new ReportTemplateFieldEntity()));
+
 
         ReportEntity report = new ReportEntity();
         report.setId("abc");

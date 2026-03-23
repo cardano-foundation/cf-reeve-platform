@@ -249,6 +249,7 @@ public class CsvReportService {
     }
 
     public void downloadReportAsCsv(String organisationId,
+                                    String reportId,
                                     List<Short> years,
                                     List<IntervalType> intervalTypes,
                                     List<Short> periods,
@@ -258,7 +259,7 @@ public class CsvReportService {
                                     String txHash,
                                     Boolean isReadyToPublish,
                                     Boolean ledgerDispatchApproved, OutputStream outputStream) {
-        Page<ReportEntity> allReports = reportingRepository.findAll(organisationId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, Pageable.unpaged());
+        Page<ReportEntity> allReports = reportingRepository.findAll(organisationId, reportId, years, intervalTypes, periods, ledgerStatus, reportTypes, reportTemplateIds, txHash, isReadyToPublish, ledgerDispatchApproved, Pageable.unpaged());
         try (Writer writer = new OutputStreamWriter(outputStream)) {
             CSVWriter csvWriter = new CSVWriter(writer);
             String[] header = {"Template name","Name","Interval type","Period","Year","Data mode","Field name","Amount"};
