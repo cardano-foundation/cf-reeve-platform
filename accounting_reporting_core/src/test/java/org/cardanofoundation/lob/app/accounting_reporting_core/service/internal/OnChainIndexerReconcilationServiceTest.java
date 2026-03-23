@@ -680,18 +680,18 @@ class OnChainIndexerReconcilationServiceTest {
     }
 
     @Test
-    void shouldReturnOK_whenNullAmountFcySkipsComparison() {
-        // When DB item has null amountFcy, the amountFcy comparison is skipped (no mismatch)
+    void shouldReturnOK_whenAmountFcyMatchesAndOtherFieldsAlsoMatch() {
+        // When DB item amountFcy equals the indexer amountFcy and all content-key fields match, result is OK
         String organisationId = "test-org";
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 1, 31);
 
         TransactionEntity dbTx = buildDbTx("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
 
-        // null amountFcy but content key fields match
+        // amountFcy matches the indexer item; content key fields also match
         TransformedTransactionItem item = TransformedTransactionItem.builder()
                 .id("item-1")
-                .amountFcy(null) // null → skips comparison
+                .amountFcy(BigDecimal.valueOf(9999))
                 .fxRate(BigDecimal.ONE)
                 .costCenter(new IndexerTransactionTransformer.CostCenterHolder("9000", "Internal"))
                 .project(new IndexerTransactionTransformer.ProjectHolder("PRJ001", "Test Project"))
@@ -709,7 +709,6 @@ class OnChainIndexerReconcilationServiceTest {
 
         when(indexerTransactionTransformer.transformForIndexerComparison(any())).thenReturn(transformedTx);
 
-        // Indexer has a different amountFcy, but null check on DB side skips the comparison
         OnChainTransactionItemDto indexerItem = buildIndexerItem("item-1", BigDecimal.valueOf(9999), "1");
         OnChainTransactionDto indexerTx = buildIndexerTx(
                 "tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", organisationId, List.of(indexerItem));
