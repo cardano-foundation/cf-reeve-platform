@@ -91,7 +91,7 @@ public class ReportTemplateFieldEntity extends CommonEntity {
         return Objects.hash(
                 hashChildFields(),
                 name,
-                dateRange,
+                childFields.isEmpty() ? dateRange : null, // if there are child fields, the dateRange is determined by them, so we only include it in the hash if there are no child fields
                 negated
         );
     }
