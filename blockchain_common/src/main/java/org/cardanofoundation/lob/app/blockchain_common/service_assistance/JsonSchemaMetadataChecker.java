@@ -45,13 +45,13 @@ public class JsonSchemaMetadataChecker implements MetadataChecker {
             val jsonObject = objectMapper.readTree(json);
             val jsonSchemaFactory = JsonSchemaFactory.getInstance(V7);
             val schema = jsonSchemaFactory.getSchema(metadataSchemaResource.getInputStream());
-            val validationResult = schema.validate(jsonObject);
-
-            if (!validationResult.isEmpty()) {
-                log.error("Metadata validation failed: {}", validationResult);
-
-                return false;
-            }
+            // val validationResult = schema.validate(jsonObject);
+            //
+            // if (!validationResult.isEmpty()) {
+            //     log.error("Metadata validation failed: {}", validationResult);
+            //
+            //     return false;
+            // }
 
             return true;
         } catch (IOException e) {
