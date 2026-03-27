@@ -1005,13 +1005,13 @@ public class AccountingCorePresentationViewService {
                             item.getAccountCredit().flatMap(Account::getName).orElse(""),
                             item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
                             item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
-                            parentProject.map(project -> project.getId().getCustomerCode()).orElse(""),
+                            parentProject.map(Project::getParentCustomerCode).orElse(""),
                             item.getDocument().map(Document::getNum).orElse(""),
                             item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
                             item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
                             item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
-                            item.getCostCenter().map(costCenter -> costCenter.getCustomerCode()).orElse(""),
-                            parentCostcenter.map(costCenter -> costCenter.getId().getCustomerCode()).orElse(""),
+                            item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
+                            parentCostcenter.map(CostCenter::getParentCustomerCode).orElse(""),
                             item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
                             item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
                             item.getDocument().flatMap(document -> document.getCounterparty().map(counterparty -> counterparty.getType().name())).orElse(""),
@@ -1019,6 +1019,7 @@ public class AccountingCorePresentationViewService {
                             transactionEntity.getLedgerDispatchStatus() == LedgerDispatchStatus.NOT_DISPATCHED ? "Not Dispatched" : "Dispatched",
                             transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
                     };
+
                     csvWriter.writeNext(data, false);
                 }
             }

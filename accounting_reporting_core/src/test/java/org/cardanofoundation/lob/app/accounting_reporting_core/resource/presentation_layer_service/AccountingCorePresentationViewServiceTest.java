@@ -52,6 +52,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxVal
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconciliationStatisticProjection;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
@@ -74,6 +75,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
+import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCorePresentationViewServiceTest {
@@ -94,6 +97,10 @@ class AccountingCorePresentationViewServiceTest {
     private OrganisationPublicApiIF organisationPublicApiIF;
     @Mock
     private ReconcilationRepository reconcilationRepository;
+    @Mock
+    private CostCenterRepository costCenterRepository;
+    @Mock
+    private ProjectRepository projectRepository;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
@@ -274,6 +281,159 @@ class AccountingCorePresentationViewServiceTest {
         assertEquals(2, lines.length); // Only header line should be present
         assertEquals("Transaction Number,Transaction Date,Transaction Type,Fx Rate,AmountLCY Debit,AmountLCY Credit,AmountFCY Debit,AmountFCY Credit,Debit Code,Debit Name,Credit Code,Credit Name,Event code,Project Code,Parent Project Code,Document Name,Currency,VAT Rate,VAT Code,Cost Center Code,Parent Cost Center Code,Counterparty Code,Counterparty Name,Counterparty Type,Extractor Type,Ledger Dispatch Status,Blockchain Hash", lines[0]);
         assertEquals("TXN123,2026-01-01,,1,,100,,100,,,,,,,,,,0,,,,,,,ERP,Dispatched,", lines[1]);
+    }
+
+    @Test
+    void downloadCsvTransaction_withParentProjectCode() {
+        TransactionEntity transactionEntity = mock(TransactionEntity.class);
+        TransactionItemEntity itemEntity = mock(TransactionItemEntity.class);
+
+        Organisation organisation = Organisation.builder().id("ORG01").build();
+        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project accountingProject =
+                org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project.builder()
+                        .customerCode("PROJ01").build();
+        org.cardanofoundation.lob.app.organisation.domain.entity.Project orgProject =
+                org.cardanofoundation.lob.app.organisation.domain.entity.Project.builder()
+                        .id(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ01"))
+                        .name("Project One")
+                        .parentCustomerCode("PARENT_PROJ")
+                        .build();
+
+        when(transactionEntity.getInternalTransactionNumber()).thenReturn("TXN-PROJ");
+        when(transactionEntity.getEntryDate()).thenReturn(LocalDate.of(2026, 1, 1));
+        when(transactionEntity.getExtractorType()).thenReturn("ERP");
+        when(transactionEntity.getLedgerDispatchStatus()).thenReturn(LedgerDispatchStatus.NOT_DISPATCHED);
+        when(transactionEntity.getLedgerDispatchReceipt()).thenReturn(Optional.empty());
+        when(transactionEntity.getOrganisation()).thenReturn(organisation);
+        when(transactionEntity.getItems()).thenReturn(Set.of(itemEntity));
+
+        when(itemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
+        when(itemEntity.getFxRate()).thenReturn(BigDecimal.ONE);
+        when(itemEntity.getAmountLcy()).thenReturn(BigDecimal.valueOf(200));
+        when(itemEntity.getAmountFcy()).thenReturn(BigDecimal.valueOf(200));
+        when(itemEntity.getAccountDebit()).thenReturn(Optional.empty());
+        when(itemEntity.getAccountCredit()).thenReturn(Optional.empty());
+        when(itemEntity.getProject()).thenReturn(Optional.of(accountingProject));
+        when(itemEntity.getCostCenter()).thenReturn(Optional.empty());
+        when(itemEntity.getDocument()).thenReturn(Optional.empty());
+
+        when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ01")))
+                .thenReturn(Optional.of(orgProject));
+        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(transactionEntity)));
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+        String[] lines = csv.split("\n");
+
+        assertEquals(2, lines.length);
+        String[] columns = lines[1].split(",");
+        assertEquals("PROJ01", columns[13]);       // Project Code
+        assertEquals("PARENT_PROJ", columns[14]);  // Parent Project Code
+    }
+
+    @Test
+    void downloadCsvTransaction_withParentCostCenterCode() {
+        TransactionEntity transactionEntity = mock(TransactionEntity.class);
+        TransactionItemEntity itemEntity = mock(TransactionItemEntity.class);
+
+        Organisation organisation = Organisation.builder().id("ORG01").build();
+        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter accountingCostCenter =
+                org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter.builder()
+                        .customerCode("CC01").build();
+        org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter orgCostCenter =
+                org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter.builder()
+                        .id(new org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter.Id("ORG01", "CC01"))
+                        .name("Cost Center One")
+                        .parentCustomerCode("PARENT_CC")
+                        .build();
+
+        when(transactionEntity.getInternalTransactionNumber()).thenReturn("TXN-CC");
+        when(transactionEntity.getEntryDate()).thenReturn(LocalDate.of(2026, 1, 1));
+        when(transactionEntity.getExtractorType()).thenReturn("ERP");
+        when(transactionEntity.getLedgerDispatchStatus()).thenReturn(LedgerDispatchStatus.NOT_DISPATCHED);
+        when(transactionEntity.getLedgerDispatchReceipt()).thenReturn(Optional.empty());
+        when(transactionEntity.getOrganisation()).thenReturn(organisation);
+        when(transactionEntity.getItems()).thenReturn(Set.of(itemEntity));
+
+        when(itemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
+        when(itemEntity.getFxRate()).thenReturn(BigDecimal.ONE);
+        when(itemEntity.getAmountLcy()).thenReturn(BigDecimal.valueOf(150));
+        when(itemEntity.getAmountFcy()).thenReturn(BigDecimal.valueOf(150));
+        when(itemEntity.getAccountDebit()).thenReturn(Optional.empty());
+        when(itemEntity.getAccountCredit()).thenReturn(Optional.empty());
+        when(itemEntity.getProject()).thenReturn(Optional.empty());
+        when(itemEntity.getCostCenter()).thenReturn(Optional.of(accountingCostCenter));
+        when(itemEntity.getDocument()).thenReturn(Optional.empty());
+
+        when(costCenterRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter.Id("ORG01", "CC01")))
+                .thenReturn(Optional.of(orgCostCenter));
+        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(transactionEntity)));
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+        String[] lines = csv.split("\n");
+
+        assertEquals(2, lines.length);
+        String[] columns = lines[1].split(",");
+        assertEquals("CC01", columns[19]);         // Cost Center Code
+        assertEquals("PARENT_CC", columns[20]);    // Parent Cost Center Code
+    }
+
+    @Test
+    void downloadCsvTransaction_projectWithNoParentCustomerCode() {
+        TransactionEntity transactionEntity = mock(TransactionEntity.class);
+        TransactionItemEntity itemEntity = mock(TransactionItemEntity.class);
+
+        Organisation organisation = Organisation.builder().id("ORG01").build();
+        org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project accountingProject =
+                org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project.builder()
+                        .customerCode("PROJ02").build();
+        org.cardanofoundation.lob.app.organisation.domain.entity.Project orgProject =
+                org.cardanofoundation.lob.app.organisation.domain.entity.Project.builder()
+                        .id(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ02"))
+                        .name("Project Two")
+                        .parentCustomerCode(null)
+                        .build();
+
+        when(transactionEntity.getInternalTransactionNumber()).thenReturn("TXN-NOPROJ");
+        when(transactionEntity.getEntryDate()).thenReturn(LocalDate.of(2026, 1, 1));
+        when(transactionEntity.getExtractorType()).thenReturn("ERP");
+        when(transactionEntity.getLedgerDispatchStatus()).thenReturn(LedgerDispatchStatus.NOT_DISPATCHED);
+        when(transactionEntity.getLedgerDispatchReceipt()).thenReturn(Optional.empty());
+        when(transactionEntity.getOrganisation()).thenReturn(organisation);
+        when(transactionEntity.getItems()).thenReturn(Set.of(itemEntity));
+
+        when(itemEntity.getOperationType()).thenReturn(OperationType.DEBIT);
+        when(itemEntity.getFxRate()).thenReturn(BigDecimal.ONE);
+        when(itemEntity.getAmountLcy()).thenReturn(BigDecimal.valueOf(50));
+        when(itemEntity.getAmountFcy()).thenReturn(BigDecimal.valueOf(50));
+        when(itemEntity.getAccountDebit()).thenReturn(Optional.empty());
+        when(itemEntity.getAccountCredit()).thenReturn(Optional.empty());
+        when(itemEntity.getProject()).thenReturn(Optional.of(accountingProject));
+        when(itemEntity.getCostCenter()).thenReturn(Optional.empty());
+        when(itemEntity.getDocument()).thenReturn(Optional.empty());
+
+        when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ02")))
+                .thenReturn(Optional.of(orgProject));
+        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+                .thenReturn(new PageImpl<>(List.of(transactionEntity)));
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+
+        String csv = outputStream.toString(StandardCharsets.UTF_8);
+        String[] lines = csv.split("\n");
+
+        assertEquals(2, lines.length);
+        String[] columns = lines[1].split(",", -1);
+        assertEquals("PROJ02", columns[13]);  // Project Code
+        assertEquals("", columns[14]);        // Parent Project Code is empty (null parentCustomerCode)
     }
 
     // --- getReconciliationStatisticByDateRange tests ---
