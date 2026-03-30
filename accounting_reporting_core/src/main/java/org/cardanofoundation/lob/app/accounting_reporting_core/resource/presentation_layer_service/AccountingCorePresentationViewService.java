@@ -54,7 +54,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
-import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
@@ -982,7 +981,7 @@ public class AccountingCorePresentationViewService {
                     "Counterparty Name",
                     "Counterparty Type",
                     "Extractor Type",
-                    "Ledger Dispatch Status",
+                    "Processing Status",
                     "Blockchain Hash"};
             csvWriter.writeNext(header, false);
             for (TransactionEntity transactionEntity : transactions) {
@@ -1016,7 +1015,7 @@ public class AccountingCorePresentationViewService {
                             item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
                             item.getDocument().flatMap(document -> document.getCounterparty().map(counterparty -> counterparty.getType().name())).orElse(""),
                             transactionEntity.getExtractorType(),
-                            transactionEntity.getLedgerDispatchStatus() == LedgerDispatchStatus.NOT_DISPATCHED ? "Not Dispatched" : "Dispatched",
+                            mapTransactionProcessingStatusToString(transactionEntity.getProcessingStatus()),
                             transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
                     };
 
@@ -1028,4 +1027,21 @@ public class AccountingCorePresentationViewService {
             log.error("Error while writing transactions to CSV for orgId {}: {}", orgId, e.getMessage(), e);
         }
     }
+
+    private String mapTransactionProcessingStatusToString(Optional<TransactionProcessingStatus> status) {
+        if (status.isEmpty()) {
+            return "Unknown";
+        }
+
+        return switch (status.get()) {
+            case APPROVE -> "Ready to Approve";
+            case PENDING -> "Pending";
+            case INVALID -> "Invalid";
+            case PUBLISH -> "Ready to Publish";
+            case PUBLISHED -> "Published";
+            case DISPATCHED -> "Dispatched";
+            case ROLLBACK -> "Rollback";
+        };
+    }
+
 }
