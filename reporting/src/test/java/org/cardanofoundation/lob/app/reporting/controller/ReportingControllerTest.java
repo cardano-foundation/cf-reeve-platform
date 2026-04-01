@@ -31,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvReportRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
 import org.cardanofoundation.lob.app.reporting.service.CsvReportService;
@@ -364,14 +365,14 @@ class ReportingControllerTest {
     void downloadCsvReports_noAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null);
+        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null,null, null, null, null, null, null, null, null);
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
     }
 
     @Test
     void downloadCsvReports_success() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null);
+        ResponseEntity<?> response = reportingController.downloadReports("org123", null, null, null, null, null, null, null, null, null, null);
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertEquals("text/plain", response.getHeaders().getContentType().toString());
         assertEquals(
@@ -379,6 +380,25 @@ class ReportingControllerTest {
                 response.getHeaders().getFirst("Content-Disposition")
         );
         assertNotNull(response.getBody());
+    }
 
+    @Test
+    void reject_problem() {
+        ReportIdRequest request = mock(ReportIdRequest.class);
+
+        when(reportService.reject(request)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
+
+        ResponseEntity<?> response = reportingController.reject(request);
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    }
+
+    @Test
+    void reject_success() {
+        ReportIdRequest request = mock(ReportIdRequest.class);
+
+        when(reportService.reject(request)).thenReturn(Either.right(mock(ReportResponseDto.class)));
+
+        ResponseEntity<?> response = reportingController.reject(request);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 }

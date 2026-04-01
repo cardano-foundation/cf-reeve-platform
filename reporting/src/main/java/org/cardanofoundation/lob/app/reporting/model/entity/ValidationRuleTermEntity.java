@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.model.entity;
 
+import java.util.Objects;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -57,4 +59,11 @@ public class ValidationRuleTermEntity extends CommonEntity {
 
     @Column(name = "term_order", nullable = false)
     private int termOrder;
+
+    public int computeContentHash() {
+        return Objects.hash(
+            field.getName(),
+            operation.name()
+        );
+    }
 }

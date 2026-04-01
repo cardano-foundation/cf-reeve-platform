@@ -34,6 +34,8 @@ import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
@@ -56,6 +58,7 @@ public class ReportTemplateService {
     private final ReportingRepository reportingRepository;
     private final Validator validator;
     private final ReportTemplateTypeValidator reportTemplateTypeValidator;
+    private final ReportingService reportingService;
 
     private Either<ProblemDetail, Void> validateReport(ReportTemplateDto dto) {
         Either<ProblemDetail, Void> errorDetails = validateReportTemplateDto(dto);
@@ -88,13 +91,6 @@ public class ReportTemplateService {
         }
 
         return Either.right(null);
-    }
-
-    private boolean hasDuplicate(ReportTemplateFieldDto field, Set<String> seenAccountMappings) {
-        if(field.getAccounts().stream().anyMatch(s -> !seenAccountMappings.add(s))) {
-            return true;
-        }
-        return field.getChildFields().stream().anyMatch(f -> hasDuplicate(f, seenAccountMappings));
     }
 
     private Either<ProblemDetail, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
@@ -249,10 +245,6 @@ public class ReportTemplateService {
         if(prohibitedFieldChanged.isLeft()) {
             return Either.left(prohibitedFieldChanged.getLeft());
         }
-
-        // Check if there are any reports using this template
-        List<ReportEntity> existingReports =
-                reportingRepository.findByReportTemplateId(existing.getId());
         try {
             ReportTemplateType.valueOf(dto.getReportTemplateType());
         } catch (IllegalArgumentException e) {
@@ -260,16 +252,24 @@ public class ReportTemplateService {
             problem.setTitle("Invalid Report Template Type");
             return Either.left(problem);
         }
-        if (!existingReports.isEmpty()) {
+
+        // Check if there are any reports using this template
+        List<ReportEntity> existingReports =
+                reportingRepository.findByReportTemplateId(existing.getId());
+        // Prevent a version update if the update only is about mappings
+        boolean isOnlyChangingMappings = isChangingOnlyMappings(existing.getFields(), dto.getFields());
+        boolean isOnlyNameChangeForValidationRules = isChangingOnlyName(existing.getValidationRules(), dto.getValidationRules());
+        if (!existingReports.isEmpty() && (!isOnlyChangingMappings || !isOnlyNameChangeForValidationRules)) {
             // Reports exist - create a new version
-            log.info("Template '{}' has {} existing reports, creating new version {} -> {}",
+            log.info("Template '{}' has {} existing reports & more changes than just mappings, creating new version {} -> {}",
                     dto.getName(), existingReports.size(), existing.getVer(), existing.getVer() + 1);
 
             templateToSave = reportTemplateMapper.toEntity(dto, null);
             templateToSave.setVer(existing.getVer() + 1);
         } else {
             // No reports exist - update existing template in place
-            log.info("Template '{}' has no existing reports, updating in place", dto.getName());
+            log.info("Template '{}' has no existing reports or only changes in mappings, updating in place", dto.getName());
+            // Use toEntity with existing template to perform intelligent field merging
             templateToSave = reportTemplateMapper.toEntity(dto, existing);
         }
         Either<ProblemDetail, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(templateToSave);
@@ -278,6 +278,9 @@ public class ReportTemplateService {
         }
 
         ReportTemplateEntity saved = reportTemplateRepository.save(templateToSave);
+        if(!existingReports.isEmpty() && isOnlyChangingMappings) {
+            existingReports.forEach(report -> reportingService.reprocess(report.getOrganisationId(), report.getId()));
+        }
         // Setting "old" version to inactive after save
         if(saved.getVer() > existing.getVer()) {
             existing.setActive(false);
@@ -285,6 +288,33 @@ public class ReportTemplateService {
             reportTemplateRepository.save(existing);
         }
         return Either.right(reportTemplateMapper.toResponseDto(saved));
+    }
+
+    private boolean isChangingOnlyName(List<ReportTemplateValidationRuleEntity> validationRules, List<ValidationRuleDto> rules) {
+        Set<Integer> validationRuleHashes = validationRules.stream().map(ReportTemplateValidationRuleEntity::computeContentHash).collect(Collectors.toSet());
+        for(ValidationRuleDto rule : rules) {
+            int ruleHash = rule.computeContentHash();
+            if(!validationRuleHashes.remove(ruleHash)) {
+                return false;
+            }
+        }
+        // This means there is a hash in the entity, that isn't in the dto resulting in a remove
+        if(!validationRuleHashes.isEmpty()) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isChangingOnlyMappings(List<ReportTemplateFieldEntity> fields, List<ReportTemplateFieldDto> dtoFields) {
+        if(dtoFields == null || fields.size() != dtoFields.size()) {
+            return false;
+        }
+        for(int i = 0; i < fields.size(); i++) {
+            if(fields.get(i).computeContentHash() != dtoFields.get(i).computeContentHash()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Either<ProblemDetail, Void> checkIfProhibitedFieldChanged(ReportTemplateEntity existing, ReportTemplateDto dto) {

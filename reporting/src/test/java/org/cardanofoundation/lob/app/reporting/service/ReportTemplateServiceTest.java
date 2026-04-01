@@ -42,8 +42,15 @@ import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ValidationRuleTermEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ComparisonOperator;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
+import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
@@ -63,6 +70,8 @@ class ReportTemplateServiceTest {
     private ReportTemplateTypeValidator reportTemplateTypeValidator;
     @Mock
     private ChartOfAccountRepository chartOfAccountRepository;
+    @Mock
+    private ReportingService reportingService;
 
     @InjectMocks
     private ReportTemplateService reportTemplateService;
@@ -81,6 +90,7 @@ class ReportTemplateServiceTest {
         templateDto.setReportTemplateType("BALANCE_SHEET");
         templateDto.setDataMode("SYSTEM");
         templateDto.setFields(new ArrayList<>());
+        templateDto.setValidationRules(new ArrayList<>());
 
         templateEntity = new ReportTemplateEntity();
         templateEntity.setId("abc");
@@ -592,6 +602,7 @@ class ReportTemplateServiceTest {
         existing.setName(templateDto.getName());
         existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
         existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
+        existing.setValidationRules(List.of());
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
@@ -622,6 +633,10 @@ class ReportTemplateServiceTest {
         existing.setName(templateDto.getName());
         existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
         existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
+        existing.setFields(List.of(new ReportTemplateFieldEntity()));
+        existing.setValidationRules(List.of());
+        templateDto.setValidationRules(List.of());
+
 
         ReportEntity report = new ReportEntity();
         report.setId("abc");
@@ -652,6 +667,200 @@ class ReportTemplateServiceTest {
         verify(reportTemplateRepository).save(newVersion);
         verify(reportTemplateRepository).save(existing);
 
+    }
+
+    @Test
+    void update_keepVersionValidationRulesMatch() {
+        // Given
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setVer(1L);
+        existing.setDataMode(DataMode.USER);
+        existing.setName(templateDto.getName());
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
+        ReportTemplateFieldEntity field = new ReportTemplateFieldEntity();
+        field.setName("field1");
+        existing.setFields(List.of(field));
+        ReportTemplateValidationRuleEntity ruleEntity = ReportTemplateValidationRuleEntity.builder()
+                .name("rule1")
+                .operator(ComparisonOperator.EQUAL)
+                .reportTemplate(existing)
+                .active(true)
+                .terms(List.of(ValidationRuleTermEntity.builder()
+                        .side(TermSide.LEFT)
+                        .field(field)
+                        .operation(TermOperation.ADD)
+                        .build(),
+                        ValidationRuleTermEntity.builder()
+                                .side(TermSide.RIGHT)
+                                .field(field)
+                                .operation(TermOperation.ADD)
+                                .build()))
+                .build();
+        existing.setValidationRules(List.of(ruleEntity));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder()
+                .fieldName("field1")
+                        .accounts(Set.of())
+                .childFields(List.of())
+                .dateRange(ReportFieldDateRange.PERIOD)
+                .build()));
+        templateDto.setDataMode("USER");
+        templateDto.setValidationRules(List.of(ValidationRuleDto.builder()
+                        .name("rule2") // Name doesn'T affect the hash
+                        .operator("EQUAL")
+                        .leftSideTerms(List.of(ValidationRuleTermDto.builder()
+                                .operation("ADD")
+                                .fieldName("field1").build()))
+                        .rightSideTerms(List.of(ValidationRuleTermDto.builder()
+                                        .operation("ADD")
+                                        .fieldName("field1").build()))
+                .build()));
+
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
+                .thenReturn(Optional.of(existing));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
+        when(reportTemplateMapper.toEntity(eq(templateDto), eq(existing))).thenReturn(existing);
+        when(reportTemplateRepository.save(any(ReportTemplateEntity.class))).thenReturn(existing);
+        when(reportTemplateMapper.toResponseDto(existing)).thenReturn(templateResponseDto);
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(mock(ReportEntity.class)));
+        // When
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+
+        // Then
+        assertTrue(result.isRight());
+        assertEquals(1L, existing.getVer());
+        verify(reportTemplateMapper).toEntity(eq(templateDto), eq(existing));
+        verify(reportTemplateRepository).save(existing);
+
+    }
+
+    @Test
+    void update_updateVersionValidationRulesDontMatch() {
+        // Given
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setVer(1L);
+        existing.setDataMode(DataMode.USER);
+        existing.setName(templateDto.getName());
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
+        ReportTemplateFieldEntity field = new ReportTemplateFieldEntity();
+        field.setName("field1");
+        existing.setFields(List.of(field));
+        ReportTemplateValidationRuleEntity ruleEntity = ReportTemplateValidationRuleEntity.builder()
+                .name("rule1")
+                .operator(ComparisonOperator.EQUAL)
+                .reportTemplate(existing)
+                .active(true)
+                .terms(List.of(ValidationRuleTermEntity.builder()
+                                .side(TermSide.LEFT)
+                                .field(field)
+                                .operation(TermOperation.ADD)
+                                .build(),
+                        ValidationRuleTermEntity.builder()
+                                .side(TermSide.RIGHT)
+                                .field(field)
+                                .operation(TermOperation.ADD)
+                                .build()))
+                .build();
+        existing.setValidationRules(List.of(ruleEntity));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder()
+                .fieldName("field1")
+                .accounts(Set.of())
+                .childFields(List.of())
+                .dateRange(ReportFieldDateRange.PERIOD)
+                .build()));
+        templateDto.setDataMode("USER");
+        templateDto.setValidationRules(List.of(ValidationRuleDto.builder()
+                .name("rule2") // Name doesn'T affect the hash
+                .operator("EQUAL")
+                .leftSideTerms(List.of(ValidationRuleTermDto.builder()
+                        .operation("SUBTRACT")
+                        .fieldName("field1").build()))
+                .rightSideTerms(List.of(ValidationRuleTermDto.builder()
+                        .operation("ADD")
+                        .fieldName("field1").build()))
+                .build()));
+
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
+                .thenReturn(Optional.of(existing));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
+        when(reportTemplateMapper.toEntity(any(), any())).thenReturn(existing);
+        when(reportTemplateRepository.save(any(ReportTemplateEntity.class))).thenReturn(existing);
+        when(reportTemplateMapper.toResponseDto(existing)).thenReturn(templateResponseDto);
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(mock(ReportEntity.class)));
+        // When
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+
+        // Then
+        assertTrue(result.isRight());
+        assertEquals(2L, existing.getVer());
+        verify(reportTemplateRepository).save(existing);
+    }
+
+    @Test
+    void update_updateVersionValidationRuleDeleted() {
+        // Given
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setVer(1L);
+        existing.setDataMode(DataMode.USER);
+        existing.setName(templateDto.getName());
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
+        ReportTemplateFieldEntity field = new ReportTemplateFieldEntity();
+        field.setName("field1");
+        existing.setFields(List.of(field));
+        ReportTemplateValidationRuleEntity ruleEntity = ReportTemplateValidationRuleEntity.builder()
+                .name("rule1")
+                .operator(ComparisonOperator.EQUAL)
+                .reportTemplate(existing)
+                .active(true)
+                .terms(List.of(ValidationRuleTermEntity.builder()
+                                .side(TermSide.LEFT)
+                                .field(field)
+                                .operation(TermOperation.ADD)
+                                .build(),
+                        ValidationRuleTermEntity.builder()
+                                .side(TermSide.RIGHT)
+                                .field(field)
+                                .operation(TermOperation.ADD)
+                                .build()))
+                .build();
+        existing.setValidationRules(List.of(ruleEntity));
+        templateDto.setFields(List.of(ReportTemplateFieldDto.builder()
+                .fieldName("field1")
+                .accounts(Set.of())
+                .childFields(List.of())
+                .dateRange(ReportFieldDateRange.PERIOD)
+                .build()));
+        templateDto.setDataMode("USER");
+        templateDto.setValidationRules(List.of());
+
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
+                .thenReturn(Optional.of(existing));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
+        when(reportTemplateMapper.toEntity(any(), any())).thenReturn(existing);
+        when(reportTemplateRepository.save(any(ReportTemplateEntity.class))).thenReturn(existing);
+        when(reportTemplateMapper.toResponseDto(existing)).thenReturn(templateResponseDto);
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+        when(reportTemplateTypeValidator.validateReportTemplateType(any())).thenReturn(Either.right(null));
+        when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(mock(ReportEntity.class)));
+        // When
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+
+        // Then
+        assertTrue(result.isRight());
+        assertEquals(2L, existing.getVer());
+        verify(reportTemplateRepository).save(existing);
     }
 
     @Test

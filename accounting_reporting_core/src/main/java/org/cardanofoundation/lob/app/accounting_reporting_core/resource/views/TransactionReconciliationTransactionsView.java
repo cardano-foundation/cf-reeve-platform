@@ -32,6 +32,8 @@ public class TransactionReconciliationTransactionsView {
     private String id;
     private String internalTransactionNumber;
 
+    private String batchId;
+
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate entryDate;
 
@@ -67,6 +69,8 @@ public class TransactionReconciliationTransactionsView {
     private Set<TransactionItemView> items = new LinkedHashSet<>();
 
     private Set<ViolationView> violations = new LinkedHashSet<>();
+
+    private Set<String> sourceDiff;
 
     public enum ReconciliationCodeView {
         OK,

@@ -5,6 +5,7 @@ import static jakarta.persistence.EnumType.STRING;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import jakarta.persistence.CascadeType;
@@ -81,5 +82,32 @@ public class ReportTemplateFieldEntity extends CommonEntity {
 
     @Builder.Default
     private boolean negated = false;
+
+    /**
+     * Computes a hash based on: childFields, name, dateRange, and negated.
+     * Used for quick comparison with DTOs to detect changes.
+     */
+    public int computeContentHash() {
+        return Objects.hash(
+                hashChildFields(),
+                name,
+                childFields.isEmpty() ? dateRange : null, // if there are child fields, the dateRange is determined by them, so we only include it in the hash if there are no child fields
+                negated
+        );
+    }
+
+    /**
+     * Helper method to compute hash of child fields recursively.
+     */
+    private int hashChildFields() {
+        if (childFields == null || childFields.isEmpty()) {
+            return 0;
+        }
+        int hash = 1;
+        for (ReportTemplateFieldEntity child : childFields) {
+            hash = 31 * hash + child.computeContentHash();
+        }
+        return hash;
+    }
 
 }

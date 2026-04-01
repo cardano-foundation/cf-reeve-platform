@@ -6,10 +6,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
+import jakarta.persistence.LockModeType;
+
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -75,7 +78,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     @Query("""
         SELECT t FROM accounting_reporting_core.TransactionEntity t
         JOIN t.batches b
-        WHERE b.id = :batchId
+        WHERE (:batchId IS NULL OR b.id = :batchId)
         AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
         AND (:types IS NULL OR t.transactionType IN :types)
         AND (:internalTransactionNumber IS NULL OR LOWER(t.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:internalTransactionNumber AS string), '%')))
@@ -152,6 +155,18 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     );
 
     @Query("""
+        SELECT t FROM accounting_reporting_core.TransactionEntity t
+        JOIN t.batches b
+        WHERE (:batchId IS NULL OR b.id = :batchId)
+        AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
+        """)
+    Page<TransactionEntity> findAllByBatchId(
+            @Param("batchId") String batchId,
+            @Param("txStatus") List<TransactionProcessingStatus> txStatus,
+            Pageable page
+    );
+
+    @Query("""
             SELECT t FROM accounting_reporting_core.TransactionEntity t
             WHERE t.organisation.id = :organisationId
             AND (:validationStatuses IS NULL OR t.automatedValidationStatus in (:validationStatuses))
@@ -192,4 +207,12 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         AND t.updatedAt < :cutoffTime
         """)
         List<TransactionEntity> findStuckTransactions(@Param("cutoffTime") LocalDateTime cutoffTime);
+
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+            SELECT t FROM accounting_reporting_core.TransactionEntity t
+            WHERE t.id IN :transactionIds
+            ORDER BY t.id ASC
+            """)
+        List<TransactionEntity> findAllByIdWithPessimisticLock(@Param("transactionIds") Set<String> transactionIds);
 }
