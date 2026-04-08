@@ -56,7 +56,8 @@ public class OnChainIndexerConfig {
     @Bean
     public OnChainIndexerReconcilationService onChainIndexerReconcilationService(
             OnChainIndexerService onChainIndexerService,
-            IndexerTransactionTransformer indexerTransactionTransformer) {
-        return new OnChainIndexerReconcilationService(onChainIndexerService, indexerTransactionTransformer);
+            IndexerTransactionTransformer indexerTransactionTransformer,
+            ObjectMapper objectMapper) {
+        return new OnChainIndexerReconcilationService(onChainIndexerService, indexerTransactionTransformer, objectMapper);
     }
 }

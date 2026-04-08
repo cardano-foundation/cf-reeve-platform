@@ -20,10 +20,6 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
-import org.javers.core.Changes;
-import org.javers.core.Javers;
-import org.javers.core.diff.Diff;
-import org.javers.core.json.JsonConverter;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -70,7 +66,7 @@ class TransactionReconcilationServiceTest {
     private BlockchainReaderPublicApiIF blockchainReaderPublicApi;
 
     @Mock
-    private Javers javers;
+    private ERPSourceReconciliationDiffCalculator erpDiffCalculator;
 
     @Mock
     private IndexerReconcilationServiceIF indexerReconcilationServiceMock;
@@ -852,20 +848,14 @@ class TransactionReconcilationServiceTest {
         when(blockchainReaderPublicApi.isOnChain(anySet()))
                 .thenReturn(Either.right(Map.of("tx1", true)));
 
-        Diff diff = mock(Diff.class);
-        Changes changes = mock(Changes.class);
-        JsonConverter jsonConverter = mock(JsonConverter.class);
-        when(javers.compare(any(), any())).thenReturn(diff);
-        when(diff.getChanges()).thenReturn(changes);
-        when(javers.getJsonConverter()).thenReturn(jsonConverter);
-        when(jsonConverter.toJson(any())).thenReturn("{}");
+        when(erpDiffCalculator.computeDiff(any(), any())).thenReturn("{}");
 
         transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
 
         assertThat(reconcilationEntity.getViolations()).hasSize(1);
         assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
                 .isEqualTo(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
-        verify(javers).compare(any(), any());
+        verify(erpDiffCalculator).computeDiff(any(), any());
     }
 
     @Test
@@ -1065,7 +1055,7 @@ class TransactionReconcilationServiceTest {
         assertThat(attachedTx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
         assertThat(reconcilationEntity.getViolations()).hasSize(1);
         assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
-                .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL);
+                .isEqualTo(ReconcilationRejectionCode.SINK_RECONCILATION_MISMATCH);
     }
 
     @Test
@@ -1110,13 +1100,7 @@ class TransactionReconcilationServiceTest {
         when(blockchainReaderPublicApi.isOnChain(anySet()))
                 .thenReturn(Either.right(Map.of("tx1", true)));
 
-        Diff diff = mock(Diff.class);
-        Changes changes = mock(Changes.class);
-        JsonConverter jsonConverter = mock(JsonConverter.class);
-        when(javers.compare(any(), any())).thenReturn(diff);
-        when(diff.getChanges()).thenReturn(changes);
-        when(javers.getJsonConverter()).thenReturn(jsonConverter);
-        when(jsonConverter.toJson(any())).thenReturn("{}");
+        when(erpDiffCalculator.computeDiff(any(), any())).thenReturn("{}");
 
         transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
 

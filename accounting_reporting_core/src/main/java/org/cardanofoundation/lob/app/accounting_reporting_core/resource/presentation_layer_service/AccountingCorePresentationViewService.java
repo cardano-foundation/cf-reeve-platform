@@ -495,7 +495,20 @@ public class AccountingCorePresentationViewService {
                 transactionEntity.getLastReconcilation()
                         .map(CommonEntity::getCreatedAt).orElse(null),
                 getTransactionItemView(transactionEntity),
-                getViolations(transactionEntity)
+                getViolations(transactionEntity),
+                transactionEntity.getLastReconcilation()
+                        .map(reconcilationEntity -> reconcilationEntity
+                                .getViolations().stream()
+                                .filter(reconcilationViolation -> reconcilationViolation
+                                        .getTransactionId()
+                                        .equals(transactionEntity
+                                                .getId()))
+                                .map(reconcilationViolation -> {
+                                    return reconcilationViolation.getSourceDiff().isPresent() ? reconcilationViolation.getSourceDiff().get() : null;
+                                })
+                                .collect(toSet()))
+                        .orElse(new LinkedHashSet<>())
+
 
         );
     }
@@ -516,8 +529,8 @@ public class AccountingCorePresentationViewService {
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 Set.of(ReconciliationRejectionCodeRequest.of(
                         reconcilationViolation.getRejectionCode(), false)),
-                lastReconciledDate, new LinkedHashSet<>(), new LinkedHashSet<>()
-
+                lastReconciledDate, new LinkedHashSet<>(), new LinkedHashSet<>(),
+                reconcilationViolation.getSourceDiff().stream().collect(toSet())
         );
     }
 
@@ -529,7 +542,7 @@ public class AccountingCorePresentationViewService {
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
                 TransactionReconciliationTransactionsView.ReconciliationCodeView.NOK,
-                new LinkedHashSet<>(), null, null, null
+                new LinkedHashSet<>(), null, null, null, null
 
         );
     }
@@ -968,12 +981,14 @@ public class AccountingCorePresentationViewService {
                     "Counterparty Name",
                     "Counterparty Type",
                     "Extractor Type",
-                    "Ledger Dispatch Status",
+                    "Processing Status",
                     "Blockchain Hash"};
             csvWriter.writeNext(header, false);
             for (TransactionEntity transactionEntity : transactions) {
                 for (TransactionItemEntity item : transactionEntity.getItems()) {
                     boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
+                    Optional<CostCenter> parentCostcenter = item.getCostCenter().flatMap(costCenter -> costCenterRepository.findById(new CostCenter.Id(transactionEntity.getOrganisation().getId(), costCenter.getCustomerCode())));
+                    Optional<Project> parentProject = item.getProject().flatMap(project -> projectRepository.findById(new Project.Id(transactionEntity.getOrganisation().getId(), project.getCustomerCode())));
                     String[] data = {
                             transactionEntity.getInternalTransactionNumber(),
                             transactionEntity.getEntryDate().toString(),
@@ -987,18 +1002,23 @@ public class AccountingCorePresentationViewService {
                             item.getAccountDebit().flatMap(Account::getName).orElse(""),
                             item.getAccountCredit().map(Account::getCode).orElse(""),
                             item.getAccountCredit().flatMap(Account::getName).orElse(""),
+                            item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
                             item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                            parentProject.map(Project::getParentCustomerCode).orElse(""),
                             item.getDocument().map(Document::getNum).orElse(""),
                             item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
                             item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
                             item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
-                            item.getCostCenter().map(costCenter -> costCenter.getCustomerCode()).orElse(""),
+                            item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
+                            parentCostcenter.map(CostCenter::getParentCustomerCode).orElse(""),
                             item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
                             item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
+                            item.getDocument().flatMap(document -> document.getCounterparty().map(counterparty -> counterparty.getType().name())).orElse(""),
                             transactionEntity.getExtractorType(),
-                            transactionEntity.getLedgerDispatchStatus().name(),
+                            mapTransactionProcessingStatusToString(transactionEntity.getProcessingStatus()),
                             transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
                     };
+
                     csvWriter.writeNext(data, false);
                 }
             }
@@ -1007,4 +1027,21 @@ public class AccountingCorePresentationViewService {
             log.error("Error while writing transactions to CSV for orgId {}: {}", orgId, e.getMessage(), e);
         }
     }
+
+    private String mapTransactionProcessingStatusToString(Optional<TransactionProcessingStatus> status) {
+        if (status.isEmpty()) {
+            return "Unknown";
+        }
+
+        return switch (status.get()) {
+            case APPROVE -> "Ready to Approve";
+            case PENDING -> "Pending";
+            case INVALID -> "Invalid";
+            case PUBLISH -> "Ready to Publish";
+            case PUBLISHED -> "Published";
+            case DISPATCHED -> "Dispatched";
+            case ROLLBACK -> "Rollback";
+        };
+    }
+
 }
