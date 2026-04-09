@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,6 +11,7 @@ import lombok.NoArgsConstructor;
 
 import org.springframework.http.ProblemDetail;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -62,4 +64,17 @@ public class ReportTemplateResponseDto {
 
     private Optional<ProblemDetail> error;
 
+    @Schema(description = "User who created this template", example = "john.doe@example.com")
+    private String createdBy;
+
+    @Schema(description = "User who last updated this template", example = "jane.smith@example.com")
+    private String updatedBy;
+
+    @Schema(description = "Date and time when this template was created", example = "2024-04-08")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd-MM-yyyy")
+    private LocalDateTime createdAt;
+
+    @Schema(description = "Date and time when this template was last updated", example = "2024-04-08")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "dd-MM-yyyy")
+    private LocalDateTime updatedAt;
 }
