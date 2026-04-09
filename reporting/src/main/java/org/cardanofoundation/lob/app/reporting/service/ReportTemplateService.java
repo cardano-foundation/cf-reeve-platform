@@ -258,7 +258,7 @@ public class ReportTemplateService {
                 reportingRepository.findByReportTemplateId(existing.getId());
         // Prevent a version update if the update only is about mappings
         boolean isOnlyChangingMappings = isChangingOnlyMappings(existing.getFields(), dto.getFields());
-        boolean isOnlyNameChangeForValidationRules = isChangingOnlyName(existing.getValidationRules(), dto.getValidationRules());
+        boolean isOnlyNameChangeForValidationRules = isChangingOnlyName(existing.getValidationRules(), Optional.ofNullable(dto.getValidationRules()).orElse(List.of()));
         if (!existingReports.isEmpty() && (!isOnlyChangingMappings || !isOnlyNameChangeForValidationRules)) {
             // Reports exist - create a new version
             log.info("Template '{}' has {} existing reports & more changes than just mappings, creating new version {} -> {}",
