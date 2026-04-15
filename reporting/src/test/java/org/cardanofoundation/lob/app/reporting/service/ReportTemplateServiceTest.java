@@ -12,11 +12,16 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
@@ -36,6 +41,8 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFilter;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
@@ -1025,6 +1032,162 @@ class ReportTemplateServiceTest {
         assertFalse(result);
     }
 
+    // -------------------------------------------------------------------------
+    // findAll
+    // -------------------------------------------------------------------------
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void findAll_noFilters_returnsAllTemplates() {
+        // Given
+        Page<ReportTemplateEntity> page = mock(Page.class);
+        when(page.stream()).thenReturn(Stream.of(templateEntity));
+        when(page.getTotalElements()).thenReturn(1L);
+        when(page.getTotalPages()).thenReturn(1);
+        Pageable pageable = PageRequest.of(0, 10);
+        when(reportTemplateRepository.findAllFiltered(
+                eq("org123"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(page);
+        when(reportTemplateMapper.toResponseDto(templateEntity)).thenReturn(templateResponseDto);
+
+        // When
+        ReportTemplateListResponseDto result = reportTemplateService.findAll(
+                "org123", new ReportTemplateFilter(null, null, null, null, null, null), pageable);
+
+        // Then
+        assertEquals(1, result.getTemplates().size());
+        assertEquals(templateResponseDto, result.getTemplates().getFirst());
+        assertEquals(1L, result.getTotal());
+        assertEquals(1, result.getTotalPages());
+        verify(reportTemplateRepository).findAllFiltered(
+                eq("org123"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void findAll_withDateFilters_passesFiltersToRepository() {
+        // Given
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2026, 12, 31);
+
+        Page<ReportTemplateEntity> page = mock(Page.class);
+        when(page.stream()).thenReturn(Stream.of(templateEntity));
+        when(page.getTotalElements()).thenReturn(1L);
+        when(page.getTotalPages()).thenReturn(1);
+        Pageable pageable = PageRequest.of(0, 10);
+        when(reportTemplateRepository.findAllFiltered(
+                eq("org123"), isNull(), isNull(), isNull(), isNull(), eq(dateFrom), eq(dateTo), eq(pageable)))
+                .thenReturn(page);
+        when(reportTemplateMapper.toResponseDto(templateEntity)).thenReturn(templateResponseDto);
+
+        // When
+        ReportTemplateListResponseDto result = reportTemplateService.findAll(
+                "org123", new ReportTemplateFilter(null, null, null, null, dateFrom, dateTo), pageable);
+
+        // Then
+        assertEquals(1, result.getTemplates().size());
+        verify(reportTemplateRepository).findAllFiltered(
+                eq("org123"), isNull(), isNull(), isNull(), isNull(), eq(dateFrom), eq(dateTo), eq(pageable));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void findAll_emptyPage_returnsEmptyList() {
+        // Given
+        Page<ReportTemplateEntity> page = mock(Page.class);
+        when(page.stream()).thenReturn(Stream.empty());
+        when(page.getTotalElements()).thenReturn(0L);
+        when(page.getTotalPages()).thenReturn(0);
+        Pageable pageable = PageRequest.of(0, 10);
+        when(reportTemplateRepository.findAllFiltered(
+                eq("org123"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(page);
+
+        // When
+        ReportTemplateListResponseDto result = reportTemplateService.findAll(
+                "org123", new ReportTemplateFilter(null, null, null, null, null, null), pageable);
+
+        // Then
+        assertTrue(result.getTemplates().isEmpty());
+        assertEquals(0L, result.getTotal());
+        assertEquals(0, result.getTotalPages());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void findAll_withSearchTerm_passesSearchToRepository() {
+        // Given
+        Page<ReportTemplateEntity> page = mock(Page.class);
+        when(page.stream()).thenReturn(Stream.of(templateEntity));
+        when(page.getTotalElements()).thenReturn(1L);
+        when(page.getTotalPages()).thenReturn(1);
+        Pageable pageable = PageRequest.of(0, 10);
+        when(reportTemplateRepository.findAllFiltered(
+                eq("org123"), eq("quarterly"), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(page);
+        when(reportTemplateMapper.toResponseDto(templateEntity)).thenReturn(templateResponseDto);
+
+        // When — search term matches both name and description fields
+        ReportTemplateListResponseDto result = reportTemplateService.findAll(
+                "org123", new ReportTemplateFilter("quarterly", null, null, null, null, null), pageable);
+
+        // Then
+        assertEquals(1, result.getTemplates().size());
+        verify(reportTemplateRepository).findAllFiltered(
+                eq("org123"), eq("quarterly"), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void findAll_withAllFilters_passesAllFiltersToRepository() {
+        // Given
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2026, 12, 31);
+        List<ReportTemplateType> types = List.of(ReportTemplateType.BALANCE_SHEET);
+        List<DataMode> modes = List.of(DataMode.SYSTEM);
+
+        Page<ReportTemplateEntity> page = mock(Page.class);
+        when(page.stream()).thenReturn(Stream.of(templateEntity));
+        when(page.getTotalElements()).thenReturn(1L);
+        when(page.getTotalPages()).thenReturn(1);
+        Pageable pageable = PageRequest.of(0, 10);
+        when(reportTemplateRepository.findAllFiltered(
+                "org123", "search", types, true, modes, dateFrom, dateTo, pageable))
+                .thenReturn(page);
+        when(reportTemplateMapper.toResponseDto(templateEntity)).thenReturn(templateResponseDto);
+
+        // When
+        ReportTemplateListResponseDto result = reportTemplateService.findAll(
+                "org123", new ReportTemplateFilter("search", types, true, modes, dateFrom, dateTo), pageable);
+
+        // Then
+        assertEquals(1, result.getTemplates().size());
+        verify(reportTemplateRepository).findAllFiltered(
+                "org123", "search", types, true, modes, dateFrom, dateTo, pageable);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void findAll_pageMetadata_isCorrectlyMapped() {
+        // Given
+        Page<ReportTemplateEntity> page = mock(Page.class);
+        when(page.stream()).thenReturn(Stream.empty());
+        when(page.getTotalElements()).thenReturn(42L);
+        when(page.getTotalPages()).thenReturn(5);
+        Pageable pageable = PageRequest.of(2, 10);
+        when(reportTemplateRepository.findAllFiltered(
+                eq("org123"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(page);
+
+        // When
+        ReportTemplateListResponseDto result = reportTemplateService.findAll(
+                "org123", new ReportTemplateFilter(null, null, null, null, null, null), pageable);
+
+        // Then
+        assertEquals(2, result.getPage());
+        assertEquals(10, result.getSize());
+        assertEquals(42L, result.getTotal());
+        assertEquals(5, result.getTotalPages());
+    }
 
 }
