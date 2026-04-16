@@ -7,6 +7,7 @@ import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
@@ -19,6 +20,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.annotations.SQLRestriction;
 
@@ -34,6 +37,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Builder
 @Getter
 @Setter
+@EntityListeners(AuditingEntityListener.class)
 public class ReportTemplateEntity extends CommonEntity {
     @Id
     private String id;

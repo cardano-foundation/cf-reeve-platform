@@ -132,7 +132,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
                 .get("/api/v1/transactions-rejection-codes")
                 .then()
                 .statusCode(200)
-                .body(equalTo("[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\"]"))
+                .body(equalTo("[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\",\"NEW_VERSION_PUBLISHED\"]"))
         ;
     }
 

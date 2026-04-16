@@ -85,7 +85,7 @@ class AccountingCoreResourceReconciliationTest {
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
         ReconciliationRejectionCodeRequest[] body = (ReconciliationRejectionCodeRequest[])responseEntity.getBody();
         Assertions.assertNotNull(body);
-        Assertions.assertEquals(5, body.length);
+        Assertions.assertEquals(6, body.length);
         verifyNoInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationViewService);
     }

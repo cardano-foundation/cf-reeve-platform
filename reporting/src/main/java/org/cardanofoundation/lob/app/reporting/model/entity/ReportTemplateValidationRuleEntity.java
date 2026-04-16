@@ -59,6 +59,7 @@ public class ReportTemplateValidationRuleEntity extends CommonEntity {
     public int computeContentHash() {
         return Objects.hash(
             operator.name(),
+            active,
             terms.stream().filter(validationRuleTermEntity -> validationRuleTermEntity.getSide().equals(TermSide.LEFT)).map(ValidationRuleTermEntity::computeContentHash).toList(),
             terms.stream().filter(validationRuleTermEntity -> validationRuleTermEntity.getSide().equals(TermSide.RIGHT)).map(ValidationRuleTermEntity::computeContentHash).toList()
         );

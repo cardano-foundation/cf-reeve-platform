@@ -1,0 +1,1 @@
+ALTER TYPE accounting_core_reconcilation_rejection_code_type ADD VALUE 'SINK_RECONCILATION_MISMATCH';
