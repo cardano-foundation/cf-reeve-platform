@@ -21,6 +21,7 @@ env:
   MAVEN_CENTRAL_OSSRH_USERNAME: ${{ secrets.MAVEN_CENTRAL_OSSRH_USERNAME }}
   MAVEN_CENTRAL_OSSRH_TOKEN: ${{ secrets.MAVEN_CENTRAL_OSSRH_TOKEN }}
   DOCKER_PUSH: true
+  BUILDKIT_PROGRESS: plain
 
 jobs:
   publish:
@@ -80,7 +81,7 @@ jobs:
               GRADLE_TARGETS="$GRADLE_TARGETS jreleaserDeploy"
               ;;
           esac
-          ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test 
+          ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test --console=plain --no-daemon --parallel --build-cache
           echo "VERSION_PUBLISH=$VERSION_PUBLISH" | tee -a $GITHUB_ENV
 
       - name:  🌍 earthly (docker build and push)
