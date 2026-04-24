@@ -27,6 +27,7 @@ import com.google.common.cache.CacheBuilder;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkCommittedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxRollbackEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
@@ -56,9 +57,9 @@ public class DbSynchronisationUseCaseService {
 
     @Transactional
     public void execute(String batchId,
-                        OrganisationTransactions incomingTransactions,
-                        int totalTransactionsCount,
-                        ProcessorFlags flags) {
+            OrganisationTransactions incomingTransactions,
+            int totalTransactionsCount,
+            ProcessorFlags flags) {
         ProcessorFlags.Trigger trigger = flags.getTrigger();
         Set<TransactionEntity> transactions = incomingTransactions.transactions();
 
@@ -75,8 +76,8 @@ public class DbSynchronisationUseCaseService {
             Set<String> batchIdsToReprocess = transactions.stream()
                     .flatMap(transactionEntity ->
                             transactionBatchAssocRepository.findAllByTxId(transactionEntity.getId())
-                                    .stream()
-                                    .map(transactionBatchAssocEntity -> transactionBatchAssocEntity.getId().getTransactionBatchId())
+                            .stream()
+                            .map(transactionBatchAssocEntity -> transactionBatchAssocEntity.getId().getTransactionBatchId())
                     )
                     .collect(Collectors.toSet());
 
@@ -92,10 +93,10 @@ public class DbSynchronisationUseCaseService {
     }
 
     public void processTransactionsForTheFirstTime(String batchId,
-                                                   String organisationId,
-                                                   Set<TransactionEntity> incomingDetachedTransactions,
-                                                   int totalTransactionsCount,
-                                                   ProcessorFlags flags) {
+            String organisationId,
+            Set<TransactionEntity> incomingDetachedTransactions,
+            int totalTransactionsCount,
+            ProcessorFlags flags) {
         LinkedHashSet<TransactionEntity> txsAlreadyStored = new LinkedHashSet<>();
 
         Set<String> txIds = incomingDetachedTransactions.stream()
@@ -164,15 +165,19 @@ public class DbSynchronisationUseCaseService {
             return current + toProcessTransactions.size();
         });
         log.info("Batch transaction count for batchId: {}, totalProcessTx: {}", batchId, totalProcessTx);
-        // we don't need to pass in Transactions, since we just saved them and the status was updated
-        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalProcessTx, Optional.empty());
-        batchesToBeUpdated.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
+
+        eventPublisher.publishEvent(TransactionBatchChunkCommittedEvent.builder()
+                .batchId(batchId)
+                .processedTransactionCount(totalProcessTx)
+                .batchesToBeUpdated(batchesToBeUpdated)
+                .build());
+
         publishedTransactionToReset.forEach(txId -> eventPublisher.publishEvent(new TxRollbackEvent(txId)));
     }
 
     private Set<TransactionEntity> storeTransactions(String batchId,
-                                                     OrganisationTransactions transactions,
-                                                     ProcessorFlags flags) {
+            OrganisationTransactions transactions,
+            ProcessorFlags flags) {
         log.info("Updating transaction batch, batchId: {}", batchId);
         ProcessorFlags.Trigger trigger = flags.getTrigger();
         Set<TransactionEntity> txs = transactions.transactions();
@@ -207,7 +212,7 @@ public class DbSynchronisationUseCaseService {
     }
 
     private boolean isIncomingTransactionERPSame(TransactionEntity existingTx,
-                                                 TransactionEntity incomingTx) {
+            TransactionEntity incomingTx) {
         if (existingTx.hasAnyViolation(Source.ERP)) {
             return false;
         }

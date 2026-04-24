@@ -38,6 +38,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.recon
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.LedgerDispatchReceipt;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionProcessingStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkCommittedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxRollbackEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
@@ -605,9 +606,16 @@ class DbSynchronisationUseCaseServiceTest {
         service.execute(batchId, new OrganisationTransactions(orgId, Set.of(incomingTx)), 1,
                 new ProcessorFlags(ProcessorFlags.Trigger.IMPORT));
 
-        // Then: Both new batch and existing batch should be updated
-        verify(transactionBatchService).updateTransactionBatchStatusAndStats(eq(batchId), anyInt(), eq(Optional.empty()));
-        verify(transactionBatchService).updateTransactionBatchStatusAndStats(eq(existingBatchId), eq(null), eq(Optional.empty()));
+        // Then: Event should have been thrown that should update both the new batch and the existing batch
+        ArgumentCaptor<TransactionBatchChunkCommittedEvent> eventCaptor = ArgumentCaptor.forClass(TransactionBatchChunkCommittedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+
+        // Verify values from the published event
+        TransactionBatchChunkCommittedEvent event = eventCaptor.getValue();
+        assertThat(event.getBatchId()).isEqualTo(batchId);
+        assertThat(event.getBatchesToBeUpdated().contains(existingBatchId)).isTrue();
+        assertThat(event.getProcessedTransactionCount()).isGreaterThan(0);
+
     }
 
     @Test
