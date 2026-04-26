@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.DISPATCHED;
 import static org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus.NOT_DISPATCHED;
 import static org.mockito.ArgumentMatchers.*;
@@ -613,7 +613,7 @@ class DbSynchronisationUseCaseServiceTest {
         // Verify values from the published event
         TransactionBatchChunkCommittedEvent event = eventCaptor.getValue();
         assertThat(event.getBatchId()).isEqualTo(batchId);
-        assertThat(event.getBatchesToBeUpdated().contains(existingBatchId)).isTrue();
+        assertThat(event.getBatchesToBeUpdated()).contains(existingBatchId);
         assertThat(event.getProcessedTransactionCount()).isGreaterThan(0);
 
     }
