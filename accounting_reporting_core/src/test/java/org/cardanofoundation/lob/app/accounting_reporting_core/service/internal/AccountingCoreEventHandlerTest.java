@@ -19,7 +19,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdat
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 
 @ExtendWith(MockitoExtension.class)
-public class AccountingCoreEventHandlerTest {
+class AccountingCoreEventHandlerTest {
 
     @Mock
     private ERPIncomingDataProcessor erpIncomingDataProcessor;
