@@ -190,6 +190,10 @@ public class ReportTemplateMapper {
             .validationRules(validationRules)
             .reportCount(entity.getReportCount())
             .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
+            .createdAt(entity.getCreatedAt())
+            .updatedAt(entity.getUpdatedAt())
+            .createdBy(entity.getCreatedBy())
+            .updatedBy(entity.getUpdatedBy())
             .build();
     }
 

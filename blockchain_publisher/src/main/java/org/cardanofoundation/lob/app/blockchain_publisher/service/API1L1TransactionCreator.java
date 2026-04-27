@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.ProblemDetail;
 
+import co.nstant.in.cbor.CborException;
 import co.nstant.in.cbor.model.Map;
 import com.bloxbean.cardano.client.account.Account;
 import com.bloxbean.cardano.client.api.model.Amount;
@@ -31,6 +32,7 @@ import com.bloxbean.cardano.client.exception.CborSerializationException;
 import com.bloxbean.cardano.client.function.helper.SignerProviders;
 import com.bloxbean.cardano.client.metadata.Metadata;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
+import com.bloxbean.cardano.client.metadata.MetadataList;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataMap;
 import com.bloxbean.cardano.client.metadata.helper.MetadataToJsonNoSchemaConverter;
@@ -45,6 +47,7 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API1BlockchainTransactions;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @Slf4j
@@ -59,6 +62,7 @@ public class API1L1TransactionCreator {
     private final BlockchainReaderPublicApiIF blockchainReaderPublicApi;
     private final MetadataChecker jsonSchemaMetadataChecker;
     private final Account organiserAccount;
+    private final Optional<IpfsPublisher> ipfsPublisher;
 
     private final int metadataLabel;
     private final boolean debugStoreOutputTx;
@@ -86,8 +90,12 @@ public class API1L1TransactionCreator {
                                                                                             Set<TransactionEntity> transactions,
                                                                                             long creationSlot) {
         try {
-            return createTransaction(organisationId, transactions, creationSlot);
-        } catch (IOException e) {
+            if(ipfsPublisher.isEmpty()) {
+                return createL1Transaction(organisationId, transactions, creationSlot);
+            } else {
+                return createIpfsL1Transaction(organisationId, transactions, creationSlot);
+            }
+        } catch (IOException | CborException | CborSerializationException e) {
             log.error("Error creating blockchain transaction: ", e);
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "%s".formatted(e.getMessage()));
             problemDetail.setTitle("ERROR_CREATING_TRANSACTION");
@@ -95,10 +103,69 @@ public class API1L1TransactionCreator {
         }
     }
 
+    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> createIpfsL1Transaction(String organisationId, Set<TransactionEntity> transactions, long creationSlot) throws CborException, CborSerializationException {
+        // Creating one transaction contain all transactions, probably it's to big, but that's why we will replace the metadata
+        MetadataMap metadataMap = api1MetadataSerialiser.serialiseToMetadataMap(organisationId, transactions, creationSlot);
+
+        Map data = metadataMap.getMap();
+        Either<ProblemDetail, Void> problemDetail = checkJsonSchema(data);
+        if (problemDetail.isLeft()) return Either.left(problemDetail.getLeft());
+
+        // Removing the data object from the metadata and replacing it with an ipfs link to the data,
+        // to reduce the size of the metadata and be able to create a transaction with more transactions in it
+        MetadataList dataList = (MetadataList) metadataMap.get("data");
+        metadataMap.remove("data");
+        MetadataMap ipfsMap = MetadataBuilder.createMap();
+        ipfsMap.put("data", dataList);
+        byte[] bytes = CborSerializationUtil.serialize(ipfsMap.getMap());
+        String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
+        if(ipfsPublisher.isEmpty()) {
+            ProblemDetail problemDetailIpfs = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "IPFS publisher is not configured, we cannot publish the metadata to IPFS!");
+            problemDetailIpfs.setTitle("IPFS_PUBLISHER_NOT_CONFIGURED");
+            return Either.left(problemDetailIpfs);
+        }
+        Either<ProblemDetail, String> publish = ipfsPublisher.get().publish(json);
+        if (publish.isLeft()) {
+            log.error("Error publishing metadata to IPFS, issue: {}", publish.getLeft().getDetail());
+            return Either.left(publish.getLeft());
+        }
+        String cid = publish.get();
+        metadataMap.put("ipfs", cid);
+
+        Metadata metadata = MetadataBuilder.createMetadata();
+        CBORMetadataMap cborMetadataMap = new CBORMetadataMap(data);
+
+        metadata.put(metadataLabel, cborMetadataMap);
+        byte[] serialisedTx = serialiseTransaction(metadata);
+        log.info("Metadata for tx validated, gonna serialise tx now...");
+        return Either.right(Optional.of(new API1BlockchainTransactions(
+                organisationId,
+                transactions,
+                Set.of(), // Empty we published all transactions
+                creationSlot,
+                serialisedTx,
+                organiserAccount.baseAddress()
+        )));
+    }
+
+    private Either<ProblemDetail, Void> checkJsonSchema(Map data) throws CborException {
+        byte[] bytes = CborSerializationUtil.serialize(data);
+
+        // we use json only for validation with json schema and for debugging (storing to a tmp file)
+        String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
+        boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
+        if (!isValid) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "Metadata is not valid according to the transaction schema, we will not create a transaction!");
+            problemDetail.setTitle("INVALID_TRANSACTION_METADATA");
+            return Either.left(problemDetail);
+        }
+        return Either.right(null);
+    }
+
     // error or transactions to process or no more transactions to process in case of blockchain transaction creation
-    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> createTransaction(String organisationId,
-                                                                                    Set<TransactionEntity> transactions,
-                                                                                    long creationSlot) throws IOException {
+    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> createL1Transaction(String organisationId,
+                                                                                            Set<TransactionEntity> transactions,
+                                                                                            long creationSlot) throws IOException {
         log.info("Splitting {} passedTransactions into blockchain passedTransactions", transactions.size());
 
         LinkedHashSet<TransactionEntity> transactionsBatch = new LinkedHashSet<>();

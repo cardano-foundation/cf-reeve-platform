@@ -70,6 +70,8 @@ public class TransactionReconciliationTransactionsView {
 
     private Set<ViolationView> violations = new LinkedHashSet<>();
 
+    private Set<String> sourceDiff;
+
     public enum ReconciliationCodeView {
         OK,
         NOK,

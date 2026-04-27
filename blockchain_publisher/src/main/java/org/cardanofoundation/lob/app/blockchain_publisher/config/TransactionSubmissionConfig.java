@@ -21,6 +21,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.API1MetadataSe
 import org.cardanofoundation.lob.app.blockchain_publisher.service.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
@@ -64,6 +65,7 @@ public class TransactionSubmissionConfig {
                                                              BlockchainReaderPublicApiIF blockchainReaderPublicApi,
                                                              @Qualifier("api1JsonSchemaMetadataChecker") MetadataChecker metadataChecker,
                                                              Account organiserAccount,
+                                                             Optional<IpfsPublisher> ipfsPublisher,
                                                              @Value("${l1.transaction.metadata_label:1447}") int metadataLabel,
                                                              @Value("${l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
     ) {
@@ -72,6 +74,7 @@ public class TransactionSubmissionConfig {
                 blockchainReaderPublicApi,
                 metadataChecker,
                 organiserAccount,
+                ipfsPublisher,
                 metadataLabel,
                 debugStoreOutputTx
         );
