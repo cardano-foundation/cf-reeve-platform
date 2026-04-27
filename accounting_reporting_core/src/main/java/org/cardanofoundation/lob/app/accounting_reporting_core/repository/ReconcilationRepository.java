@@ -147,6 +147,17 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                     GROUP BY rv.transactionId)
                 ) as newVersion,
 
+                (SELECT COUNT(newVersionPublished) FROM (
+                    SELECT rv.transactionId newVersionPublished
+                    FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+                    JOIN r.violations rv
+                    LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+                    WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+                    AND rv.rejectionCode = 'SINK_RECONCILATION_MISMATCH'
+                    AND (tr IS NULL OR NOT EXISTS (SELECT 1 FROM tr.violations tv WHERE tv.code = 'TX_NOT_IN_ERP'))
+                    GROUP BY rv.transactionId)
+                ) as newVersionPublished,
+
                 (SELECT COUNT(txOk) FROM (
                     SELECT tx.id txOk
                     FROM accounting_reporting_core.TransactionEntity tx
