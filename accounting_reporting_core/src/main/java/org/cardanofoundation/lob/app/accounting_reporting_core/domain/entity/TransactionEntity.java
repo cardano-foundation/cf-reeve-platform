@@ -224,12 +224,6 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
     @Nullable
     private String rollbackSuffix;
 
-    @Column(name = "excluded_report")
-    @Getter
-    @Setter
-    @Nullable
-    private Boolean excludedReport;
-
     @Column(name = "overall_status", nullable = false)
     @Enumerated(STRING)
     @DiffIgnore

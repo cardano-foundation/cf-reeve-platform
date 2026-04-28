@@ -32,7 +32,6 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         AND (t.accountDebit.code IN :customerCodes OR t.accountCredit.code IN :customerCodes)
         AND t.amountLcy <> 0
         AND t.transaction.ledgerDispatchStatus = 'FINALIZED'
-        AND t.transaction.excludedReport IS NOT TRUE
         """)
     List<TransactionItemEntity> findTransactionItemsByAccountCodeAndDateRange(@Param("customerCodes") List<String> customerCodes, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
@@ -55,7 +54,6 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
             AND t.amountLcy <> 0
             AND t.transaction.automatedValidationStatus = 'VALIDATED'
             AND t.transaction.processingStatus NOT IN ('PENDING','INVALID')
-            AND t.transaction.excludedReport IS NOT TRUE
             """)
     List<TransactionItemEntity> findPreviewTransactionItemsByAccountCodeAndDateRange(
             @Param("customerCodes") List<String> customerCodes,
