@@ -108,7 +108,7 @@ public class CostCenterService {
         costCenter.setId(new CostCenter.Id(orgId, costCenterUpdate.getCustomerCode()));
         if (costCenterFound.isPresent()) {
             if (!isUpsert) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cost Center with customer code %s already exists.".formatted(costCenterUpdate.getCustomerCode()));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Code %s already exists.".formatted(costCenterUpdate.getCustomerCode()));
                 problem.setTitle(ErrorTitleConstants.COST_CENTER_CODE_ALREADY_EXISTS);
                 return CostCenterView.createFail(costCenterUpdate, problem);
             }
