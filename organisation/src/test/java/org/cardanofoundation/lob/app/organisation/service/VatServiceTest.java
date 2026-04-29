@@ -74,6 +74,19 @@ class VatServiceTest {
     }
 
     @Test
+    void insert_alreadyExistsDetail() {
+        VatUpdate vatUpdate = mock(VatUpdate.class);
+        Vat.Id id = new Vat.Id("organisationId", "customerCode");
+        when(vatUpdate.getCustomerCode()).thenReturn("customerCode");
+        when(vatRepository.findById(id)).thenReturn(Optional.of(mock(Vat.class)));
+
+        VatView result = vatService.insert("organisationId", vatUpdate, false);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("Code customerCode already exists.", result.getError().get().getDetail());
+    }
+
+    @Test
     void insert_countryCodeNotExists() {
         VatUpdate update = mock(VatUpdate.class);
 
