@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -212,10 +213,33 @@ class ReportTemplateControllerTest {
         ReportTemplateListResponseDto responseDto = ReportTemplateListResponseDto.builder().templates(templates).build();
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
         when(jpaSortFieldValidator.convertPageable(any(), any(), any())).thenReturn(Either.right(Pageable.unpaged()));
-        when(reportTemplateService.findAll("org123", null, null, null, null, null, Pageable.unpaged())).thenReturn(responseDto);
+        when(reportTemplateService.findAll(anyString(), any(), any(Pageable.class)))
+                .thenReturn(responseDto);
 
         // When
-        ResponseEntity<?> response = reportTemplateController.findAll("org123", null, null, null, null, null, null);
+        ResponseEntity<?> response = reportTemplateController.findAll(
+                "org123", null, null, null, null, null, null, null);
+
+        // Then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(responseDto, response.getBody());
+    }
+
+    @Test
+    void findAll_WithDateFilters_Success() {
+        // Given
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2026, 12, 31);
+        List<ReportTemplateResponseDto> templates = List.of(templateResponseDto);
+        ReportTemplateListResponseDto responseDto = ReportTemplateListResponseDto.builder().templates(templates).build();
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(jpaSortFieldValidator.convertPageable(any(), any(), any())).thenReturn(Either.right(Pageable.unpaged()));
+        when(reportTemplateService.findAll(anyString(), any(), any(Pageable.class)))
+                .thenReturn(responseDto);
+
+        // When
+        ResponseEntity<?> response = reportTemplateController.findAll(
+                "org123", null, null, null, null, dateFrom, dateTo, null);
 
         // Then
         assertEquals(HttpStatus.OK, response.getStatusCode());
@@ -228,7 +252,8 @@ class ReportTemplateControllerTest {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
         // When
-        ResponseEntity<?> response = reportTemplateController.findAll("org123", null, null, null, null, null, null);
+        ResponseEntity<?> response = reportTemplateController.findAll(
+                "org123", null, null, null, null, null, null, null);
 
         // Then
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
