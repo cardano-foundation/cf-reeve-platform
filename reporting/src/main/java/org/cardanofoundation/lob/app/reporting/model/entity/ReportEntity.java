@@ -17,6 +17,7 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.PostPersist;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreRemove;
@@ -75,6 +76,7 @@ public class ReportEntity extends CommonEntity {
 
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
     @SQLRestriction("parent_field_id IS NULL")
+    @OrderBy("id ASC")
     @Builder.Default
     private List<ReportFieldEntity> fields = new ArrayList<>();
 

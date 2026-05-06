@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.dto.events;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,7 +43,7 @@ public class PublishReportEvent {
         event.setPeriod(reportEntity.getPeriod());
         event.setYear(reportEntity.getYear());
         event.setDataMode(reportEntity.getDataMode());
-        event.setReportData(extractReportData(reportEntity.getFields(), new HashMap<>()));
+        event.setReportData(extractReportData(reportEntity.getFields(), new LinkedHashMap<>()));
         event.setDispatchStatus(reportEntity.getLedgerDispatchStatus());
 
         return event;
@@ -51,10 +51,16 @@ public class PublishReportEvent {
 
     private static Map<String, Object> extractReportData(List<ReportFieldEntity> fields, Map<String, Object> reportData) {
         for (ReportFieldEntity field : fields) {
-            if(field.getChildFields().isEmpty()) {
-                reportData.put(field.getFieldTemplate().getName(), field.getValue());
+            if (field.getChildFields().isEmpty()) {
+                // Leaf: {v: value, o: fieldOrder} — named keys remove ambiguity for consuming apps
+                Map<String, Object> leaf = new LinkedHashMap<>(2);
+                leaf.put("v", field.getValue());
+                leaf.put("_o", field.getFieldTemplate().getFieldOrder());
+                reportData.put(field.getFieldTemplate().getName(), leaf);
             } else {
-                Map<String, Object> childData = new HashMap<>();
+                // Section: {_o: fieldOrder, ...children} — "_o" is the section's own order
+                Map<String, Object> childData = new LinkedHashMap<>();
+                childData.put("_o", field.getFieldTemplate().getFieldOrder());
                 extractReportData(field.getChildFields(), childData);
                 reportData.put(field.getFieldTemplate().getName(), childData);
             }
