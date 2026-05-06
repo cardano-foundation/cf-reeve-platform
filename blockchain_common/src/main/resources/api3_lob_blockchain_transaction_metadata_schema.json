@@ -18,6 +18,18 @@
     "timestampPattern": {
       "type": "string",
       "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "orderInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "leafFieldPattern": {
+      "type": "object",
+      "properties": {
+        "v":  { "$ref": "#/definitions/bigDecimalPattern" },
+        "_o": { "$ref": "#/definitions/orderInteger" }
+      },
+      "required": ["v", "_o"]
     }
   },
   "properties": {
@@ -92,9 +104,7 @@
     {
       "if": {
         "properties": {
-          "interval": {
-            "const": "YEAR"
-          }
+          "interval": { "const": "YEAR" }
         }
       },
       "then": {
@@ -107,9 +117,7 @@
     {
       "if": {
         "properties": {
-          "interval": {
-            "const": "QUARTER"
-          }
+          "interval": { "const": "QUARTER" }
         }
       },
       "then": {
@@ -126,18 +134,14 @@
     {
       "if": {
         "properties": {
-          "interval": {
-            "enum": ["MONTH", "QUARTER"]
-          }
+          "interval": { "enum": ["MONTH", "QUARTER"] }
         }
       }
     },
     {
       "if": {
         "properties": {
-          "subType": {
-            "const": "INCOME_STATEMENT"
-          }
+          "subType": { "const": "INCOME_STATEMENT" }
         }
       },
       "then": {
@@ -148,81 +152,55 @@
               "revenues": {
                 "type": "object",
                 "properties": {
-                  "other_income": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "build_of_long_term_provision": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  }
+                  "_o":                             { "$ref": "#/definitions/orderInteger" },
+                  "other_income":                   { "$ref": "#/definitions/leafFieldPattern" },
+                  "build_of_long_term_provision":   { "$ref": "#/definitions/leafFieldPattern" }
                 }
               },
               "cost_of_goods_and_services": {
                 "type": "object",
                 "properties": {
-                  "cost_of_providing_services": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  }
+                  "_o":                          { "$ref": "#/definitions/orderInteger" },
+                  "cost_of_providing_services":  { "$ref": "#/definitions/leafFieldPattern" }
                 }
               },
               "operating_expenses": {
                 "type": "object",
                 "properties": {
-                  "personnel_expenses": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "general_and_administrative_expenses": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "depreciation_and_impairment_losses_on_tangible_assets": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "amortization_on_intangible_assets": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "rentExpenses": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  }
+                  "_o":                                                          { "$ref": "#/definitions/orderInteger" },
+                  "personnel_expenses":                                          { "$ref": "#/definitions/leafFieldPattern" },
+                  "general_and_administrative_expenses":                         { "$ref": "#/definitions/leafFieldPattern" },
+                  "depreciation_and_impairment_losses_on_tangible_assets":       { "$ref": "#/definitions/leafFieldPattern" },
+                  "amortization_on_intangible_assets":                           { "$ref": "#/definitions/leafFieldPattern" },
+                  "rentExpenses":                                                { "$ref": "#/definitions/leafFieldPattern" }
                 }
               },
               "financial_income": {
                 "type": "object",
                 "properties": {
-                  "financial_revenues": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "financial_expenses": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "realised_gains_on_sale_of_cryptocurrencies": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "staking_rewards_income": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "net_income_options_sale": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  }
+                  "_o":                                          { "$ref": "#/definitions/orderInteger" },
+                  "financial_revenues":                          { "$ref": "#/definitions/leafFieldPattern" },
+                  "financial_expenses":                          { "$ref": "#/definitions/leafFieldPattern" },
+                  "realised_gains_on_sale_of_cryptocurrencies":  { "$ref": "#/definitions/leafFieldPattern" },
+                  "staking_rewards_income":                      { "$ref": "#/definitions/leafFieldPattern" },
+                  "net_income_options_sale":                     { "$ref": "#/definitions/leafFieldPattern" }
                 }
               },
               "extraordinary_income": {
                 "type": "object",
                 "properties": {
-                  "extraordinary_expenses": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  }
+                  "_o":                        { "$ref": "#/definitions/orderInteger" },
+                  "extraordinary_expenses":    { "$ref": "#/definitions/leafFieldPattern" }
                 }
               },
               "tax_expenses": {
                 "type": "object",
                 "properties": {
-                  "income_tax_expense": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  }
+                  "_o":                   { "$ref": "#/definitions/orderInteger" },
+                  "income_tax_expense":   { "$ref": "#/definitions/leafFieldPattern" }
                 }
               },
-              "profit_for_the_year": {
-                "$ref": "#/definitions/bigDecimalPattern"
-              }
+              "profit_for_the_year": { "$ref": "#/definitions/leafFieldPattern" }
             }
           }
         }
@@ -231,9 +209,7 @@
     {
       "if": {
         "properties": {
-          "subType": {
-            "const": "BALANCE_SHEET"
-          }
+          "subType": { "const": "BALANCE_SHEET" }
         }
       },
       "then": {
@@ -244,38 +220,25 @@
               "assets": {
                 "type": "object",
                 "properties": {
+                  "_o": { "$ref": "#/definitions/orderInteger" },
                   "non_current_assets": {
                     "type": "object",
                     "properties": {
-                      "property_plant_equipment": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "intangible_assets": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "investments": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "financial_assets": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      }
+                      "_o":                        { "$ref": "#/definitions/orderInteger" },
+                      "property_plant_equipment":  { "$ref": "#/definitions/leafFieldPattern" },
+                      "intangible_assets":          { "$ref": "#/definitions/leafFieldPattern" },
+                      "investments":               { "$ref": "#/definitions/leafFieldPattern" },
+                      "financial_assets":          { "$ref": "#/definitions/leafFieldPattern" }
                     }
                   },
                   "current_assets": {
                     "type": "object",
                     "properties": {
-                      "prepayments_and_other_short_term_assets": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "other_receivables": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "crypto_assets": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "cash_and_cash_equivalents": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      }
+                      "_o":                                            { "$ref": "#/definitions/orderInteger" },
+                      "prepayments_and_other_short_term_assets":       { "$ref": "#/definitions/leafFieldPattern" },
+                      "other_receivables":                             { "$ref": "#/definitions/leafFieldPattern" },
+                      "crypto_assets":                                 { "$ref": "#/definitions/leafFieldPattern" },
+                      "cash_and_cash_equivalents":                     { "$ref": "#/definitions/leafFieldPattern" }
                     }
                   }
                 }
@@ -283,26 +246,21 @@
               "liabilities": {
                 "type": "object",
                 "properties": {
+                  "_o": { "$ref": "#/definitions/orderInteger" },
                   "non_current_liabilities": {
                     "type": "object",
                     "properties": {
-                      "provisions": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      }
+                      "_o":          { "$ref": "#/definitions/orderInteger" },
+                      "provisions":  { "$ref": "#/definitions/leafFieldPattern" }
                     }
                   },
                   "current_liabilities": {
                     "type": "object",
                     "properties": {
-                      "trade_accounts_payables": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "other_current_liabilities": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      },
-                      "accruals_and_short_term_provisions": {
-                        "$ref": "#/definitions/bigDecimalPattern"
-                      }
+                      "_o":                                    { "$ref": "#/definitions/orderInteger" },
+                      "trade_accounts_payables":               { "$ref": "#/definitions/leafFieldPattern" },
+                      "other_current_liabilities":             { "$ref": "#/definitions/leafFieldPattern" },
+                      "accruals_and_short_term_provisions":    { "$ref": "#/definitions/leafFieldPattern" }
                     }
                   }
                 }
@@ -310,15 +268,10 @@
               "capital": {
                 "type": "object",
                 "properties": {
-                  "capital": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "profit_for_the_year": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  },
-                  "results_carried_forward": {
-                    "$ref": "#/definitions/bigDecimalPattern"
-                  }
+                  "_o":                        { "$ref": "#/definitions/orderInteger" },
+                  "capital":                   { "$ref": "#/definitions/leafFieldPattern" },
+                  "profit_for_the_year":       { "$ref": "#/definitions/leafFieldPattern" },
+                  "results_carried_forward":   { "$ref": "#/definitions/leafFieldPattern" }
                 }
               }
             }

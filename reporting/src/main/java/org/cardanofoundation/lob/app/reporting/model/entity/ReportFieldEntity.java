@@ -14,6 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 import lombok.AllArgsConstructor;
@@ -50,6 +51,7 @@ public class ReportFieldEntity extends CommonEntity {
     private ReportFieldEntity parentField;
 
     @OneToMany(mappedBy = "parentField", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
     @Builder.Default
     private List<ReportFieldEntity> childFields = new ArrayList<>();
 

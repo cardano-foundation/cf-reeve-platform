@@ -20,6 +20,7 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 import lombok.AllArgsConstructor;
@@ -54,6 +55,7 @@ public class ReportTemplateFieldEntity extends CommonEntity {
     private ReportTemplateFieldEntity parentField;
 
     @OneToMany(mappedBy = "parentField", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("fieldOrder ASC")
     @Builder.Default
     private List<ReportTemplateFieldEntity> childFields = new ArrayList<>();
 
@@ -74,6 +76,9 @@ public class ReportTemplateFieldEntity extends CommonEntity {
     private Set<ChartOfAccount> mappingAccounts = new HashSet<>();
 
     private String name;
+
+    @Builder.Default
+    private int fieldOrder = 0;
 
     // Additional properties for column behavior
     @Enumerated(STRING)
