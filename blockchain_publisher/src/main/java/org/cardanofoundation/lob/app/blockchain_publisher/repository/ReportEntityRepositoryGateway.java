@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.repository;
 
+import java.util.Optional;
 import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
@@ -33,9 +34,18 @@ public class ReportEntityRepositoryGateway {
 
     @Transactional
     public void storeReportV2IfNew(ReportEntity reportEntity) {
-        boolean exists = reportEntityRepository.existsById(reportEntity.getId());
-        if (!exists) {
+        Optional<ReportEntity> existing = reportEntityRepository.findById(reportEntity.getId());
+        if (existing.isEmpty()) {
             reportEntityRepository.save(reportEntity);
+        } else {
+            ReportEntity existingEntity = existing.get();
+            boolean notYetSubmitted = existingEntity.getL1SubmissionData()
+                    .flatMap(l1 -> l1.getPublishStatus())
+                    .map(status -> status == BlockchainPublishStatus.STORED)
+                    .orElse(true);
+            if (notYetSubmitted) {
+                existingEntity.setReportData(reportEntity.getReportData());
+            }
         }
     }
 

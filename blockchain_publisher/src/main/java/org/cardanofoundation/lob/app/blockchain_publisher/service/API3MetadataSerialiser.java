@@ -54,28 +54,87 @@ public class API3MetadataSerialiser {
         return globalMetadataMap;
     }
 
-    private MetadataMap createRecursiveMetadataSection(
-            MetadataMap metadataMap, Map<String, Object> data) {
+    /**
+     * Serialises reportData recursively. New format embeds fieldOrder with named keys:
+     *   - Leaf field value is {"v": normalised_decimal, "_o": fieldOrder} — "v" = value, "_o" = order.
+     *   - Section map contains "_o" for the section's own fieldOrder alongside its children.
+     * Old format (plain numeric values / plain section maps) is also handled for backward compatibility.
+     */
+    private MetadataMap createRecursiveMetadataSection(MetadataMap metadataMap, Map<String, Object> data) {
         data.forEach((key, value) -> {
-            key = toLowerSnakeCase(key);
-            if (value == null) {
-                log.debug("Null value for key: {}", key);
-            } else if (value instanceof Map) {
-                MetadataMap childMap = MetadataBuilder.createMap();
-                createRecursiveMetadataSection(childMap, (Map<String, Object>) value);
-                metadataMap.put(key, childMap);
-            } else if (value instanceof Integer integerValue) {
-                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(integerValue)));
-            } else if (value instanceof Long longValue) {
-                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(longValue)));
-            } else if (value instanceof Double doubleValue) {
-                metadataMap.put(key, BigDecimals.normaliseString(BigDecimal.valueOf(doubleValue)));
-            } else {
-                throw new IllegalArgumentException("Unsupported data type in report data: %s".formatted(value.getClass().getName()));
+            if ("_o".equals(key)) {
+                metadataMap.put("_o", toBigInteger(value));
+                return;
             }
+
+            String snakeKey = toLowerSnakeCase(key);
+            processDataValue(metadataMap, snakeKey, value);
         });
 
         return metadataMap;
+    }
+
+    private void processDataValue(MetadataMap metadataMap, String snakeKey, Object value) {
+        if (value == null) {
+            log.debug("Null value for key: {}", snakeKey);
+        } else if (value instanceof Map<?, ?> childMapRaw) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> childMap = (Map<String, Object>) childMapRaw;
+            if (childMap.containsKey("v")) {
+                processNewFormatLeaf(metadataMap, snakeKey, childMap);
+            } else {
+                processSection(metadataMap, snakeKey, childMap);
+            }
+        } else {
+            processOldFormatLeaf(metadataMap, snakeKey, value);
+        }
+    }
+
+    private void processNewFormatLeaf(MetadataMap metadataMap, String snakeKey, Map<String, Object> childMap) {
+        MetadataMap leafMap = MetadataBuilder.createMap();
+        addLeafValue(leafMap, childMap.get("v"));
+        if (childMap.containsKey("_o")) {
+            leafMap.put("_o", toBigInteger(childMap.get("_o")));
+        }
+        metadataMap.put(snakeKey, leafMap);
+    }
+
+    private void processSection(MetadataMap metadataMap, String snakeKey, Map<String, Object> childMap) {
+        MetadataMap childMetadataMap = MetadataBuilder.createMap();
+        createRecursiveMetadataSection(childMetadataMap, childMap);
+        metadataMap.put(snakeKey, childMetadataMap);
+    }
+
+    private void processOldFormatLeaf(MetadataMap metadataMap, String snakeKey, Object value) {
+        String normalised = switch (value) {
+            case Integer integerValue -> BigDecimals.normaliseString(BigDecimal.valueOf(integerValue));
+            case Long longValue -> BigDecimals.normaliseString(BigDecimal.valueOf(longValue));
+            case Double doubleValue -> BigDecimals.normaliseString(BigDecimal.valueOf(doubleValue));
+            default -> throw new IllegalArgumentException("Unsupported data type in report data: %s".formatted(value.getClass().getName()));
+        };
+        metadataMap.put(snakeKey, normalised);
+    }
+
+    private void addLeafValue(MetadataMap leafMap, Object value) {
+        if (value == null) {
+            log.debug("Null leaf value, skipping");
+        } else if (value instanceof Integer integerValue) {
+            leafMap.put("v", BigDecimals.normaliseString(BigDecimal.valueOf(integerValue)));
+        } else if (value instanceof Long longValue) {
+            leafMap.put("v", BigDecimals.normaliseString(BigDecimal.valueOf(longValue)));
+        } else if (value instanceof Double doubleValue) {
+            leafMap.put("v", BigDecimals.normaliseString(BigDecimal.valueOf(doubleValue)));
+        } else if (value instanceof String strValue) {
+            leafMap.put("v", strValue);
+        } else {
+            throw new IllegalArgumentException("Unsupported leaf type in report data: %s".formatted(value.getClass().getName()));
+        }
+    }
+
+    private BigInteger toBigInteger(Object value) {
+        if (value instanceof Integer i) return BigInteger.valueOf(i);
+        if (value instanceof Long l) return BigInteger.valueOf(l);
+        return BigInteger.ZERO;
     }
 
     private String toLowerSnakeCase(String input) {

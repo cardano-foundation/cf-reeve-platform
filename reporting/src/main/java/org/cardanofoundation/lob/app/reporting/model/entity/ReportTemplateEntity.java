@@ -12,6 +12,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
@@ -63,6 +64,7 @@ public class ReportTemplateEntity extends CommonEntity {
 
     @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
     @SQLRestriction("parent_field_id IS NULL")
+    @OrderBy("fieldOrder ASC")
     @Builder.Default
     private List<ReportTemplateFieldEntity> fields = new ArrayList<>();
 
