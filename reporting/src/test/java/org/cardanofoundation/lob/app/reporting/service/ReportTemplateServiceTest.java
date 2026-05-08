@@ -726,7 +726,7 @@ class ReportTemplateServiceTest {
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
                 .thenReturn(Optional.of(existing));
         when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
-        when(reportTemplateMapper.toEntity(eq(templateDto), eq(existing))).thenReturn(existing);
+        when(reportTemplateMapper.toEntity(eq(templateDto), isNull())).thenReturn(existing);
         when(reportTemplateRepository.save(any(ReportTemplateEntity.class))).thenReturn(existing);
         when(reportTemplateMapper.toResponseDto(existing)).thenReturn(templateResponseDto);
         Errors errors = mock(Errors.class);
@@ -739,8 +739,8 @@ class ReportTemplateServiceTest {
 
         // Then
         assertTrue(result.isRight());
-        assertEquals(1L, existing.getVer());
-        verify(reportTemplateMapper).toEntity(eq(templateDto), eq(existing));
+        assertEquals(2L, existing.getVer());
+        verify(reportTemplateMapper).toEntity(eq(templateDto), isNull());
         verify(reportTemplateRepository).save(existing);
 
     }
