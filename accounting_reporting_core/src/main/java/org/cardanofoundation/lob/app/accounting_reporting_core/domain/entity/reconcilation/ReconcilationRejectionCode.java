@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.re
 public enum ReconcilationRejectionCode {
 
     SOURCE_RECONCILATION_FAIL, // transaction version will have to be ignored because it cannot be extracted again
+    SOURCE_RECONCILATION_MISMATCH,
     SINK_RECONCILATION_FAIL, // blockchain is missing a transaction or it is not finalised yet
     SINK_RECONCILATION_MISMATCH,
 
