@@ -7,18 +7,27 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 
 import java.util.Map;
 
-import lombok.RequiredArgsConstructor;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-@RequiredArgsConstructor
 public class AccountCodeCreditCheckTaskItem implements PipelineTaskItem {
+
+    private final boolean enabled;
+
+    public AccountCodeCreditCheckTaskItem() {
+        this(true);
+    }
+
+    public AccountCodeCreditCheckTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         if (tx.getTransactionType() == Journal) {
             return;
         }

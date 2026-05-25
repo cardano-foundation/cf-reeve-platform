@@ -15,8 +15,19 @@ import org.cardanofoundation.lob.app.support.collections.Optionals;
 @Slf4j
 public class DiscardSameAccountCodeTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
+
+    public DiscardSameAccountCodeTaskItem() {
+        this(true);
+    }
+
+    public DiscardSameAccountCodeTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
+
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         tx.getItems().stream().filter(txItem -> {
             Optional<Account> accountDebit = txItem.getAccountDebit();
             Optional<Account> accountCredit = txItem.getAccountCredit();

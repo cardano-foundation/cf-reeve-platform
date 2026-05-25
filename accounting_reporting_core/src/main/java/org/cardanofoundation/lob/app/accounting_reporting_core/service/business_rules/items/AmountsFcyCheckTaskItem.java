@@ -7,17 +7,26 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 
 import java.util.Map;
 
-import lombok.RequiredArgsConstructor;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-@RequiredArgsConstructor
 public class AmountsFcyCheckTaskItem implements PipelineTaskItem {
+
+    private final boolean enabled;
+
+    public AmountsFcyCheckTaskItem() {
+        this(true);
+    }
+
+    public AmountsFcyCheckTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         if (tx.getTransactionType() != FxRevaluation) {
         for (val txItem : tx.getItems()) {
             if (txItem.getAmountLcy().signum() != 0 && txItem.getAmountFcy().signum() == 0) {

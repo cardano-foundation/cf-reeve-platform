@@ -10,10 +10,10 @@ import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -37,10 +37,13 @@ class JournalAccountCreditEnrichmentTaskItemTest {
     @Mock
     private Organisation organisation;
 
-    @InjectMocks
     private JournalAccountCreditEnrichmentTaskItem taskItem;
-
     private TransactionEntity transaction;
+
+    @BeforeEach
+    void setUp() {
+        taskItem = new JournalAccountCreditEnrichmentTaskItem(organisationPublicApiIF);
+    }
 
     @Test
     void should_Not_Run_Because_It_Is_Not_A_Journal_Transaction() {

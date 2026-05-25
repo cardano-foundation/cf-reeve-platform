@@ -6,17 +6,26 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 
 import java.util.Map;
 
-import lombok.RequiredArgsConstructor;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-@RequiredArgsConstructor
 public class DocumentMustBePresentTaskItem implements PipelineTaskItem {
+
+    private final boolean enabled;
+
+    public DocumentMustBePresentTaskItem() {
+        this(true);
+    }
+
+    public DocumentMustBePresentTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         for (val txItem : tx.getItems()) {
             if (txItem.getDocument().isEmpty()) {
                 val v = TransactionViolation.builder()
