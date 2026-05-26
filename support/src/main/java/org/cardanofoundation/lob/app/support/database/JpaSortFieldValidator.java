@@ -118,6 +118,19 @@ public class JpaSortFieldValidator {
                 return new Sort.Order(order.getDirection(), property);
             }).toList());
 
+            // Append "id" as a deterministic tiebreaker when not already present.
+            // Without a unique final column, offset-based pagination is unstable:
+            // rows with equal sort-key values can shift between pages.
+            boolean hasIdSort = sort.stream()
+                    .anyMatch(order -> order.getProperty().equals("id"));
+            if (!hasIdSort) {
+                Sort.Direction tiebreakerDir = sort.stream()
+                        .findFirst()
+                        .map(Sort.Order::getDirection)
+                        .orElse(Sort.Direction.DESC);
+                sort = sort.and(Sort.by(tiebreakerDir, "id"));
+            }
+
             return Either.right(PageRequest.of(page.getPageNumber(), page.getPageSize(),
                     sort));
         }
