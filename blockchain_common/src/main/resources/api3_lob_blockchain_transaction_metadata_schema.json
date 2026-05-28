@@ -40,6 +40,33 @@
           "additionalProperties": false
         }
       ]
+    },
+    "flexibleFieldPattern": {
+      "oneOf": [
+        {
+          "description": "Old format: plain string decimal value",
+          "$ref": "#/definitions/bigDecimalPattern"
+        },
+        {
+          "description": "New format: object with value and field order",
+          "type": "object",
+          "properties": {
+            "v":  { "$ref": "#/definitions/bigDecimalPattern" },
+            "_o": { "$ref": "#/definitions/orderInteger" }
+          },
+          "required": ["v", "_o"],
+          "additionalProperties": false
+        },
+        {
+          "description": "Section format: object with order and child fields",
+          "type": "object",
+          "properties": {
+            "_o": { "$ref": "#/definitions/orderInteger" }
+          },
+          "required": ["_o"],
+          "additionalProperties": true
+        }
+      ]
     }
   },
   "properties": {
@@ -210,7 +237,7 @@
                   "income_tax_expense":   { "$ref": "#/definitions/leafFieldPattern" }
                 }
               },
-              "profit_for_the_year": { "$ref": "#/definitions/leafFieldPattern" }
+              "profit_for_the_year": { "$ref": "#/definitions/flexibleFieldPattern" }
             }
           }
         }
@@ -280,7 +307,7 @@
                 "properties": {
                   "_o":                        { "$ref": "#/definitions/orderInteger" },
                   "capital":                   { "$ref": "#/definitions/leafFieldPattern" },
-                  "profit_for_the_year":       { "$ref": "#/definitions/leafFieldPattern" },
+                  "profit_for_the_year":       { "$ref": "#/definitions/flexibleFieldPattern" },
                   "results_carried_forward":   { "$ref": "#/definitions/leafFieldPattern" }
                 }
               }
