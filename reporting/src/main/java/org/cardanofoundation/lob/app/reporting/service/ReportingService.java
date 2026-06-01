@@ -28,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
