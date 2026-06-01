@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
@@ -728,17 +729,15 @@ public class ReportingService {
             DateRange range = entry.getKey();
             List<String> accountCodes = new ArrayList<>(entry.getValue());
             if (!accountCodes.isEmpty()) {
-                List<Object[]> rows = preview
+                List<AccountCodeTotal> rows = preview
                         ? transactionItemRepository.aggregatePreviewTransactionItemsByAccountCodeAndDateRange(
                                 accountCodes, range.startDate(), range.endDate())
                         : transactionItemRepository.aggregateTransactionItemsByAccountCodeAndDateRange(
                                 accountCodes, range.startDate(), range.endDate());
 
                 Map<String, BigDecimal> totals = new HashMap<>();
-                for (Object[] row : rows) {
-                    String accountCode = (String) row[0];
-                    BigDecimal total = (BigDecimal) row[1];
-                    totals.put(accountCode, total);
+                for (AccountCodeTotal row : rows) {
+                    totals.put(row.accountCode(), row.totalAmount());
                 }
                 result.put(range, totals);
             }

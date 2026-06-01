@@ -24,10 +24,91 @@ import org.javers.core.metamodel.annotation.DiffIgnore;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.annotations.LOBVersionSourceRelevant;
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @Entity(name = "accounting_reporting_core.TransactionItemEntity")
 @Table(name = "accounting_core_transaction_item")
+@NamedNativeQueries({
+        @NamedNativeQuery(
+                name = "TransactionItemEntity.aggregateTransactionItemsByAccountCodeAndDateRange",
+                query = """
+                        SELECT sub.account_code AS account_code, SUM(sub.signed_amount) AS total_amount
+                        FROM (
+                          SELECT i.account_code_debit AS account_code,
+                                 CASE WHEN i.operation_type = 'DEBIT' THEN i.amount_lcy ELSE -i.amount_lcy END AS signed_amount
+                          FROM accounting_core_transaction_item i
+                          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+                          WHERE i.account_code_debit IN (:customerCodes)
+                            AND t.entry_date >= :startDate
+                            AND t.entry_date <= :endDate
+                            AND i.amount_lcy <> 0
+                            AND i.status = 'OK'
+                            AND t.ledger_dispatch_status = 'FINALIZED'
+
+                          UNION ALL
+
+                          SELECT i.account_code_credit AS account_code,
+                                 CASE WHEN i.operation_type = 'DEBIT' THEN -i.amount_lcy ELSE i.amount_lcy END AS signed_amount
+                          FROM accounting_core_transaction_item i
+                          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+                          WHERE i.account_code_credit IN (:customerCodes)
+                            AND t.entry_date >= :startDate
+                            AND t.entry_date <= :endDate
+                            AND i.amount_lcy <> 0
+                            AND i.status = 'OK'
+                            AND t.ledger_dispatch_status = 'FINALIZED'
+                        ) sub
+                        GROUP BY sub.account_code
+                        """,
+                resultSetMapping = "AccountCodeTotalMapping"
+        ),
+        @NamedNativeQuery(
+                name = "TransactionItemEntity.aggregatePreviewTransactionItemsByAccountCodeAndDateRange",
+                query = """
+                        SELECT sub.account_code AS account_code, SUM(sub.signed_amount) AS total_amount
+                        FROM (
+                          SELECT i.account_code_debit AS account_code,
+                                 CASE WHEN i.operation_type = 'DEBIT' THEN i.amount_lcy ELSE -i.amount_lcy END AS signed_amount
+                          FROM accounting_core_transaction_item i
+                          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+                          WHERE i.account_code_debit IN (:customerCodes)
+                            AND t.entry_date >= :startDate
+                            AND t.entry_date <= :endDate
+                            AND i.amount_lcy <> 0
+                            AND i.status = 'OK'
+                            AND t.automated_validation_status = 'VALIDATED'
+                            AND t.processing_status NOT IN ('PENDING','INVALID')
+
+                          UNION ALL
+
+                          SELECT i.account_code_credit AS account_code,
+                                 CASE WHEN i.operation_type = 'DEBIT' THEN -i.amount_lcy ELSE i.amount_lcy END AS signed_amount
+                          FROM accounting_core_transaction_item i
+                          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+                          WHERE i.account_code_credit IN (:customerCodes)
+                            AND t.entry_date >= :startDate
+                            AND t.entry_date <= :endDate
+                            AND i.amount_lcy <> 0
+                            AND i.status = 'OK'
+                            AND t.automated_validation_status = 'VALIDATED'
+                            AND t.processing_status NOT IN ('PENDING','INVALID')
+                        ) sub
+                        GROUP BY sub.account_code
+                        """,
+                resultSetMapping = "AccountCodeTotalMapping"
+        )
+})
+@SqlResultSetMapping(
+        name = "AccountCodeTotalMapping",
+        classes = @ConstructorResult(
+                targetClass = AccountCodeTotal.class,
+                columns = {
+                        @ColumnResult(name = "account_code", type = String.class),
+                        @ColumnResult(name = "total_amount", type = java.math.BigDecimal.class)
+                }
+        )
+)
 @NoArgsConstructor
 @ToString
 @AllArgsConstructor
