@@ -7,6 +7,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
@@ -269,6 +270,7 @@ public class ReportingService {
         return Either.right(null);
     }
 
+    @Transactional(readOnly = true)
     public Either<ProblemDetail, ReportResponseDto> generate(ReportGenerateRequest request) {
         log.info("Generating report preview for template: {}, org: {}, interval: {}, year: {}, period: {}",
                 request.getReportTemplateId(), request.getOrganisationId(),
@@ -300,7 +302,9 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, request.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, request.isPreview());
+        Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache =
+                fetchTransactionItemTotalsBatch(template.getFields(), startDate, endDate, request.isPreview());
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, request.isPreview(), transactionItemTotalsCache);
 
         // Generate report name
         String reportName = generateReportName(template.getName(), request.getIntervalType(), request.getYear(), request.getPeriod());
@@ -370,7 +374,9 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, dto.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, false);
+        Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache =
+                fetchTransactionItemTotalsBatch(template.getFields(), startDate, endDate, false);
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, false, transactionItemTotalsCache);
         return Either.right(fields);
     }
 
@@ -627,33 +633,35 @@ public class ReportingService {
         return Either.right(null);
     }
 
-    private List<ReportFieldDto> fillFieldsFromTemplate
-            (List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate, boolean preview) {
+    private List<ReportFieldDto> fillFieldsFromTemplate(
+            List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate, boolean preview,
+            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache) {
         if (templateFields == null) {
             return null;
         }
 
         return templateFields.stream()
                 .filter(field -> field.getParentField() == null) // Only top-level fields
-                .map(field -> fillTemplateFieldRecursively(field, startDate, endDate, preview))
+                .map(field -> fillTemplateFieldRecursively(field, startDate, endDate, preview, transactionItemTotalsCache))
                 .toList();
     }
 
     private ReportFieldDto fillTemplateFieldRecursively(ReportTemplateFieldEntity templateField, LocalDate
-            startDate, LocalDate endDate, boolean preview) {
+            startDate, LocalDate endDate, boolean preview,
+            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache) {
         List<ReportFieldDto> childColumns = null;
 
         if (templateField.getChildFields() != null && !templateField.getChildFields().isEmpty()) {
             // Has children - recursively fill child fields
             childColumns = templateField.getChildFields().stream()
-                    .map(child -> fillTemplateFieldRecursively(child, startDate, endDate, preview))
+                    .map(child -> fillTemplateFieldRecursively(child, startDate, endDate, preview, transactionItemTotalsCache))
                     .toList();
         }
 
         // Calculate value based on mapping types (if no children or if it's an accumulated field)
         BigDecimal value = null;
         if (templateField.getMappingAccounts() != null && !templateField.getMappingAccounts().isEmpty()) {
-            value = calculateFieldValue(templateField, startDate, endDate, preview);
+            value = calculateFieldValue(templateField, startDate, endDate, preview, transactionItemTotalsCache);
         }
 
         return ReportFieldDto.builder()
@@ -664,7 +672,8 @@ public class ReportingService {
                 .build();
     }
 
-    private BigDecimal calculateFieldValue(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview) {
+    private BigDecimal calculateFieldValue(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview,
+            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache) {
 
         LocalDate effectiveStartDate = getEffectiveStartDate(field, startDate);
         LocalDate effectiveEndDate = getEffectiveEndDate(field, startDate, endDate);
@@ -680,17 +689,16 @@ public class ReportingService {
                     .toList();
 
             if (!accountCodes.isEmpty()) {
-                // Query transaction items for these accounts in the date range
-                List<TransactionItemEntity> transactionItems = getTransactionItems(preview, accountCodes, effectiveStartDate, effectiveEndDate);
+                // Look up pre-aggregated transaction-item totals for the effective date range
+                DateRange range = new DateRange(effectiveStartDate, effectiveEndDate);
+                Map<String, BigDecimal> accountTotals = transactionItemTotalsCache.getOrDefault(range, Map.of());
 
-                // Map accounts for quick lookup
-                Map<String, ChartOfAccount> accountMap = chartOfAccounts.stream()
-                        .collect(Collectors.toMap(
-                                coa -> coa.getId().getCustomerCode(),
-                                coa -> coa
-                        ));
-
-                totalAmount = SumTransactionItems(transactionItems, accountMap, totalAmount);
+                for (String accountCode : accountCodes) {
+                    BigDecimal accountTotal = accountTotals.get(accountCode);
+                    if (accountTotal != null) {
+                        totalAmount = totalAmount.add(accountTotal);
+                    }
+                }
             }
         }
 
@@ -702,16 +710,62 @@ public class ReportingService {
         return totalAmount.stripTrailingZeros();
     }
 
-    private List<TransactionItemEntity> getTransactionItems(boolean preview, List<String> accountCodes, LocalDate effectiveStartDate, LocalDate effectiveEndDate) {
-        List<TransactionItemEntity> transactionItems;
-        if (preview) {
-            transactionItems = transactionItemRepository
-                    .findPreviewTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
-        } else {
-            transactionItems = transactionItemRepository
-                    .findTransactionItemsByAccountCodeAndDateRange(accountCodes, effectiveStartDate, effectiveEndDate);
+    private record DateRange(LocalDate startDate, LocalDate endDate) {}
+
+    private Map<DateRange, Map<String, BigDecimal>> fetchTransactionItemTotalsBatch(
+            List<ReportTemplateFieldEntity> templateFields,
+            LocalDate reportStartDate,
+            LocalDate reportEndDate,
+            boolean preview
+    ) {
+        Map<DateRange, Set<String>> dateRangeToAccountCodes = new HashMap<>();
+        for (ReportTemplateFieldEntity field : templateFields) {
+            collectAccountCodesByDateRange(field, reportStartDate, reportEndDate, dateRangeToAccountCodes);
         }
-        return transactionItems;
+
+        Map<DateRange, Map<String, BigDecimal>> result = new HashMap<>();
+        for (Map.Entry<DateRange, Set<String>> entry : dateRangeToAccountCodes.entrySet()) {
+            DateRange range = entry.getKey();
+            List<String> accountCodes = new ArrayList<>(entry.getValue());
+            if (!accountCodes.isEmpty()) {
+                List<Object[]> rows = preview
+                        ? transactionItemRepository.aggregatePreviewTransactionItemsByAccountCodeAndDateRange(
+                                accountCodes, range.startDate(), range.endDate())
+                        : transactionItemRepository.aggregateTransactionItemsByAccountCodeAndDateRange(
+                                accountCodes, range.startDate(), range.endDate());
+
+                Map<String, BigDecimal> totals = new HashMap<>();
+                for (Object[] row : rows) {
+                    String accountCode = (String) row[0];
+                    BigDecimal total = (BigDecimal) row[1];
+                    totals.put(accountCode, total);
+                }
+                result.put(range, totals);
+            }
+        }
+        return result;
+    }
+
+    private void collectAccountCodesByDateRange(
+            ReportTemplateFieldEntity field,
+            LocalDate reportStartDate,
+            LocalDate reportEndDate,
+            Map<DateRange, Set<String>> accumulator
+    ) {
+        if (field.getChildFields() != null && !field.getChildFields().isEmpty()) {
+            for (ReportTemplateFieldEntity child : field.getChildFields()) {
+                collectAccountCodesByDateRange(child, reportStartDate, reportEndDate, accumulator);
+            }
+        } else if (field.getMappingAccounts() != null && !field.getMappingAccounts().isEmpty()) {
+            LocalDate effectiveStart = getEffectiveStartDate(field, reportStartDate);
+            LocalDate effectiveEnd = getEffectiveEndDate(field, reportStartDate, reportEndDate);
+            DateRange range = new DateRange(effectiveStart, effectiveEnd);
+
+            Set<String> codes = accumulator.computeIfAbsent(range, k -> new HashSet<>());
+            for (ChartOfAccount coa : field.getMappingAccounts()) {
+                codes.add(coa.getId().getCustomerCode());
+            }
+        }
     }
 
     private static LocalDate getEffectiveEndDate(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate) {
@@ -759,44 +813,6 @@ public class ReportingService {
             }
         }
         return totalAmount;
-    }
-
-    private BigDecimal SumTransactionItems(List<TransactionItemEntity> transactionItems, Map<String, ChartOfAccount> accountMap, BigDecimal totalAmount) {
-        // Sum transaction amounts
-        for (TransactionItemEntity txItem : transactionItems) {
-            // Skip invalid items
-            if (txItem.getStatus() != org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus.OK) {
-                continue;
-            }
-
-            BigDecimal itemAmount = getItemAmountFromItem(txItem, accountMap);
-
-            totalAmount = totalAmount.add(itemAmount);
-        }
-        return totalAmount;
-    }
-
-    private BigDecimal getItemAmountFromItem(TransactionItemEntity txItem, Map<String, ChartOfAccount> accountMap) {
-        BigDecimal itemAmount = BigDecimal.ZERO;
-
-        // Check if account is on debit side
-        if (accountMap.containsKey(txItem.getAccountDebit().orElse(Account.builder().code("").build()).getCode())) {
-            if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
-                itemAmount = itemAmount.add(txItem.getAmountLcy());
-            } else {
-                itemAmount = itemAmount.add(txItem.getAmountLcy().negate());
-            }
-        }
-
-        // Check if account is on credit side
-        if (accountMap.containsKey(txItem.getAccountCredit().orElse(Account.builder().code("").build()).getCode())) {
-            if (txItem.getOperationType() == org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType.DEBIT) {
-                itemAmount = itemAmount.subtract(txItem.getAmountLcy());
-            } else {
-                itemAmount = itemAmount.subtract(txItem.getAmountLcy().negate());
-            }
-        }
-        return itemAmount;
     }
 
     private LocalDate getReportStartDate(IntervalType intervalType, short period, short year) {
@@ -897,11 +913,14 @@ public class ReportingService {
             LocalDate endDate = getReportEndDate(report.getIntervalType(), startDate);
 
             // Regenerate fields from template
+            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache =
+                    fetchTransactionItemTotalsBatch(report.getReportTemplate().getFields(), startDate, endDate, false);
             List<ReportFieldDto> regeneratedFields = fillFieldsFromTemplate(
                     report.getReportTemplate().getFields(),
                     startDate,
                     endDate,
-                    false
+                    false,
+                    transactionItemTotalsCache
             );
 
             // Convert DTOs to entities and update the report

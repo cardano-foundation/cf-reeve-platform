@@ -35,6 +35,45 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         """)
     List<TransactionItemEntity> findTransactionItemsByAccountCodeAndDateRange(@Param("customerCodes") List<String> customerCodes, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
+    /**
+     * Aggregates signed transaction-item amounts per account code in a single native query.
+     * Returns one row per account code: [0] = account_code (String), [1] = total_amount (BigDecimal).
+     * This replaces the per-item fetching + Java-side looping used by report generation.
+     */
+    @Query(value = """
+        SELECT sub.account_code, SUM(sub.signed_amount)
+        FROM (
+          SELECT i.account_code_debit AS account_code,
+                 CASE WHEN i.operation_type = 'DEBIT' THEN i.amount_lcy ELSE -i.amount_lcy END AS signed_amount
+          FROM accounting_core_transaction_item i
+          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+          WHERE i.account_code_debit IN (:customerCodes)
+            AND t.entry_date >= :startDate
+            AND t.entry_date <= :endDate
+            AND i.amount_lcy <> 0
+            AND i.status = 'OK'
+            AND t.ledger_dispatch_status = 'FINALIZED'
+
+          UNION ALL
+
+          SELECT i.account_code_credit AS account_code,
+                 CASE WHEN i.operation_type = 'DEBIT' THEN -i.amount_lcy ELSE i.amount_lcy END AS signed_amount
+          FROM accounting_core_transaction_item i
+          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+          WHERE i.account_code_credit IN (:customerCodes)
+            AND t.entry_date >= :startDate
+            AND t.entry_date <= :endDate
+            AND i.amount_lcy <> 0
+            AND i.status = 'OK'
+            AND t.ledger_dispatch_status = 'FINALIZED'
+        ) sub
+        GROUP BY sub.account_code
+        """, nativeQuery = true)
+    List<Object[]> aggregateTransactionItemsByAccountCodeAndDateRange(
+            @Param("customerCodes") List<String> customerCodes,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
     @Query("""
         SELECT DISTINCT t.document.num FROM accounting_reporting_core.TransactionItemEntity t
         """)
@@ -58,6 +97,46 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
     List<TransactionItemEntity> findPreviewTransactionItemsByAccountCodeAndDateRange(
             @Param("customerCodes") List<String> customerCodes,
             @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    /**
+     * Preview variant of {@link #aggregateTransactionItemsByAccountCodeAndDateRange}.
+     * Uses the preview validation filter (VALIDATED + not PENDING/INVALID).
+     */
+    @Query(value = """
+        SELECT sub.account_code, SUM(sub.signed_amount)
+        FROM (
+          SELECT i.account_code_debit AS account_code,
+                 CASE WHEN i.operation_type = 'DEBIT' THEN i.amount_lcy ELSE -i.amount_lcy END AS signed_amount
+          FROM accounting_core_transaction_item i
+          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+          WHERE i.account_code_debit IN (:customerCodes)
+            AND t.entry_date >= :startDate
+            AND t.entry_date <= :endDate
+            AND i.amount_lcy <> 0
+            AND i.status = 'OK'
+            AND t.automated_validation_status = 'VALIDATED'
+            AND t.processing_status NOT IN ('PENDING','INVALID')
+
+          UNION ALL
+
+          SELECT i.account_code_credit AS account_code,
+                 CASE WHEN i.operation_type = 'DEBIT' THEN -i.amount_lcy ELSE i.amount_lcy END AS signed_amount
+          FROM accounting_core_transaction_item i
+          JOIN accounting_core_transaction t ON i.transaction_id = t.transaction_id
+          WHERE i.account_code_credit IN (:customerCodes)
+            AND t.entry_date >= :startDate
+            AND t.entry_date <= :endDate
+            AND i.amount_lcy <> 0
+            AND i.status = 'OK'
+            AND t.automated_validation_status = 'VALIDATED'
+            AND t.processing_status NOT IN ('PENDING','INVALID')
+        ) sub
+        GROUP BY sub.account_code
+        """, nativeQuery = true)
+    List<Object[]> aggregatePreviewTransactionItemsByAccountCodeAndDateRange(
+            @Param("customerCodes") List<String> customerCodes,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 
     @Query("""
         SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
