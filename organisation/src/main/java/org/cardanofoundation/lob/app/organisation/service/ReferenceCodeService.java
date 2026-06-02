@@ -85,7 +85,7 @@ public class ReferenceCodeService {
             if(isUpsert) {
                 referenceCode = referenceCodeOpt.get();
             } else {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The reference code with code :%s already exists".formatted(referenceCodeUpdate.getReferenceCode()));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Code %s already exists.".formatted(referenceCodeUpdate.getReferenceCode()));
                 problem.setTitle(ErrorTitleConstants.REFERENCE_CODE_ALREADY_EXIST);
                 return ReferenceCodeView.createFail(problem, referenceCodeUpdate);
             }

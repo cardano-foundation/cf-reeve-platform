@@ -11,7 +11,6 @@ import java.util.Optional;
 
 import javax.annotation.Nullable;
 
-import lombok.RequiredArgsConstructor;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CoreCurrency;
@@ -24,14 +23,25 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.CoreCu
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Vat;
 
-@RequiredArgsConstructor
 public class DocumentConversionTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
     private final OrganisationPublicApiIF organisationPublicApi;
     private final CoreCurrencyRepository coreCurrencyRepository;
 
+    public DocumentConversionTaskItem(OrganisationPublicApiIF organisationPublicApi, CoreCurrencyRepository coreCurrencyRepository) {
+        this(true, organisationPublicApi, coreCurrencyRepository);
+    }
+
+    public DocumentConversionTaskItem(boolean enabled, OrganisationPublicApiIF organisationPublicApi, CoreCurrencyRepository coreCurrencyRepository) {
+        this.enabled = enabled;
+        this.organisationPublicApi = organisationPublicApi;
+        this.coreCurrencyRepository = coreCurrencyRepository;
+    }
+
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         val organisationId = tx.getOrganisation().getId();
 
         for (val txItem : tx.getItems()) {

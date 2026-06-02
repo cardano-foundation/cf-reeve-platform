@@ -7,7 +7,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import java.util.Map;
 import java.util.Optional;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
@@ -15,14 +14,24 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 
-@RequiredArgsConstructor
 @Slf4j
 public class ProjectConversionTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
     private final OrganisationPublicApiIF organisationPublicApi;
+
+    public ProjectConversionTaskItem(OrganisationPublicApiIF organisationPublicApi) {
+        this(true, organisationPublicApi);
+    }
+
+    public ProjectConversionTaskItem(boolean enabled, OrganisationPublicApiIF organisationPublicApi) {
+        this.enabled = enabled;
+        this.organisationPublicApi = organisationPublicApi;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         for (val txItem : tx.getItems()) {
             val projectM = txItem.getProject();
 

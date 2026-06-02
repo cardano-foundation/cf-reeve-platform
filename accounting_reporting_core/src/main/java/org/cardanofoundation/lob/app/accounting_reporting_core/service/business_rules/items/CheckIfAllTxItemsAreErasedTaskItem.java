@@ -7,20 +7,26 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 
 import java.util.Map;
 
-import lombok.RequiredArgsConstructor;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-/**
- * Task item that checks if all transaction items are erased, if yes then it fails the transaction.
- */
-@RequiredArgsConstructor
 public class CheckIfAllTxItemsAreErasedTaskItem implements PipelineTaskItem {
+
+    private final boolean enabled;
+
+    public CheckIfAllTxItemsAreErasedTaskItem() {
+        this(true);
+    }
+
+    public CheckIfAllTxItemsAreErasedTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         if (tx.hasAllItemsErased()) {
             tx.setAutomatedValidationStatus(FAILED);
             handleViolationForEmptyItems(tx);

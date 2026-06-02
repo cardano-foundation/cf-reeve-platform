@@ -27,6 +27,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFilter;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
@@ -258,7 +259,7 @@ public class ReportTemplateService {
                 reportingRepository.findByReportTemplateId(existing.getId());
         // Prevent a version update if the update only is about mappings
         boolean isOnlyChangingMappings = isChangingOnlyMappings(existing.getFields(), dto.getFields());
-        boolean isOnlyNameChangeForValidationRules = isChangingOnlyName(existing.getValidationRules(), dto.getValidationRules());
+        boolean isOnlyNameChangeForValidationRules = isChangingOnlyName(existing.getValidationRules(), Optional.ofNullable(dto.getValidationRules()).orElse(List.of()));
         if (!existingReports.isEmpty() && (!isOnlyChangingMappings || !isOnlyNameChangeForValidationRules)) {
             // Reports exist - create a new version
             log.info("Template '{}' has {} existing reports & more changes than just mappings, creating new version {} -> {}",
@@ -350,17 +351,21 @@ public class ReportTemplateService {
     }
 
     @Transactional(readOnly = true)
-    public ReportTemplateListResponseDto findAll(String organisationId, String name, String description, List<ReportTemplateType> reportTemplateTypes, Boolean active, List<DataMode> dataMode, Pageable pageable) {
-        Page<ReportTemplateEntity> findAllFiltered = reportTemplateRepository.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageable);
-        List<ReportTemplateResponseDto> dtos = findAllFiltered.stream()
+    public ReportTemplateListResponseDto findAll(String organisationId, ReportTemplateFilter filter, Pageable pageable) {
+        Page<ReportTemplateEntity> page = reportTemplateRepository.findAllFiltered(
+                organisationId, filter.name(),
+                filter.reportTemplateTypes(), filter.active(), filter.dataMode(),
+                filter.dateFrom(), filter.dateTo(),
+                pageable);
+        List<ReportTemplateResponseDto> dtos = page.stream()
                 .map(reportTemplateMapper::toResponseDto)
                 .toList();
         return ReportTemplateListResponseDto.builder()
                 .templates(dtos)
                 .page(pageable.getPageNumber())
                 .size(pageable.getPageSize())
-                .total(findAllFiltered.getTotalElements())
-                .totalPages(findAllFiltered.getTotalPages())
+                .total(page.getTotalElements())
+                .totalPages(page.getTotalPages())
                 .build();
     }
 

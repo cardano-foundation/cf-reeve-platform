@@ -210,6 +210,20 @@ class CostCenterServiceTest {
     }
 
     @Test
+    void insertCostCenter_costCenterAlreadyExistsDetail() {
+        CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
+
+        when(costCenterUpdate.getCustomerCode()).thenReturn(customerCode);
+        when(costCenterRepository.findById(new CostCenter.Id(organisationId, customerCode))).thenReturn(Optional.of(costCenter));
+
+        CostCenterView costCenterView = costCenterService.insertCostCenter(organisationId, costCenterUpdate, false);
+
+        assertNotNull(costCenterView);
+        assertEquals(customerCode, costCenterView.getCustomerCode());
+        assertEquals("Code " + customerCode + " already exists.", costCenterView.getError().get().getDetail());
+    }
+
+    @Test
     void insertCostCenter_parentNotFound() {
         CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
 

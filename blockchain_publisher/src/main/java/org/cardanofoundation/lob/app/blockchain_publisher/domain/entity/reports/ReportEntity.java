@@ -59,7 +59,7 @@ public class ReportEntity extends CommonDateOnlyEntity implements Persistable<St
     private DataMode dataMode;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "report_data", columnDefinition = "jsonb")
+    @Column(name = "report_data", columnDefinition = "json")
     private Map<String, Object> reportData;
 
     @Nullable

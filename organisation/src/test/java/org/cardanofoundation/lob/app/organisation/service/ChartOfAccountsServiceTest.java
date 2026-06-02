@@ -499,6 +499,23 @@ class ChartOfAccountsServiceTest {
     }
 
     @Test
+    void testInsertChartOfAccount_ExistDetail() {
+        when(organisationService.findById(orgId)).thenReturn(Optional.of(new Organisation()));
+        when(referenceCodeRepository.findByOrgIdAndReferenceCode(orgId, chartOfAccountUpdate.getEventRefCode()))
+                .thenReturn(Optional.of(referenceCode));
+        when(chartOfAccountSubTypeRepository.findAllByOrganisationIdAndSubTypeId(orgId, chartOfAccountUpdate.getSubType()))
+                .thenReturn(Optional.of(subType));
+        when(chartOfAccountRepository.findAllByOrganisationIdAndReferenceCode(orgId, chartOfAccountUpdate.getCustomerCode()))
+                .thenReturn(Optional.of(chartOfAccount));
+
+        ChartOfAccountView response = chartOfAccountsService.insertChartOfAccount(orgId, chartOfAccountUpdate, false);
+
+        assertNotNull(response);
+        assertFalse(response.getError().isEmpty());
+        assertEquals("Code " + customerCode + " already exists.", response.getError().get().getDetail());
+    }
+
+    @Test
     void testInsertChartOfAccount_Success() {
         Organisation mockOrg = mock(Organisation.class);
         when(organisationService.findById(orgId)).thenReturn(Optional.of(mockOrg));

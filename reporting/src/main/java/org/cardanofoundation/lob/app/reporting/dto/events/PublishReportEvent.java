@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.reporting.dto.events;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -8,12 +9,20 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
+
+record ReportFieldValue(
+    @JsonProperty("v") Object value,
+    @JsonProperty("_o") Integer fieldOrder
+) {
+}
 
 @RequiredArgsConstructor
 @Getter
@@ -43,7 +52,7 @@ public class PublishReportEvent {
         event.setPeriod(reportEntity.getPeriod());
         event.setYear(reportEntity.getYear());
         event.setDataMode(reportEntity.getDataMode());
-        event.setReportData(extractReportData(reportEntity.getFields(), new HashMap<>()));
+        event.setReportData(extractReportData(reportEntity.getFields(), new LinkedHashMap<>()));
         event.setDispatchStatus(reportEntity.getLedgerDispatchStatus());
 
         return event;
@@ -51,10 +60,12 @@ public class PublishReportEvent {
 
     private static Map<String, Object> extractReportData(List<ReportFieldEntity> fields, Map<String, Object> reportData) {
         for (ReportFieldEntity field : fields) {
-            if(field.getChildFields().isEmpty()) {
-                reportData.put(field.getFieldTemplate().getName(), field.getValue());
+            if (field.getChildFields().isEmpty()) {
+                reportData.put(field.getFieldTemplate().getName(),
+                    new ReportFieldValue(field.getValue(), field.getFieldTemplate().getFieldOrder()));
             } else {
                 Map<String, Object> childData = new HashMap<>();
+                childData.put("_o", field.getFieldTemplate().getFieldOrder());
                 extractReportData(field.getChildFields(), childData);
                 reportData.put(field.getFieldTemplate().getName(), childData);
             }

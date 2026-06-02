@@ -41,11 +41,16 @@ public class TransactionBatchRepositoryGateway {
     }
 
     public Page<TransactionBatchEntity> findByFilter(BatchSearchRequest body, Pageable pageable) {
-        // Apply default sort if no sort is provided
-        Pageable pageableWithSort = pageable.getSort().isSorted() ? pageable // Use the provided
-                                                                             // sort
-                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                        Sort.by(Sort.Direction.DESC, "createdAt")); // Use default sort
+        // Provide a default sort when none is given. The "id" tiebreaker is
+        // already appended by convertPageable for client-provided sorts.
+        Pageable pageableWithSort;
+        if (pageable.getSort().isSorted()) {
+            pageableWithSort = pageable;
+        } else {
+            pageableWithSort = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "createdAt")
+                            .and(Sort.by(Sort.Direction.DESC, "id")));
+        }
         return transactionBatchRepository.findByFilter(body.getOrganisationId(),
                 Optional.ofNullable(body.getBatchStatistics().isEmpty() ? null : body.getBatchStatistics()).map(bs -> bs.stream().map(Enum::name).collect(java.util.stream.Collectors.toSet())).orElse(null),
                 Optional.ofNullable(body.getTxStatus().isEmpty() ? null

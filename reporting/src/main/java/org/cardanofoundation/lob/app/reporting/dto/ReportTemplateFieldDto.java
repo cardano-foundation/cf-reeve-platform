@@ -41,6 +41,10 @@ public class ReportTemplateFieldDto {
     @Schema(description = "Whether the value should be negated (for expenses)", example = "false", defaultValue = "false")
     private boolean negated;
 
+    @Schema(description = "Order of the field within its parent", example = "1", defaultValue = "0")
+    @Builder.Default
+    private int order = 0;
+
     @Schema(description = "List of chart of account customer codes to map to this field. Only applicable if the template type is SYSTEM.", example = "[1101100100, 1101100101]", nullable = true)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private Set<String> accounts = new HashSet<>();
@@ -50,15 +54,16 @@ public class ReportTemplateFieldDto {
     private List<ReportTemplateFieldDto> childFields = new ArrayList<>();
 
     /**
-     * Computes a hash based on: childFields, fieldName, dateRange, and negated.
+     * Computes a hash based on: childFields, fieldName, dateRange, negated, and order.
      * Used for quick comparison with entities to detect changes.
      */
     public int computeContentHash() {
         return Objects.hash(
                 hashChildFields(),
                 fieldName,
-                Optional.ofNullable(dateRange).orElse(ReportFieldDateRange.PERIOD),
-                negated
+                childFields.isEmpty() ? Optional.ofNullable(dateRange).orElse(ReportFieldDateRange.PERIOD) : null,
+                negated,
+                order
         );
     }
 

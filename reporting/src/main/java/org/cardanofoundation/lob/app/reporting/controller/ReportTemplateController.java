@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.reporting.controller;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,7 @@ import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFilter;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateListResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
@@ -185,11 +187,12 @@ public class ReportTemplateController {
             @RequestParam(value = "organisationId", required = true) @Parameter(
                     description = "Filter by organisation ID",
                     example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
-            @RequestParam(value = "name", required = false) String name,
-            @RequestParam(value = "description", required = false) String description,
+            @RequestParam(value = "name", required = false) @Parameter(description = "Contains search across template name and description") String name,
             @RequestParam(value = "reportTemplateType", required = false) List<ReportTemplateType> reportTemplateTypes,
             @RequestParam(value = "active", required = false) Boolean active,
             @RequestParam(value = "dataMode", required = false) List<DataMode> dataMode,
+            @RequestParam(value = "dateFrom", required = false) @Parameter(description = "Filter by created or last-modified date (inclusive, format: yyyy-MM-dd)", example = "2024-01-01") LocalDate dateFrom,
+            @RequestParam(value = "dateTo", required = false) @Parameter(description = "Filter by created or last-modified date (inclusive, format: yyyy-MM-dd)", example = "2026-12-31") LocalDate dateTo,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         log.debug("GET /api/report-templates - organisationId: {}", organisationId);
 
@@ -203,7 +206,8 @@ public class ReportTemplateController {
             ProblemDetail problem = pageableE.getLeft();
             return ResponseEntity.status(problem.getStatus()).body(problem);
         }
-        ReportTemplateListResponseDto reportListDto = reportTemplateService.findAll(organisationId, name, description, reportTemplateTypes, active, dataMode, pageableE.get());
+        ReportTemplateFilter filter = new ReportTemplateFilter(name, reportTemplateTypes, active, dataMode, dateFrom, dateTo);
+        ReportTemplateListResponseDto reportListDto = reportTemplateService.findAll(organisationId, filter, pageableE.get());
         return ResponseEntity.ok(reportListDto);
     }
 

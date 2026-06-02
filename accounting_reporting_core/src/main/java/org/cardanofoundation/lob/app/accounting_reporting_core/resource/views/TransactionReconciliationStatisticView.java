@@ -21,6 +21,8 @@ public class TransactionReconciliationStatisticView {
 
     private Integer newVersion = 0;
 
+    private Integer newVersionPublished = 0;
+
     private Long OK = 0L;
 
     private Integer NOK = 0;

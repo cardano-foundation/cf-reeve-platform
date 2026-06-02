@@ -23,10 +23,10 @@ jobs:
           distribution: 'temurin'
       - name: Spotless
         run: |
-          ./gradlew spotlessCheck
+          ./gradlew --console=plain --no-daemon --parallel --build-cache spotlessCheck
       - name: Test
         run: |
-          ./gradlew clean test jacocoTestReport
+          ./gradlew clean test jacocoTestReport --console=plain --no-daemon --parallel --build-cache
       - name: SonarCloud Scan
         if: github.event_name == 'pull_request'
         env:
@@ -36,12 +36,13 @@ jobs:
           SONAR_PR_BASE: ${{ github.base_ref }}
         run: |
           ./gradlew sonar \
-          -Dsonar.host.url=https://sonarcloud.io \
-          -Dsonar.organization=cardano-foundation \
-          -Dsonar.projectKey=cardano-foundation_cf-lob-platform \
-          -Dsonar.pullrequest.key=$SONAR_PR_KEY \
-          -Dsonar.pullrequest.branch=$SONAR_PR_BRANCH \
-          -Dsonar.pullrequest.base=$SONAR_PR_BASE
+            --console=plain --no-daemon --parallel --build-cache \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.organization=cardano-foundation \
+            -Dsonar.projectKey=cardano-foundation_cf-lob-platform \
+            -Dsonar.pullrequest.key=$SONAR_PR_KEY \
+            -Dsonar.pullrequest.branch=$SONAR_PR_BRANCH \
+            -Dsonar.pullrequest.base=$SONAR_PR_BASE
       - name: Upload test html report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -72,7 +73,7 @@ jobs:
  
       - name: PiTest
         run: |
-          ./gradlew clean :organisation:pitest
+          ./gradlew clean :organisation:pitest --console=plain --no-daemon --parallel --build-cache
       - name: Publish mutation test report to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         if: github.ref == 'refs/heads/main'
@@ -104,7 +105,7 @@ jobs:
  
       - name: PiTest
         run: |
-          ./gradlew clean :blockchain_publisher:pitest
+          ./gradlew clean :blockchain_publisher:pitest --console=plain --no-daemon --parallel --build-cache
       - name: Publish mutation test report to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         if: github.ref == 'refs/heads/main'
@@ -136,7 +137,7 @@ jobs:
  
       - name: PiTest
         run: |
-          ./gradlew clean :blockchain_common:pitest
+          ./gradlew clean :blockchain_common:pitest --console=plain --no-daemon --parallel --build-cache 
       - name: Publish mutation test report to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         if: github.ref == 'refs/heads/main'
@@ -168,7 +169,7 @@ jobs:
  
       - name: PiTest
         run: |
-          ./gradlew clean :accounting_reporting_core:pitest
+          ./gradlew clean :accounting_reporting_core:pitest --console=plain --no-daemon --parallel --build-cache 
       - name: Publish mutation test report to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         if: github.ref == 'refs/heads/main'
@@ -200,7 +201,7 @@ jobs:
  
       - name: PiTest
         run: |
-          ./gradlew clean :blockchain_reader:pitest
+          ./gradlew clean :blockchain_reader:pitest --console=plain --no-daemon --parallel --build-cache 
       - name: Publish mutation test report to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         if: github.ref == 'refs/heads/main'
@@ -232,7 +233,7 @@ jobs:
  
       - name: PiTest
         run: |
-          ./gradlew clean :netsuite_altavia_erp_adapter:pitest
+          ./gradlew clean :netsuite_altavia_erp_adapter:pitest --console=plain --no-daemon --parallel --build-cache 
       - name: Publish mutation test report to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         if: github.ref == 'refs/heads/main'

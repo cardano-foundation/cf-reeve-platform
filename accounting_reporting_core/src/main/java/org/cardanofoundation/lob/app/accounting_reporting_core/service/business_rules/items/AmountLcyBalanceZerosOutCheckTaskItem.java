@@ -10,18 +10,26 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Set;
 
-import lombok.RequiredArgsConstructor;
-
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-@RequiredArgsConstructor
 public class AmountLcyBalanceZerosOutCheckTaskItem implements PipelineTaskItem {
+
+    private final boolean enabled;
+
+    public AmountLcyBalanceZerosOutCheckTaskItem() {
+        this(true);
+    }
+
+    public AmountLcyBalanceZerosOutCheckTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         Set<TransactionItemEntity> txItems = tx.getItems();
 
         BigDecimal lcySumDebit = getSumOfOperationType(txItems, OperationType.DEBIT);

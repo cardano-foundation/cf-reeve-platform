@@ -11,11 +11,13 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkCommittedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
@@ -116,6 +118,19 @@ public class AccountingCoreEventHandler {
         );
 
         log.info("Finished processing handleTransactionBatchChunkEvent event...., event, batch_id: {}", batchId);
+    }
+
+    @TransactionalEventListener
+    public void handleTransactionBatchChunkCommittedEvent(TransactionBatchChunkCommittedEvent event) {
+        log.info("Chunk committed for batchId: {}, scheduling status update with Debouncer", event.getBatchId());
+
+        transactionBatchService.updateTransactionBatchStatusAndStats(
+                event.getBatchId(), event.getProcessedTransactionCount(), Optional.empty());
+        event.getBatchesToBeUpdated().forEach(bId
+                -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
+
+        log.info("Finished processing handleTransactionBatchChunkCommittedEvent, event: {}", event);
+
     }
 
     @EventListener

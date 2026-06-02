@@ -42,6 +42,7 @@ public class ValidationRuleDto {
     public int computeContentHash() {
         return Objects.hash(
                 operator,
+                active,
                 leftSideTerms.stream().map(ValidationRuleTermDto::computeContentHash).toList(),
                 rightSideTerms.stream().map(ValidationRuleTermDto::computeContentHash).toList()
         );

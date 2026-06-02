@@ -71,6 +71,8 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 // presentation layer service
 public class AccountingCorePresentationViewService {
 
+    private static final String INVALID_EXTRACTOR_TYPE_MSG = "Invalid extractorType '{}' for transaction {}";
+
     private final ValidateIngestionResponseWaiter validateIngestionResponseWaiter;
 
     private final TransactionRepositoryGateway transactionRepositoryGateway;
@@ -141,7 +143,7 @@ public class AccountingCorePresentationViewService {
                 .findCalcReconciliationStatistic();
         Optional<ReconcilationEntity> latestReconcilation =
                 transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
-        Set<TransactionReconciliationTransactionsView> transactions;
+        List<TransactionReconciliationTransactionsView> transactions;
         long count;
         Set<ReconcilationRejectionCode> rejectionCodes = body
                 .getReconciliationRejectionCode().stream()
@@ -163,7 +165,7 @@ public class AccountingCorePresentationViewService {
             count = allReconciliationSpecial.getTotalElements();
             transactions = allReconciliationSpecial.stream()
                     .map(this::getReconciliationTransactionsSelector)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
+                    .toList();
         } else {
             pageable = expandSorts(pageable, false);
             Page<TransactionEntity> pagedTransactions = reconcilationRepository
@@ -177,7 +179,7 @@ public class AccountingCorePresentationViewService {
             count = pagedTransactions.getTotalElements();
             transactions = pagedTransactions.stream()
                     .map(this::getTransactionReconciliationView)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
+                    .toList();
         }
         return new ReconciliationResponseView(count,
                 latestReconcilation.flatMap(ReconcilationEntity::getFrom),
@@ -449,7 +451,7 @@ public class AccountingCorePresentationViewService {
             dataSourceView = DataSourceView
                     .valueOf(transactionEntity.getExtractorType());
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid extractorType '{}' for transaction {}",
+            log.warn(INVALID_EXTRACTOR_TYPE_MSG,
                     transactionEntity.getExtractorType(),
                     transactionEntity.getId(), e);
         }
@@ -513,6 +515,56 @@ public class AccountingCorePresentationViewService {
         );
     }
 
+    private TransactionReconciliationTransactionsView getTransactionReconciliationView(
+            TransactionEntity transactionEntity, ReconcilationViolation specificViolation) {
+        DataSourceView dataSourceView = DataSourceView.UNKNOWN;
+        try {
+            dataSourceView = DataSourceView
+                    .valueOf(transactionEntity.getExtractorType());
+        } catch (IllegalArgumentException e) {
+            log.warn(INVALID_EXTRACTOR_TYPE_MSG,
+                    transactionEntity.getExtractorType(),
+                    transactionEntity.getId(), e);
+        }
+        return new TransactionReconciliationTransactionsView(transactionEntity.getId(),
+                transactionEntity.getInternalTransactionNumber(),
+                transactionEntity.getBatchId(),
+                transactionEntity.getEntryDate(),
+                transactionEntity.getTransactionType(), dataSourceView,
+                Optional.of(transactionEntity.getOverallStatus()),
+                transactionEntity.getProcessingStatus(),
+                Optional.of(transactionEntity.getAutomatedValidationStatus()),
+                transactionEntity.getTransactionApproved(),
+                transactionEntity.getLedgerDispatchApproved(),
+                transactionEntity.getTotalAmountLcy(), false,
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getSource().map(
+                                        TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
+                        .orElse(TransactionReconciliationTransactionsView.ReconciliationCodeView.NEVER),
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getSink().map(
+                                        TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
+                        .orElse(TransactionReconciliationTransactionsView.ReconciliationCodeView.NEVER),
+                transactionEntity.getReconcilation().flatMap(
+                                reconcilation -> reconcilation.getFinalStatus().map(
+                                        TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
+                        .orElse(TransactionReconciliationTransactionsView.ReconciliationCodeView.NEVER),
+                Optional.ofNullable(specificViolation)
+                        .map(v -> (Set<ReconciliationRejectionCodeRequest>) new LinkedHashSet<>(Set.of(
+                                ReconciliationRejectionCodeRequest.of(v.getRejectionCode(),
+                                        transactionEntity.getLedgerDispatchApproved()))))
+                        .orElse(new LinkedHashSet<>()),
+                transactionEntity.getLastReconcilation()
+                        .map(CommonEntity::getCreatedAt).orElse(null),
+                getTransactionItemView(transactionEntity),
+                getViolations(transactionEntity),
+                Optional.ofNullable(specificViolation)
+                        .flatMap(ReconcilationViolation::getSourceDiff)
+                        .map(diff -> (Set<String>) new LinkedHashSet<>(Set.of(diff)))
+                        .orElse(new LinkedHashSet<>())
+        );
+    }
+
     private TransactionReconciliationTransactionsView getTransactionReconciliationViolationView(
             ReconcilationViolation reconcilationViolation, LocalDateTime lastReconciledDate) {
         return new TransactionReconciliationTransactionsView(
@@ -553,7 +605,7 @@ public class AccountingCorePresentationViewService {
             dataSourceView = DataSourceView
                     .valueOf(transactionEntity.getExtractorType());
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid extractorType '{}' for transaction {}",
+            log.warn(INVALID_EXTRACTOR_TYPE_MSG,
                     transactionEntity.getExtractorType(),
                     transactionEntity.getId(), e);
         }
@@ -617,12 +669,13 @@ public class AccountingCorePresentationViewService {
                 (Integer) ((Long) result[2]).intValue(),
                 (Integer) ((Long) result[3]).intValue(),
                 (Integer) ((Long) result[4]).intValue(),
-                (Long) result[5],
-                (Integer) ((Long) result[6]).intValue(),
-                (Long) result[7],
-                (Integer) (((Long) result[5]).intValue()
-                        + ((Long) result[6]).intValue())
-                        + ((Integer) ((Long) result[7]).intValue()));
+                (Integer) ((Long) result[5]).intValue(),
+                (Long) result[6],
+                (Integer) ((Long) result[7]).intValue(),
+                (Long) result[8],
+                ((Long) result[6]).intValue()
+                        + ((Long) result[7]).intValue()
+                        + ((Long) result[8]).intValue());
     }
 
     private Set<TransactionItemView> getTransactionItemView(TransactionEntity transaction) {
@@ -723,7 +776,7 @@ public class AccountingCorePresentationViewService {
             TransactionWithViolationDto violations) {
         // fallback, if the transaction doesn't exist in Reeve
         if (Optional.ofNullable(violations.tx()).isPresent() && violations.tx().getReconcilation().isPresent()) {
-            return getTransactionReconciliationView(violations.tx());
+            return getTransactionReconciliationView(violations.tx(), violations.violation());
         }
 
         if (Optional.ofNullable(violations.violation()).isPresent()) {

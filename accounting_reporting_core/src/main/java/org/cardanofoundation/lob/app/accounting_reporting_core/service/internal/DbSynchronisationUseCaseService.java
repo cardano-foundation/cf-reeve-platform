@@ -27,6 +27,7 @@ import com.google.common.cache.CacheBuilder;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkCommittedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxRollbackEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountingCoreTransactionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchAssocRepository;
@@ -164,9 +165,13 @@ public class DbSynchronisationUseCaseService {
             return current + toProcessTransactions.size();
         });
         log.info("Batch transaction count for batchId: {}, totalProcessTx: {}", batchId, totalProcessTx);
-        // we don't need to pass in Transactions, since we just saved them and the status was updated
-        transactionBatchService.updateTransactionBatchStatusAndStats(batchId, totalProcessTx, Optional.empty());
-        batchesToBeUpdated.forEach(bId -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
+
+        eventPublisher.publishEvent(TransactionBatchChunkCommittedEvent.builder()
+                .batchId(batchId)
+                .processedTransactionCount(totalProcessTx)
+                .batchesToBeUpdated(batchesToBeUpdated)
+                .build());
+
         publishedTransactionToReset.forEach(txId -> eventPublisher.publishEvent(new TxRollbackEvent(txId)));
     }
 

@@ -75,7 +75,7 @@ public class VatService {
             if(isUpsert) {
                 vatEntity = foundEntity.get();
             } else {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The organisation vat with code :%s already exists".formatted(vatUpdate.getCustomerCode()));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Code %s already exists.".formatted(vatUpdate.getCustomerCode()));
                 problem.setTitle(ErrorTitleConstants.ORGANISATION_VAT_ALREADY_EXISTS);
                 return VatView.createFail(vatUpdate, problem);
             }

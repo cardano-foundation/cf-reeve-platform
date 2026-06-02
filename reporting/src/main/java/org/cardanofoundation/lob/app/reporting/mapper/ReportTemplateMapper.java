@@ -50,12 +50,15 @@ public class ReportTemplateMapper {
         if (dto.getFields() != null) {
             // If updating existing template, intelligently merge fields instead of replacing
             if (existingTemplate != null && template.getFields() != null) {
-                mergeFieldsInPlace(template.getFields(), dto.getFields(), template);
+                mergeFieldsInPlace(template.getFields(), dto.getFields(), template, null);
             } else {
                 // Creating new template or no existing fields - just map all new fields
-                List<ReportTemplateFieldEntity> newColumns = dto.getFields().stream()
-                    .map(columnDto -> toColumnEntity(columnDto, template, null))
-                    .toList();
+                List<ReportTemplateFieldEntity> newColumns = new ArrayList<>();
+                for (int i = 0; i < dto.getFields().size(); i++) {
+                    ReportTemplateFieldDto fieldDto = dto.getFields().get(i);
+                    int order = fieldDto.getOrder() != 0 ? fieldDto.getOrder() : i;
+                    newColumns.add(toColumnEntity(fieldDto, template, null, order));
+                }
                 template.setFields(newColumns);
             }
         }
@@ -85,7 +88,8 @@ public class ReportTemplateMapper {
      */
     private void mergeFieldsInPlace(List<ReportTemplateFieldEntity> existingFields,
                                     List<ReportTemplateFieldDto> dtoFields,
-                                    ReportTemplateEntity template) {
+                                    ReportTemplateEntity template,
+                                    ReportTemplateFieldEntity parentField) {
         if (dtoFields == null) {
             dtoFields = new ArrayList<>();
         }
@@ -104,16 +108,19 @@ public class ReportTemplateMapper {
 
         // Update or create fields
         List<ReportTemplateFieldEntity> updatedFields = new ArrayList<>();
-        for (ReportTemplateFieldDto dtoField : dtoFields) {
+        for (int i = 0; i < dtoFields.size(); i++) {
+            ReportTemplateFieldDto dtoField = dtoFields.get(i);
             ReportTemplateFieldEntity existingField = existingFieldMap.get(dtoField.getFieldName());
+            int order = dtoField.getOrder() != 0 ? dtoField.getOrder() : i;
 
             if (existingField != null) {
                 // Update existing field in-place
+                existingField.setFieldOrder(order);
                 updateFieldInPlace(existingField, dtoField, template);
                 updatedFields.add(existingField);
             } else {
                 // Create new field
-                ReportTemplateFieldEntity newField = toColumnEntity(dtoField, template, null);
+                ReportTemplateFieldEntity newField = toColumnEntity(dtoField, template, parentField, order);
                 updatedFields.add(newField);
             }
         }
@@ -149,12 +156,9 @@ public class ReportTemplateMapper {
             if (existingField.getChildFields() == null) {
                 existingField.setChildFields(new ArrayList<>());
             }
-            mergeFieldsInPlace(existingField.getChildFields(), dtoField.getChildFields(), template);
-        } else {
-            // Clear child fields if DTO has none
-            if (existingField.getChildFields() != null) {
-                existingField.getChildFields().clear();
-            }
+            mergeFieldsInPlace(existingField.getChildFields(), dtoField.getChildFields(), template, existingField);
+        } else if (existingField.getChildFields() != null) {
+            existingField.getChildFields().clear();
         }
     }
 
@@ -190,18 +194,21 @@ public class ReportTemplateMapper {
             .validationRules(validationRules)
             .reportCount(entity.getReportCount())
             .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
+            .createdAt(entity.getCreatedAt())
+            .updatedAt(entity.getUpdatedAt())
+            .createdBy(entity.getCreatedBy())
+            .updatedBy(entity.getUpdatedBy())
             .build();
     }
 
     private ReportTemplateFieldEntity toColumnEntity(
         ReportTemplateFieldDto dto,
         ReportTemplateEntity template,
-        ReportTemplateFieldEntity parent
+        ReportTemplateFieldEntity parent,
+        int order
     ) {
-        // Load mapping sub types if provided
         Set<ChartOfAccount> mappingAccounts = new HashSet<>();
         if (dto.getAccounts() != null && !dto.getAccounts().isEmpty()) {
-            // Convert Long IDs to String and fetch
             Set<ChartOfAccount.Id> ids = dto.getAccounts().stream()
                 .map(id -> new ChartOfAccount.Id(template.getOrganisationId(), id))
                 .collect(Collectors.toSet());
@@ -212,15 +219,19 @@ public class ReportTemplateMapper {
             .reportTemplate(template)
             .parentField(parent)
             .name(dto.getFieldName())
+            .fieldOrder(order)
             .dateRange(Optional.ofNullable(dto.getDateRange()).orElse(ReportFieldDateRange.PERIOD))
             .negated(dto.isNegated())
             .mappingAccounts(mappingAccounts)
             .build();
 
         if (dto.getChildFields() != null) {
-            List<ReportTemplateFieldEntity> children = dto.getChildFields().stream()
-                .map(childDto -> toColumnEntity(childDto, template, column))
-                .toList();
+            List<ReportTemplateFieldEntity> children = new ArrayList<>();
+            for (int i = 0; i < dto.getChildFields().size(); i++) {
+                ReportTemplateFieldDto childDto = dto.getChildFields().get(i);
+                int childOrder = childDto.getOrder() != 0 ? childDto.getOrder() : i;
+                children.add(toColumnEntity(childDto, template, column, childOrder));
+            }
             column.setChildFields(children);
         }
 
@@ -249,6 +260,7 @@ public class ReportTemplateMapper {
             .fieldName(entity.getName())
             .dateRange(entity.getDateRange())
             .negated(entity.isNegated())
+            .order(entity.getFieldOrder())
             .accounts(mappingAccountTypes)
             .childFields(children)
             .build();

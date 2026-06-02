@@ -9,7 +9,6 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 
 import java.util.Optional;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
@@ -21,16 +20,26 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
-@RequiredArgsConstructor
 @Slf4j
 public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem {
 
     public static final String DUMMY_ACCOUNT = "Transit account";
 
+    private final boolean enabled;
     private final OrganisationPublicApiIF organisationPublicApiIF;
+
+    public JournalAccountCreditEnrichmentTaskItem(OrganisationPublicApiIF organisationPublicApiIF) {
+        this(true, organisationPublicApiIF);
+    }
+
+    public JournalAccountCreditEnrichmentTaskItem(boolean enabled, OrganisationPublicApiIF organisationPublicApiIF) {
+        this.enabled = enabled;
+        this.organisationPublicApiIF = organisationPublicApiIF;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         if (tx.getTransactionType() != Journal) {
             return;
         }
@@ -52,43 +61,42 @@ public class JournalAccountCreditEnrichmentTaskItem implements PipelineTaskItem 
             return;
         }
 
-        //log.info("Normalising journal transaction with id: {}", tx.getId());
-
-        // at this point we can assume we have it, it is mandatory
         String dummyAccount = dummyAccountM.orElseThrow();
         for (TransactionItemEntity txItem : tx.getItems()) {
-            OperationType operationType = txItem.getOperationType();
-            if (txItem.getAccountCredit().isEmpty() && operationType == CREDIT) {
-                if(txItem.getAccountDebit().isEmpty()) {
-                    tx.addViolation(TransactionViolation.builder()
-                                    .code(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY)
-                                    .severity(ERROR)
-                                    .source(ERP)
-                                    .processorModule(this.getClass().getSimpleName())
-                            .build());
-                    continue;
-                }
-                Account accountDebit = txItem.getAccountDebit().orElseThrow();
-                txItem.setAccountCredit(Optional.of(accountDebit));
-                // If we switch the account credit, we need to set the operation type to DEBIT
-                txItem.setOperationType(DEBIT);
+            normaliseTransactionItem(tx, txItem, dummyAccount);
+        }
+    }
 
-                txItem.clearAccountCodeDebit();
-            }
-
-            if (txItem.getAccountCredit().isEmpty()) {
-                txItem.setAccountCredit(Optional.of(Account.builder()
-                        .code(dummyAccount)
-                        .name(DUMMY_ACCOUNT)
-                        .build()));
-            }
-
+    private void normaliseTransactionItem(TransactionEntity tx, TransactionItemEntity txItem, String dummyAccount) {
+        OperationType operationType = txItem.getOperationType();
+        if (txItem.getAccountCredit().isEmpty() && operationType == CREDIT) {
             if (txItem.getAccountDebit().isEmpty()) {
-                txItem.setAccountDebit(Optional.of(Account.builder()
-                        .code(dummyAccount)
-                        .name(DUMMY_ACCOUNT)
-                        .build()));
+                tx.addViolation(TransactionViolation.builder()
+                        .code(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY)
+                        .severity(ERROR)
+                        .source(ERP)
+                        .processorModule(this.getClass().getSimpleName())
+                        .build());
+                return;
             }
+            Account accountDebit = txItem.getAccountDebit().orElseThrow();
+            txItem.setAccountCredit(Optional.of(accountDebit));
+            txItem.setOperationType(DEBIT);
+            txItem.clearAccountCodeDebit();
+        }
+
+        if (txItem.getAccountCredit().isEmpty()) {
+            txItem.setAccountCredit(Optional.of(Account.builder()
+                    .code(dummyAccount)
+                    .name(DUMMY_ACCOUNT)
+                    .build()));
+        }
+
+        if (txItem.getAccountDebit().isEmpty()) {
+            txItem.setAccountDebit(Optional.of(Account.builder()
+                    .code(dummyAccount)
+                    .name(DUMMY_ACCOUNT)
+                    .build()));
         }
     }
 

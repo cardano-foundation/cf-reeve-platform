@@ -18,8 +18,8 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -111,7 +111,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconiciliationTransaction_successfulUnprocessed() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
                 eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Page.empty());
@@ -126,10 +126,11 @@ class AccountingCorePresentationViewServiceTest {
         Assertions.assertEquals(2, responseView.getStatistic().getNewInERP());
         Assertions.assertEquals(3, responseView.getStatistic().getNewVersionNotPublished());
         Assertions.assertEquals(4, responseView.getStatistic().getNewVersion());
-        Assertions.assertEquals(5L, responseView.getStatistic().getOK());
-        Assertions.assertEquals(6, responseView.getStatistic().getNOK());
-        Assertions.assertEquals(7L, responseView.getStatistic().getNEVER());
-        Assertions.assertEquals(18, responseView.getStatistic().getTOTAL()); // Array index 5 + Array index 6
+        Assertions.assertEquals(5, responseView.getStatistic().getNewVersionPublished());
+        Assertions.assertEquals(6L, responseView.getStatistic().getOK());
+        Assertions.assertEquals(7, responseView.getStatistic().getNOK());
+        Assertions.assertEquals(8L, responseView.getStatistic().getNEVER());
+        Assertions.assertEquals(21, responseView.getStatistic().getTOTAL()); // Array index 6 + Array index 7 + Array index 8
         Assertions.assertEquals(Optional.empty(), responseView.getLastDateFrom());
         Assertions.assertEquals(Optional.empty(), responseView.getLastDateTo());
         Assertions.assertEquals(Optional.empty(), responseView.getLastReconciledDate());
@@ -143,7 +144,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconiciliationTransaction_successfulUnReconciled() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -927,7 +928,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconciliationTransaction_reconciledFilter_withTransactionId() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(eq("RECONCILED"), eq(null), eq(null), eq(null), eq("TXN-123"), eq(null), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -943,7 +944,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconciliationTransaction_unreconciledFilter_withTransactionId() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(eq(null), eq(null), eq(null), eq(null), eq(null), eq("TXN-123"), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -962,7 +963,7 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(
                 eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class))
@@ -986,7 +987,7 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(
                 eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("CSV"), any(Pageable.class))
@@ -1012,7 +1013,7 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(
                 eq(null), eq(dateFrom), eq(dateTo), eq("CSV"), eq(null), eq(null), any(Pageable.class))
@@ -1036,7 +1037,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void allReconciliationTransaction_unreconciledFilter_withNonEmptyRejectionCodesAndTypes() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -1061,7 +1062,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void allReconciliationTransaction_reconciledFilter_withSortedPageable_expandsSort() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -1082,7 +1083,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void allReconciliationTransaction_unreconciledFilter_withSortedPageable_expandsSortWithRvMapping() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -1105,7 +1106,7 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void allReconciliationTransaction_reconciledFilter_resultsPreserveInsertionOrder() {
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
@@ -1114,8 +1115,8 @@ class AccountingCorePresentationViewServiceTest {
 
         ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
-        assertTrue(result.getTransactions() instanceof LinkedHashSet,
-                "Transactions should be a LinkedHashSet to preserve ordering");
+        assertTrue(result.getTransactions() instanceof List,
+                "Transactions should be a List");
     }
 
     // --- getReconciliationTransactionsSelector tests (via allReconciliationTransaction UNRECONCILED path) ---
@@ -1140,7 +1141,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violation, lastReconciledDate);
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1177,7 +1178,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violation, null);
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1215,7 +1216,7 @@ class AccountingCorePresentationViewServiceTest {
                 txEntity, null, LocalDateTime.of(2024, 6, 15, 10, 30, 0));
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1254,7 +1255,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violation, lastReconciledDate);
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1283,7 +1284,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, null, LocalDateTime.of(2024, 6, 15, 10, 30, 0));
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1334,7 +1335,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto2 = new TransactionWithViolationDto(txEntity, violation2, LocalDateTime.of(2025, 3, 3, 10, 0, 0));
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1345,8 +1346,8 @@ class AccountingCorePresentationViewServiceTest {
 
         ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
-        // Despite two DTOs from the query, only one unique transaction must appear in the result
-        assertEquals(1, result.getTransactions().size());
+        // Two DTOs from the query produce two entries in the list (no deduplication)
+        assertEquals(2, result.getTransactions().size());
         assertEquals("TX-DUP-001", result.getTransactions().iterator().next().getId());
     }
 
@@ -1368,7 +1369,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(null, violation, lastReconciledDate);
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1392,7 +1393,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(null, null, null);
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1415,7 +1416,7 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(
                 eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("BLOCKCHAIN"), any(Pageable.class))
@@ -1440,7 +1441,7 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+        when(reconcilationRepository.findCalcReconciliationStatistic()).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(
                 eq(null), eq(dateFrom), eq(dateTo), eq("BLOCKCHAIN"), eq(null), eq(null), any(Pageable.class))
@@ -1481,7 +1482,7 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, null, null);
 
         when(reconcilationRepository.findCalcReconciliationStatistic())
-                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L});
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
         when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
                 .thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
@@ -1496,5 +1497,159 @@ class AccountingCorePresentationViewServiceTest {
         TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
         assertEquals("TX-UNK-001", view.getId());
         assertEquals(org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.DataSourceView.UNKNOWN, view.getDataSource());
+    }
+
+    // --- getTransactionReconciliationView(tx, specificViolation) overload tests ---
+
+    @Test
+    void getTransactionReconciliationView_dualViolations_eachRowShowsOnlyItsOwnSourceDiffAndRejectionCode() {
+        // Scenario: findAllReconciliationSpecial returns one DTO per violation for the same tx.
+        // Each view must carry only the sourceDiff and rejectionCode of its own violation,
+        // not the union of all violations sharing the same transactionId.
+        Reconcilation reconcilation = Reconcilation.builder()
+                .source(ReconcilationCode.NOK)
+                .sink(ReconcilationCode.NOK)
+                .finalStatus(ReconcilationCode.NOK)
+                .build();
+
+        TransactionEntity txEntity = mock(TransactionEntity.class);
+        when(txEntity.getId()).thenReturn("TX-DUAL-001");
+        when(txEntity.getExtractorType()).thenReturn("NETSUITE");
+        when(txEntity.getOverallStatus()).thenReturn(TransactionStatus.OK);
+        when(txEntity.getAutomatedValidationStatus()).thenReturn(TxValidationStatus.VALIDATED);
+        when(txEntity.getReconcilation()).thenReturn(Optional.of(reconcilation));
+        when(txEntity.getLastReconcilation()).thenReturn(Optional.empty());
+        when(txEntity.getLedgerDispatchApproved()).thenReturn(false);
+
+        ReconcilationViolation erpViolation = ReconcilationViolation.builder()
+                .transactionId("TX-DUAL-001")
+                .transactionInternalNumber("INT-DUAL-001")
+                .transactionEntryDate(LocalDate.of(2024, 6, 1))
+                .transactionType(TransactionType.Journal)
+                .rejectionCode(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL)
+                .amountLcySum(BigDecimal.valueOf(190571))
+                .sourceDiff("{\"erp\":\"190571\",\"field\":\"amountFcy\",\"reeve\":\"-190571\"}")
+                .build();
+
+        ReconcilationViolation indexerViolation = ReconcilationViolation.builder()
+                .transactionId("TX-DUAL-001")
+                .transactionInternalNumber("INT-DUAL-001")
+                .transactionEntryDate(LocalDate.of(2024, 6, 1))
+                .transactionType(TransactionType.Journal)
+                .rejectionCode(ReconcilationRejectionCode.SINK_RECONCILATION_FAIL)
+                .amountLcySum(BigDecimal.valueOf(190571))
+                .sourceDiff("{\"field\":\"amountFcy\",\"reeve\":\"-190571\",\"indexer\":\"190571\"}")
+                .build();
+
+        TransactionWithViolationDto dto1 = new TransactionWithViolationDto(txEntity, erpViolation, null);
+        TransactionWithViolationDto dto2 = new TransactionWithViolationDto(txEntity, indexerViolation, null);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic())
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(dto1, dto2)));
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        assertEquals(2, result.getTransactions().size());
+        List<TransactionReconciliationTransactionsView> views = new ArrayList<>(result.getTransactions());
+
+        TransactionReconciliationTransactionsView view1 = views.get(0);
+        assertEquals(Set.of("{\"erp\":\"190571\",\"field\":\"amountFcy\",\"reeve\":\"-190571\"}"), view1.getSourceDiff());
+        assertEquals(Set.of(ReconciliationRejectionCodeRequest.NEW_VERSION_NOT_PUBLISHED), view1.getReconciliationRejectionCode());
+
+        TransactionReconciliationTransactionsView view2 = views.get(1);
+        assertEquals(Set.of("{\"field\":\"amountFcy\",\"reeve\":\"-190571\",\"indexer\":\"190571\"}"), view2.getSourceDiff());
+        assertEquals(Set.of(ReconciliationRejectionCodeRequest.IN_PROCESSING), view2.getReconciliationRejectionCode());
+    }
+
+    @Test
+    void getTransactionReconciliationView_nullViolation_sourceDiffAndRejectionCodeAreEmpty() {
+        // When the DTO carries a null violation (tx path taken but no associated violation),
+        // both sourceDiff and reconciliationRejectionCode must be empty.
+        Reconcilation reconcilation = Reconcilation.builder()
+                .source(ReconcilationCode.OK)
+                .sink(ReconcilationCode.OK)
+                .finalStatus(ReconcilationCode.OK)
+                .build();
+
+        TransactionEntity txEntity = mock(TransactionEntity.class);
+        when(txEntity.getId()).thenReturn("TX-NULL-VIOL-001");
+        when(txEntity.getExtractorType()).thenReturn("NETSUITE");
+        when(txEntity.getOverallStatus()).thenReturn(TransactionStatus.OK);
+        when(txEntity.getAutomatedValidationStatus()).thenReturn(TxValidationStatus.VALIDATED);
+        when(txEntity.getReconcilation()).thenReturn(Optional.of(reconcilation));
+        when(txEntity.getLastReconcilation()).thenReturn(Optional.empty());
+
+        TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, null, null);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic())
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(dto)));
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        assertEquals(1, result.getTransactions().size());
+        TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
+        assertTrue(view.getSourceDiff().isEmpty());
+        assertTrue(view.getReconciliationRejectionCode().isEmpty());
+    }
+
+    @Test
+    void getTransactionReconciliationView_violationWithNoSourceDiff_sourceDiffIsEmpty() {
+        // A violation with no sourceDiff must produce an empty sourceDiff set on the view.
+        Reconcilation reconcilation = Reconcilation.builder()
+                .source(ReconcilationCode.NOK)
+                .sink(ReconcilationCode.NOK)
+                .finalStatus(ReconcilationCode.NOK)
+                .build();
+
+        TransactionEntity txEntity = mock(TransactionEntity.class);
+        when(txEntity.getId()).thenReturn("TX-NO-DIFF-001");
+        when(txEntity.getExtractorType()).thenReturn("NETSUITE");
+        when(txEntity.getOverallStatus()).thenReturn(TransactionStatus.OK);
+        when(txEntity.getAutomatedValidationStatus()).thenReturn(TxValidationStatus.VALIDATED);
+        when(txEntity.getReconcilation()).thenReturn(Optional.of(reconcilation));
+        when(txEntity.getLastReconcilation()).thenReturn(Optional.empty());
+        when(txEntity.getLedgerDispatchApproved()).thenReturn(false);
+
+        ReconcilationViolation violationWithoutDiff = ReconcilationViolation.builder()
+                .transactionId("TX-NO-DIFF-001")
+                .transactionInternalNumber("INT-NO-DIFF-001")
+                .transactionEntryDate(LocalDate.of(2024, 6, 1))
+                .transactionType(TransactionType.Journal)
+                .rejectionCode(ReconcilationRejectionCode.TX_NOT_IN_ERP)
+                .amountLcySum(BigDecimal.valueOf(100))
+                .build();
+
+        TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violationWithoutDiff, null);
+
+        when(reconcilationRepository.findCalcReconciliationStatistic())
+                .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(dto)));
+
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+
+        ReconciliationResponseView result = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        assertEquals(1, result.getTransactions().size());
+        TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
+        assertTrue(view.getSourceDiff().isEmpty());
+        assertEquals(Set.of(ReconciliationRejectionCodeRequest.MISSING_IN_ERP), view.getReconciliationRejectionCode());
     }
 }

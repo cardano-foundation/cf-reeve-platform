@@ -61,8 +61,15 @@ public class ValidationRuleTermEntity extends CommonEntity {
     private int termOrder;
 
     public int computeContentHash() {
+        StringBuilder name = new StringBuilder();
+        ReportTemplateFieldEntity entity = this.getField();
+        while(entity != null) {
+            String partName = (entity.getParentField() != null ?  "." + entity.getName() : entity.getName());
+            name.insert(0, partName);
+            entity = entity.getParentField();
+        }
         return Objects.hash(
-            field.getName(),
+                name.toString(),
             operation.name()
         );
     }

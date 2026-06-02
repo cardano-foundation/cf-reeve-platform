@@ -11,21 +11,29 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import java.util.Map;
 import java.util.Optional;
 
-import lombok.RequiredArgsConstructor;
-
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 
-@RequiredArgsConstructor
 public class AccountEventCodesConversionTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
     private final OrganisationPublicApiIF organisationPublicApi;
+
+    public AccountEventCodesConversionTaskItem(OrganisationPublicApiIF organisationPublicApi) {
+        this(true, organisationPublicApi);
+    }
+
+    public AccountEventCodesConversionTaskItem(boolean enabled, OrganisationPublicApiIF organisationPublicApi) {
+        this.enabled = enabled;
+        this.organisationPublicApi = organisationPublicApi;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         String organisationId = tx.getOrganisation().getId();
 
         for (TransactionItemEntity item : tx.getItems()) {

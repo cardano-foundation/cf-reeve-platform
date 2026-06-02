@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.reporting.repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,8 +37,8 @@ public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEn
             LIMIT 1
             """)
     Optional<ReportTemplateEntity> findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(@Param("organisationId") String organisationId,
-                                                                                   @Param("name") String name,
-                                                                                   @Param("reportTemplateType") ReportTemplateType reportTemplateType);
+                                                                               @Param("name") String name,
+                                                                               @Param("reportTemplateType") ReportTemplateType reportTemplateType);
 
     @Query("SELECT rt FROM ReportTemplateEntity rt WHERE rt.organisationId = :organisationId " +
             "AND rt.id = :id ORDER BY rt.ver DESC LIMIT 1")
@@ -45,12 +46,26 @@ public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEn
 
     @Query("""
         SELECT rt FROM ReportTemplateEntity rt
-        WHERE (:organisationId IS NULL OR rt.organisationId = :organisationId)
-        AND (:name IS NULL OR LOWER(rt.name) LIKE LOWER(CONCAT('%', CAST(:name AS string), '%')))
-        AND (:description IS NULL OR LOWER(rt.description) LIKE LOWER(CONCAT('%', CAST(:description AS string), '%')))
+        WHERE rt.organisationId = :organisationId
+        AND (:search IS NULL OR LOWER(rt.name) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR LOWER(rt.description) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
         AND (:reportTemplateTypes IS NULL OR rt.reportTemplateType IN :reportTemplateTypes)
         AND (:active IS NULL OR rt.active = :active)
         AND (:dataMode IS NULL OR rt.dataMode IN :dataMode)
+        AND (
+            (CAST(:dateFrom AS date) IS NULL AND CAST(:dateTo AS date) IS NULL)
+             OR
+             ((CAST(:dateFrom AS date) IS NULL OR rt.createdAt >= :dateFrom) AND (CAST(:dateTo AS date) IS NULL OR rt.createdAt <= :dateTo))
+             OR
+             ((CAST(:dateFrom AS date) IS NULL OR rt.updatedAt >= :dateFrom) AND (CAST(:dateTo AS date) IS NULL OR rt.updatedAt <= :dateTo))
+        )
         """)
-    Page<ReportTemplateEntity> findAll(@Param("organisationId") String organisationId, @Param("name") String name, @Param("description") String description, @Param("reportTemplateTypes") List<ReportTemplateType> reportTemplateTypes, @Param("active") Boolean active, @Param("dataMode") List<DataMode> dataMode, Pageable pageable);
+    Page<ReportTemplateEntity> findAllFiltered(
+        @Param("organisationId") String organisationId,
+        @Param("search") String search,
+        @Param("reportTemplateTypes") List<ReportTemplateType> reportTemplateTypes,
+        @Param("active") Boolean active,
+        @Param("dataMode") List<DataMode> dataMode,
+        @Param("dateFrom") LocalDate dateFrom,
+        @Param("dateTo") LocalDate dateTo,
+        Pageable pageable);
 }
