@@ -728,15 +728,24 @@ public class ReportingService {
             DateRange range = entry.getKey();
             List<String> accountCodes = new ArrayList<>(entry.getValue());
             if (!accountCodes.isEmpty()) {
-                List<AccountCodeTotal> rows = preview
-                        ? transactionItemRepository.aggregatePreviewTransactionItemsByAccountCodeAndDateRange(
+                List<AccountCodeTotal> debitRows = preview
+                        ? transactionItemRepository.aggregatePreviewTransactionItemsDebitByAccountCodeAndDateRange(
                                 accountCodes, range.startDate(), range.endDate())
-                        : transactionItemRepository.aggregateTransactionItemsByAccountCodeAndDateRange(
+                        : transactionItemRepository.aggregateTransactionItemsDebitByAccountCodeAndDateRange(
+                                accountCodes, range.startDate(), range.endDate());
+
+                List<AccountCodeTotal> creditRows = preview
+                        ? transactionItemRepository.aggregatePreviewTransactionItemsCreditByAccountCodeAndDateRange(
+                                accountCodes, range.startDate(), range.endDate())
+                        : transactionItemRepository.aggregateTransactionItemsCreditByAccountCodeAndDateRange(
                                 accountCodes, range.startDate(), range.endDate());
 
                 Map<String, BigDecimal> totals = new HashMap<>();
-                for (AccountCodeTotal row : rows) {
+                for (AccountCodeTotal row : debitRows) {
                     totals.put(row.accountCode(), row.totalAmount());
+                }
+                for (AccountCodeTotal row : creditRows) {
+                    totals.merge(row.accountCode(), row.totalAmount(), BigDecimal::add);
                 }
                 result.put(range, totals);
             }
