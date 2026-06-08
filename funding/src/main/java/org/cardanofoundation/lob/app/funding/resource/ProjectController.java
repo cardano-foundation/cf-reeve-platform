@@ -28,7 +28,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
@@ -97,32 +96,13 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.toView(projectOpt.get()));
     }
 
-    @Operation(description = "Create a new project", responses = {
-            @ApiResponse(responseCode = "201", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ProjectView.class))}),
-            @ApiResponse(responseCode = "409", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ProblemDetail.class))})
-    })
-    @PostMapping(value = "/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> createProject(@Valid @RequestBody ProjectCreateRequest request) {
-        if (projectService.existsByOrganisationIdAndActivityId(request.getOrganisationId(), request.getActivityId())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.CONFLICT, "Project already exists for activityId: " + request.getActivityId());
-            problem.setTitle(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
-        }
-        ProjectEntity created = projectService.create(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(projectService.toView(created));
-    }
-
     @Operation(description = "Create a new project together with its initial milestones in a single request", responses = {
             @ApiResponse(responseCode = "201", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProjectView.class))}),
             @ApiResponse(responseCode = "409", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
-    @PostMapping(value = "/projects/with-milestones", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<Object> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
         if (projectService.existsByOrganisationIdAndActivityId(request.getOrganisationId(), request.getActivityId())) {

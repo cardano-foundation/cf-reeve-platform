@@ -17,6 +17,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.EventMilestoneAllocationRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingItemRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
@@ -77,9 +78,9 @@ public class SpendingEventService {
 
             if (request.getEventType() == EventType.SPENDING) {
                 populateSpendingItems(event, request.getSpendingItems());
-                resolveSpendingMilestone(event, request.getMilestoneId());
+                resolveSpendingMilestone(event, request.getMilestone(), project);
             } else {
-                populateMilestoneAllocations(event, request.getMilestoneAllocations());
+                populateMilestoneAllocations(event, request.getMilestoneAllocations(), project);
             }
 
             recalculateTotalAmount(event);
@@ -127,18 +128,21 @@ public class SpendingEventService {
         event.getSpendingItems().addAll(items);
     }
 
-    private void resolveSpendingMilestone(SpendingEventEntity event, String milestoneId) {
-        if (milestoneId != null) {
-            event.setMilestoneId(milestoneId);
+    private void resolveSpendingMilestone(SpendingEventEntity event, MilestoneCreateRequest milestoneRequest, ProjectEntity project) {
+        if (milestoneRequest != null) {
+            MilestoneEntity milestone = buildMilestone(milestoneRequest, project);
+            milestoneRepository.saveAndFlush(milestone);
+            event.setMilestoneId(milestone.getId());
         }
     }
 
-    private void populateMilestoneAllocations(SpendingEventEntity event, List<EventMilestoneAllocationRequest> allocationRequests) {
+    private void populateMilestoneAllocations(SpendingEventEntity event, List<EventMilestoneAllocationRequest> allocationRequests, ProjectEntity project) {
         List<EventMilestoneAllocationEntity> allocations = allocationRequests.stream()
                 .map(req -> {
+                    MilestoneEntity milestone = buildMilestone(req.getMilestone(), project);
+                    milestoneRepository.saveAndFlush(milestone);
                     EventMilestoneAllocationEntity.Id id = new EventMilestoneAllocationEntity.Id(
-                            event.getId(), req.getMilestoneId());
-                    MilestoneEntity milestone = milestoneRepository.findById(req.getMilestoneId()).orElse(null);
+                            event.getId(), milestone.getId());
                     return EventMilestoneAllocationEntity.builder()
                             .id(id)
                             .allocatedAmount(req.getAllocatedAmount())
@@ -148,6 +152,17 @@ public class SpendingEventService {
                 })
                 .toList();
         event.getMilestoneAllocations().addAll(allocations);
+    }
+
+    private MilestoneEntity buildMilestone(MilestoneCreateRequest req, ProjectEntity project) {
+        return MilestoneEntity.builder()
+                .id(UUID.randomUUID().toString())
+                .label(req.getLabel())
+                .expectedCost(req.getExpectedCost())
+                .currency(req.getCurrency())
+                .dueDate(req.getDueDate())
+                .project(project)
+                .build();
     }
 
     private void recalculateTotalAmount(SpendingEventEntity event) {

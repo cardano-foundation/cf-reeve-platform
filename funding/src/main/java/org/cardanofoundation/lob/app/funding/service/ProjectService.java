@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
@@ -44,23 +43,6 @@ public class ProjectService {
 
     public boolean existsByOrganisationIdAndActivityId(String organisationId, String activityId) {
         return projectRepository.existsByOrganisationIdAndActivityId(organisationId, activityId);
-    }
-
-    @Transactional
-    public ProjectEntity create(ProjectCreateRequest request) {
-        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getActivityId());
-
-        ProjectEntity project = ProjectEntity.builder()
-                .id(projectId)
-                .organisationId(request.getOrganisationId())
-                .fundingId(request.getFundingId())
-                .activityId(request.getActivityId())
-                .activityTitle(request.getActivityTitle())
-                .expectedTotalAmount(request.getExpectedTotalAmount())
-                .currency(request.getCurrency())
-                .build();
-
-        return projectRepository.saveAndFlush(project);
     }
 
     @Transactional

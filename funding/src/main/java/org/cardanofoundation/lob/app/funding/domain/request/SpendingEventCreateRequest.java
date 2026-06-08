@@ -37,10 +37,10 @@ public class SpendingEventCreateRequest {
     @Schema(example = "USD")
     private String currency;
 
-    /** Required for SPENDING events — links batch to a single milestone. */
+    /** Required for SPENDING events — milestone data to create and link to this event. */
     @Nullable
-    @Schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    private String milestoneId;
+    @Valid
+    private MilestoneCreateRequest milestone;
 
     /** Optional — disbursement tx hash (used when Event 1 is omitted). */
     @Nullable

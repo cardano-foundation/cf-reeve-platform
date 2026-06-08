@@ -24,7 +24,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
@@ -81,25 +80,6 @@ class ProjectServiceTest {
         when(projectRepository.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(true);
 
         assertThat(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).isTrue();
-    }
-
-    @Test
-    void create_buildsAndSavesProject() {
-        ProjectEntity saved = projectEntity();
-        when(projectRepository.saveAndFlush(any())).thenReturn(saved);
-
-        ProjectCreateRequest request = createRequest();
-        ProjectEntity result = projectService.create(request);
-
-        assertThat(result).isEqualTo(saved);
-        verify(projectRepository).saveAndFlush(argThat(p ->
-                "org1".equals(p.getOrganisationId())
-                && "GRANT-2025-001".equals(p.getFundingId())
-                && "PROJ-AB".equals(p.getActivityId())
-                && "Project AB".equals(p.getActivityTitle())
-                && new BigDecimal("200000.00").equals(p.getExpectedTotalAmount())
-                && "USD".equals(p.getCurrency())
-        ));
     }
 
     @Test
@@ -219,17 +199,6 @@ class ProjectServiceTest {
     private ProjectEntity projectEntity() {
         return ProjectEntity.builder()
                 .id(ProjectEntity.id("org1", "PROJ-AB"))
-                .organisationId("org1")
-                .fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB")
-                .activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00"))
-                .currency("USD")
-                .build();
-    }
-
-    private ProjectCreateRequest createRequest() {
-        return ProjectCreateRequest.builder()
                 .organisationId("org1")
                 .fundingId("GRANT-2025-001")
                 .activityId("PROJ-AB")

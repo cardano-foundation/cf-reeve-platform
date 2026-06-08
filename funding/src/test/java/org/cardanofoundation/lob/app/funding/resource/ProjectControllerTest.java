@@ -24,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
@@ -105,35 +104,6 @@ class ProjectControllerTest {
         ResponseEntity<?> response = projectController.getProject("p1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(view);
-    }
-
-    // --- createProject ---
-
-    @Test
-    void createProject_returns409_whenAlreadyExists() {
-        ProjectCreateRequest request = createRequest();
-        when(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(true);
-
-        ResponseEntity<?> response = projectController.createProject(request);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
-        verify(projectService, never()).create(any());
-    }
-
-    @Test
-    void createProject_returns201_withView() {
-        ProjectCreateRequest request = createRequest();
-        ProjectEntity project = projectEntity();
-        ProjectView view = projectView();
-        when(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(false);
-        when(projectService.create(request)).thenReturn(project);
-        when(projectService.toView(project)).thenReturn(view);
-
-        ResponseEntity<?> response = projectController.createProject(request);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
@@ -229,13 +199,6 @@ class ProjectControllerTest {
                 .activityId("PROJ-AB").activityTitle("Project AB")
                 .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).events(List.of()).build();
-    }
-
-    private ProjectCreateRequest createRequest() {
-        return ProjectCreateRequest.builder()
-                .organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
     private ProjectWithMilestonesCreateRequest createWithMilestonesRequest() {

@@ -20,6 +20,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.EventMilestoneAllocationRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingItemRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -83,20 +84,22 @@ class SpendingEventServiceTest {
         SpendingItemRequest item2 = spendingItemRequest(new BigDecimal("200.00"));
 
         SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(item1, item2), List.of());
-        request.setMilestoneId("m1");
+        request.setMilestone(milestoneCreateRequest());
 
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         SpendingEventEntity saved = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         when(spendingEventRepository.saveAndFlush(any())).thenReturn(saved);
 
         Optional<SpendingEventEntity> result = spendingEventService.create("p1", request);
 
         assertThat(result).isPresent();
+        verify(milestoneRepository).saveAndFlush(any());
         verify(spendingEventRepository).saveAndFlush(argThat(e ->
                 e.getEventType() == EventType.SPENDING
                 && e.getStatus() == EventStatus.DRAFT
                 && e.getSpendingItems().size() == 2
                 && e.getTotalAmount().compareTo(new BigDecimal("300.00")) == 0
-                && "m1".equals(e.getMilestoneId())
+                && e.getMilestoneId() != null
         ));
     }
 
@@ -105,11 +108,10 @@ class SpendingEventServiceTest {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
 
-        MilestoneEntity milestone = milestoneEntity("m1");
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         EventMilestoneAllocationRequest alloc = EventMilestoneAllocationRequest.builder()
-                .milestoneId("m1")
+                .milestone(milestoneCreateRequest())
                 .allocatedAmount(new BigDecimal("50000.00"))
                 .build();
 
@@ -133,11 +135,10 @@ class SpendingEventServiceTest {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
 
-        MilestoneEntity milestone = milestoneEntity("m1");
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         EventMilestoneAllocationRequest alloc = EventMilestoneAllocationRequest.builder()
-                .milestoneId("m1")
+                .milestone(milestoneCreateRequest())
                 .allocatedAmount(null)
                 .build();
 
@@ -335,6 +336,15 @@ class SpendingEventServiceTest {
                 .currency("USD")
                 .spendingItems(items)
                 .milestoneAllocations(allocations)
+                .build();
+    }
+
+    private MilestoneCreateRequest milestoneCreateRequest() {
+        return MilestoneCreateRequest.builder()
+                .label("Milestone AB")
+                .expectedCost(new BigDecimal("50000.00"))
+                .currency("USD")
+                .dueDate(LocalDate.of(2025, 6, 30))
                 .build();
     }
 
