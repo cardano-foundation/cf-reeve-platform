@@ -39,9 +39,8 @@ public class ReconciliationFilterRequest extends BaseRequest {
 
     private Optional<ReconciliationFilterSource> source = Optional.empty();
 
-    @ArraySchema(arraySchema = @Schema(example = "[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\"]"))
+    @ArraySchema(arraySchema = @Schema(example = "[\"MISSING_IN_ERP\",\"IN_PROCESSING\",\"NEW_IN_ERP\",\"NEW_VERSION_PUBLISHED\",\"NEW_VERSION_NOT_PUBLISHED\",\"NEW_VERSION\"]"))
     private Set<ReconciliationRejectionCodeRequest> reconciliationRejectionCode = new HashSet<>();
-
 
     @ArraySchema(arraySchema = @Schema(example ="[\"Journal\"]"))
     private Set<TransactionType> transactionTypes = new HashSet<>();

@@ -32,14 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
 import com.opencsv.CSVWriter;
 import io.vavr.control.Either;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FilterOptions;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.IntervalType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ReconciliationStatisticDto;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionWithViolationDto;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.AccountEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Counterparty;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Document;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationViolation;
@@ -140,7 +139,7 @@ public class AccountingCorePresentationViewService {
     public ReconciliationResponseView allReconciliationTransaction(
             ReconciliationFilterRequest body, Pageable pageable) {
         Object transactionsStatistic = reconcilationRepository
-                .findCalcReconciliationStatistic();
+                .findCalcReconciliationStatistic(TransactionViolationCode.exclusions());
         Optional<ReconcilationEntity> latestReconcilation =
                 transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
         List<TransactionReconciliationTransactionsView> transactions;
@@ -149,7 +148,9 @@ public class AccountingCorePresentationViewService {
                 .getReconciliationRejectionCode().stream()
                 .map(ReconciliationRejectionCodeRequest::toReconcilationRejectionCode)
                 .collect(Collectors.toSet());
+
         if (body.getFilter().equals(ReconciliationFilterStatusRequest.UNRECONCILED)) {
+
             pageable = expandSorts(pageable, true);
             Page<TransactionWithViolationDto> allReconciliationSpecial =
                     reconcilationRepository.findAllReconciliationSpecial(
@@ -161,7 +162,9 @@ public class AccountingCorePresentationViewService {
                                     .orElse(null),
                             body.getTransactionTypes().isEmpty() ? null
                                     : body.getTransactionTypes(),
-                            body.getTransactionId(), pageable);
+                            body.getTransactionId(),
+                            TransactionViolationCode.exclusions(),
+                            pageable);
             count = allReconciliationSpecial.getTotalElements();
             transactions = allReconciliationSpecial.stream()
                     .map(this::getReconciliationTransactionsSelector)
@@ -409,7 +412,7 @@ public class AccountingCorePresentationViewService {
             TransactionBatchEntity transactionBatchEntity,
             List<TransactionProcessingStatus> status, Pageable pageable,
             BatchFilterRequest batchFilterRequest) {
-        if(batchFilterRequest == null) {
+        if (batchFilterRequest == null) {
             return accountingCoreTransactionRepository.findAllByBatchId(
                     Optional.ofNullable(transactionBatchEntity).map(TransactionBatchEntity::getId).orElse(null),
                     status, pageable);
@@ -789,7 +792,8 @@ public class AccountingCorePresentationViewService {
         List<ReconciliationStatisticDto> rows = reconcilationRepository.findReconciliationStatisticByDateRange(
                         request.getOrganisationId(),
                         request.getDateFrom(),
-                        request.getDateTo())
+                        request.getDateTo(),
+                        TransactionViolationCode.exclusions())
                 .stream()
                 .map(p -> new ReconciliationStatisticDto(
                         p.getYear(),

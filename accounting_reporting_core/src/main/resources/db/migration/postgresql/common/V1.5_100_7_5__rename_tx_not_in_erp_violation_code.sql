@@ -1,0 +1,46 @@
+ALTER TYPE accounting_core_transaction_violation_code_type ADD VALUE IF NOT EXISTS 'TRANSACTION_NOT_IN_ERP';
+
+-- UPDATE statements moved to V1.5_100_7_6 because PostgreSQL requires a committed transaction
+-- between ALTER TYPE ADD VALUE and any DML that uses the new enum value.
+
+--ALTER TYPE accounting_core_transaction_violation_code_type RENAME TO accounting_core_transaction_violation_code_type_old;
+--
+--CREATE TYPE accounting_core_transaction_violation_code_type AS ENUM (
+--    'DOCUMENT_MUST_BE_PRESENT',
+--    'TX_CANNOT_BE_ALTERED',
+--    'ACCOUNT_CODE_CREDIT_IS_EMPTY',
+--    'ACCOUNT_CODE_DEBIT_IS_EMPTY',
+--    'TX_VALIDATION_ERROR',
+--    'LCY_BALANCE_MUST_BE_ZERO',
+--    'FCY_BALANCE_MUST_BE_ZERO',
+--    'AMOUNT_LCY_IS_ZERO',
+--    'AMOUNT_FCY_IS_ZERO',
+--    'ALL_TX_ITEMS_ERASED',
+--    'VAT_DATA_NOT_FOUND',
+--    'CORE_CURRENCY_NOT_FOUND',
+--    'CURRENCY_DATA_NOT_FOUND',
+--    'COST_CENTER_DATA_NOT_FOUND',
+--    'PROJECT_DATA_NOT_FOUND',
+--    'CHART_OF_ACCOUNT_NOT_FOUND',
+--    'EVENT_DATA_NOT_FOUND',
+--    'ORGANISATION_DATA_NOT_FOUND',
+--    'JOURNAL_DUMMY_ACCOUNT_MISSING',
+--    'TX_VERSION_CONFLICT_TX_NOT_MODIFIABLE',
+--    'TRANSACTION_TYPE_UNKNOWN',
+--    'NET_OFF_TX',
+--    'TX_INTERNAL_NUMBER_MUST_BE_PRESENT',
+--    'DOCUMENT_NAME_MUST_BE_SET',
+--    'FX_RATE_MUST_BE_GREATER_THAN_ZERO',
+--    'ENTRY_DATE_MUST_BE_PRESENT',
+--    'TRANSACTION_NOT_IN_ERP'
+--);
+--
+--ALTER TABLE accounting_core_transaction_violation
+--    ALTER COLUMN code TYPE accounting_core_transaction_violation_code_type
+--    USING code::text::accounting_core_transaction_violation_code_type;
+--
+--ALTER TABLE accounting_core_transaction_violation_aud
+--    ALTER COLUMN code TYPE accounting_core_transaction_violation_code_type
+--    USING code::text::accounting_core_transaction_violation_code_type;
+--
+--DROP TYPE accounting_core_transaction_violation_code_type_old;

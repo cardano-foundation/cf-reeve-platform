@@ -243,18 +243,31 @@ public class TransactionReconcilationService {
                 String jsonDiff = erpDiffCalculator.computeDiff(attachedTx, detachedTx);
 
                 log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), jsonDiff);
+                if (attachedTx.getLedgerDispatchApproved().equals(true)) {
+                    reconcilationEntity.addViolation(ReconcilationViolation.builder()
+                            .transactionId(attachedTx.getId())
+                            .rejectionCode(SOURCE_RECONCILATION_MISMATCH)
+                            .sourceDiff(jsonDiff)
+                            .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
+                            .transactionEntryDate(attachedTx.getEntryDate())
+                            .transactionType(attachedTx.getTransactionType())
+                            .amountLcySum(computeAmountLcySum(attachedTx)
+                            )
 
-                reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                        .transactionId(attachedTx.getId())
-                        .rejectionCode(SOURCE_RECONCILATION_FAIL)
-                        .sourceDiff(jsonDiff)
-                        .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
-                        .transactionEntryDate(attachedTx.getEntryDate())
-                        .transactionType(attachedTx.getTransactionType())
-                        .amountLcySum(computeAmountLcySum(attachedTx)
-                        )
+                            .build());
+                } else {
+                    reconcilationEntity.addViolation(ReconcilationViolation.builder()
+                            .transactionId(attachedTx.getId())
+                            .rejectionCode(SOURCE_RECONCILATION_FAIL)
+                            .sourceDiff(jsonDiff)
+                            .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
+                            .transactionEntryDate(attachedTx.getEntryDate())
+                            .transactionType(attachedTx.getTransactionType())
+                            .amountLcySum(computeAmountLcySum(attachedTx)
+                            )
 
-                        .build());
+                            .build());
+                }
             }
 
             ReconcilationCode isSync = getSinkReconcilationStatus(attachedTx, isOnChainMap);
@@ -375,7 +388,7 @@ public class TransactionReconcilationService {
                 missingTx.setInternalTransactionNumber(missingTx.getInternalTransactionNumber());
                 org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation violation =
                         org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation.builder()
-                                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                                .code(TransactionViolationCode.TRANSACTION_NOT_IN_ERP)
                                 .severity(Violation.Severity.ERROR)
                                 .source(Source.ERP)
                                 .processorModule("reconciliation")
@@ -428,101 +441,126 @@ public class TransactionReconcilationService {
         }
 
         Set<TransactionEntity> attachedTxEntitiesSet = Set.copyOf(attachedTxEntities);
-
         IndexerReconcilationServiceIF indexerService = indexerReconcilationService
                 .orElseThrow(() -> new IllegalStateException("Indexer reconciliation service is not available"));
         Either<ProblemDetail, Map<String, IndexerReconcilationServiceIF.IndexerReconcilationResult>> resultE =
-                indexerService.reconcileWithIndexer(
-                        organisationId,
-                        fromDate,
-                        toDate,
-                        attachedTxEntitiesSet
-                );
+                indexerService.reconcileWithIndexer(organisationId, fromDate, toDate, attachedTxEntitiesSet);
 
         if (resultE.isLeft()) {
-            log.error("Indexer reconciliation failed: {}", resultE.getLeft().getDetail());
-
-            for (TransactionEntity attachedTx : attachedTxEntities) {
-
-                if (attachedTx.getReconcilation()
-                        .flatMap(Reconcilation::getSink)
-                        .filter(status -> status == ReconcilationCode.OK)
-                        .isEmpty()) {
-                    reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                            .transactionId(attachedTx.getId())
-                            .rejectionCode(SINK_RECONCILATION_FAIL)
-                            .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
-                            .transactionEntryDate(attachedTx.getEntryDate())
-                            .transactionType(attachedTx.getTransactionType())
-                            .amountLcySum(computeAmountLcySum(attachedTx)
-                            )
-                            .build());
-
-                }
-            }
-            transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
+            handleIndexerError(resultE.getLeft(), attachedTxEntities, reconcilationEntity);
             return;
         }
 
-        Map<String, IndexerReconcilationServiceIF.IndexerReconcilationResult> results = resultE.get();
+        processIndexerResults(resultE.get(), attachedTxEntities, reconcilationEntity);
+    }
 
+    private void handleIndexerError(ProblemDetail error, Set<TransactionEntity> attachedTxEntities, ReconcilationEntity reconcilationEntity) {
+        log.error("Indexer reconciliation failed: {}", error.getDetail());
         for (TransactionEntity tx : attachedTxEntities) {
-            String txId = tx.getId();
-            IndexerReconcilationServiceIF.IndexerReconcilationResult indexerResult = results.get(txId);
-
-            ReconcilationCode sinkReconcilationStatus;
-
-            if (indexerResult == null) {
-                sinkReconcilationStatus = ReconcilationCode.NOK;
-                log.warn("Transaction {} ({}) not found in indexer results", tx.getInternalTransactionNumber(), txId);
-                reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                        .transactionId(txId)
-                        .rejectionCode(SINK_RECONCILATION_FAIL)
-                        .transactionInternalNumber(tx.getInternalTransactionNumber())
-                        .transactionEntryDate(tx.getEntryDate())
-                        .transactionType(tx.getTransactionType())
-                        .amountLcySum(computeAmountLcySum(tx))
-                        .build());
-            } else if (indexerResult.status() == ReconcilationCode.NOK) {
-                sinkReconcilationStatus = ReconcilationCode.NOK;
-                log.warn("Transaction {} ({}) failed indexer reconciliation: {} ", tx.getInternalTransactionNumber(), txId, indexerResult.mismatchReason());
-                reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                        .transactionId(txId)
-                        .rejectionCode(SINK_RECONCILATION_MISMATCH)
-                        .transactionInternalNumber(tx.getInternalTransactionNumber())
-                        .sourceDiff(indexerResult.mismatchReason())
-                        .transactionEntryDate(tx.getEntryDate())
-                        .transactionType(tx.getTransactionType())
-                        .amountLcySum(computeAmountLcySum(tx))
-                        .build());
-            } else {
-                log.info("Transaction {} ({}) is OK", tx.getInternalTransactionNumber(), txId);
-                sinkReconcilationStatus = ReconcilationCode.OK;
+            if (shouldAddViolationOnIndexerError(tx)) {
+                reconcilationEntity.addViolation(createIndexerErrorViolation(tx));
             }
+        }
+        transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
+    }
 
-            Reconcilation currentReconcilation = tx.getReconcilation().orElse(
-                    Reconcilation.builder().build()
-            );
-            tx.setReconcilation(Optional.of(currentReconcilation.toBuilder()
-                    .sink(sinkReconcilationStatus)
-                    .build()));
-            tx.setLastReconcilation(Optional.of(reconcilationEntity));
-            //transactionRepositoryGateway.store(tx);
+    private boolean shouldAddViolationOnIndexerError(TransactionEntity tx) {
+        return tx.getReconcilation()
+                .flatMap(Reconcilation::getSink)
+                .filter(status -> status == ReconcilationCode.OK)
+                .isEmpty() && tx.getReconcilation()
+                .flatMap(Reconcilation::getSource)
+                .filter(status -> status == ReconcilationCode.OK)
+                .isPresent();
+    }
+
+    private ReconcilationViolation createIndexerErrorViolation(TransactionEntity tx) {
+        return ReconcilationViolation.builder()
+                .transactionId(tx.getId())
+                .rejectionCode(SINK_RECONCILATION_FAIL)
+                .transactionInternalNumber(tx.getInternalTransactionNumber())
+                .transactionEntryDate(tx.getEntryDate())
+                .transactionType(tx.getTransactionType())
+                .amountLcySum(computeAmountLcySum(tx))
+                .build();
+    }
+
+    private void processIndexerResults(Map<String, IndexerReconcilationServiceIF.IndexerReconcilationResult> results, Set<TransactionEntity> attachedTxEntities, ReconcilationEntity reconcilationEntity) {
+        for (TransactionEntity tx : attachedTxEntities) {
+            processTransactionIndexerResult(tx, results, reconcilationEntity);
+        }
+        transactionRepositoryGateway.storeAll(attachedTxEntities);
+        transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
+        logIndexerReconciliationStats(results);
+    }
+
+    private void processTransactionIndexerResult(TransactionEntity tx, Map<String, IndexerReconcilationServiceIF.IndexerReconcilationResult> results, ReconcilationEntity reconcilationEntity) {
+        String txId = tx.getId();
+        ReconcilationCode sinkReconcilationStatus = ReconcilationCode.NOK;
+
+        if (hasSourceOK(tx)) {
+            IndexerReconcilationServiceIF.IndexerReconcilationResult indexerResult = results.get(txId);
+            if (indexerResult == null) {
+                log.warn("Transaction {} ({}) not found in indexer results", tx.getInternalTransactionNumber(), txId);
+                reconcilationEntity.addViolation(createMissingIndexerResultViolation(tx, txId));
+            } else {
+                sinkReconcilationStatus = updateSinkFromIndexerResult(tx, txId, indexerResult, reconcilationEntity);
+            }
         }
 
-        transactionRepositoryGateway.storeAll(attachedTxEntities);
+        updateTransactionWithSink(tx, sinkReconcilationStatus, reconcilationEntity);
+    }
 
-        transactionReconcilationRepository.saveAndFlush(reconcilationEntity);
+    private boolean hasSourceOK(TransactionEntity tx) {
+        return tx.getReconcilation()
+                .flatMap(Reconcilation::getSource)
+                .filter(status -> status == ReconcilationCode.OK)
+                .isPresent();
+    }
 
-        long okCount = results.values().stream()
-                .filter(r -> r.status() == ReconcilationCode.OK)
-                .count();
-        long nokCount = results.values().stream()
-                .filter(r -> r.status() == ReconcilationCode.NOK)
-                .count();
+    private ReconcilationCode updateSinkFromIndexerResult(TransactionEntity tx, String txId, IndexerReconcilationServiceIF.IndexerReconcilationResult indexerResult, ReconcilationEntity reconcilationEntity) {
+        if (indexerResult.status() == ReconcilationCode.NOK) {
+            log.warn("Transaction {} ({}) failed indexer reconciliation: {} ", tx.getInternalTransactionNumber(), txId, indexerResult.mismatchReason());
+            reconcilationEntity.addViolation(createIndexerMismatchViolation(tx, txId, indexerResult));
+            return ReconcilationCode.NOK;
+        }
+        log.info("Transaction {} ({}) is OK", tx.getInternalTransactionNumber(), txId);
+        return ReconcilationCode.OK;
+    }
 
-        log.info("Indexer reconciliation completed. Total: {}, OK: {}, NOK: {}",
-                results.size(), okCount, nokCount);
+    private ReconcilationViolation createMissingIndexerResultViolation(TransactionEntity tx, String txId) {
+        return ReconcilationViolation.builder()
+                .transactionId(txId)
+                .rejectionCode(SINK_RECONCILATION_FAIL)
+                .transactionInternalNumber(tx.getInternalTransactionNumber())
+                .transactionEntryDate(tx.getEntryDate())
+                .transactionType(tx.getTransactionType())
+                .amountLcySum(computeAmountLcySum(tx))
+                .build();
+    }
+
+    private ReconcilationViolation createIndexerMismatchViolation(TransactionEntity tx, String txId, IndexerReconcilationServiceIF.IndexerReconcilationResult indexerResult) {
+        return ReconcilationViolation.builder()
+                .transactionId(txId)
+                .rejectionCode(SINK_RECONCILATION_MISMATCH)
+                .transactionInternalNumber(tx.getInternalTransactionNumber())
+                .sourceDiff(indexerResult.mismatchReason())
+                .transactionEntryDate(tx.getEntryDate())
+                .transactionType(tx.getTransactionType())
+                .amountLcySum(computeAmountLcySum(tx))
+                .build();
+    }
+
+    private void updateTransactionWithSink(TransactionEntity tx, ReconcilationCode sinkReconcilationStatus, ReconcilationEntity reconcilationEntity) {
+        Reconcilation currentReconcilation = tx.getReconcilation().orElse(Reconcilation.builder().build());
+        tx.setReconcilation(Optional.of(currentReconcilation.toBuilder().sink(sinkReconcilationStatus).build()));
+        tx.setLastReconcilation(Optional.of(reconcilationEntity));
+    }
+
+    private void logIndexerReconciliationStats(Map<String, IndexerReconcilationServiceIF.IndexerReconcilationResult> results) {
+        long okCount = results.values().stream().filter(r -> r.status() == ReconcilationCode.OK).count();
+        long nokCount = results.values().stream().filter(r -> r.status() == ReconcilationCode.NOK).count();
+        log.info("Indexer reconciliation completed. Total: {}, OK: {}, NOK: {}", results.size(), okCount, nokCount);
     }
 
 }
