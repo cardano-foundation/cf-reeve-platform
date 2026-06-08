@@ -82,7 +82,7 @@ class SpendingEventControllerTest {
         SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
         when(spendingEventService.findByProjectIdAndFilter(
-                eq("p1"), eq(Optional.of(EventStatus.DRAFT)), eq(Optional.of(EventType.SPENDING)), eq(pageable)))
+                "p1", Optional.of(EventStatus.DRAFT), Optional.of(EventType.SPENDING), pageable))
                 .thenReturn(new PageImpl<>(List.of(event)));
         when(spendingEventService.toView(event)).thenReturn(view);
 
