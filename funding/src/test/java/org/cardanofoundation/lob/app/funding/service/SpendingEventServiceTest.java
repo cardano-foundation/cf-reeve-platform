@@ -160,7 +160,7 @@ class SpendingEventServiceTest {
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
         when(spendingEventRepository.saveAndFlush(event)).thenReturn(event);
 
-        Optional<SpendingEventEntity> result = spendingEventService.publish("e1", "tx-hash-abc");
+        Optional<SpendingEventEntity> result = spendingEventService.publish("e1");
 
         assertThat(result).isPresent();
         assertThat(event.getStatus()).isEqualTo(EventStatus.PUBLISHED);
@@ -171,7 +171,7 @@ class SpendingEventServiceTest {
     void publish_returnsEmpty_whenEventNotFound() {
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.empty());
 
-        assertThat(spendingEventService.publish("e1", "tx-hash")).isEmpty();
+        assertThat(spendingEventService.publish("e1")).isEmpty();
     }
 
     @Test

@@ -149,9 +149,9 @@ class SpendingEventControllerTest {
 
     @Test
     void publishEvent_returns404_whenNotFound() {
-        when(spendingEventService.publish("e1", "tx-abc")).thenReturn(Optional.empty());
+        when(spendingEventService.publish("e1")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1", "tx-abc");
+        ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
@@ -161,10 +161,10 @@ class SpendingEventControllerTest {
     void publishEvent_returns200_withView() {
         SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.PUBLISHED);
-        when(spendingEventService.publish("e1", "tx-abc")).thenReturn(Optional.of(event));
+        when(spendingEventService.publish("e1")).thenReturn(Optional.of(event));
         when(spendingEventService.toView(event)).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1", "tx-abc");
+        ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);

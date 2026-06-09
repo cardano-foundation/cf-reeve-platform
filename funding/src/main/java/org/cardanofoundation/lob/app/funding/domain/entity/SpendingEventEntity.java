@@ -1,6 +1,10 @@
 package org.cardanofoundation.lob.app.funding.domain.entity;
 
+import static jakarta.persistence.EnumType.STRING;
+import static jakarta.persistence.TemporalType.TIMESTAMP;
+
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,6 +20,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.envers.Audited;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
@@ -53,6 +58,18 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     @NotBlank
     @Column(name = "activity_id", nullable = false)
     private String activityId;
+
+    @Builder.Default
+    @Column(name = "ledger_dispatch_approved")
+    private boolean ledgerDispatchApproved = false;
+
+    @Builder.Default
+    @Enumerated(STRING)
+    private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;
+
+    @Temporal(TIMESTAMP)
+    @Column(name = "published_at")
+    protected LocalDateTime publishedAt;
 
     @Nullable
     @Column(name = "tx_hash")
