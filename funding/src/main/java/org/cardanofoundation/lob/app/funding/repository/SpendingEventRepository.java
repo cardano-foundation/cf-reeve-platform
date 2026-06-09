@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,4 +41,11 @@ public interface SpendingEventRepository extends JpaRepository<SpendingEventEnti
             @Param("fundingId") String fundingId,
             Pageable pageable);
 
+    @Query("""
+        SELECT e FROM funding.SpendingEventEntity e
+        WHERE e.ledgerDispatchApproved IS TRUE
+        AND e.ledgerDispatchStatus = 'NOT_DISPATCHED'
+        AND e.project.organisationId = :organisationId
+        """)
+    Set<SpendingEventEntity> findAllToBePublished(@Param("organisationId") String organisationId);
 }

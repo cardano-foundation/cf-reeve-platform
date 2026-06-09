@@ -9,6 +9,10 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.ReportConverter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.SpendingEventConverter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.TransactionConverter;
+import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +34,7 @@ public class BlockchainPublisherService {
     private final ReportEntityRepositoryGateway reportEntityRepositoryGateway;
     private final LedgerUpdatedEventPublisher ledgerUpdatedEventPublisher;
     private final TransactionConverter transactionConverter;
+    private final SpendingEventConverter spendingEventConverter;
     private final ReportConverter reportConverter;
 
     @Transactional
@@ -64,5 +69,9 @@ public class BlockchainPublisherService {
                 Collectors.mapping(Function.identity(), Collectors.toSet())
         ));
         organisationIdTransactionEntityMap.forEach(ledgerUpdatedEventPublisher::sendTxLedgerUpdatedEvents);
+    }
+
+    public void storeEventsForDispatchLater(SpendingEventsPublishCommand spendingEventsPublishCommand) {
+
     }
 }

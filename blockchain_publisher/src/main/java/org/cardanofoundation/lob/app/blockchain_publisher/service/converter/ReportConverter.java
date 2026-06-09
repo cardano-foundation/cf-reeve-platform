@@ -1,8 +1,9 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service;
+package org.cardanofoundation.lob.app.blockchain_publisher.service.converter;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublishStatusMapper;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;

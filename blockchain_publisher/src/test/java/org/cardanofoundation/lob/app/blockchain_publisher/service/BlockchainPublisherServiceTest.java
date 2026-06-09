@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.ReportConverter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.TransactionConverter;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;

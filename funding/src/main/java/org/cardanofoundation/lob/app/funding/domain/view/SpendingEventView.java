@@ -9,6 +9,8 @@ import lombok.*;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 

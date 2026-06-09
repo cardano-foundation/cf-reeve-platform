@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.TransactionConverter;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -25,7 +26,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Accou
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.AccountEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CoreCurrency;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project;

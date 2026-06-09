@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service;
+package org.cardanofoundation.lob.app.blockchain_publisher.service.converter;
 
 import static java.math.BigDecimal.ZERO;
 import static java.util.stream.Collectors.toSet;
@@ -14,6 +14,7 @@ import jakarta.persistence.OneToOne;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublishStatusMapper;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CoreCurrency;

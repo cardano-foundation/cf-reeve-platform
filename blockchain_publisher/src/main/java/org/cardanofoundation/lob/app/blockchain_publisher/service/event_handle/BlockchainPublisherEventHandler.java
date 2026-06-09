@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.event_handle;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,14 @@ public class BlockchainPublisherEventHandler {
     public void handleTransactionStatusRequestEvent(TransactionStatusRequestEvent event) {
         log.info("Received TransactionStatusRequestEvent: {}", event);
         blockchainPublisherService.handleTxStatusRequest(event);
+    }
+
+    @EventListener
+    @Async
+    public void handleEventsPublishCommand(SpendingEventsPublishCommand spendingEventsPublishCommand) {
+        log.info("Received SpendingEventsPublishCommand: {}", spendingEventsPublishCommand);
+
+        blockchainPublisherService.storeEventsForDispatchLater(spendingEventsPublishCommand);
     }
 
 }
