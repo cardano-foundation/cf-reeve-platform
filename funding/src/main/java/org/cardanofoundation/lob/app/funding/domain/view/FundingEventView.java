@@ -15,7 +15,7 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 @Getter
 @Builder
 @AllArgsConstructor
-public class SpendingEventView {
+public class FundingEventView {
 
     @Schema(example = "550e8400-e29b-41d4-a716-446655440000")
     private String eventId;
@@ -57,7 +57,7 @@ public class SpendingEventView {
     @Schema(example = "Milestone AB")
     private String milestoneLabel;
 
-    private List<SpendingItemView> spendingItems;
+    private List<FundingItemView> fundingItems;
 
     private List<EventMilestoneAllocationView> milestoneAllocations;
 

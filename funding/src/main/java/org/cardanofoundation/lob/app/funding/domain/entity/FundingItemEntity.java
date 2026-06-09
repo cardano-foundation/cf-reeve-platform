@@ -22,11 +22,11 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Builder
-@Entity(name = "funding.SpendingItemEntity")
-@Table(name = "funding_spending_item")
+@Entity(name = "funding.FundingItemEntity")
+@Table(name = "funding_funding_item")
 @Audited
 @EntityListeners({AuditingEntityListener.class})
-public class SpendingItemEntity extends CommonEntity implements Persistable<String> {
+public class FundingItemEntity extends CommonEntity implements Persistable<String> {
 
     @Id
     @Column(name = "item_id", nullable = false)
@@ -68,12 +68,9 @@ public class SpendingItemEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "notes")
     private String notes;
 
-    @Column(name = "event_id", insertable = false, updatable = false)
-    private String eventId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
-    private SpendingEventEntity event;
+    private FundingEventEntity event;
 
     @Override
     public boolean isNew() {

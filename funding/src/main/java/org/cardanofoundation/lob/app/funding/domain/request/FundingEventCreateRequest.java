@@ -19,7 +19,7 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class SpendingEventCreateRequest {
+public class FundingEventCreateRequest {
 
     @NotNull
     @Schema(example = "SPENDING")
@@ -50,7 +50,7 @@ public class SpendingEventCreateRequest {
     /** Spend line items — used only for SPENDING events. */
     @Builder.Default
     @Valid
-    private List<SpendingItemRequest> spendingItems = new ArrayList<>();
+    private List<FundingItemRequest> fundingItems = new ArrayList<>();
 
     /** Milestone allocations — used only for FUNDING and REFUND events. */
     @Builder.Default

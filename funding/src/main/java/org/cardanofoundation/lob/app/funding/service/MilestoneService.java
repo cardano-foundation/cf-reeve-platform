@@ -9,8 +9,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
@@ -42,48 +46,57 @@ public class MilestoneService {
     }
 
     @Transactional
-    public Optional<MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
-        return projectRepository.findById(projectId).map(project -> {
-            MilestoneEntity milestone = MilestoneEntity.builder()
-                    .id(UUID.randomUUID().toString())
-                    .projectId(projectId)
-                    .label(request.getLabel())
-                    .expectedCost(request.getExpectedCost())
-                    .currency(request.getCurrency())
-                    .dueDate(request.getDueDate())
-                    .project(project)
-                    .build();
+    public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
 
-            return milestoneRepository.saveAndFlush(milestone);
-        });
+        if (projectM.isEmpty()) {
+            log.warn("Project not found for id: {}", projectId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found for id: %s".formatted(projectId));
+            problem.setTitle("PROJECT_NOT_FOUND");
+            return Either.left(problem);
+        }
+
+        return Either.right(milestoneRepository.saveAndFlush(toEntity(projectId, request, projectM.orElseThrow())));
     }
 
     @Transactional
-    public Optional<MilestoneEntity> update(String milestoneId, MilestoneUpdateRequest request) {
-        return milestoneRepository.findById(milestoneId).map(milestone -> {
-            if (request.getLabel() != null) {
-                milestone.setLabel(request.getLabel());
-            }
-            if (request.getExpectedCost() != null) {
-                milestone.setExpectedCost(request.getExpectedCost());
-            }
-            if (request.getCurrency() != null) {
-                milestone.setCurrency(request.getCurrency());
-            }
-            if (request.getDueDate() != null) {
-                milestone.setDueDate(request.getDueDate());
-            }
-            return milestoneRepository.saveAndFlush(milestone);
-        });
+    public Either<ProblemDetail, MilestoneEntity> update(String milestoneId, MilestoneUpdateRequest request) {
+        Optional<MilestoneEntity> milestoneM = milestoneRepository.findById(milestoneId);
+
+        if (milestoneM.isEmpty()) {
+            log.warn("Milestone not found for id: {}", milestoneId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneId));
+            problem.setTitle("MILESTONE_NOT_FOUND");
+            return Either.left(problem);
+        }
+
+        MilestoneEntity milestone = milestoneM.orElseThrow();
+        if (request.getLabel() != null) {
+            milestone.setLabel(request.getLabel());
+        }
+        if (request.getExpectedCost() != null) {
+            milestone.setExpectedCost(request.getExpectedCost());
+        }
+        if (request.getCurrency() != null) {
+            milestone.setCurrency(request.getCurrency());
+        }
+        if (request.getDueDate() != null) {
+            milestone.setDueDate(request.getDueDate());
+        }
+
+        return Either.right(milestoneRepository.saveAndFlush(milestone));
     }
 
     @Transactional
-    public boolean delete(String milestoneId) {
+    public Either<ProblemDetail, Void> delete(String milestoneId) {
         if (!milestoneRepository.existsById(milestoneId)) {
-            return false;
+            log.warn("Milestone not found for id: {}", milestoneId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneId));
+            problem.setTitle("MILESTONE_NOT_FOUND");
+            return Either.left(problem);
         }
         milestoneRepository.deleteById(milestoneId);
-        return true;
+        return Either.right(null);
     }
 
     public boolean belongsToProject(MilestoneEntity milestone, ProjectEntity project) {
@@ -93,11 +106,22 @@ public class MilestoneService {
     public MilestoneView toView(MilestoneEntity milestone) {
         return MilestoneView.builder()
                 .milestoneId(milestone.getId())
-                .projectId(milestone.getProjectId())
+                .projectId(milestone.getProject().getId())
                 .label(milestone.getLabel())
                 .expectedCost(milestone.getExpectedCost())
                 .currency(milestone.getCurrency())
                 .dueDate(milestone.getDueDate())
+                .build();
+    }
+
+    private MilestoneEntity toEntity(String projectId, MilestoneCreateRequest request, ProjectEntity project) {
+        return MilestoneEntity.builder()
+                .id(UUID.randomUUID().toString())
+                .label(request.getLabel())
+                .expectedCost(request.getExpectedCost())
+                .currency(request.getCurrency())
+                .dueDate(request.getDueDate())
+                .project(project)
                 .build();
     }
 

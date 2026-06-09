@@ -13,7 +13,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -38,7 +41,7 @@ class ProjectServiceTest {
     @Mock
     private MilestoneService milestoneService;
     @Mock
-    private SpendingEventService spendingEventService;
+    private FundingEventService fundingEventService;
 
     @InjectMocks
     private ProjectService projectService;
@@ -87,7 +90,7 @@ class ProjectServiceTest {
         ProjectEntity saved = projectEntity();
         when(projectRepository.saveAndFlush(any())).thenReturn(saved);
         when(projectRepository.findById(saved.getId())).thenReturn(Optional.of(saved));
-        when(milestoneService.create(eq(saved.getId()), any())).thenReturn(Optional.empty());
+        when(milestoneService.create(eq(saved.getId()), any())).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.NOT_FOUND)));
 
         MilestoneCreateRequest milestoneReq = MilestoneCreateRequest.builder()
                 .label("MS-1")
@@ -116,7 +119,7 @@ class ProjectServiceTest {
     void update_returnsEmpty_whenProjectNotFound() {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 
-        assertThat(projectService.update("p1", ProjectUpdateRequest.builder().build())).isEmpty();
+        assertThat(projectService.update("p1", ProjectUpdateRequest.builder().build()).isLeft()).isTrue();
     }
 
     @Test
@@ -131,9 +134,9 @@ class ProjectServiceTest {
                 .currency("EUR")
                 .build();
 
-        Optional<ProjectEntity> result = projectService.update("p1", request);
+        Either<ProblemDetail, ProjectEntity> result = projectService.update("p1", request);
 
-        assertThat(result).isPresent();
+        assertThat(result.isRight()).isTrue();
         assertThat(project.getActivityTitle()).isEqualTo("Updated Title");
         assertThat(project.getExpectedTotalAmount()).isEqualByComparingTo("250000.00");
         assertThat(project.getCurrency()).isEqualTo("EUR");
@@ -155,7 +158,7 @@ class ProjectServiceTest {
     void delete_returnsFalse_whenNotFound() {
         when(projectRepository.existsById("p1")).thenReturn(false);
 
-        assertThat(projectService.delete("p1")).isFalse();
+        assertThat(projectService.delete("p1").isLeft()).isTrue();
         verify(projectRepository, never()).deleteById(any());
     }
 
@@ -163,7 +166,7 @@ class ProjectServiceTest {
     void delete_deletesAndReturnsTrue_whenFound() {
         when(projectRepository.existsById("p1")).thenReturn(true);
 
-        assertThat(projectService.delete("p1")).isTrue();
+        assertThat(projectService.delete("p1").isRight()).isTrue();
         verify(projectRepository).deleteById("p1");
     }
 
@@ -180,7 +183,7 @@ class ProjectServiceTest {
 
         when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of(milestone));
         when(milestoneService.toView(milestone)).thenReturn(milestoneView);
-        when(spendingEventService.findByProjectId(project.getId())).thenReturn(List.of());
+        when(fundingEventService.findByProjectId(project.getId())).thenReturn(List.of());
 
         ProjectView view = projectService.toView(project);
 

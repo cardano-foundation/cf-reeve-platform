@@ -23,6 +23,7 @@ import org.hibernate.envers.Audited;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -30,11 +31,11 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Builder
-@Entity(name = "funding.SpendingEventEntity")
-@Table(name = "funding_spending_event")
+@Entity(name = "funding.FundingEventEntity")
+@Table(name = "funding_funding_event")
 @Audited
 @EntityListeners({AuditingEntityListener.class})
-public class SpendingEventEntity extends CommonEntity implements Persistable<String> {
+public class FundingEventEntity extends CommonEntity implements Persistable<String> {
 
     @Id
     @Column(name = "event_id", nullable = false)
@@ -88,9 +89,6 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     @Column(name = "currency", nullable = false)
     private String currency;
 
-    @Column(name = "project_id", insertable = false, updatable = false)
-    private String projectId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
     private ProjectEntity project;
@@ -109,12 +107,24 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     /** Spend line items — populated only for SPENDING events. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
-    private List<SpendingItemEntity> spendingItems = new ArrayList<>();
+    private List<FundingItemEntity> fundingItems = new ArrayList<>();
 
     /** Milestone allocations — populated only for FUNDING and REFUND events. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
     private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
+
+    @PrePersist
+    private void generateId() {
+        if (this.id == null) {
+            String hashInput = String.format("%s:%s:%s",
+                    project != null ? project.getId() : "",
+                    fundingId,
+                    activityId
+            );
+            this.id = SHA3.digestAsHex(hashInput);
+        }
+    }
 
     @Override
     public boolean isNew() {

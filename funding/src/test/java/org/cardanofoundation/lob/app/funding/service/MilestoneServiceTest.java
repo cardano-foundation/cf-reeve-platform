@@ -9,6 +9,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.http.ProblemDetail;
+
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -64,7 +67,7 @@ class MilestoneServiceTest {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 
         MilestoneCreateRequest request = createRequest();
-        assertThat(milestoneService.create("p1", request)).isEmpty();
+        assertThat(milestoneService.create("p1", request).isLeft()).isTrue();
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
@@ -76,9 +79,10 @@ class MilestoneServiceTest {
         when(milestoneRepository.saveAndFlush(any())).thenReturn(saved);
 
         MilestoneCreateRequest request = createRequest();
-        Optional<MilestoneEntity> result = milestoneService.create("p1", request);
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
 
-        assertThat(result).contains(saved);
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get()).isEqualTo(saved);
         verify(milestoneRepository).saveAndFlush(argThat(m ->
                 "Milestone AB".equals(m.getLabel())
                 && new BigDecimal("50000.00").equals(m.getExpectedCost())
@@ -92,7 +96,7 @@ class MilestoneServiceTest {
     void update_returnsEmpty_whenMilestoneNotFound() {
         when(milestoneRepository.findById("m1")).thenReturn(Optional.empty());
 
-        assertThat(milestoneService.update("m1", MilestoneUpdateRequest.builder().label("New").build())).isEmpty();
+        assertThat(milestoneService.update("m1", MilestoneUpdateRequest.builder().label("New").build()).isLeft()).isTrue();
     }
 
     @Test
@@ -108,9 +112,9 @@ class MilestoneServiceTest {
                 .dueDate(LocalDate.of(2026, 1, 1))
                 .build();
 
-        Optional<MilestoneEntity> result = milestoneService.update("m1", request);
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
 
-        assertThat(result).isPresent();
+        assertThat(result.isRight()).isTrue();
         assertThat(milestone.getLabel()).isEqualTo("Updated Label");
         assertThat(milestone.getExpectedCost()).isEqualByComparingTo("99000.00");
         assertThat(milestone.getCurrency()).isEqualTo("EUR");
@@ -135,7 +139,7 @@ class MilestoneServiceTest {
     void delete_returnsFalse_whenNotFound() {
         when(milestoneRepository.existsById("m1")).thenReturn(false);
 
-        assertThat(milestoneService.delete("m1")).isFalse();
+        assertThat(milestoneService.delete("m1").isLeft()).isTrue();
         verify(milestoneRepository, never()).deleteById(any());
     }
 
@@ -143,7 +147,7 @@ class MilestoneServiceTest {
     void delete_deletesAndReturnsTrue_whenFound() {
         when(milestoneRepository.existsById("m1")).thenReturn(true);
 
-        assertThat(milestoneService.delete("m1")).isTrue();
+        assertThat(milestoneService.delete("m1").isRight()).isTrue();
         verify(milestoneRepository).deleteById("m1");
     }
 

@@ -8,34 +8,34 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
-public interface SpendingEventRepository extends JpaRepository<SpendingEventEntity, String> {
+public interface FundingEventRepository extends JpaRepository<FundingEventEntity, String> {
 
-    List<SpendingEventEntity> findByProject_Id(String projectId);
+    List<FundingEventEntity> findByProject_Id(String projectId);
 
-    Page<SpendingEventEntity> findByProject_Id(String projectId, Pageable pageable);
+    Page<FundingEventEntity> findByProject_Id(String projectId, Pageable pageable);
 
     @Query("""
-            SELECT e FROM funding.SpendingEventEntity e
+            SELECT e FROM funding.FundingEventEntity e
             WHERE e.project.id = :projectId
             AND (:status IS NULL OR e.status = :status)
             AND (:eventType IS NULL OR e.eventType = :eventType)
             """)
-    Page<SpendingEventEntity> findByProjectIdAndFilter(
+    Page<FundingEventEntity> findByProjectIdAndFilter(
             @Param("projectId") String projectId,
             @Param("status") EventStatus status,
             @Param("eventType") EventType eventType,
             Pageable pageable);
 
     @Query("""
-            SELECT e FROM funding.SpendingEventEntity e
+            SELECT e FROM funding.FundingEventEntity e
             WHERE e.project.organisationId = :organisationId
             AND (:fundingId IS NULL OR e.fundingId = :fundingId)
             """)
-    Page<SpendingEventEntity> findByOrganisationIdAndFundingId(
+    Page<FundingEventEntity> findByOrganisationIdAndFundingId(
             @Param("organisationId") String organisationId,
             @Param("fundingId") String fundingId,
             Pageable pageable);

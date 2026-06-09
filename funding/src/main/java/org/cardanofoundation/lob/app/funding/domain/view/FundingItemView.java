@@ -1,11 +1,9 @@
-package org.cardanofoundation.lob.app.funding.domain.request;
+package org.cardanofoundation.lob.app.funding.domain.view;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import jakarta.annotation.Nullable;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 import lombok.*;
 
@@ -13,25 +11,25 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Getter
-@Setter
-@AllArgsConstructor
-@NoArgsConstructor
 @Builder
-public class SpendingItemRequest {
+@AllArgsConstructor
+public class FundingItemView {
 
-    @NotBlank
+    @Schema(example = "550e8400-e29b-41d4-a716-446655440000")
+    private String itemId;
+
+    @Schema(example = "550e8400-e29b-41d4-a716-446655440001")
+    private String eventId;
+
     @Schema(example = "Personnel")
     private String category;
 
-    @NotBlank
     @Schema(example = "Vendor AB")
     private String vendor;
 
-    @NotNull
     @Schema(example = "100000.00")
     private BigDecimal amountFcy;
 
-    @NotBlank
     @Schema(example = "USD")
     private String currency;
 
@@ -43,7 +41,6 @@ public class SpendingItemRequest {
     @Schema(example = "85000.00")
     private BigDecimal amountRcy;
 
-    @NotNull
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-04-03")
     private LocalDate spendDate;
