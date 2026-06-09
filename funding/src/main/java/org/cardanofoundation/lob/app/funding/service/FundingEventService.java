@@ -92,16 +92,12 @@ public class FundingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> publish(String eventId) {
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
-
-        if (eventM.isEmpty()) {
-            log.warn("Event not found for id: {}", eventId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Event not found for id: %s".formatted(eventId));
-            problem.setTitle("FUNDING_EVENT_NOT_FOUND");
-            return Either.left(problem);
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
+        if (eventOrError.isLeft()) {
+            return eventOrError;
         }
 
-        FundingEventEntity event = eventM.orElseThrow();
+        FundingEventEntity event = eventOrError.get();
         if (event.getStatus() == EventStatus.PUBLISHED) {
             log.warn("Event already published: {}", eventId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event is already published: %s".formatted(eventId));
@@ -115,16 +111,12 @@ public class FundingEventService {
 
     @Transactional
     public Either<ProblemDetail, Void> delete(String eventId) {
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
-
-        if (eventM.isEmpty()) {
-            log.warn("Event not found for id: {}", eventId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Event not found for id: %s".formatted(eventId));
-            problem.setTitle("FUNDING_EVENT_NOT_FOUND");
-            return Either.left(problem);
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
+        if (eventOrError.isLeft()) {
+            return Either.left(eventOrError.getLeft());
         }
 
-        FundingEventEntity event = eventM.orElseThrow();
+        FundingEventEntity event = eventOrError.get();
         if (event.getStatus() == EventStatus.PUBLISHED) {
             log.warn("Cannot delete published event: {}", eventId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cannot delete a published event: %s".formatted(eventId));
@@ -134,6 +126,17 @@ public class FundingEventService {
 
         fundingEventRepository.delete(event);
         return Either.right(null);
+    }
+
+    private Either<ProblemDetail, FundingEventEntity> findEventOrError(String eventId) {
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+        if (eventM.isEmpty()) {
+            log.warn("Event not found for id: {}", eventId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Event not found for id: %s".formatted(eventId));
+            problem.setTitle("FUNDING_EVENT_NOT_FOUND");
+            return Either.left(problem);
+        }
+        return Either.right(eventM.orElseThrow());
     }
 
     private void populateFundingItems(FundingEventEntity event, List<FundingItemRequest> itemRequests) {
