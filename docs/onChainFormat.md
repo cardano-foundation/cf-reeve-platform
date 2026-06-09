@@ -33,7 +33,7 @@ All metadata entries under label 1447 follow this base structure, containing org
       "timestamp": "string",                       // ISO-8601 timestamp
       "version": "string"                          // Metadata format version (e.g., "1.1")
     },
-    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS" or "REPORT"
+    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS", "REPORT", or "EVENT_BUNDLE"
     "data": {}                   // Type-specific data structure
   }
 }
@@ -51,10 +51,11 @@ All metadata entries under label 1447 follow this base structure, containing org
 
 ### Metadata Types
 
-Reeve currently supports two metadata types:
+Reeve currently supports the following metadata types:
 
 - **`INDIVIDUAL_TRANSACTIONS`**: Individual accounting transactions of the organization
 - **`REPORT`**: Custom financial reports (balance sheets, income statements, etc.)
+- **`EVENT_BUNDLE`** *(since v1.2)*: Lifecycle events of grant or treasury funding (allocation, spending, refund)
 
 ## Type: Individual Transactions
 
@@ -228,6 +229,244 @@ Required fields:
 }
 ```
 
+## Type: Event Bundle
+
+The `EVENT_BUNDLE` type anchors the lifecycle of grant or treasury funding. Each bundle is a self-contained record of **one** lifecycle event — `ALLOCATION`, `SPENDING`, or `REFUND` — scoped to a single funding source, activity, and milestone. Because every bundle re-states its funding context (the `allocation` block), the complete history of a grant can be reconstructed and aggregated directly from the chain without a separate registration step, mirroring the self-containment of the `org` heather.
+
+`EVENT_BUNDLE` deliberately reuses the conventions of the other types: SHA3-256 `<Parent>::<Child>` id derivation, `ISO_4217` / `ISO_24165` currency identifiers, the `"<from>:<to>=<rate>"` FX-rate string, amounts as strings, and the `document` object.
+
+For `EVENT_BUNDLE`, `data` is a **single object** (not an array).
+
+### Bundle Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier, SHA3-256 hash of `<OrgId>::<funding_id>::<type>::<sequence>` |
+| `type` | enum | Yes | Event type: `ALLOCATION`, `SPENDING`, or `REFUND` |
+| `date` | string | Yes | Date the event occurred, ISO 8601 (YYYY-MM-DD). Distinct from the `metadata.timestamp` submission time. |
+| `accounting_period` | string | Yes | Accounting period (e.g., "2026-02"), as in `INDIVIDUAL_TRANSACTIONS` |
+| `allocation` | object | Yes | Funding context. Present in all three event types; it is the join key for aggregation. |
+| `milestone` | object | Conditional | Required for `ALLOCATION` and `REFUND`. Milestone the disbursement/refund relates to. |
+| `amount` | string | Conditional | Required for `ALLOCATION` and `REFUND`. Total amount moved by the event, in `currency`. |
+| `currency` | object | Conditional | Required for `ALLOCATION` and `REFUND`. Currency of `amount`. |
+| `items` | array | Conditional | Required for `SPENDING`. Batch of spend line items, all scoped to `allocation.milestone_id`. |
+
+### Allocation Object
+
+The `allocation` object identifies the funding source and activity. It appears in every bundle.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `funding_id` | string | Yes | Identifier of the funding source. Stable across every record related to this funding — the primary join key. |
+| `activity_id` | string | Yes | Identifier of the funded activity. |
+| `activity_title` | string | Conditional | Human-readable activity name. Required for `ALLOCATION`/`REFUND`, optional for `SPENDING`. |
+| `milestone_id` | string | Conditional | Required for `SPENDING`: the milestone the spend batch is scoped to. For `ALLOCATION`/`REFUND` the milestone is carried in the `milestone` object instead. |
+| `round_id` | string \| int | No | Funding round or tranche number. Links multiple rounds of funding to the same activity. |
+| `funding_tx` | string | Conditional | On-chain disbursement transaction hash, verifiable directly in the ledger. Exactly one of `funding_tx` / `funding_doc_hash` is required on `ALLOCATION` and `REFUND`; optional context on `SPENDING`. |
+| `funding_doc_hash` | string | Conditional | SHA-256 hash or IPFS CID of off-chain payment evidence. Required when `funding_tx` is absent on `ALLOCATION`/`REFUND`. |
+
+### Milestone Object
+
+Used by `ALLOCATION` and `REFUND`. If a single disbursement covers several milestones, `milestone` MAY be an array of these objects; readers must accept both forms.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `milestone_id` | string | Yes | Identifier of the milestone. |
+| `label` | string | Yes | Human-readable milestone name. |
+| `amount` | string | Yes | Amount allocated to this milestone. |
+| `currency` | object | Yes | Currency of the milestone allocation, with `id` (ISO format) and `cust_code`. |
+| `date` | string | Yes | Milestone due date, ISO 8601. |
+
+### Spend Item Fields
+
+Each item in the `items` array (for `SPENDING`) represents one spend, scoped to `allocation.milestone_id`. Items map onto the same conventions as transaction items.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier, SHA3-256 hash of `<BundleId>::<LineNo>`. |
+| `category` | string | Yes | Spending category, inherited from the approval-proposal budget lines (not defined by Reeve). |
+| `vendor` | string | Yes | Vendor, contractor, or payment recipient. May be a hashed organization id (counterparty convention). |
+| `amount` | string | Yes | Amount in the currency the payment was actually made in. |
+| `currency` | object | Yes | Payment currency, with `id` (ISO format) and `cust_code`. |
+| `fx_rate` | string | Yes | FX rate converting `amount` to the reporting currency (`org.currency_id`), format `"<from>:<to>=<rate>"`. |
+| `amount_rcy` | string | No | Amount in the reporting currency. Derivable from `amount` × rate; included for readability and must reconcile. |
+| `date` | string | Yes | Actual date the spend occurred, ISO 8601. |
+| `document` | object | No | Supporting evidence (see Document object): `type`, `number`, `date`, and a `hash` (SHA-256 / IPFS CID). |
+| `notes` | string | No | Free-text description, or a link to an internal accounting reference. |
+
+### Event Type Field Matrix
+
+| Field (`data.*`) | ALLOCATION | SPENDING | REFUND |
+|------------------|:----------:|:--------:|:------:|
+| `id`, `type`, `date`, `accounting_period` | Yes | Yes | Yes |
+| `allocation.funding_id`, `allocation.activity_id` | Yes | Yes | Yes |
+| `allocation.activity_title` | Yes | Optional | Yes |
+| `allocation.milestone_id` | — (in `milestone`) | Yes | — (in `milestone`) |
+| `allocation.round_id` | Optional | — | Optional |
+| `allocation.funding_tx` / `funding_doc_hash` | Yes (one-of) | Optional | Yes (one-of) |
+| `milestone` | Yes | — | Yes |
+| `amount`, `currency` | Yes | — | Yes |
+| `items` | — | Yes | — |
+
+`REFUND` is structurally identical to `ALLOCATION`; only `type` differs.
+
+### Example: Event Bundle — Allocation
+
+```json
+{
+  "1447": {
+    "org": {
+      "id": "d9346a676f48818e7ff5e0767dbfa445970f1c0b45d37035324443eea7d12b6d",
+      "name": "Reef eG",
+      "currency_id": "ISO_4217:EUR",
+      "country_code": "DE",
+      "tax_id_number": "GnR 1234 Braunschweig"
+    },
+    "metadata": {
+      "creation_slot": 123456789,
+      "timestamp": "2026-02-17T23:59:00Z",
+      "version": "1.2"
+    },
+    "type": "EVENT_BUNDLE",
+    "data": {
+      "id": "9c06037cb03b31040afc3946f3f48c14327b10eed7724769e750fbcefe5326bf",
+      "type": "ALLOCATION",
+      "date": "2026-02-17",
+      "accounting_period": "2026-02",
+      "allocation": {
+        "funding_id": "GRANT-2026-REEF-014",
+        "activity_id": "ACT-REEF-RESTORATION",
+        "activity_title": "Coastal reef restoration programme",
+        "round_id": 1,
+        "funding_tx": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+      },
+      "amount": "50000.00",
+      "currency": { "id": "ISO_4217:EUR", "cust_code": "EUR" },
+      "milestone": {
+        "milestone_id": "M1",
+        "label": "Site survey & permitting",
+        "amount": "50000.00",
+        "currency": { "id": "ISO_4217:EUR", "cust_code": "EUR" },
+        "date": "2026-06-30"
+      }
+    }
+  }
+}
+```
+
+### Example: Event Bundle — Spending
+
+```json
+{
+  "1447": {
+    "org": {
+      "id": "d9346a676f48818e7ff5e0767dbfa445970f1c0b45d37035324443eea7d12b6d",
+      "name": "Reef eG",
+      "currency_id": "ISO_4217:EUR",
+      "country_code": "DE",
+      "tax_id_number": "GnR 1234 Braunschweig"
+    },
+    "metadata": {
+      "creation_slot": 124000000,
+      "timestamp": "2026-03-31T23:59:00Z",
+      "version": "1.2"
+    },
+    "type": "EVENT_BUNDLE",
+    "data": {
+      "id": "48b2ebcc69af396c9ed2ae2f6ea56b12d871653a689837103b4f074e971465b2",
+      "type": "SPENDING",
+      "date": "2026-03-31",
+      "accounting_period": "2026-03",
+      "allocation": {
+        "funding_id": "GRANT-2026-REEF-014",
+        "activity_id": "ACT-REEF-RESTORATION",
+        "milestone_id": "M1",
+        "funding_tx": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"
+      },
+      "items": [
+        {
+          "id": "27a257c1a6e1106d3e2a3955f79954b670091fc28c224c0acc38eaacce5642a8",
+          "category": "Surveying services",
+          "vendor": "Nordsee Marine Survey GmbH",
+          "amount": "12000.00",
+          "currency": { "id": "ISO_4217:EUR", "cust_code": "EUR" },
+          "fx_rate": "ISO_4217:EUR:ISO_4217:EUR=1.0000",
+          "amount_rcy": "12000.00",
+          "date": "2026-03-12",
+          "document": {
+            "type": "INVOICE",
+            "number": "NMS-2026-0042",
+            "date": "2026-03-12",
+            "hash": "bafybeid7m2x...ipfs-cid"
+          },
+          "notes": "Bathymetric survey, milestone M1"
+        },
+        {
+          "id": "bf7a718761ada1db74c98bba17a2cc4a621a904e0626aa1dbef076d6fc510367",
+          "category": "Equipment",
+          "vendor": "Reef Substrate Co.",
+          "amount": "5000.00",
+          "currency": { "id": "ISO_4217:USD", "cust_code": "USD" },
+          "fx_rate": "ISO_4217:USD:ISO_4217:EUR=0.9200",
+          "amount_rcy": "4600.00",
+          "date": "2026-03-20",
+          "document": {
+            "type": "RECEIPT",
+            "number": "RSC-88231",
+            "date": "2026-03-20",
+            "hash": "9f2c4a...sha256"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### Example: Event Bundle — Refund
+
+```json
+{
+  "1447": {
+    "org": {
+      "id": "d9346a676f48818e7ff5e0767dbfa445970f1c0b45d37035324443eea7d12b6d",
+      "name": "Reef eG",
+      "currency_id": "ISO_4217:EUR",
+      "country_code": "DE",
+      "tax_id_number": "GnR 1234 Braunschweig"
+    },
+    "metadata": {
+      "creation_slot": 124500000,
+      "timestamp": "2026-07-05T10:00:00Z",
+      "version": "1.2"
+    },
+    "type": "EVENT_BUNDLE",
+    "data": {
+      "id": "a535d0d73fac92fd7b3bc8c2004e39755b63a5ef2a8fc462b89aef694bf5a275",
+      "type": "REFUND",
+      "date": "2026-07-05",
+      "accounting_period": "2026-07",
+      "allocation": {
+        "funding_id": "GRANT-2026-REEF-014",
+        "activity_id": "ACT-REEF-RESTORATION",
+        "activity_title": "Coastal reef restoration programme",
+        "round_id": 1,
+        "funding_tx": "f0e1d2c3b4a5968778695a4b3c2d1e0ff0e1d2c3b4a5968778695a4b3c2d1e0f"
+      },
+      "amount": "3200.00",
+      "currency": { "id": "ISO_4217:EUR", "cust_code": "EUR" },
+      "milestone": {
+        "milestone_id": "M1",
+        "label": "Site survey & permitting",
+        "amount": "3200.00",
+        "currency": { "id": "ISO_4217:EUR", "cust_code": "EUR" },
+        "date": "2026-06-30"
+      }
+    }
+  }
+}
+```
+
 ## Glossary
 
 This section defines key terms used throughout the on-chain metadata format.
@@ -295,3 +534,15 @@ Organizations can report financial data at different time intervals:
 - **MONTH**: Monthly reporting (January-December, represented as periods 1-12)
 
 The combination of `interval`, `year`, and `period` uniquely identifies a reporting timeframe.
+
+### Funding (Allocation)
+
+Funding, recorded by an `ALLOCATION` event bundle, is the disbursement of resources from a treasury or grantor to a funded organization. It establishes the `funding_id`, activity, and milestone reference that all subsequent `SPENDING` and `REFUND` records point back to. A disbursement may be on-chain (`funding_tx`) or off-chain (`funding_doc_hash`).
+
+### Milestone
+
+A milestone is a defined checkpoint of a funded activity against which funds are allocated and spending is scoped. Identified by `milestone_id`, it carries a human-readable `label`, an allocated `amount` and `currency`, and a due `date`. Spending records reference the milestone via `allocation.milestone_id`.
+
+### Event Bundle
+
+An event bundle is a single on-chain record capturing one lifecycle event of a funding relationship — `ALLOCATION`, `SPENDING`, or `REFUND`. Each bundle re-states its funding context so that a grant's full history can be aggregated from the chain. Bundle identifiers are SHA3-256 hashes of `<OrgId>::<funding_id>::<type>::<sequence>`.
