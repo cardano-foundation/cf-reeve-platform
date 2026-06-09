@@ -233,8 +233,6 @@ Required fields:
 
 The `EVENT_BUNDLE` type anchors a set of **typed events** for an organization over a period. An event is the atomic unit (e.g., a grant `ALLOCATION`, a daily `SALE_SUMMARY`); a bundle is the collection of events recorded together. Because each bundle re-states its organization and (where relevant) funding context, the full history of a grant or activity can be reconstructed and aggregated directly from the chain without a separate registration step, mirroring the self-containment of the `org` heather.
 
-`EVENT_BUNDLE` deliberately reuses the conventions of the other types: SHA3-256 `<Parent>::<Child>` id derivation, `ISO_4217` / `ISO_24165` currency identifiers, the `"<from>:<to>=<rate>"` FX-rate string, amounts as strings, and the `document` object.
-
 ### Storage Modes
 
 A bundle's events can be stored in one of two ways. Both are valid and a reader distinguishes them by the shape of `data`:
@@ -252,7 +250,7 @@ Every event (whether inline in `data[]` or in the off-chain `events[]`) carries 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | string | Yes | Unique identifier, SHA3-256 hash of `<OrgId>::<scope>::<type>::<sequence>`, where `<scope>` is the `funding_id` for grant-lifecycle events or the bundle `date` for period events, and `<sequence>` keeps events unique when several share the same org, scope, and type. |
+| `id` | string | Yes | Unique identifier. |
 | `type` | enum/string | Yes | The event type. Grant-lifecycle types (`ALLOCATION`, `SPENDING`, `REFUND`) are fully specified below; organizations MAY define additional custom types. |
 | `date` | string | Yes | Date the event occurred, ISO 8601 (YYYY-MM-DD). Distinct from the `metadata.timestamp` submission time. |
 | `accounting_period` | string | Conditional | Accounting period (e.g., "2026-02"). Required for grant-lifecycle events; optional for custom event types. |
@@ -299,7 +297,7 @@ Each item in the `items` array (for `SPENDING`) represents one spend, scoped to 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | string | Yes | Unique identifier, SHA3-256 hash of `<EventId>::<LineNo>`. |
+| `id` | string | Yes | Unique identifier |
 | `category` | string | Yes | Spending category, inherited from the approval-proposal budget lines (not defined by Reeve). |
 | `vendor` | string | Yes | Vendor, contractor, or payment recipient. May be a hashed organization id (counterparty convention). |
 | `amount` | string | Yes | Amount in the currency the payment was actually made in. |
