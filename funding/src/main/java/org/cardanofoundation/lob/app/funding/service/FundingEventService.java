@@ -102,7 +102,12 @@ public class FundingEventService {
         }
 
         FundingEventEntity event = eventM.orElseThrow();
-        // TODO - Validation is needed
+        if (event.getStatus() == EventStatus.PUBLISHED) {
+            log.warn("Event already published: {}", eventId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event is already published: %s".formatted(eventId));
+            problem.setTitle("FUNDING_EVENT_ALREADY_PUBLISHED");
+            return Either.left(problem);
+        }
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);
         return Either.right(fundingEventRepository.saveAndFlush(event));

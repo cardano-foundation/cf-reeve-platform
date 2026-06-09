@@ -56,7 +56,7 @@ public class MilestoneService {
             return Either.left(problem);
         }
 
-        return Either.right(milestoneRepository.saveAndFlush(toEntity(projectId, request, projectM.orElseThrow())));
+        return Either.right(milestoneRepository.saveAndFlush(toEntity(request, projectM.orElseThrow())));
     }
 
     @Transactional
@@ -114,7 +114,7 @@ public class MilestoneService {
                 .build();
     }
 
-    private MilestoneEntity toEntity(String projectId, MilestoneCreateRequest request, ProjectEntity project) {
+    private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
         return MilestoneEntity.builder()
                 .id(UUID.randomUUID().toString())
                 .label(request.getLabel())
