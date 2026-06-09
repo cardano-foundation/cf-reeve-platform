@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -130,10 +129,9 @@ public class SpendingEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<Object> publishEvent(
             @PathVariable String projectId,
-            @PathVariable String eventId,
-            @RequestParam @NotBlank String txHash) {
+            @PathVariable String eventId) {
 
-        Optional<SpendingEventEntity> published = spendingEventService.publish(eventId, txHash);
+        Optional<SpendingEventEntity> published = spendingEventService.publish(eventId);
         if (published.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, EVENT_NOT_FOUND_DETAIL + eventId);

@@ -93,11 +93,14 @@ CREATE TABLE IF NOT EXISTS funding_spending_event (
     total_amount NUMERIC(30, 10)      NOT NULL DEFAULT 0,
     currency     VARCHAR(10)  NOT NULL,
     milestone_id VARCHAR(36),
+    ledger_dispatch_approved BOOLEAN,
+    ledger_dispatch_status VARCHAR(20),
 
     created_by  VARCHAR(255),
     updated_by  VARCHAR(255),
     created_at  TIMESTAMP WITHOUT TIME ZONE,
     updated_at  TIMESTAMP WITHOUT TIME ZONE,
+    published_at  TIMESTAMP WITHOUT TIME ZONE,
 
     CONSTRAINT pk_funding_spending_event PRIMARY KEY (event_id),
     CONSTRAINT fk_funding_event_project   FOREIGN KEY (project_id)   REFERENCES funding_project   (project_id)   ON DELETE CASCADE,

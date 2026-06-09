@@ -89,10 +89,11 @@ public class SpendingEventService {
     }
 
     @Transactional
-    public Optional<SpendingEventEntity> publish(String eventId, String txHash) {
+    public Optional<SpendingEventEntity> publish(String eventId) {
         return spendingEventRepository.findById(eventId).map(event -> {
+            // TODO - Validation is needed
             event.setStatus(EventStatus.PUBLISHED);
-            event.setTxHash(txHash);
+            event.setLedgerDispatchApproved(true);
             return spendingEventRepository.saveAndFlush(event);
         });
     }
