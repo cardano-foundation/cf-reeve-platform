@@ -375,7 +375,7 @@ public class SpendingEventService {
 
         return SpendingEventPublishView.builder()
                 .eventId(event.getId())
-                .projectId(event.getProjectId())
+                .projectId(event.getProject().getId())
                 .eventType(event.getEventType())
                 .date(date)
                 .fundingId(event.getFundingId())
