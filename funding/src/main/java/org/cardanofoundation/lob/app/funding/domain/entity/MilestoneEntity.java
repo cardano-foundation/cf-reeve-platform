@@ -47,9 +47,6 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     @Column(name = "due_date", nullable = false)
     private LocalDate dueDate;
 
-    @Column(name = "project_id", insertable = false, updatable = false)
-    private String projectId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
     private ProjectEntity project;

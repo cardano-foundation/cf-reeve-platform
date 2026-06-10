@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -101,7 +102,9 @@ class MilestoneControllerTest {
     @Test
     void createMilestone_returns404_whenProjectNotFound() {
         MilestoneCreateRequest request = createRequest();
-        when(milestoneService.create("p1", request)).thenReturn(Optional.empty());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
+        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        when(milestoneService.create("p1", request)).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = milestoneController.createMilestone("p1", request);
 
@@ -114,7 +117,7 @@ class MilestoneControllerTest {
         MilestoneCreateRequest request = createRequest();
         MilestoneEntity milestone = milestoneEntity("m-new");
         MilestoneView view = milestoneView("m-new");
-        when(milestoneService.create("p1", request)).thenReturn(Optional.of(milestone));
+        when(milestoneService.create("p1", request)).thenReturn(Either.right(milestone));
         when(milestoneService.toView(milestone)).thenReturn(view);
 
         ResponseEntity<?> response = milestoneController.createMilestone("p1", request);
@@ -128,7 +131,9 @@ class MilestoneControllerTest {
     @Test
     void updateMilestone_returns404_whenNotFound() {
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().label("New").build();
-        when(milestoneService.update("m1", request)).thenReturn(Optional.empty());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found");
+        problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        when(milestoneService.update("m1", request)).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = milestoneController.updateMilestone("p1", "m1", request);
 
@@ -141,7 +146,7 @@ class MilestoneControllerTest {
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().label("New").build();
         MilestoneEntity milestone = milestoneEntity("m1");
         MilestoneView view = milestoneView("m1");
-        when(milestoneService.update("m1", request)).thenReturn(Optional.of(milestone));
+        when(milestoneService.update("m1", request)).thenReturn(Either.right(milestone));
         when(milestoneService.toView(milestone)).thenReturn(view);
 
         ResponseEntity<?> response = milestoneController.updateMilestone("p1", "m1", request);
@@ -154,7 +159,9 @@ class MilestoneControllerTest {
 
     @Test
     void deleteMilestone_returns404_whenNotFound() {
-        when(milestoneService.delete("m1")).thenReturn(false);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found");
+        problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        when(milestoneService.delete("m1")).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
 
@@ -164,7 +171,7 @@ class MilestoneControllerTest {
 
     @Test
     void deleteMilestone_returns204_whenDeleted() {
-        when(milestoneService.delete("m1")).thenReturn(true);
+        when(milestoneService.delete("m1")).thenReturn(Either.right(null));
 
         ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
 

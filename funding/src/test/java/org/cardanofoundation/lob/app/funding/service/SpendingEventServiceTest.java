@@ -9,6 +9,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.http.ProblemDetail;
+
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -71,7 +74,7 @@ class SpendingEventServiceTest {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 
         SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
-        assertThat(spendingEventService.create("p1", request)).isEmpty();
+        assertThat(spendingEventService.create("p1", request).isLeft()).isTrue();
         verify(spendingEventRepository, never()).saveAndFlush(any());
     }
 
@@ -90,9 +93,9 @@ class SpendingEventServiceTest {
         SpendingEventEntity saved = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         when(spendingEventRepository.saveAndFlush(any())).thenReturn(saved);
 
-        Optional<SpendingEventEntity> result = spendingEventService.create("p1", request);
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.create("p1", request);
 
-        assertThat(result).isPresent();
+        assertThat(result.isRight()).isTrue();
         verify(milestoneRepository).saveAndFlush(any());
         verify(spendingEventRepository).saveAndFlush(argThat(e ->
                 e.getEventType() == EventType.SPENDING
@@ -104,7 +107,7 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_fundingEvent_populatesMilestoneAllocationsAndCalculatesTotal() {
+    void create_spendingEvent_populatesMilestoneAllocationsAndCalculatesTotal() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
 
@@ -120,9 +123,9 @@ class SpendingEventServiceTest {
         SpendingEventEntity saved = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
         when(spendingEventRepository.saveAndFlush(any())).thenReturn(saved);
 
-        Optional<SpendingEventEntity> result = spendingEventService.create("p1", request);
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.create("p1", request);
 
-        assertThat(result).isPresent();
+        assertThat(result.isRight()).isTrue();
         verify(spendingEventRepository).saveAndFlush(argThat(e ->
                 e.getEventType() == EventType.FUNDING
                 && e.getMilestoneAllocations().size() == 1
@@ -131,7 +134,7 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_fundingEvent_withNullAllocatedAmount_totalIsZero() {
+    void create_spendingEvent_withNullAllocatedAmount_totalIsZero() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
 
@@ -155,30 +158,29 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void publish_setsStatusAndTxHash() {
+    void publish_setsStatusAndDispatchApproved() {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
         when(spendingEventRepository.saveAndFlush(event)).thenReturn(event);
 
-        Optional<SpendingEventEntity> result = spendingEventService.publish("e1");
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.publish("e1");
 
-        assertThat(result).isPresent();
+        assertThat(result.isRight()).isTrue();
         assertThat(event.getStatus()).isEqualTo(EventStatus.PUBLISHED);
-        assertThat(event.getTxHash()).isEqualTo("tx-hash-abc");
     }
 
     @Test
     void publish_returnsEmpty_whenEventNotFound() {
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.empty());
 
-        assertThat(spendingEventService.publish("e1")).isEmpty();
+        assertThat(spendingEventService.publish("e1").isLeft()).isTrue();
     }
 
     @Test
     void delete_returnsFalse_whenNotFound() {
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.empty());
 
-        assertThat(spendingEventService.delete("e1")).isFalse();
+        assertThat(spendingEventService.delete("e1").isLeft()).isTrue();
         verify(spendingEventRepository, never()).delete(any());
     }
 
@@ -187,7 +189,7 @@ class SpendingEventServiceTest {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        assertThat(spendingEventService.delete("e1")).isFalse();
+        assertThat(spendingEventService.delete("e1").isLeft()).isTrue();
         verify(spendingEventRepository, never()).delete(any());
     }
 
@@ -196,7 +198,7 @@ class SpendingEventServiceTest {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        assertThat(spendingEventService.delete("e1")).isTrue();
+        assertThat(spendingEventService.delete("e1").isRight()).isTrue();
         verify(spendingEventRepository).delete(event);
     }
 

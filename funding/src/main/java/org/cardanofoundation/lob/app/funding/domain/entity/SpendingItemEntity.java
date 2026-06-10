@@ -68,9 +68,6 @@ public class SpendingItemEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "notes")
     private String notes;
 
-    @Column(name = "event_id", insertable = false, updatable = false)
-    private String eventId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
     private SpendingEventEntity event;

@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -123,7 +124,9 @@ class SpendingEventControllerTest {
     @Test
     void createEvent_returns404_whenProjectNotFound() {
         SpendingEventCreateRequest request = createRequest();
-        when(spendingEventService.create("p1", request)).thenReturn(Optional.empty());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
+        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        when(spendingEventService.create("p1", request)).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = spendingEventController.createEvent("p1", request);
 
@@ -136,7 +139,7 @@ class SpendingEventControllerTest {
         SpendingEventCreateRequest request = createRequest();
         SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
-        when(spendingEventService.create("p1", request)).thenReturn(Optional.of(event));
+        when(spendingEventService.create("p1", request)).thenReturn(Either.right(event));
         when(spendingEventService.toView(event)).thenReturn(view);
 
         ResponseEntity<?> response = spendingEventController.createEvent("p1", request);
@@ -149,7 +152,9 @@ class SpendingEventControllerTest {
 
     @Test
     void publishEvent_returns404_whenNotFound() {
-        when(spendingEventService.publish("e1")).thenReturn(Optional.empty());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Event not found");
+        problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+        when(spendingEventService.publish("e1")).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1");
 
@@ -161,7 +166,7 @@ class SpendingEventControllerTest {
     void publishEvent_returns200_withView() {
         SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.PUBLISHED);
-        when(spendingEventService.publish("e1")).thenReturn(Optional.of(event));
+        when(spendingEventService.publish("e1")).thenReturn(Either.right(event));
         when(spendingEventService.toView(event)).thenReturn(view);
 
         ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1");
@@ -174,7 +179,9 @@ class SpendingEventControllerTest {
 
     @Test
     void deleteEvent_returns404_whenNotFound() {
-        when(spendingEventService.findById("e1")).thenReturn(Optional.empty());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Event not found");
+        problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+        when(spendingEventService.delete("e1")).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = spendingEventController.deleteEvent("p1", "e1");
 
@@ -184,20 +191,19 @@ class SpendingEventControllerTest {
 
     @Test
     void deleteEvent_returns409_whenPublished() {
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
-        when(spendingEventService.findById("e1")).thenReturn(Optional.of(event));
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cannot delete a published event");
+        problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        when(spendingEventService.delete("e1")).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = spendingEventController.deleteEvent("p1", "e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
-        verify(spendingEventService, never()).delete(any());
     }
 
     @Test
     void deleteEvent_returns204_forDraftEvent() {
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(spendingEventService.findById("e1")).thenReturn(Optional.of(event));
+        when(spendingEventService.delete("e1")).thenReturn(Either.right(null));
 
         ResponseEntity<?> response = spendingEventController.deleteEvent("p1", "e1");
 

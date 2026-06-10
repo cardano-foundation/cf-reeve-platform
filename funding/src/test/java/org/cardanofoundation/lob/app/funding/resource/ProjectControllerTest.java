@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -141,7 +142,9 @@ class ProjectControllerTest {
     @Test
     void updateProject_returns404_whenNotFound() {
         ProjectUpdateRequest request = ProjectUpdateRequest.builder().activityTitle("New").build();
-        when(projectService.update("p1", request)).thenReturn(Optional.empty());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
+        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        when(projectService.update("p1", request)).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = projectController.updateProject("p1", request);
 
@@ -154,7 +157,7 @@ class ProjectControllerTest {
         ProjectUpdateRequest request = ProjectUpdateRequest.builder().activityTitle("New").build();
         ProjectEntity project = projectEntity();
         ProjectView view = projectView();
-        when(projectService.update("p1", request)).thenReturn(Optional.of(project));
+        when(projectService.update("p1", request)).thenReturn(Either.right(project));
         when(projectService.toView(project)).thenReturn(view);
 
         ResponseEntity<?> response = projectController.updateProject("p1", request);
@@ -167,7 +170,9 @@ class ProjectControllerTest {
 
     @Test
     void deleteProject_returns404_whenNotFound() {
-        when(projectService.delete("p1")).thenReturn(false);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
+        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        when(projectService.delete("p1")).thenReturn(Either.left(problem));
 
         ResponseEntity<?> response = projectController.deleteProject("p1");
 
@@ -177,7 +182,7 @@ class ProjectControllerTest {
 
     @Test
     void deleteProject_returns204_whenDeleted() {
-        when(projectService.delete("p1")).thenReturn(true);
+        when(projectService.delete("p1")).thenReturn(Either.right(null));
 
         ResponseEntity<?> response = projectController.deleteProject("p1");
 

@@ -26,6 +26,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
@@ -39,7 +40,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/spending")
-@Tag(name = "Projects", description = "Spending – Project management API")
+@Tag(name = "Projects", description = "Funding – Project management API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 public class ProjectController {
@@ -56,7 +57,8 @@ public class ProjectController {
     })
     @GetMapping(value = "/projects", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> listProjects(
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<List<ProjectView>> listProjects(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
@@ -66,7 +68,7 @@ public class ProjectController {
         if (orgM.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Organisation with id: %s not found".formatted(organisationId));
             problem.setTitle("ORGANISATION_NOT_FOUND");
-            return ResponseEntity.badRequest().body(problem);
+            return (ResponseEntity<List<ProjectView>>) (ResponseEntity<?>) ResponseEntity.badRequest().body(problem);
         }
 
         List<ProjectView> views = projectService.findByOrganisationId(organisationId, pageable)
@@ -85,13 +87,14 @@ public class ProjectController {
     })
     @GetMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> getProject(@PathVariable String projectId) {
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<ProjectView> getProject(@PathVariable String projectId) {
         Optional<ProjectEntity> projectOpt = projectService.findById(projectId);
         if (projectOpt.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, PROJECT_NOT_FOUND_DETAIL + projectId);
             problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+            return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
         }
         return ResponseEntity.ok(projectService.toView(projectOpt.get()));
     }
@@ -104,12 +107,13 @@ public class ProjectController {
     })
     @PostMapping(value = "/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<ProjectView> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
         if (projectService.existsByOrganisationIdAndActivityId(request.getOrganisationId(), request.getActivityId())) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.CONFLICT, "Project already exists for activityId: " + request.getActivityId());
             problem.setTitle(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+            return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
         }
         ProjectEntity created = projectService.createWithMilestones(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(projectService.toView(created));
@@ -123,16 +127,14 @@ public class ProjectController {
     })
     @PutMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> updateProject(
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<ProjectView> updateProject(
             @PathVariable String projectId,
             @Valid @RequestBody ProjectUpdateRequest request) {
 
-        Optional<ProjectEntity> updated = projectService.update(projectId, request);
-        if (updated.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.NOT_FOUND, PROJECT_NOT_FOUND_DETAIL + projectId);
-            problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        Either<ProblemDetail, ProjectEntity> updated = projectService.update(projectId, request);
+        if (updated.isLeft()) {
+            return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(updated.getLeft());
         }
         return ResponseEntity.ok(projectService.toView(updated.get()));
     }
@@ -144,12 +146,11 @@ public class ProjectController {
     })
     @DeleteMapping(value = "/projects/{projectId}")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> deleteProject(@PathVariable String projectId) {
-        if (!projectService.delete(projectId)) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.NOT_FOUND, PROJECT_NOT_FOUND_DETAIL + projectId);
-            problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<Void> deleteProject(@PathVariable String projectId) {
+        Either<ProblemDetail, Void> deleted = projectService.delete(projectId);
+        if (deleted.isLeft()) {
+            return (ResponseEntity<Void>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(deleted.getLeft());
         }
         return ResponseEntity.noContent().build();
     }

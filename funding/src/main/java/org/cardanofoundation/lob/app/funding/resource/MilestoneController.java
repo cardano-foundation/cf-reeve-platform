@@ -24,6 +24,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
@@ -36,7 +37,7 @@ import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/spending")
-@Tag(name = "Milestones", description = "Spending – Milestone management API")
+@Tag(name = "Milestones", description = "Funding – Milestone management API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 public class MilestoneController {
@@ -52,14 +53,15 @@ public class MilestoneController {
     })
     @GetMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> listMilestones(
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<List<MilestoneView>> listMilestones(
             @PathVariable String projectId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         if (projectService.findById(projectId).isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, "Project not found: " + projectId);
             problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+            return (ResponseEntity<List<MilestoneView>>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
         }
         List<MilestoneView> views = milestoneService.findByProjectId(projectId, pageable)
                 .getContent()
@@ -77,7 +79,8 @@ public class MilestoneController {
     })
     @GetMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> getMilestone(
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<MilestoneView> getMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId) {
 
@@ -86,7 +89,7 @@ public class MilestoneController {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, MILESTONE_NOT_FOUND_DETAIL + milestoneId);
             problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+            return (ResponseEntity<MilestoneView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
         }
         return ResponseEntity.ok(milestoneService.toView(milestoneOpt.get()));
     }
@@ -99,16 +102,14 @@ public class MilestoneController {
     })
     @PostMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> createMilestone(
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<MilestoneView> createMilestone(
             @PathVariable String projectId,
             @Valid @RequestBody MilestoneCreateRequest request) {
 
-        Optional<MilestoneEntity> created = milestoneService.create(projectId, request);
-        if (created.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.NOT_FOUND, "Project not found: " + projectId);
-            problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        Either<ProblemDetail, MilestoneEntity> created = milestoneService.create(projectId, request);
+        if (created.isLeft()) {
+            return (ResponseEntity<MilestoneView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(created.getLeft());
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(milestoneService.toView(created.get()));
     }
@@ -121,17 +122,15 @@ public class MilestoneController {
     })
     @PutMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> updateMilestone(
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<MilestoneView> updateMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId,
             @Valid @RequestBody MilestoneUpdateRequest request) {
 
-        Optional<MilestoneEntity> updated = milestoneService.update(milestoneId, request);
-        if (updated.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.NOT_FOUND, MILESTONE_NOT_FOUND_DETAIL + milestoneId);
-            problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        Either<ProblemDetail, MilestoneEntity> updated = milestoneService.update(milestoneId, request);
+        if (updated.isLeft()) {
+            return (ResponseEntity<MilestoneView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(updated.getLeft());
         }
         return ResponseEntity.ok(milestoneService.toView(updated.get()));
     }
@@ -143,15 +142,14 @@ public class MilestoneController {
     })
     @DeleteMapping(value = "/projects/{projectId}/milestones/{milestoneId}")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<Object> deleteMilestone(
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<Void> deleteMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId) {
 
-        if (!milestoneService.delete(milestoneId)) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.NOT_FOUND, MILESTONE_NOT_FOUND_DETAIL + milestoneId);
-            problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        Either<ProblemDetail, Void> deleted = milestoneService.delete(milestoneId);
+        if (deleted.isLeft()) {
+            return (ResponseEntity<Void>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(deleted.getLeft());
         }
         return ResponseEntity.noContent().build();
     }
