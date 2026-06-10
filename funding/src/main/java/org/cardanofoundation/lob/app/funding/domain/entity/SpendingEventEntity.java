@@ -31,11 +31,11 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Builder
-@Entity(name = "funding.FundingEventEntity")
-@Table(name = "funding_funding_event")
+@Entity(name = "funding.SpendingEventEntity")
+@Table(name = "funding_spending_event")
 @Audited
 @EntityListeners({AuditingEntityListener.class})
-public class FundingEventEntity extends CommonEntity implements Persistable<String> {
+public class SpendingEventEntity extends CommonEntity implements Persistable<String> {
 
     @Id
     @Column(name = "event_id", nullable = false)
@@ -107,7 +107,7 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     /** Spend line items — populated only for SPENDING events. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
-    private List<FundingItemEntity> fundingItems = new ArrayList<>();
+    private List<SpendingItemEntity> spendingItems = new ArrayList<>();
 
     /** Milestone allocations — populated only for FUNDING and REFUND events. */
     @Builder.Default

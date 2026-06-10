@@ -41,7 +41,7 @@ class ProjectServiceTest {
     @Mock
     private MilestoneService milestoneService;
     @Mock
-    private FundingEventService fundingEventService;
+    private SpendingEventService spendingEventService;
 
     @InjectMocks
     private ProjectService projectService;
@@ -183,7 +183,7 @@ class ProjectServiceTest {
 
         when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of(milestone));
         when(milestoneService.toView(milestone)).thenReturn(milestoneView);
-        when(fundingEventService.findByProjectId(project.getId())).thenReturn(List.of());
+        when(spendingEventService.findByProjectId(project.getId())).thenReturn(List.of());
 
         ProjectView view = projectService.toView(project);
 

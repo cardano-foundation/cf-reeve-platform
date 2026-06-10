@@ -38,7 +38,7 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", insertable = false, updatable = false)
-    private FundingEventEntity event;
+    private SpendingEventEntity event;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "milestone_id", insertable = false, updatable = false)

@@ -39,7 +39,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/funding")
+@RequestMapping("/api/v1/spending")
 @Tag(name = "Projects", description = "Funding – Project management API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor

@@ -18,9 +18,9 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.view.FundingEventView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 
 @Slf4j
@@ -31,7 +31,7 @@ public class ProjectService {
 
     private final FundingProjectRepository projectRepository;
     private final MilestoneService milestoneService;
-    private final FundingEventService fundingEventService;
+    private final SpendingEventService spendingEventService;
 
     public Optional<ProjectEntity> findById(String projectId) {
         return projectRepository.findById(projectId);
@@ -115,8 +115,8 @@ public class ProjectService {
                 .map(milestoneService::toView)
                 .toList();
 
-        List<FundingEventView> eventViews = fundingEventService.findByProjectId(project.getId()).stream()
-                .map(fundingEventService::toView)
+        List<SpendingEventView> eventViews = spendingEventService.findByProjectId(project.getId()).stream()
+                .map(spendingEventService::toView)
                 .toList();
 
         return ProjectView.builder()

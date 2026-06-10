@@ -41,6 +41,7 @@ public class ProjectView {
 
     private List<MilestoneView> milestones;
 
-    private List<FundingEventView> events;
+    private List<SpendingEventView> events;
+
 
 }

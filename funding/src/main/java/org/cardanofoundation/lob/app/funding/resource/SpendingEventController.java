@@ -26,38 +26,38 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
 
-import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
-import org.cardanofoundation.lob.app.funding.domain.request.FundingEventCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.view.FundingEventView;
-import org.cardanofoundation.lob.app.funding.service.FundingEventService;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
+import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/funding")
-@Tag(name = "FundingEvents", description = "Funding – Event management API (Funding, Spending, Refund)")
+@RequestMapping("/api/v1/spending")
+@Tag(name = "SpendingEvents", description = "Spending – Event management API (Funding, Spending, Refund)")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
-public class FundingEventController {
+public class SpendingEventController {
 
     private static final String EVENT_NOT_FOUND_DETAIL = "Event not found: ";
 
-    private final FundingEventService fundingEventService;
+    private final SpendingEventService spendingEventService;
     private final ProjectService projectService;
 
     @Operation(description = "List events for a project with optional filtering", responses = {
             @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    array = @ArraySchema(schema = @Schema(implementation = FundingEventView.class)))}),
+                    array = @ArraySchema(schema = @Schema(implementation = SpendingEventView.class)))}),
             @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @GetMapping(value = "/projects/{projectId}/events", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @SuppressWarnings("unchecked")
-    public ResponseEntity<List<FundingEventView>> listEvents(
+    public ResponseEntity<List<SpendingEventView>> listEvents(
             @PathVariable String projectId,
             @RequestParam(required = false) Optional<EventStatus> status,
             @RequestParam(required = false) Optional<EventType> eventType,
@@ -66,78 +66,78 @@ public class FundingEventController {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, "Project not found: " + projectId);
             problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-            return (ResponseEntity<List<FundingEventView>>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+            return (ResponseEntity<List<SpendingEventView>>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
         }
-        List<FundingEventView> views = fundingEventService
+        List<SpendingEventView> views = spendingEventService
                 .findByProjectIdAndFilter(projectId, status, eventType, pageable)
                 .getContent()
                 .stream()
-                .map(fundingEventService::toView)
+                .map(spendingEventService::toView)
                 .toList();
         return ResponseEntity.ok(views);
     }
 
     @Operation(description = "Get a single event", responses = {
             @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = FundingEventView.class))}),
+                    schema = @Schema(implementation = SpendingEventView.class))}),
             @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @GetMapping(value = "/projects/{projectId}/events/{eventId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @SuppressWarnings("unchecked")
-    public ResponseEntity<FundingEventView> getEvent(
+    public ResponseEntity<SpendingEventView> getEvent(
             @PathVariable String projectId,
             @PathVariable String eventId) {
 
-        Optional<FundingEventEntity> eventOpt = fundingEventService.findById(eventId);
+        Optional<SpendingEventEntity> eventOpt = spendingEventService.findById(eventId);
         if (eventOpt.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, EVENT_NOT_FOUND_DETAIL + eventId);
-            problem.setTitle(ErrorTitleConstants.FUNDING_EVENT_NOT_FOUND);
-            return (ResponseEntity<FundingEventView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+            return (ResponseEntity<SpendingEventView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
         }
-        return ResponseEntity.ok(fundingEventService.toView(eventOpt.get()));
+        return ResponseEntity.ok(spendingEventService.toView(eventOpt.get()));
     }
 
-    @Operation(description = "Create a new funding event (Funding, Spending, or Refund)", responses = {
+    @Operation(description = "Create a new spending event (Funding, Spending, or Refund)", responses = {
             @ApiResponse(responseCode = "201", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = FundingEventView.class))}),
+                    schema = @Schema(implementation = SpendingEventView.class))}),
             @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @PostMapping(value = "/projects/{projectId}/events", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     @SuppressWarnings("unchecked")
-    public ResponseEntity<FundingEventView> createEvent(
+    public ResponseEntity<SpendingEventView> createEvent(
             @PathVariable String projectId,
-            @Valid @RequestBody FundingEventCreateRequest request) {
+            @Valid @RequestBody SpendingEventCreateRequest request) {
 
-        Either<ProblemDetail, FundingEventEntity> created = fundingEventService.create(projectId, request);
+        Either<ProblemDetail, SpendingEventEntity> created = spendingEventService.create(projectId, request);
         if (created.isLeft()) {
-            return (ResponseEntity<FundingEventView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(created.getLeft());
+            return (ResponseEntity<SpendingEventView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(created.getLeft());
         }
-        return ResponseEntity.status(HttpStatus.CREATED).body(fundingEventService.toView(created.get()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(spendingEventService.toView(created.get()));
     }
 
     @Operation(description = "Publish an event to the blockchain (sets status to PUBLISHED)", responses = {
             @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = FundingEventView.class))}),
+                    schema = @Schema(implementation = SpendingEventView.class))}),
             @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @PostMapping(value = "/projects/{projectId}/events/{eventId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @SuppressWarnings("unchecked")
-    public ResponseEntity<FundingEventView> publishEvent(
+    public ResponseEntity<SpendingEventView> publishEvent(
             @PathVariable String projectId,
             @PathVariable String eventId) {
 
-        Either<ProblemDetail, FundingEventEntity> published = fundingEventService.publish(eventId);
+        Either<ProblemDetail, SpendingEventEntity> published = spendingEventService.publish(eventId);
         if (published.isLeft()) {
-            return (ResponseEntity<FundingEventView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(published.getLeft());
+            return (ResponseEntity<SpendingEventView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(published.getLeft());
         }
-        return ResponseEntity.ok(fundingEventService.toView(published.get()));
+        return ResponseEntity.ok(spendingEventService.toView(published.get()));
     }
 
     @Operation(description = "Delete a draft event (published events cannot be deleted)", responses = {
@@ -154,7 +154,7 @@ public class FundingEventController {
             @PathVariable String projectId,
             @PathVariable String eventId) {
 
-        Either<ProblemDetail, Void> deleted = fundingEventService.delete(eventId);
+        Either<ProblemDetail, Void> deleted = spendingEventService.delete(eventId);
         if (deleted.isLeft()) {
             ProblemDetail problem = deleted.getLeft();
             return (ResponseEntity<Void>) (ResponseEntity<?>) ResponseEntity.status(problem.getStatus()).body(problem);

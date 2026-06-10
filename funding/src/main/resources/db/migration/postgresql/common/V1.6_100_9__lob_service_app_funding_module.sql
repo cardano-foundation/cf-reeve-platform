@@ -1,4 +1,4 @@
--- Funding module – Funding feature tables
+-- Funding module – Spending feature tables
 
 CREATE TABLE IF NOT EXISTS funding_project (
     project_id       CHAR(64)       NOT NULL,
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS funding_milestone_aud (
 
 -- ------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS funding_funding_event (
+CREATE TABLE IF NOT EXISTS funding_spending_event (
     event_id     VARCHAR(36)  NOT NULL,
     project_id   CHAR(64)     NOT NULL,
     event_type   VARCHAR(20)  NOT NULL,
@@ -102,14 +102,14 @@ CREATE TABLE IF NOT EXISTS funding_funding_event (
     updated_at  TIMESTAMP WITHOUT TIME ZONE,
     published_at  TIMESTAMP WITHOUT TIME ZONE,
 
-    CONSTRAINT pk_funding_funding_event PRIMARY KEY (event_id),
+    CONSTRAINT pk_funding_spending_event PRIMARY KEY (event_id),
     CONSTRAINT fk_funding_event_project   FOREIGN KEY (project_id)   REFERENCES funding_project   (project_id)   ON DELETE CASCADE,
     CONSTRAINT fk_funding_event_milestone FOREIGN KEY (milestone_id) REFERENCES funding_milestone (milestone_id) ON DELETE SET NULL,
     CONSTRAINT chk_funding_event_type   CHECK (event_type IN ('FUNDING', 'SPENDING', 'REFUND')),
     CONSTRAINT chk_funding_event_status CHECK (status     IN ('DRAFT', 'PUBLISHED'))
 );
 
-CREATE TABLE IF NOT EXISTS funding_funding_event_aud (
+CREATE TABLE IF NOT EXISTS funding_spending_event_aud (
     event_id     VARCHAR(36)  NOT NULL,
     project_id   CHAR(64),
     event_type   VARCHAR(20),
@@ -134,13 +134,13 @@ CREATE TABLE IF NOT EXISTS funding_funding_event_aud (
     rev     INTEGER  NOT NULL,
     revtype SMALLINT,
 
-    CONSTRAINT pk_funding_funding_event_aud PRIMARY KEY (event_id, rev, revtype),
-    CONSTRAINT fk_funding_funding_event_aud_rev FOREIGN KEY (rev) REFERENCES revinfo (rev)
+    CONSTRAINT pk_funding_spending_event_aud PRIMARY KEY (event_id, rev, revtype),
+    CONSTRAINT fk_funding_spending_event_aud_rev FOREIGN KEY (rev) REFERENCES revinfo (rev)
 );
 
 -- ------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS funding_funding_item (
+CREATE TABLE IF NOT EXISTS funding_spending_item (
     item_id      VARCHAR(36)  NOT NULL,
     event_id     VARCHAR(36)  NOT NULL,
     category     VARCHAR(255) NOT NULL,
@@ -158,11 +158,11 @@ CREATE TABLE IF NOT EXISTS funding_funding_item (
     created_at  TIMESTAMP WITHOUT TIME ZONE,
     updated_at  TIMESTAMP WITHOUT TIME ZONE,
 
-    CONSTRAINT pk_funding_funding_item PRIMARY KEY (item_id),
-    CONSTRAINT fk_funding_item_event FOREIGN KEY (event_id) REFERENCES funding_funding_event (event_id) ON DELETE CASCADE
+    CONSTRAINT pk_funding_spending_item PRIMARY KEY (item_id),
+    CONSTRAINT fk_funding_item_event FOREIGN KEY (event_id) REFERENCES funding_spending_event (event_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS funding_funding_item_aud (
+CREATE TABLE IF NOT EXISTS funding_spending_item_aud (
     item_id      VARCHAR(36)  NOT NULL,
     event_id     VARCHAR(36),
     category     VARCHAR(255),
@@ -183,8 +183,8 @@ CREATE TABLE IF NOT EXISTS funding_funding_item_aud (
     rev     INTEGER  NOT NULL,
     revtype SMALLINT,
 
-    CONSTRAINT pk_funding_funding_item_aud PRIMARY KEY (item_id, rev, revtype),
-    CONSTRAINT fk_funding_funding_item_aud_rev FOREIGN KEY (rev) REFERENCES revinfo (rev)
+    CONSTRAINT pk_funding_spending_item_aud PRIMARY KEY (item_id, rev, revtype),
+    CONSTRAINT fk_funding_spending_item_aud_rev FOREIGN KEY (rev) REFERENCES revinfo (rev)
 );
 
 -- ------------------------------------------------------------
@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS funding_event_milestone_allocation (
     updated_at  TIMESTAMP WITHOUT TIME ZONE,
 
     CONSTRAINT pk_funding_event_milestone_allocation PRIMARY KEY (event_id, milestone_id),
-    CONSTRAINT fk_fema_event     FOREIGN KEY (event_id)     REFERENCES funding_funding_event (event_id)     ON DELETE CASCADE,
+    CONSTRAINT fk_fema_event     FOREIGN KEY (event_id)     REFERENCES funding_spending_event (event_id)     ON DELETE CASCADE,
     CONSTRAINT fk_fema_milestone FOREIGN KEY (milestone_id) REFERENCES funding_milestone      (milestone_id) ON DELETE CASCADE
 );
 

@@ -64,7 +64,7 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
 
     @Builder.Default
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
-    private List<FundingEventEntity> events = new ArrayList<>();
+    private List<SpendingEventEntity> events = new ArrayList<>();
 
     public static String id(String organisationId, String activityId) {
         return digestAsHex("%s::%s".formatted(organisationId, activityId));

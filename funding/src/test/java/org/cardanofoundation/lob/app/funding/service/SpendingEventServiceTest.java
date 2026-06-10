@@ -23,91 +23,91 @@ import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.EventMilestoneAllocationRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.FundingEventCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.FundingItemRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.view.FundingEventView;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingItemRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.*;
 
 @ExtendWith(MockitoExtension.class)
-class FundingEventServiceTest {
+class SpendingEventServiceTest {
 
     @Mock
-    private FundingEventRepository fundingEventRepository;
+    private SpendingEventRepository spendingEventRepository;
     @Mock
     private FundingProjectRepository projectRepository;
     @Mock
     private MilestoneRepository milestoneRepository;
     @Mock
-    private FundingItemRepository fundingItemRepository;
+    private SpendingItemRepository spendingItemRepository;
     @Mock
     private EventMilestoneAllocationRepository allocationRepository;
 
     @InjectMocks
-    private FundingEventService fundingEventService;
+    private SpendingEventService spendingEventService;
 
     @Test
     void findById_delegatesToRepository() {
-        FundingEventEntity event = fundingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        assertThat(fundingEventService.findById("e1")).contains(event);
+        assertThat(spendingEventService.findById("e1")).contains(event);
     }
 
     @Test
     void findById_returnsEmpty_whenNotFound() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.empty());
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.empty());
 
-        assertThat(fundingEventService.findById("e1")).isEmpty();
+        assertThat(spendingEventService.findById("e1")).isEmpty();
     }
 
     @Test
     void findByProjectId_returnsList() {
-        FundingEventEntity event = fundingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findByProject_Id("p1")).thenReturn(List.of(event));
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findByProject_Id("p1")).thenReturn(List.of(event));
 
-        assertThat(fundingEventService.findByProjectId("p1")).containsExactly(event);
+        assertThat(spendingEventService.findByProjectId("p1")).containsExactly(event);
     }
 
     @Test
     void create_returnsEmpty_whenProjectNotFound() {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 
-        FundingEventCreateRequest request = fundingCreateRequest(EventType.SPENDING, List.of(), List.of());
-        assertThat(fundingEventService.create("p1", request).isLeft()).isTrue();
-        verify(fundingEventRepository, never()).saveAndFlush(any());
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
+        assertThat(spendingEventService.create("p1", request).isLeft()).isTrue();
+        verify(spendingEventRepository, never()).saveAndFlush(any());
     }
 
     @Test
-    void create_fundingEvent_populatesItemsAndCalculatesTotal() {
+    void create_spendingEvent_populatesItemsAndCalculatesTotal() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
 
-        FundingItemRequest item1 = fundingItemRequest(new BigDecimal("100.00"));
-        FundingItemRequest item2 = fundingItemRequest(new BigDecimal("200.00"));
+        SpendingItemRequest item1 = spendingItemRequest(new BigDecimal("100.00"));
+        SpendingItemRequest item2 = spendingItemRequest(new BigDecimal("200.00"));
 
-        FundingEventCreateRequest request = fundingCreateRequest(EventType.SPENDING, List.of(item1, item2), List.of());
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(item1, item2), List.of());
         request.setMilestone(milestoneCreateRequest());
 
         when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
-        FundingEventEntity saved = fundingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.saveAndFlush(any())).thenReturn(saved);
+        SpendingEventEntity saved = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.saveAndFlush(any())).thenReturn(saved);
 
-        Either<ProblemDetail, FundingEventEntity> result = fundingEventService.create("p1", request);
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.create("p1", request);
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository).saveAndFlush(any());
-        verify(fundingEventRepository).saveAndFlush(argThat(e ->
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
                 e.getEventType() == EventType.SPENDING
                 && e.getStatus() == EventStatus.DRAFT
-                && e.getFundingItems().size() == 2
+                && e.getSpendingItems().size() == 2
                 && e.getTotalAmount().compareTo(new BigDecimal("300.00")) == 0
                 && e.getMilestoneId() != null
         ));
     }
 
     @Test
-    void create_fundingEvent_populatesMilestoneAllocationsAndCalculatesTotal() {
+    void create_spendingEvent_populatesMilestoneAllocationsAndCalculatesTotal() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
 
@@ -118,15 +118,15 @@ class FundingEventServiceTest {
                 .allocatedAmount(new BigDecimal("50000.00"))
                 .build();
 
-        FundingEventCreateRequest request = fundingCreateRequest(EventType.FUNDING, List.of(), List.of(alloc));
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.FUNDING, List.of(), List.of(alloc));
 
-        FundingEventEntity saved = fundingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
-        when(fundingEventRepository.saveAndFlush(any())).thenReturn(saved);
+        SpendingEventEntity saved = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        when(spendingEventRepository.saveAndFlush(any())).thenReturn(saved);
 
-        Either<ProblemDetail, FundingEventEntity> result = fundingEventService.create("p1", request);
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.create("p1", request);
 
         assertThat(result.isRight()).isTrue();
-        verify(fundingEventRepository).saveAndFlush(argThat(e ->
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
                 e.getEventType() == EventType.FUNDING
                 && e.getMilestoneAllocations().size() == 1
                 && e.getTotalAmount().compareTo(new BigDecimal("50000.00")) == 0
@@ -134,7 +134,7 @@ class FundingEventServiceTest {
     }
 
     @Test
-    void create_fundingEvent_withNullAllocatedAmount_totalIsZero() {
+    void create_spendingEvent_withNullAllocatedAmount_totalIsZero() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
 
@@ -145,25 +145,25 @@ class FundingEventServiceTest {
                 .allocatedAmount(null)
                 .build();
 
-        FundingEventCreateRequest request = fundingCreateRequest(EventType.FUNDING, List.of(), List.of(alloc));
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.FUNDING, List.of(), List.of(alloc));
 
-        FundingEventEntity saved = fundingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
-        when(fundingEventRepository.saveAndFlush(any())).thenReturn(saved);
+        SpendingEventEntity saved = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        when(spendingEventRepository.saveAndFlush(any())).thenReturn(saved);
 
-        fundingEventService.create("p1", request);
+        spendingEventService.create("p1", request);
 
-        verify(fundingEventRepository).saveAndFlush(argThat(e ->
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
                 e.getTotalAmount().compareTo(BigDecimal.ZERO) == 0
         ));
     }
 
     @Test
-    void publish_setsStatusAndTxHash() {
-        FundingEventEntity event = fundingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
-        when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
+    void publish_setsStatusAndDispatchApproved() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(spendingEventRepository.saveAndFlush(event)).thenReturn(event);
 
-        Either<ProblemDetail, FundingEventEntity> result = fundingEventService.publish("e1");
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.publish("e1");
 
         assertThat(result.isRight()).isTrue();
         assertThat(event.getStatus()).isEqualTo(EventStatus.PUBLISHED);
@@ -171,63 +171,63 @@ class FundingEventServiceTest {
 
     @Test
     void publish_returnsEmpty_whenEventNotFound() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.empty());
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.empty());
 
-        assertThat(fundingEventService.publish("e1").isLeft()).isTrue();
+        assertThat(spendingEventService.publish("e1").isLeft()).isTrue();
     }
 
     @Test
     void delete_returnsFalse_whenNotFound() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.empty());
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.empty());
 
-        assertThat(fundingEventService.delete("e1").isLeft()).isTrue();
-        verify(fundingEventRepository, never()).delete(any());
+        assertThat(spendingEventService.delete("e1").isLeft()).isTrue();
+        verify(spendingEventRepository, never()).delete(any());
     }
 
     @Test
     void delete_returnsFalse_whenEventIsPublished() {
-        FundingEventEntity event = fundingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        assertThat(fundingEventService.delete("e1").isLeft()).isTrue();
-        verify(fundingEventRepository, never()).delete(any());
+        assertThat(spendingEventService.delete("e1").isLeft()).isTrue();
+        verify(spendingEventRepository, never()).delete(any());
     }
 
     @Test
     void delete_deletesAndReturnsTrue_forDraftEvent() {
-        FundingEventEntity event = fundingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        assertThat(fundingEventService.delete("e1").isRight()).isTrue();
-        verify(fundingEventRepository).delete(event);
+        assertThat(spendingEventService.delete("e1").isRight()).isTrue();
+        verify(spendingEventRepository).delete(event);
     }
 
     @Test
-    void toView_mapsEventWithFundingItems() {
-        FundingEventEntity event = fundingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+    void toView_mapsEventWithSpendingItems() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         event.setId("e1");
         event.setMilestoneId("m1");
 
-        FundingItemEntity item = fundingItemEntity(event);
-        when(fundingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
+        SpendingItemEntity item = spendingItemEntity(event);
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
 
-        FundingEventView view = fundingEventService.toView(event);
+        SpendingEventView view = spendingEventService.toView(event);
 
         assertThat(view.getEventId()).isEqualTo("e1");
         assertThat(view.getEventType()).isEqualTo(EventType.SPENDING);
         assertThat(view.getStatus()).isEqualTo(EventStatus.DRAFT);
         assertThat(view.getMilestoneLabel()).isEqualTo("Milestone AB");
-        assertThat(view.getFundingItems()).hasSize(1);
+        assertThat(view.getSpendingItems()).hasSize(1);
         assertThat(view.getMilestoneAllocations()).isEmpty();
     }
 
     @Test
     void toView_mapsEventWithMilestoneAllocations() {
-        FundingEventEntity event = fundingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        SpendingEventEntity event = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
         event.setId("e1");
 
         MilestoneEntity milestone = milestoneEntity("m1");
@@ -239,13 +239,13 @@ class FundingEventServiceTest {
                 .milestone(milestone)
                 .build();
 
-        when(fundingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
 
-        FundingEventView view = fundingEventService.toView(event);
+        SpendingEventView view = spendingEventService.toView(event);
 
-        assertThat(view.getFundingItems()).isEmpty();
+        assertThat(view.getSpendingItems()).isEmpty();
         assertThat(view.getMilestoneAllocations()).hasSize(1);
         assertThat(view.getMilestoneAllocations().get(0).getMilestoneId()).isEqualTo("m1");
         assertThat(view.getMilestoneAllocations().get(0).getAllocatedAmount()).isEqualByComparingTo("50000.00");
@@ -254,14 +254,14 @@ class FundingEventServiceTest {
 
     @Test
     void toView_handlesNullMilestoneId() {
-        FundingEventEntity event = fundingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         event.setId("e1");
         event.setMilestoneId(null);
 
-        when(fundingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
-        FundingEventView view = fundingEventService.toView(event);
+        SpendingEventView view = spendingEventService.toView(event);
 
         assertThat(view.getMilestoneLabel()).isNull();
         verify(milestoneRepository, never()).findById(any());
@@ -269,8 +269,8 @@ class FundingEventServiceTest {
 
     // --- helpers ---
 
-    private FundingEventEntity fundingEventEntity(EventType type, EventStatus status) {
-        return FundingEventEntity.builder()
+    private SpendingEventEntity spendingEventEntity(EventType type, EventStatus status) {
+        return SpendingEventEntity.builder()
                 .id("e1")
                 .eventType(type)
                 .status(status)
@@ -305,8 +305,8 @@ class FundingEventServiceTest {
                 .build();
     }
 
-    private FundingItemEntity fundingItemEntity(FundingEventEntity event) {
-        return FundingItemEntity.builder()
+    private SpendingItemEntity spendingItemEntity(SpendingEventEntity event) {
+        return SpendingItemEntity.builder()
                 .id("item-1")
                 .category("Personnel")
                 .vendor("Vendor AB")
@@ -317,8 +317,8 @@ class FundingEventServiceTest {
                 .build();
     }
 
-    private FundingItemRequest fundingItemRequest(BigDecimal amount) {
-        return FundingItemRequest.builder()
+    private SpendingItemRequest spendingItemRequest(BigDecimal amount) {
+        return SpendingItemRequest.builder()
                 .category("Personnel")
                 .vendor("Vendor AB")
                 .amountFcy(amount)
@@ -327,16 +327,16 @@ class FundingEventServiceTest {
                 .build();
     }
 
-    private FundingEventCreateRequest fundingCreateRequest(
+    private SpendingEventCreateRequest spendingCreateRequest(
             EventType type,
-            List<FundingItemRequest> items,
+            List<SpendingItemRequest> items,
             List<EventMilestoneAllocationRequest> allocations) {
-        return FundingEventCreateRequest.builder()
+        return SpendingEventCreateRequest.builder()
                 .eventType(type)
                 .fundingId("GRANT-2025-001")
                 .activityId("PROJ-AB")
                 .currency("USD")
-                .fundingItems(items)
+                .spendingItems(items)
                 .milestoneAllocations(allocations)
                 .build();
     }

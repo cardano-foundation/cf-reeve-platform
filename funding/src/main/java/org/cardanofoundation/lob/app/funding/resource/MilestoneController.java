@@ -36,7 +36,7 @@ import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/funding")
+@RequestMapping("/api/v1/spending")
 @Tag(name = "Milestones", description = "Funding – Milestone management API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
