@@ -43,5 +43,4 @@ public class ProjectView {
 
     private List<SpendingEventView> events;
 
-
 }
