@@ -160,6 +160,7 @@ class SpendingEventServiceTest {
     @Test
     void publish_setsStatusAndDispatchApproved() {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        event.setTxHash("tx-hash-abc");
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
         when(spendingEventRepository.saveAndFlush(event)).thenReturn(event);
 
