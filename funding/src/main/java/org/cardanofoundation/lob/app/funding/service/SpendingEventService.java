@@ -115,11 +115,12 @@ public class SpendingEventService {
         event.setFundingTx(request.getFundingTx());
 
         if (event.getEventType() == EventType.SPENDING) {
+            event.getSpendingItems().clear();
+            populateSpendingItems(event, request.getSpendingItems());
             event.setMilestoneId(null);
             Either<ProblemDetail, Void> milestoneResult = applySpendingMilestone(event, request.getMilestone(), project);
             if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
         } else {
-            allocationRepository.deleteById_EventId(eventId);
             event.getMilestoneAllocations().clear();
             Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getMilestoneAllocations(), project);
             if (allocResult.isLeft()) return Either.left(allocResult.getLeft());

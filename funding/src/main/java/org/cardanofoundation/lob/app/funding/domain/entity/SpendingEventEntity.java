@@ -106,12 +106,12 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
 
     /** Spend line items — populated only for SPENDING events. */
     @Builder.Default
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SpendingItemEntity> spendingItems = new ArrayList<>();
 
     /** Milestone allocations — populated only for FUNDING and REFUND events. */
     @Builder.Default
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
 
     @PrePersist
