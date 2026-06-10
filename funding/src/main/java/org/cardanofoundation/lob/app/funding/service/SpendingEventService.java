@@ -202,12 +202,12 @@ public class SpendingEventService {
             if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
             MilestoneEntity milestone = milestoneResult.get();
             EventMilestoneAllocationEntity.Id id = new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId());
-            event.getMilestoneAllocations().add(toAllocationEntity(id, req, event, milestone));
+            event.getMilestoneAllocations().add(toAllocationEntity(id, req.getAllocatedAmount(), event, milestone));
         }
         return Either.right(null);
     }
 
-    /** Finds an existing milestone by milestoneId, or creates a new one from the request fields. */
+    /** Used by SPENDING events: finds existing milestone by milestoneId or creates a new one from MilestoneCreateRequest. */
     private Either<ProblemDetail, MilestoneEntity> resolveOrCreateMilestone(MilestoneCreateRequest req, ProjectEntity project) {
         if (req.getMilestoneId() != null) {
             Optional<MilestoneEntity> existing = milestoneRepository.findById(req.getMilestoneId());
@@ -229,7 +229,7 @@ public class SpendingEventService {
             return Either.left(problem);
         }
 
-        MilestoneEntity milestone = MilestoneEntity.builder()
+        MilestoneEntity newMilestone = MilestoneEntity.builder()
                 .id(UUID.randomUUID().toString())
                 .label(req.getLabel())
                 .expectedCost(req.getExpectedCost())
@@ -237,7 +237,7 @@ public class SpendingEventService {
                 .dueDate(req.getDueDate())
                 .project(project)
                 .build();
-        return Either.right(milestoneRepository.saveAndFlush(milestone));
+        return Either.right(milestoneRepository.saveAndFlush(newMilestone));
     }
 
     private void recalculateTotalAmount(SpendingEventEntity event) {
@@ -255,10 +255,10 @@ public class SpendingEventService {
         }
     }
 
-    private EventMilestoneAllocationEntity toAllocationEntity(EventMilestoneAllocationEntity.Id id, EventMilestoneAllocationRequest req, SpendingEventEntity event, MilestoneEntity milestone) {
+    private EventMilestoneAllocationEntity toAllocationEntity(EventMilestoneAllocationEntity.Id id, BigDecimal allocatedAmount, SpendingEventEntity event, MilestoneEntity milestone) {
         return EventMilestoneAllocationEntity.builder()
                 .id(id)
-                .allocatedAmount(req.getAllocatedAmount())
+                .allocatedAmount(allocatedAmount)
                 .event(event)
                 .milestone(milestone)
                 .build();
