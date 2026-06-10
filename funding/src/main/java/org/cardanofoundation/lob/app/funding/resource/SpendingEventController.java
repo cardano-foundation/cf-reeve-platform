@@ -120,6 +120,30 @@ public class SpendingEventController {
         return ResponseEntity.status(HttpStatus.CREATED).body(spendingEventService.toView(created.get()));
     }
 
+    @Operation(description = "Update a draft event — re-allocates milestones from the payload", responses = {
+            @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = SpendingEventView.class))}),
+            @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = ProblemDetail.class))}),
+            @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = ProblemDetail.class))})
+    })
+    @PutMapping(value = "/projects/{projectId}/events/{eventId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<SpendingEventView> updateEvent(
+            @PathVariable String projectId,
+            @PathVariable String eventId,
+            @Valid @RequestBody SpendingEventCreateRequest request) {
+
+        Either<ProblemDetail, SpendingEventEntity> updated = spendingEventService.update(projectId, eventId, request);
+        if (updated.isLeft()) {
+            ProblemDetail problem = updated.getLeft();
+            return (ResponseEntity<SpendingEventView>) (ResponseEntity<?>) ResponseEntity.status(problem.getStatus()).body(problem);
+        }
+        return ResponseEntity.ok(spendingEventService.toView(updated.get()));
+    }
+
     @Operation(description = "Publish an event to the blockchain (sets status to PUBLISHED)", responses = {
             @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = SpendingEventView.class))}),

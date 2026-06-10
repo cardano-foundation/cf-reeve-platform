@@ -47,6 +47,15 @@ public class MilestoneService {
 
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
+        if (request.getLabel() == null || request.getExpectedCost() == null
+                || request.getCurrency() == null || request.getDueDate() == null) {
+            log.warn("Missing required fields for milestone creation in project: {}", projectId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                    "label, expectedCost, currency, dueDate are required when creating a new milestone");
+            problem.setTitle("MILESTONE_FIELDS_REQUIRED");
+            return Either.left(problem);
+        }
+
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
 
         if (projectM.isEmpty()) {

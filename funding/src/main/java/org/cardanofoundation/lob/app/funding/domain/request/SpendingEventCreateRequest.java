@@ -52,7 +52,7 @@ public class SpendingEventCreateRequest {
     @Valid
     private List<SpendingItemRequest> spendingItems = new ArrayList<>();
 
-    /** Milestone allocations — used only for FUNDING and REFUND events. */
+    /** Milestone allocations — each entry can reference an existing milestone via milestoneId or create a new one. */
     @Builder.Default
     @Valid
     private List<EventMilestoneAllocationRequest> milestoneAllocations = new ArrayList<>();
