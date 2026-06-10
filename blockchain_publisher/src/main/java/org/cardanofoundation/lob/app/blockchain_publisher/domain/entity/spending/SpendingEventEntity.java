@@ -1,5 +1,12 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
 import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
 import jakarta.persistence.AttributeOverride;
@@ -9,36 +16,32 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import javax.annotation.Nullable;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
-import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockableEntity;
-import org.hibernate.annotations.JdbcType;
-import org.hibernate.dialect.PostgreSQLEnumJdbcType;
-import org.hibernate.envers.Audited;
+
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import javax.annotation.Nullable;
-import java.time.LocalDate;
-import java.time.YearMonth;
-import java.util.LinkedHashSet;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import org.hibernate.envers.Audited;
 
-import static jakarta.persistence.EnumType.STRING;
-import static jakarta.persistence.FetchType.EAGER;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.publish.PublishableEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockableEntity;
 
 @Getter
 @Setter
@@ -50,17 +53,73 @@ import static jakarta.persistence.FetchType.EAGER;
 @AllArgsConstructor
 @EntityListeners({ AuditingEntityListener.class })
 @Access(AccessType.FIELD)
-public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements Persistable<String> {
+public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements Persistable<String>, PublishableEntity {
 
     @Id
-    @Column(name = "transaction_id", nullable = false)
-    private String id;
+    @Column(name = "event_id", nullable = false)
+    private String eventId;
 
-    @Column(name = "internal_number", nullable = false)
-    private String internalNumber;
+    @Column(name = "project_id", nullable = false)
+    private String projectId;
 
-    @Column(name = "batch_id", nullable = false)
-    private String batchId;
+    @NotBlank
+    @Column(name = "funding_id", nullable = false)
+    private String fundingId;
+
+    @NotBlank
+    @Column(name = "activity_id", nullable = false)
+    private String activityId;
+
+    @Nullable
+    @Column(name = "activity_title")
+    private String activityTitle;
+
+    @Nullable
+    @Column(name = "round_id")
+    private String roundId;
+
+    @Nullable
+    @Column(name = "funding_tx")
+    private String fundingTx;
+
+    @Nullable
+    @Column(name = "funding_doc_hash")
+    private String fundingDocHash;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "event_type", nullable = false)
+    private EventType eventType;
+
+    @Column(name = "event_date")
+    private LocalDate eventDate;
+
+    @NotNull
+    @Column(name = "total_amount", nullable = false)
+    @Builder.Default
+    private BigDecimal totalAmount = BigDecimal.ZERO;
+
+    @NotBlank
+    @Column(name = "currency", nullable = false)
+    private String currency;
+
+    @Nullable
+    @Column(name = "currency_id")
+    private String currencyId;
+
+    @Nullable
+    @Column(name = "milestone_id", nullable = false)
+    private String milestoneId;
+
+    /** Spend line items — populated only for SPENDING events. */
+    @Builder.Default
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
+    private List<SpendingItemEntity> spendingItems = new ArrayList<>();
+
+    /** Milestone allocations — populated only for FUNDING and REFUND events. */
+    @Builder.Default
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
+    private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
 
     @Embedded
     @AttributeOverrides({
@@ -71,17 +130,6 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
             @AttributeOverride(name = "currencyId", column = @Column(name = "organisation_currency_id")),
     })
     private Organisation organisation;
-
-    @Column(name = "type", nullable = false)
-    @Enumerated(STRING)
-    @JdbcType(PostgreSQLEnumJdbcType.class)
-    private TransactionType transactionType;
-
-    @Column(name = "entry_date", nullable = false)
-    private LocalDate entryDate;
-
-    @Column(name = "accounting_period", nullable = false)
-    private YearMonth accountingPeriod;
 
     @Nullable
     @Embedded
@@ -96,13 +144,9 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     })
     private L1SubmissionData l1SubmissionData;
 
-    @OneToMany(mappedBy = "transaction", orphanRemoval = true, fetch = EAGER, cascade = CascadeType.ALL)
-    @Builder.Default
-    private Set<TransactionItemEntity> items = new LinkedHashSet<>();
-
     @Override
     public int hashCode() {
-        return Objects.hashCode(id);
+        return Objects.hashCode(eventId);
     }
 
     @Override
@@ -114,7 +158,7 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
             return false;
         }
         if (obj instanceof SpendingEventEntity te) {
-            return id.equals(te.getId());
+            return eventId.equals(te.getId());
         }
 
         return false;
@@ -130,7 +174,12 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
 
     @Override
     public String getId() {
-        return id;
+        return eventId;
+    }
+
+    @Override
+    public String getOrganisationId() {
+        return organisation.getId();
     }
 
 }

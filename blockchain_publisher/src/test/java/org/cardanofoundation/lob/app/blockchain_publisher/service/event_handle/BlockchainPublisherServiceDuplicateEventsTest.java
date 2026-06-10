@@ -30,10 +30,11 @@ import org.cardanofoundation.lob.app.blockchain_publisher.config.TimeConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepository;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API1L1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API3L1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.BlockchainReportsDispatcher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.BlockchainTransactionsDispatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoDispatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoStatusWatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.BlockchainTransactionSubmissionService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.TransactionSubmissionService;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
@@ -53,9 +54,9 @@ class BlockchainPublisherServiceDuplicateEventsTest {
     @Autowired
     private ReportEntityRepository reportEntityRepository;
     @MockBean
-    private BlockchainReportsDispatcher blockchainReportsDispatcher;
+    private CardanoDispatcher cardanoDispatcher;
     @MockBean
-    private BlockchainTransactionsDispatcher blockchainTransactionsDispatcher;
+    private CardanoStatusWatcher cardanoStatusWatcher;
     @MockBean
     private BlockchainTransactionSubmissionService blockchainTransactionSubmissionService;
     @MockBean
@@ -64,6 +65,8 @@ class BlockchainPublisherServiceDuplicateEventsTest {
     private API1L1TransactionCreator api1L1TransactionCreator;
     @MockBean
     private API3L1TransactionCreator api3L1TransactionCreator;
+    @MockBean
+    private SpendingEventL1TransactionCreator spendingEventL1TransactionCreator;
 
 
     @BeforeEach

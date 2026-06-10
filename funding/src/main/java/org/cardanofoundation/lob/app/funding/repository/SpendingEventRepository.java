@@ -43,9 +43,11 @@ public interface SpendingEventRepository extends JpaRepository<SpendingEventEnti
 
     @Query("""
         SELECT e FROM funding.SpendingEventEntity e
+        JOIN FETCH e.project
         WHERE e.ledgerDispatchApproved IS TRUE
         AND e.ledgerDispatchStatus = 'NOT_DISPATCHED'
         AND e.project.organisationId = :organisationId
+
         """)
     Set<SpendingEventEntity> findAllToBePublished(@Param("organisationId") String organisationId);
 }

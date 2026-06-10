@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.event_handle;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublisherService;
+import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 
 @Service

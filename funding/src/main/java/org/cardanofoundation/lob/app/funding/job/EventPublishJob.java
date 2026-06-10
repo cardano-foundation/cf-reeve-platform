@@ -1,22 +1,26 @@
 package org.cardanofoundation.lob.app.funding.job;
 
+import java.time.LocalDateTime;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
-import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
-import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
-import org.cardanofoundation.lob.app.funding.repository.SpendingEventRepository;
-import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
-import org.cardanofoundation.lob.app.support.collections.Partitions;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.Set;
-import java.util.stream.Collectors;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
+import org.cardanofoundation.lob.app.funding.repository.SpendingEventRepository;
+import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.collections.Partitions;
 
 @Service
 @Slf4j
@@ -38,13 +42,18 @@ public class EventPublishJob {
         log.debug("Publishing Events");
         for (Organisation organisation : organisationPublicApi.listAll()) {
             Set<SpendingEventEntity> allPublishableEvents = spendingEventRepository.findAllToBePublished(organisation.getId());
-            Set<SpendingEventView> spendingEventViews = allPublishableEvents.stream().map(spendingEventService::toView).collect(Collectors.toSet());
+            Set<SpendingEventPublishView> spendingEventViews = allPublishableEvents.stream().map(spendingEventService::toPublishView).collect(Collectors.toSet());
 
-            for (Partitions.Partition<SpendingEventView> partition : Partitions.partition(spendingEventViews, dispatchBatchSize)) {
-                Set<SpendingEventView> eventViewSet = partition.asSet();
+            for (Partitions.Partition<SpendingEventPublishView> partition : Partitions.partition(spendingEventViews, dispatchBatchSize)) {
+                Set<SpendingEventPublishView> eventViewSet = partition.asSet();
                 log.info("Publishing {} events for organisationId: {}", eventViewSet.size(), organisation.getId());
                 applicationEventPublisher.publishEvent(new SpendingEventsPublishCommand(organisation.getId(), eventViewSet));
             }
+            allPublishableEvents.forEach(spendingEventEntity -> {
+                spendingEventEntity.setPublishedAt(LocalDateTime.now());
+                spendingEventEntity.setLedgerDispatchStatus(LedgerDispatchStatus.DISPATCHED);
+            });
+            spendingEventRepository.saveAll(allPublishableEvents);
         }
 
     }

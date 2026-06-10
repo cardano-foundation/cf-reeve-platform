@@ -1,197 +1,129 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.converter;
 
-import jakarta.persistence.OneToOne;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CoreCurrency;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionItem;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.AccountEvent;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Counterparty;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Currency;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Document;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Project;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Vat;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublishStatusMapper;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
-import org.springframework.stereotype.Service;
-
 import java.math.BigDecimal;
-import java.util.Objects;
+import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
-import static java.math.BigDecimal.ZERO;
-import static java.util.stream.Collectors.toSet;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.stereotype.Service;
+
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingItemEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+
+/**
+ * Converts a funding-module {@link SpendingEventPublishView} into a blockchain-publisher
+ * {@link SpendingEventEntity} (with its spending items / milestone allocations), ready to be stored in
+ * {@code STORED} state for later dispatch and metadata serialisation.
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class SpendingEventConverter {
 
-    private final BlockchainPublishStatusMapper blockchainPublishStatusMapper;
     private final OrganisationPublicApi organisationPublicApi;
 
-    public TransactionEntity convertToDbDetached(Transaction tx) {
-        TransactionEntity transactionEntity = new TransactionEntity();
-        transactionEntity.setId(tx.getId());
-        transactionEntity.setInternalNumber(tx.getInternalTransactionNumber());
-        transactionEntity.setBatchId(tx.getBatchId());
-        transactionEntity.setTransactionType(tx.getTransactionType());
-        transactionEntity.setOrganisation(convertOrganisation(tx.getOrganisation()));
-        transactionEntity.setEntryDate(tx.getEntryDate());
-        transactionEntity.setAccountingPeriod(tx.getAccountingPeriod());
+    public SpendingEventEntity convertToDbDetached(String organisationId, SpendingEventPublishView view) {
+        SpendingEventEntity entity = new SpendingEventEntity();
+        entity.setEventId(view.getEventId());
+        entity.setProjectId(view.getProjectId());
+        entity.setEventType(view.getEventType());
+        entity.setEventDate(view.getDate());
 
-        BlockchainPublishStatus publishStatus = blockchainPublishStatusMapper.convert(tx.getLedgerDispatchStatus());
-        transactionEntity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
-                .publishStatus(publishStatus)
-                .build())
-        );
+        entity.setFundingId(view.getFundingId());
+        entity.setActivityId(view.getActivityId());
+        entity.setActivityTitle(view.getActivityTitle());
+        entity.setRoundId(view.getRoundId());
+        entity.setFundingTx(view.getFundingTx());
+        entity.setFundingDocHash(view.getFundingDocHash());
+        entity.setMilestoneId(view.getMilestoneId());
 
-        Set<TransactionItemEntity> transactionItemEntities = convertTxItems(tx, transactionEntity);
+        entity.setTotalAmount(orZero(view.getAmount()));
+        entity.setCurrency(custCode(view.getCurrency()));
+        entity.setCurrencyId(currencyId(view.getCurrency()));
 
-        transactionEntity.setItems(aggregateTxItems(transactionItemEntities));
+        entity.setOrganisation(resolveOrganisation(organisationId));
+        entity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
+                .publishStatus(BlockchainPublishStatus.STORED)
+                .build()));
 
-        return transactionEntity;
+        entity.setSpendingItems(convertItems(entity, view.getItems()));
+        entity.setMilestoneAllocations(convertMilestones(entity, view.getMilestones()));
+
+        return entity;
     }
 
-    // This method aggregates transaction items by their aggregated hash and sums their amounts.
-    // the hash is currently derived from all the fields of the TransactionItemEntity except the amount.
-    // this is to ensure that items with the same details but different amounts are treated as separate items.
-    // IMPORTANT: We sort items by ID before picking the first one to ensure deterministic selection.
-    // This is critical because Set iteration order is non-deterministic, and the selected item's ID
-    // is what gets stored in the indexer for reconciliation.
-    private Set<TransactionItemEntity> aggregateTxItems(Set<TransactionItemEntity> items) {
+    private List<SpendingItemEntity> convertItems(SpendingEventEntity event, List<SpendingEventPublishView.SpendItem> items) {
+        if (items == null) {
+            return List.of();
+        }
+
         return items.stream()
-                .collect(Collectors.groupingBy(TransactionItemEntity::aggregatedHash, Collectors.toSet()))
-                .values().stream()
-                .map(itemSet -> {
-                    // Sort by ID to ensure deterministic selection across runs
-                    TransactionItemEntity aggregatedItem = itemSet.stream()
-                            .sorted((a, b) -> a.getId().compareTo(b.getId()))
-                            .findFirst()
-                            .orElseThrow();
-                    aggregatedItem.setAmountFcy(itemSet.stream()
-                            .map(TransactionItemEntity::getAmountFcy)
-                            .reduce(ZERO, BigDecimal::add));
-                    aggregatedItem.setAmountLcy(itemSet.stream()
-                            .map(TransactionItemEntity::getAmountLcy)
-                            .filter(Objects::nonNull)
-                            .reduce(BigDecimal::add)
-                            .orElse(null));
-                    return aggregatedItem;
-                })
-                .collect(Collectors.toSet());
+                .map(item -> SpendingItemEntity.builder()
+                        .itemId(item.getItemId())
+                        .event(event)
+                        .category(item.getCategory())
+                        .vendor(item.getVendor())
+                        .amountFcy(orZero(item.getAmountFcy()))
+                        .amountRcy(orZero(item.getAmountRcy()))
+                        .currency(custCode(item.getCurrency()))
+                        .currencyId(currencyId(item.getCurrency()))
+                        .fxRate(orZero(item.getFxRate()))
+                        .spendDate(item.getSpendDate())
+                        .documentHash(item.getDocumentHash())
+                        .notes(item.getNotes())
+                        .build())
+                .collect(Collectors.toList());
     }
 
-    private Set<TransactionItemEntity> convertTxItems(Transaction tx, TransactionEntity transactionEntity) {
-        return tx.getItems()
-                .stream()
-                .map(tl -> convertToDbDetached(transactionEntity, tl))
-                .collect(toSet());
-    }
-
-    private static Organisation convertOrganisation(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation org) {
-        return Organisation.builder()
-                .id(org.getId())
-                .name(org.getName().orElseThrow())
-                .countryCode(org.getCountryCode().orElseThrow())
-                .taxIdNumber(org.getTaxIdNumber().orElseThrow())
-                .currencyId(org.getCurrencyId())
-                .build();
-    }
-
-    private static Document convertDocument(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document doc) {
-        return Document.builder()
-                .num(doc.getNumber())
-                .currency(Currency.builder()
-                        .id(doc.getCurrency().getCoreCurrency().orElseThrow().toExternalId())
-                        .customerCode(doc.getCurrency().getCustomerCode())
-                        .build()
-                )
-                .vat(doc.getVat().map(vat -> Vat.builder()
-                        .customerCode(vat.getCustomerCode())
-                        .rate(vat.getRate().orElseThrow())
-                        .build()).orElse(null))
-                .counterparty(doc.getCounterparty().map(cp -> Counterparty.builder()
-                        .customerCode(cp.getCustomerCode())
-                        .type(cp.getType())
-                        .build()).orElse(null))
-                .build();
-    }
-
-    @OneToOne
-    public TransactionItemEntity convertToDbDetached(TransactionEntity parent,
-                                                     TransactionItem txItem) {
-        TransactionItemEntity txItemEntity = new TransactionItemEntity();
-        txItemEntity.setId(txItem.getId());
-        txItemEntity.setTransaction(parent);
-
-        txItemEntity.setAccountEvent(txItem.getAccountEvent().map(e -> AccountEvent.builder()
-                        .code(e.getCode())
-                        .name(e.getName()).build())
-                .orElse(null)
-        );
-
-        txItemEntity.setFxRate(txItem.getFxRate());
-
-        txItemEntity.setAmountFcy(txItem.getAmountFcy());
-
-        Optional<org.cardanofoundation.lob.app.organisation.domain.entity.Organisation> organisationOptional = organisationPublicApi.findByOrganisationId(parent.getOrganisation().getId());
-        if (organisationOptional.isPresent()) {
-            org.cardanofoundation.lob.app.organisation.domain.entity.Organisation organisation = organisationOptional.get();
-            Optional<org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document> documentOpt = txItem.getDocument();
-            if (documentOpt.isPresent()) {
-                org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document document = documentOpt.get();
-                Optional<CoreCurrency> coreCurrencyOpt = document.getCurrency().getCoreCurrency();
-                if (coreCurrencyOpt.isPresent() && !organisation.getCurrencyId().equals(coreCurrencyOpt.get().toExternalId())) {
-                    txItemEntity.setAmountLcy(txItem.getAmountLcy());
-                }
-            }
+    private List<EventMilestoneAllocationEntity> convertMilestones(SpendingEventEntity event, List<SpendingEventPublishView.Milestone> milestones) {
+        if (milestones == null) {
+            return List.of();
         }
 
-        if(parent.getTransactionType().equals(TransactionType.FxRevaluation)){
-            txItemEntity.setAmountFcy(txItem.getAmountLcy());
-        }
+        return milestones.stream()
+                .map(milestone -> EventMilestoneAllocationEntity.builder()
+                        .event(event)
+                        .milestoneId(milestone.getMilestoneId())
+                        .milestoneLabel(milestone.getLabel())
+                        .allocatedAmount(orZero(milestone.getAmount()))
+                        .currency(custCode(milestone.getCurrency()))
+                        .currencyId(currencyId(milestone.getCurrency()))
+                        .dueDate(milestone.getDate())
+                        .build())
+                .collect(Collectors.toList());
+    }
 
-        txItemEntity.setDocument(convertDocument(txItem.getDocument().orElseThrow()));
+    private Organisation resolveOrganisation(String organisationId) {
+        return organisationPublicApi.findByOrganisationId(organisationId)
+                .map(org -> Organisation.builder()
+                        .id(org.getId())
+                        .name(org.getName())
+                        .countryCode(org.getCountryCode())
+                        .taxIdNumber(org.getTaxIdNumber())
+                        .currencyId(org.getCurrencyId())
+                        .build())
+                .orElseThrow(() -> new IllegalStateException("Organisation not found for id: " + organisationId));
+    }
 
-        txItemEntity.setCostCenter(txItem.getCostCenter().map(cc -> {
-            if(Optional.ofNullable(cc.getCustomerCode()).isEmpty()) {
-                return null;
-            }
-            org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.CostCenterBuilder ccBuilder = org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.CostCenter.builder();
-            cc.getName().ifPresent(ccBuilder::name);
-            ccBuilder.customerCode(cc.getCustomerCode());
-            // If the cost center is not associated with the parent organisation, we do not set it.
-            // Note: Only one parent level.
-            Optional<CostCenter> costCenterS = organisationPublicApi.findCostCenter(parent.getOrganisation().getId(), cc.getCustomerCode());
-            if (costCenterS.isPresent()) {
-                CostCenter costCenter = costCenterS.get();
-                if (costCenter.getParent().isPresent()) {
-                    ccBuilder.customerCode(costCenter.getParent().get().getId().getCustomerCode());
-                    ccBuilder.name(costCenter.getParent().get().getName());
-                    return ccBuilder.build();
-                }
-            }
-            return ccBuilder.build();
-        }).orElse(null));
+    private static String custCode(SpendingEventPublishView.Currency currency) {
+        return currency != null ? currency.getCustCode() : null;
+    }
 
-        txItemEntity.setProject(txItem.getProject().map(pc -> Project.builder()
-                .customerCode(pc.getCustomerCode())
-                .name(pc.getName().orElseThrow())
-                .build()).orElse(null)
-        );
+    private static String currencyId(SpendingEventPublishView.Currency currency) {
+        return currency != null ? currency.getId() : null;
+    }
 
-        return txItemEntity;
+    private static BigDecimal orZero(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
 }

@@ -1,8 +1,10 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal;
 
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,8 +15,10 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchChunkCommittedEvent;
@@ -22,11 +26,13 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extr
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.job.TxStatusUpdaterJob;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.business_rules.ProcessorFlags;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @Service
@@ -46,12 +52,26 @@ public class AccountingCoreEventHandler {
 
     @EventListener
     @Async
-    public void handleLedgerUpdatedEvent(TxsLedgerUpdatedEvent event) {
+    public void handleLedgerUpdatedEvent(LedgerUpdatedEvent event) {
+        if (event.getType() != LedgerUpdateType.TRANSACTION) {
+            return;
+        }
+
         log.info("Received handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
 
-        txStatusUpdaterJob.addToStatusUpdateMap(event.statusUpdatesMap());
+        Map<String, TxStatusUpdate> txStatusUpdates = event.getStatusUpdates().stream()
+                .collect(Collectors.toMap(LedgerStatusUpdate::getId, AccountingCoreEventHandler::toTxStatusUpdate));
+        txStatusUpdaterJob.addToStatusUpdateMap(txStatusUpdates);
 
         log.info("Finished processing handleLedgerUpdatedEvent event, event: {}", event.getStatusUpdates());
+    }
+
+    private static TxStatusUpdate toTxStatusUpdate(LedgerStatusUpdate update) {
+        Set<BlockchainReceipt> receipts = update.getBlockchainReceipts().stream()
+                .map(receipt -> new BlockchainReceipt(receipt.getType(), receipt.getHash()))
+                .collect(Collectors.toSet());
+
+        return new TxStatusUpdate(update.getId(), update.getStatus(), update.getLedgerDispatchStatusErrorReason(), receipts);
     }
 
     @EventListener

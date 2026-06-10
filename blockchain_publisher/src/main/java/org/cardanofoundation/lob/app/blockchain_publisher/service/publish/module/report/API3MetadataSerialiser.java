@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service;
+package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report;
 
 
 import java.math.BigDecimal;

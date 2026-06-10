@@ -28,6 +28,7 @@ import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.hibernate.envers.Audited;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.publish.PublishableEntity;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockableEntity;
 
 @Getter
@@ -40,7 +41,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockable
 @AllArgsConstructor
 @EntityListeners({ AuditingEntityListener.class })
 @Access(AccessType.FIELD)
-public class TransactionEntity extends CommonDateOnlyLockableEntity implements Persistable<String> {
+public class TransactionEntity extends CommonDateOnlyLockableEntity implements Persistable<String>, PublishableEntity {
 
     @Id
     @Column(name = "transaction_id", nullable = false)
@@ -121,6 +122,11 @@ public class TransactionEntity extends CommonDateOnlyLockableEntity implements P
     @Override
     public String getId() {
         return id;
+    }
+
+    @Override
+    public String getOrganisationId() {
+        return organisation.getId();
     }
 
 }

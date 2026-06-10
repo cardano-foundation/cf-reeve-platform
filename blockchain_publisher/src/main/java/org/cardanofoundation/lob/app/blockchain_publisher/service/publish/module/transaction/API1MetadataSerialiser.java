@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service;
+package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction;
 
 import java.math.BigInteger;
 import java.time.Clock;

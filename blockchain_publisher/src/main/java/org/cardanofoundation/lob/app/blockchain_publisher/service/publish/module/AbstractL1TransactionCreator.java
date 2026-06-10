@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service;
+package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module;
 
 import static org.apache.commons.collections4.iterators.PeekingIterator.peekingIterator;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
@@ -17,7 +17,6 @@ import java.util.stream.Stream;
 
 import jakarta.annotation.PostConstruct;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.ProblemDetail;
@@ -44,82 +43,115 @@ import io.vavr.control.Either;
 import org.apache.commons.collections4.iterators.PeekingIterator;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API1BlockchainTransactions;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Batch;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.publish.PublishableEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
+/**
+ * Shared base for L1 transaction creators that batch many publishable entities into Cardano transactions
+ * (API1 transactions, spending events, ...). Subclasses only provide the type-specific metadata serialisation;
+ * the chunking algorithm (fit as many entities as possible under the max tx size, defer the rest as "remaining"),
+ * the optional IPFS off-loading, schema validation, signing and debug dumping all live here.
+ *
+ * @param <E> the publishable entity type batched by this creator
+ */
 @Slf4j
-@RequiredArgsConstructor
-public class API1L1TransactionCreator {
+public abstract class AbstractL1TransactionCreator<E extends PublishableEntity> {
 
-    private static final int CARDANO_MAX_TRANSACTION_SIZE_BYTES = 16000;
-    public static final String ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE = "Error serialising transaction, abort processing, issue: {}";
+    protected static final int CARDANO_MAX_TRANSACTION_SIZE_BYTES = 16000;
+    protected static final String ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE = "Error serialising transaction, abort processing, issue: {}";
 
-    private final BackendService backendService;
-    private final API1MetadataSerialiser api1MetadataSerialiser;
-    private final BlockchainReaderPublicApiIF blockchainReaderPublicApi;
-    private final MetadataChecker jsonSchemaMetadataChecker;
-    private final Account organiserAccount;
-    private final Optional<IpfsPublisher> ipfsPublisher;
+    protected final BackendService backendService;
+    protected final BlockchainReaderPublicApiIF blockchainReaderPublicApi;
+    protected final MetadataChecker jsonSchemaMetadataChecker;
+    protected final Account organiserAccount;
+    protected final Optional<IpfsPublisher> ipfsPublisher;
 
-    private final int metadataLabel;
-    private final boolean debugStoreOutputTx;
+    /** Whether this module off-loads the metadata payload to IPFS. Independent per module. */
+    protected final boolean useIpfs;
+
+    protected final int metadataLabel;
+    protected final boolean debugStoreOutputTx;
 
     private String runId;
 
+    protected AbstractL1TransactionCreator(BackendService backendService,
+                                           BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+                                           MetadataChecker jsonSchemaMetadataChecker,
+                                           Account organiserAccount,
+                                           Optional<IpfsPublisher> ipfsPublisher,
+                                           boolean useIpfs,
+                                           int metadataLabel,
+                                           boolean debugStoreOutputTx) {
+        this.backendService = backendService;
+        this.blockchainReaderPublicApi = blockchainReaderPublicApi;
+        this.jsonSchemaMetadataChecker = jsonSchemaMetadataChecker;
+        this.organiserAccount = organiserAccount;
+        this.ipfsPublisher = ipfsPublisher;
+        this.useIpfs = useIpfs;
+        this.metadataLabel = metadataLabel;
+        this.debugStoreOutputTx = debugStoreOutputTx;
+    }
+
+    /** Serialise a batch of entities into a Cardano metadata map. Type-specific; supplied by each subclass. */
+    protected abstract MetadataMap serialiseToMetadataMap(String organisationId, Set<E> batch, long creationSlot);
+
+    /** Prefix used for the debug metadata dump file names. */
+    protected abstract String metadataFilePrefix();
+
     @PostConstruct
     public void init() {
-        log.info("API1L1TransactionCreator::metadata label: {}", metadataLabel);
-        log.info("API1L1TransactionCreator::debug store output tx: {}", debugStoreOutputTx);
+        log.info("{}::metadata label: {}", getClass().getSimpleName(), metadataLabel);
+        log.info("{}::debug store output tx: {}", getClass().getSimpleName(), debugStoreOutputTx);
 
         runId = UUID.randomUUID().toString();
-        log.info("API1L1TransactionCreator::runId: {}", runId);
+        log.info("{}::runId: {}", getClass().getSimpleName(), runId);
 
-        log.info("API1L1TransactionCreator is initialised.");
+        log.info("{} is initialised.", getClass().getSimpleName());
     }
 
-    public Either<ProblemDetail, Optional<API1BlockchainTransactions>> pullBlockchainTransaction(String organisationId,
-                                                                                           Set<TransactionEntity> txs) {
+    public Either<ProblemDetail, Optional<L1Batch<E>>> pullBlockchainTransaction(String organisationId, Set<E> entities) {
         return blockchainReaderPublicApi.getChainTip()
-                .flatMap(chainTip -> handleTransactionCreation(organisationId, txs, chainTip.getAbsoluteSlot()));
+                .flatMap(chainTip -> handleTransactionCreation(organisationId, entities, chainTip.getAbsoluteSlot()));
     }
 
-    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> handleTransactionCreation(String organisationId,
-                                                                                            Set<TransactionEntity> transactions,
-                                                                                            long creationSlot) {
+    private Either<ProblemDetail, Optional<L1Batch<E>>> handleTransactionCreation(String organisationId,
+                                                                                 Set<E> entities,
+                                                                                 long creationSlot) {
         try {
-            if(ipfsPublisher.isEmpty()) {
-                return createL1Transaction(organisationId, transactions, creationSlot);
-            } else {
-                return createIpfsL1Transaction(organisationId, transactions, creationSlot);
+            if (useIpfs && ipfsPublisher.isPresent()) {
+                return createIpfsL1Transaction(organisationId, entities, creationSlot);
             }
+            return createL1Transaction(organisationId, entities, creationSlot);
         } catch (IOException | CborException | CborSerializationException e) {
-            log.error("Error creating blockchain transaction: ", e);
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "%s".formatted(e.getMessage()));
+            log.error("Error creating blockchain transaction: ", e);
             problemDetail.setTitle("ERROR_CREATING_TRANSACTION");
             return Either.left(problemDetail);
         }
     }
 
-    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> createIpfsL1Transaction(String organisationId, Set<TransactionEntity> transactions, long creationSlot) throws CborException, CborSerializationException {
-        // Creating one transaction contain all transactions, probably it's to big, but that's why we will replace the metadata
-        MetadataMap metadataMap = api1MetadataSerialiser.serialiseToMetadataMap(organisationId, transactions, creationSlot);
+    private Either<ProblemDetail, Optional<L1Batch<E>>> createIpfsL1Transaction(String organisationId, Set<E> entities, long creationSlot) throws CborException, CborSerializationException {
+        // Creating one transaction containing all entities, probably it's too big, but that's why we replace the metadata data with an IPFS link
+        MetadataMap metadataMap = serialiseToMetadataMap(organisationId, entities, creationSlot);
 
         Map data = metadataMap.getMap();
         Either<ProblemDetail, Void> problemDetail = checkJsonSchema(data);
-        if (problemDetail.isLeft()) return Either.left(problemDetail.getLeft());
+        if (problemDetail.isLeft()) {
+            return Either.left(problemDetail.getLeft());
+        }
 
         // Removing the data object from the metadata and replacing it with an ipfs link to the data,
-        // to reduce the size of the metadata and be able to create a transaction with more transactions in it
+        // to reduce the size of the metadata and be able to create a transaction with more entities in it
         MetadataList dataList = (MetadataList) metadataMap.get("data");
         metadataMap.remove("data");
         MetadataMap ipfsMap = MetadataBuilder.createMap();
         ipfsMap.put("data", dataList);
         byte[] bytes = CborSerializationUtil.serialize(ipfsMap.getMap());
         String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
-        if(ipfsPublisher.isEmpty()) {
+        if (ipfsPublisher.isEmpty()) {
             ProblemDetail problemDetailIpfs = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, "IPFS publisher is not configured, we cannot publish the metadata to IPFS!");
             problemDetailIpfs.setTitle("IPFS_PUBLISHER_NOT_CONFIGURED");
             return Either.left(problemDetailIpfs);
@@ -138,10 +170,10 @@ public class API1L1TransactionCreator {
         metadata.put(metadataLabel, cborMetadataMap);
         byte[] serialisedTx = serialiseTransaction(metadata);
         log.info("Metadata for tx validated, gonna serialise tx now...");
-        return Either.right(Optional.of(new API1BlockchainTransactions(
+        return Either.right(Optional.of(new L1Batch<>(
                 organisationId,
-                transactions,
-                Set.of(), // Empty we published all transactions
+                entities,
+                Set.of(), // Empty - we published all entities
                 creationSlot,
                 serialisedTx,
                 organiserAccount.baseAddress()
@@ -162,20 +194,20 @@ public class API1L1TransactionCreator {
         return Either.right(null);
     }
 
-    // error or transactions to process or no more transactions to process in case of blockchain transaction creation
-    private Either<ProblemDetail, Optional<API1BlockchainTransactions>> createL1Transaction(String organisationId,
-                                                                                            Set<TransactionEntity> transactions,
-                                                                                            long creationSlot) throws IOException {
-        log.info("Splitting {} passedTransactions into blockchain passedTransactions", transactions.size());
+    // error or entities to process or no more entities to process in case of blockchain transaction creation
+    private Either<ProblemDetail, Optional<L1Batch<E>>> createL1Transaction(String organisationId,
+                                                                            Set<E> entities,
+                                                                            long creationSlot) throws IOException {
+        log.info("Splitting {} entities into blockchain transactions", entities.size());
 
-        LinkedHashSet<TransactionEntity> transactionsBatch = new LinkedHashSet<>();
+        LinkedHashSet<E> batch = new LinkedHashSet<>();
 
-        for (PeekingIterator<TransactionEntity> it = peekingIterator(transactions.iterator()); it.hasNext();) {
-            TransactionEntity txEntity = it.next();
+        for (PeekingIterator<E> it = peekingIterator(entities.iterator()); it.hasNext();) {
+            E entity = it.next();
 
-            transactionsBatch.add(txEntity);
+            batch.add(entity);
 
-            Either<ProblemDetail, SerializedCardanoL1Transaction> serializedTransactionsE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
+            Either<ProblemDetail, SerializedCardanoL1Transaction> serializedTransactionsE = serialiseTransactionChunk(organisationId, batch, creationSlot);
             if (serializedTransactionsE.isLeft()) {
                 log.error(ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE, serializedTransactionsE.getLeft().getDetail());
 
@@ -185,11 +217,11 @@ public class API1L1TransactionCreator {
             SerializedCardanoL1Transaction serializedTransaction = serializedTransactionsE.get();
             byte[] txBytes = serializedTransaction.txBytes();
 
-            TransactionEntity transactionLinePeek = it.peek();
-            if (transactionLinePeek == null) { // next one is last element
+            E entityPeek = it.peek();
+            if (entityPeek == null) { // next one is last element
                 continue;
             }
-            Either<ProblemDetail, SerializedCardanoL1Transaction> newChunkTxBytesE = serialiseTransactionChunk(organisationId, Stream.concat(transactionsBatch.stream(), Stream.of(transactionLinePeek))
+            Either<ProblemDetail, SerializedCardanoL1Transaction> newChunkTxBytesE = serialiseTransactionChunk(organisationId, Stream.concat(batch.stream(), Stream.of(entityPeek))
                     .collect(Collectors.toSet()), creationSlot);
 
             if (newChunkTxBytesE.isLeft()) {
@@ -201,22 +233,20 @@ public class API1L1TransactionCreator {
             byte[] newChunkTxBytes = newSerializedTransaction.txBytes();
 
             if (newChunkTxBytes.length >= CARDANO_MAX_TRANSACTION_SIZE_BYTES) {
-                log.info("Blockchain transaction created, id:{}", TransactionUtil.getTxHash(txBytes));
-
                 log.info("Blockchain transaction created, id:{}, debugTxOutput:{}", TransactionUtil.getTxHash(txBytes), this.debugStoreOutputTx);
                 potentiallyStoreTxs(creationSlot, serializedTransaction);
 
-                Set<TransactionEntity> remainingTxs = calculateRemainingTransactions(transactions, transactionsBatch);
+                Set<E> remaining = calculateRemainingEntities(entities, batch);
 
-                return Either.right(Optional.of(new API1BlockchainTransactions(organisationId, transactionsBatch, remainingTxs, creationSlot, txBytes, organiserAccount.baseAddress())));
+                return Either.right(Optional.of(new L1Batch<>(organisationId, batch, remaining, creationSlot, txBytes, organiserAccount.baseAddress())));
             }
         }
 
-        // if there are any left overs, meaning that the batch is not full, e.g. just a couple of transactions to serialise
-        if (!transactionsBatch.isEmpty()) {
-            log.info("Leftovers batch size: {}", transactionsBatch.size());
+        // if there are any left overs, meaning that the batch is not full, e.g. just a couple of entities to serialise
+        if (!batch.isEmpty()) {
+            log.info("Leftovers batch size: {}", batch.size());
 
-            Either<ProblemDetail, SerializedCardanoL1Transaction> serializedTxE = serialiseTransactionChunk(organisationId, transactionsBatch, creationSlot);
+            Either<ProblemDetail, SerializedCardanoL1Transaction> serializedTxE = serialiseTransactionChunk(organisationId, batch, creationSlot);
 
             if (serializedTxE.isEmpty()) {
                 log.error(ERROR_SERIALISING_TRANSACTION_ABORT_PROCESSING_ISSUE, serializedTxE.getLeft().getDetail());
@@ -232,11 +262,11 @@ public class API1L1TransactionCreator {
 
             log.info("Transaction size: {}", txBytes.length);
 
-            Set<TransactionEntity> remaining = calculateRemainingTransactions(transactions, transactionsBatch);
+            Set<E> remaining = calculateRemainingEntities(entities, batch);
 
-            return Either.right(Optional.of(new API1BlockchainTransactions(
+            return Either.right(Optional.of(new L1Batch<>(
                     organisationId,
-                    transactionsBatch,
+                    batch,
                     remaining,
                     creationSlot,
                     txBytes,
@@ -244,7 +274,7 @@ public class API1L1TransactionCreator {
             )));
         }
 
-        // no transactions to process
+        // no entities to process
         return Either.right(Optional.empty());
     }
 
@@ -252,7 +282,7 @@ public class API1L1TransactionCreator {
     private void potentiallyStoreTxs(long creationSlot, SerializedCardanoL1Transaction tx) throws IOException {
         if (debugStoreOutputTx) {
             String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
-            String name = "lob-txs-api1-metadata-%s-%s-%s".formatted(runId, timestamp, creationSlot);
+            String name = "%s-%s-%s-%s".formatted(metadataFilePrefix(), runId, timestamp, creationSlot);
             Path tmpJsonTxFile = Files.createTempFile(name, ".json");
             Path tmpCborFile = Files.createTempFile(name, ".cbor");
 
@@ -264,19 +294,15 @@ public class API1L1TransactionCreator {
         }
     }
 
-    private static Set<TransactionEntity> calculateRemainingTransactions(
-            Set<TransactionEntity> transactions,
-            Set<TransactionEntity> transactionsBatch) {
-
-        return Sets.difference(transactions, transactionsBatch);
+    private Set<E> calculateRemainingEntities(Set<E> entities, Set<E> batch) {
+        return Sets.difference(entities, batch);
     }
 
     private Either<ProblemDetail, SerializedCardanoL1Transaction> serialiseTransactionChunk(String organisationId,
-                                                                                      Set<TransactionEntity> transactionsBatch,
-                                                                                      long creationSlot) {
+                                                                                           Set<E> batch,
+                                                                                           long creationSlot) {
         try {
-            MetadataMap metadataMap =
-                    api1MetadataSerialiser.serialiseToMetadataMap(organisationId, transactionsBatch, creationSlot);
+            MetadataMap metadataMap = serialiseToMetadataMap(organisationId, batch, creationSlot);
 
             Map data = metadataMap.getMap();
             byte[] bytes = CborSerializationUtil.serialize(data);
@@ -308,7 +334,7 @@ public class API1L1TransactionCreator {
         }
     }
 
-    protected byte[] serialiseTransaction(Metadata metadata) throws CborSerializationException {
+    public byte[] serialiseTransaction(Metadata metadata) throws CborSerializationException {
         QuickTxBuilder quickTxBuilder = new QuickTxBuilder(backendService);
 
         Tx tx = new Tx()

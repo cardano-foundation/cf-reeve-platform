@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service;
+package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report;
 
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @RequiredArgsConstructor

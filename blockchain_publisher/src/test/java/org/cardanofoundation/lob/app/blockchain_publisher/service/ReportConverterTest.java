@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.ReportConverter;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -14,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.ReportConverter;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 

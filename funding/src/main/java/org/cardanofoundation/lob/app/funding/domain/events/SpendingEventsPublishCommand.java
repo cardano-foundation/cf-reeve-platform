@@ -1,16 +1,19 @@
 package org.cardanofoundation.lob.app.funding.domain.events;
 
+import java.util.Set;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
-import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
+
 import org.jmolecules.event.annotation.DomainEvent;
 
-import java.util.Set;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -25,5 +28,5 @@ public class SpendingEventsPublishCommand {
 
     @NotNull
     @Size(min = 1)
-    private Set<SpendingEventView> SpendingEventView;
+    private Set<SpendingEventPublishView> spendingEvents;
 }

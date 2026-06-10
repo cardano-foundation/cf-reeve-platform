@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateReque
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingItemRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingItemView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
@@ -200,6 +202,7 @@ public class SpendingEventService {
                 .totalAmount(event.getTotalAmount())
                 .currency(event.getCurrency())
                 .txHash(event.getTxHash())
+                .ledgerDispatchStatus(event.getLedgerDispatchStatus())
                 .fundingTx(event.getFundingTx())
                 .milestoneId(event.getMilestoneId())
                 .milestoneLabel(event.getMilestoneId() != null
@@ -236,6 +239,88 @@ public class SpendingEventService {
                 .allocatedAmount(allocation.getAllocatedAmount())
                 .currency(milestone != null ? milestone.getCurrency() : null)
                 .dueDate(milestone != null ? milestone.getDueDate() : null)
+                .build();
+    }
+
+    /**
+     * Builds the {@link SpendingEventPublishView} (blockchain-publisher contract) for a publishable event,
+     * resolving the funding context, milestones and spend items needed for the {@code EVENT_BUNDLE} metadata.
+     */
+    public SpendingEventPublishView toPublishView(SpendingEventEntity event) {
+        ProjectEntity project = event.getProject();
+
+        LocalDate date = event.getCreatedAt() != null
+                ? event.getCreatedAt().toLocalDate()
+                : (event.getPublishedAt() != null ? event.getPublishedAt().toLocalDate() : null);
+
+        List<SpendingEventPublishView.SpendItem> items = spendingItemRepository.findByEvent_Id(event.getId()).stream()
+                .map(this::toPublishItem)
+                .toList();
+
+        List<SpendingEventPublishView.Milestone> milestones = allocationRepository.findById_EventId(event.getId()).stream()
+                .map(this::toPublishMilestone)
+                .toList();
+
+        return SpendingEventPublishView.builder()
+                .eventId(event.getId())
+                .projectId(event.getProjectId())
+                .eventType(event.getEventType())
+                .date(date)
+                .fundingId(event.getFundingId())
+                .activityId(event.getActivityId())
+                .activityTitle(project != null ? project.getActivityTitle() : null)
+                .milestoneId(event.getMilestoneId())
+                .roundId(null)
+                .fundingTx(event.getFundingTx())
+                .fundingDocHash(null)
+                .amount(event.getTotalAmount())
+                .currency(toCurrency(event.getCurrency()))
+                .milestones(milestones)
+                .items(items)
+                .build();
+    }
+
+    private SpendingEventPublishView.SpendItem toPublishItem(SpendingItemEntity item) {
+        return SpendingEventPublishView.SpendItem.builder()
+                .itemId(item.getId())
+                .category(item.getCategory())
+                .vendor(item.getVendor())
+                .amountFcy(item.getAmountFcy())
+                .currency(toCurrency(item.getCurrency()))
+                .fxRate(item.getFxRate())
+                .amountRcy(item.getAmountRcy())
+                .spendDate(item.getSpendDate())
+                .documentHash(item.getHash())
+                .notes(item.getNotes())
+                .build();
+    }
+
+    private SpendingEventPublishView.Milestone toPublishMilestone(EventMilestoneAllocationEntity allocation) {
+        MilestoneEntity milestone = milestoneRepository.findById(allocation.getId().getMilestoneId()).orElse(null);
+        return SpendingEventPublishView.Milestone.builder()
+                .milestoneId(allocation.getId().getMilestoneId())
+                .label(milestone != null ? milestone.getLabel() : null)
+                .amount(allocation.getAllocatedAmount())
+                .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
+                .date(milestone != null ? milestone.getDueDate() : null)
+                .build();
+    }
+
+    /**
+     * Maps a funding currency code into a structured currency. Funding stores a short code (e.g. {@code USD});
+     * the blockchain metadata schema needs an ISO id ({@code ISO_4217:USD}) plus the customer code.
+     */
+    private static SpendingEventPublishView.Currency toCurrency(String currencyCode) {
+        if (currencyCode == null) {
+            return null;
+        }
+        if (currencyCode.startsWith("ISO_")) {
+            String custCode = currencyCode.substring(currencyCode.lastIndexOf(':') + 1);
+            return SpendingEventPublishView.Currency.builder().id(currencyCode).custCode(custCode).build();
+        }
+        return SpendingEventPublishView.Currency.builder()
+                .id("ISO_4217:" + currencyCode)
+                .custCode(currencyCode)
                 .build();
     }
 

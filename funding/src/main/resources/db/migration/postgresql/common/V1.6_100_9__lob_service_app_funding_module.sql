@@ -121,11 +121,14 @@ CREATE TABLE IF NOT EXISTS funding_spending_event_aud (
     total_amount NUMERIC(30, 10),
     currency     VARCHAR(10),
     milestone_id VARCHAR(36),
+    ledger_dispatch_approved BOOLEAN,
+    ledger_dispatch_status VARCHAR(20),
 
     created_by  VARCHAR(255),
     updated_by  VARCHAR(255),
     created_at  TIMESTAMP WITHOUT TIME ZONE,
     updated_at  TIMESTAMP WITHOUT TIME ZONE,
+    published_at  TIMESTAMP WITHOUT TIME ZONE,
 
     rev     INTEGER  NOT NULL,
     revtype SMALLINT,
