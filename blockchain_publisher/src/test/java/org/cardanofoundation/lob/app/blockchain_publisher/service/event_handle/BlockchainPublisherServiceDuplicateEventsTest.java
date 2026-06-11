@@ -9,10 +9,10 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import org.flywaydb.core.Flyway;
 
@@ -30,8 +30,6 @@ import org.cardanofoundation.lob.app.blockchain_publisher.config.TimeConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepository;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoDispatcher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoStatusWatcher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;

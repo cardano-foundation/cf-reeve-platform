@@ -9,9 +9,9 @@ import jakarta.annotation.Nullable;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
 /**
