@@ -380,7 +380,6 @@ public class SpendingEventService {
                 .fundingId(event.getFundingId())
                 .activityId(event.getActivityId())
                 .activityTitle(project != null ? project.getActivityTitle() : null)
-                .milestoneId(event.getMilestoneId())
                 .fundingTx(event.getFundingTx())
                 .fundingDocHash(null)
                 .amount(event.getTotalAmount())

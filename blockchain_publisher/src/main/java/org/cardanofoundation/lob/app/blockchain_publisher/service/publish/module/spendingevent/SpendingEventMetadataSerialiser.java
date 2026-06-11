@@ -112,12 +112,6 @@ public class SpendingEventMetadataSerialiser {
         if (event.getActivityTitle() != null) {
             metadataMap.put("activity_title", event.getActivityTitle());
         }
-        if (event.getMilestoneId() != null) {
-            metadataMap.put("milestone_id", event.getMilestoneId());
-        }
-        if (event.getRoundId() != null) {
-            metadataMap.put("round_id", event.getRoundId());
-        }
         if (event.getFundingTx() != null) {
             metadataMap.put("funding_tx", event.getFundingTx());
         }

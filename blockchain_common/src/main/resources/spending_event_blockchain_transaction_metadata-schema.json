@@ -87,8 +87,6 @@
         "funding_id": { "type": "string", "minLength": 1 },
         "activity_id": { "type": "string", "minLength": 1 },
         "activity_title": { "type": "string" },
-        "milestone_id": { "type": "string" },
-        "round_id": { "type": ["string", "integer"] },
         "funding_tx": { "type": "string" },
         "funding_doc_hash": { "type": "string", "minLength": 1 }
       }

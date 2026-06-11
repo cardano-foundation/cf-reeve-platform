@@ -103,10 +103,6 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     @Column(name = "currency_id")
     private String currencyId;
 
-    @Nullable
-    @Column(name = "milestone_id", nullable = false)
-    private String milestoneId;
-
     /** Spend line items — populated only for SPENDING events. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
