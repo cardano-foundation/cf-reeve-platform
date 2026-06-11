@@ -211,6 +211,62 @@ class SpendingEventControllerTest {
         verify(spendingEventService).delete("e1");
     }
 
+    // --- updateEvent ---
+
+    @Test
+    void updateEvent_returns200_withView() {
+        SpendingEventCreateRequest request = createRequest();
+        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventService.update("p1", "e1", request)).thenReturn(Either.right(event));
+        when(spendingEventService.toView(event)).thenReturn(view);
+
+        ResponseEntity<?> response = spendingEventController.updateEvent("p1", "e1", request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void updateEvent_returnsServiceErrorStatus_whenUpdateFails() {
+        SpendingEventCreateRequest request = createRequest();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
+        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        when(spendingEventService.update("p1", "e1", request)).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> response = spendingEventController.updateEvent("p1", "e1", request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    @Test
+    void updateEvent_returns400_whenMilestoneFieldsMissing() {
+        SpendingEventCreateRequest request = createRequest();
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Missing milestone fields");
+        problem.setTitle("MILESTONE_FIELDS_REQUIRED");
+        when(spendingEventService.update("p1", "e1", request)).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> response = spendingEventController.updateEvent("p1", "e1", request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo("MILESTONE_FIELDS_REQUIRED");
+    }
+
+    @Test
+    void listEvents_returns200_withEmptyList() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(spendingEventService.findByProjectIdAndFilter(eq("p1"), any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        ResponseEntity<?> response = spendingEventController.listEvents(
+                "p1", Optional.empty(), Optional.empty(), pageable);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat((List<?>) response.getBody()).isEmpty();
+    }
+
     // --- helpers ---
 
     private ProjectEntity projectEntity() {

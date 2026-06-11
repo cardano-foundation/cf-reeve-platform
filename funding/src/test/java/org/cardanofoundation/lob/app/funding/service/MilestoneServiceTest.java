@@ -63,6 +63,33 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void findByProjectId_withPageable_delegatesToRepository() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 5);
+        MilestoneEntity m1 = milestoneEntity("m1");
+        org.springframework.data.domain.Page<MilestoneEntity> page =
+                new org.springframework.data.domain.PageImpl<>(List.of(m1));
+        when(milestoneRepository.findByProject_Id("p1", pageable)).thenReturn(page);
+
+        assertThat(milestoneService.findByProjectId("p1", pageable)).isEqualTo(page);
+    }
+
+    @Test
+    void create_returnsLeft_whenMissingRequiredFields() {
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .label(null)
+                .expectedCost(null)
+                .currency(null)
+                .dueDate(null)
+                .build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("MILESTONE_FIELDS_REQUIRED");
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_returnsEmpty_whenProjectNotFound() {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 

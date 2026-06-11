@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.domain.core;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public enum TransactionViolationCode {
 
     DOCUMENT_MUST_BE_PRESENT, //ERP
@@ -28,6 +31,16 @@ public enum TransactionViolationCode {
     EVENT_DATA_NOT_FOUND, //LOB
     ORGANISATION_DATA_NOT_FOUND, //LOB
     JOURNAL_DUMMY_ACCOUNT_MISSING, //LOB
-    TX_NOT_IN_ERP //ERP
+    TRANSACTION_NOT_IN_ERP; //ERP
 
-}
+    public static Set<String> exclusions() {
+        Set<String> exclusion = new HashSet<>();
+        exclusion.add(TransactionViolationCode.NET_OFF_TX.name());
+        exclusion.add(TransactionViolationCode.TRANSACTION_NOT_IN_ERP.name());
+        exclusion.add(TransactionViolationCode.ALL_TX_ITEMS_ERASED.name());
+        exclusion.add(TransactionViolationCode.DOCUMENT_MUST_BE_PRESENT.name());
+        exclusion.add(TransactionViolationCode.ACCOUNT_CODE_CREDIT_IS_EMPTY.name());
+        exclusion.add(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY.name());
+        return exclusion;
+    }
+    }
