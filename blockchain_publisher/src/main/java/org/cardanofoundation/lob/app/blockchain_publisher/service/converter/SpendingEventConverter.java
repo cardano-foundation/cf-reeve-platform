@@ -41,7 +41,6 @@ public class SpendingEventConverter {
         entity.setFundingId(view.getFundingId());
         entity.setActivityId(view.getActivityId());
         entity.setActivityTitle(view.getActivityTitle());
-        entity.setRoundId(view.getRoundId());
         entity.setFundingTx(view.getFundingTx());
         entity.setFundingDocHash(view.getFundingDocHash());
         entity.setMilestoneId(view.getMilestoneId());

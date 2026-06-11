@@ -41,8 +41,6 @@ public class SpendingEventPublishView {
     @Nullable
     private String milestoneId;
     @Nullable
-    private String roundId;
-    @Nullable
     private String fundingTx;
     @Nullable
     private String fundingDocHash;

@@ -381,7 +381,6 @@ public class SpendingEventService {
                 .activityId(event.getActivityId())
                 .activityTitle(project != null ? project.getActivityTitle() : null)
                 .milestoneId(event.getMilestoneId())
-                .roundId(null)
                 .fundingTx(event.getFundingTx())
                 .fundingDocHash(null)
                 .amount(event.getTotalAmount())
@@ -418,8 +417,7 @@ public class SpendingEventService {
     }
 
     /**
-     * Maps a funding currency code into a structured currency. Funding stores a short code (e.g. {@code USD});
-     * the blockchain metadata schema needs an ISO id ({@code ISO_4217:USD}) plus the customer code.
+     * TODO Needs to add here the connection to the org module.
      */
     private static SpendingEventPublishView.Currency toCurrency(String currencyCode) {
         if (currencyCode == null) {
