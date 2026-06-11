@@ -93,15 +93,10 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     @JoinColumn(name = "project_id", nullable = false)
     private ProjectEntity project;
 
-    /** Used only for SPENDING events — stores the FK for direct access without lazy loading. */
-    @Nullable
-    @Column(name = "milestone_id")
-    private String milestoneId;
-
     /** Used only for SPENDING events — the milestone this batch of spends targets. */
     @Nullable
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "milestone_id", insertable = false, updatable = false)
+    @JoinColumn(name = "milestone_id")
     private MilestoneEntity milestone;
 
     /** Spend line items — populated only for SPENDING events. */
