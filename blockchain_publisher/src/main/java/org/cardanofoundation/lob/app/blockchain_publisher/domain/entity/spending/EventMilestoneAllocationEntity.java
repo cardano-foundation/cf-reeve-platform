@@ -55,8 +55,12 @@ public class EventMilestoneAllocationEntity {
     @Column(name = "milestone_label", nullable = false)
     private String milestoneLabel;
 
-    @NotBlank
-    @Column(name = "allocated_amount", nullable = false)
+    @Nullable
+    @Column(name = "expected_cost")
+    private BigDecimal expectedCost;
+
+    @Nullable
+    @Column(name = "allocated_amount")
     private BigDecimal allocatedAmount;
 
     @NotBlank
@@ -67,7 +71,6 @@ public class EventMilestoneAllocationEntity {
     @Column(name = "currency_id")
     private String currencyId;
 
-    @NotBlank
     @Column(name = "due_date", nullable = false)
     private LocalDate dueDate;
 }

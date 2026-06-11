@@ -93,10 +93,11 @@ class SpendingEventsPublishCommandSerdeTest {
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
                 .milestoneId("ms-1")
-                .label("Milestone AB")
-                .amount(new BigDecimal("50.00"))
+                .milestoneLabel("Milestone AB")
+                .expectedCost(new BigDecimal("60.00"))
+                .allocatedAmount(new BigDecimal("50.00"))
                 .currency(usd)
-                .date(LocalDate.of(2025, 6, 30))
+                .dueDate(LocalDate.of(2025, 6, 30))
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
@@ -121,8 +122,9 @@ class SpendingEventsPublishCommandSerdeTest {
         assertThat(resultView.getMilestones()).hasSize(1);
         SpendingEventPublishView.Milestone resultMilestone = resultView.getMilestones().get(0);
         assertThat(resultMilestone.getMilestoneId()).isEqualTo("ms-1");
-        assertThat(resultMilestone.getAmount()).isEqualByComparingTo("50.00");
-        assertThat(resultMilestone.getDate()).isEqualTo(LocalDate.of(2025, 6, 30));
+        assertThat(resultMilestone.getExpectedCost()).isEqualByComparingTo("60.00");
+        assertThat(resultMilestone.getAllocatedAmount()).isEqualByComparingTo("50.00");
+        assertThat(resultMilestone.getDueDate()).isEqualTo(LocalDate.of(2025, 6, 30));
         assertThat(resultMilestone.getCurrency().getId()).isEqualTo("ISO_4217:USD");
     }
 

@@ -372,9 +372,12 @@ public class SpendingEventService {
                 .map(this::toPublishItem)
                 .toList();
 
-        List<SpendingEventPublishView.Milestone> milestones = allocationRepository.findById_EventId(event.getId()).stream()
-                .map(this::toPublishMilestone)
-                .toList();
+        // SPENDING events target a single milestone (event.milestone); FUNDING/REFUND carry milestone allocations.
+        List<SpendingEventPublishView.Milestone> milestones = event.getEventType() == EventType.SPENDING
+                ? spendingMilestone(event)
+                : allocationRepository.findById_EventId(event.getId()).stream()
+                        .map(this::toPublishMilestone)
+                        .toList();
 
         return SpendingEventPublishView.builder()
                 .eventId(event.getId())
@@ -408,14 +411,34 @@ public class SpendingEventService {
                 .build();
     }
 
+    /** The single targeted milestone of a SPENDING event (no allocated amount - that is a FUNDING/REFUND concept). */
+    private List<SpendingEventPublishView.Milestone> spendingMilestone(SpendingEventEntity event) {
+        // event may be detached; reading the proxy's id is safe, the rest is loaded via the repository.
+        String milestoneId = event.getMilestone() != null ? event.getMilestone().getId() : null;
+        if (milestoneId == null) {
+            return List.of();
+        }
+        return milestoneRepository.findById(milestoneId)
+                .map(milestone -> List.of(SpendingEventPublishView.Milestone.builder()
+                        .milestoneId(milestone.getId())
+                        .milestoneLabel(milestone.getLabel())
+                        .expectedCost(milestone.getExpectedCost())
+                        .allocatedAmount(null)
+                        .currency(toCurrency(milestone.getCurrency()))
+                        .dueDate(milestone.getDueDate())
+                        .build()))
+                .orElseGet(List::of);
+    }
+
     private SpendingEventPublishView.Milestone toPublishMilestone(EventMilestoneAllocationEntity allocation) {
         MilestoneEntity milestone = milestoneRepository.findById(allocation.getId().getMilestoneId()).orElse(null);
         return SpendingEventPublishView.Milestone.builder()
                 .milestoneId(allocation.getId().getMilestoneId())
-                .label(milestone != null ? milestone.getLabel() : null)
-                .amount(allocation.getAllocatedAmount())
+                .milestoneLabel(milestone != null ? milestone.getLabel() : null)
+                .expectedCost(milestone != null ? milestone.getExpectedCost() : null)
+                .allocatedAmount(allocation.getAllocatedAmount())
                 .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
-                .date(milestone != null ? milestone.getDueDate() : null)
+                .dueDate(milestone != null ? milestone.getDueDate() : null)
                 .build();
     }
 

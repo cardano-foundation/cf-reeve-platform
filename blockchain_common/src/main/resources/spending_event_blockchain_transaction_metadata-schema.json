@@ -93,14 +93,15 @@
     },
     "milestone": {
       "type": "object",
-      "required": ["milestone_id", "label", "amount", "currency", "date"],
+      "required": ["milestone_id"],
       "additionalProperties": false,
       "properties": {
         "milestone_id": { "type": "string", "minLength": 1 },
-        "label": { "type": "string" },
-        "amount": { "$ref": "#/$defs/decimalString" },
+        "milestone_label": { "type": "string" },
+        "expected_cost": { "$ref": "#/$defs/decimalString" },
+        "allocated_amount": { "$ref": "#/$defs/decimalString" },
         "currency": { "$ref": "#/$defs/currency" },
-        "date": { "$ref": "#/$defs/isoDate" }
+        "due_date": { "$ref": "#/$defs/isoDate" }
       }
     },
     "milestoneOrArray": {
@@ -174,9 +175,10 @@
             "properties": { "type": { "const": "SPENDING" } }
           },
           "then": {
-            "required": ["items"],
+            "required": ["items", "milestone"],
             "properties": {
-              "allocation": { "required": ["milestone_id"] }
+              "amount": false,
+              "milestone": { "$ref": "#/$defs/milestone" }
             }
           }
         }

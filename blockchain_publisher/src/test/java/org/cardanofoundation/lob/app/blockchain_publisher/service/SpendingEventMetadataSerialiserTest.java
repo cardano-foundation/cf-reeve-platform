@@ -76,8 +76,17 @@ class SpendingEventMetadataSerialiserTest {
         event.setCurrency("USD");
         event.setCurrencyId("ISO_4217:USD");
         event.setOrganisation(organisation());
+        EventMilestoneAllocationEntity milestone = EventMilestoneAllocationEntity.builder()
+                .milestoneId("ms1")
+                .milestoneLabel("Milestone AB")
+                .expectedCost(new BigDecimal("60.00"))
+                .currency("USD")
+                .currencyId("ISO_4217:USD")
+                .dueDate(LocalDate.of(2025, 6, 30))
+                .build();
+
         event.setSpendingItems(List.of(item));
-        event.setMilestoneAllocations(List.of());
+        event.setMilestoneAllocations(List.of(milestone));
 
         MetadataMap result = serialiser.serialiseToMetadataMap("org123", Set.of(event), 12345L);
 
@@ -95,7 +104,8 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(eventMap.get("id")).isEqualTo("event1");
         assertThat(eventMap.get("type")).isEqualTo("SPENDING");
         assertThat(eventMap.get("date")).isEqualTo("2025-04-30");
-        assertThat(eventMap.get("amount")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("100.00")));
+        // SPENDING events do not carry an event-level amount (derived from items)
+        assertThat(eventMap.get("amount")).isNull();
 
         MetadataMap currencyMap = (MetadataMap) eventMap.get("currency");
         assertThat(currencyMap.get("id")).isEqualTo("ISO_4217:USD");
@@ -118,8 +128,13 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(((MetadataMap) itemMap.get("document")).get("hash")).isEqualTo("doc-hash-1");
         assertThat(itemMap.get("notes")).isEqualTo("Invoice #1");
 
-        // SPENDING events carry no milestone list (milestone_id lives in allocation)
-        assertThat(eventMap.get("milestone")).isNull();
+        // SPENDING targets a single milestone object carrying only the milestone_id
+        MetadataMap milestoneMap = (MetadataMap) eventMap.get("milestone");
+        assertThat(milestoneMap.get("milestone_id")).isEqualTo("ms1");
+        assertThat(milestoneMap.get("milestone_label")).isNull();
+        assertThat(milestoneMap.get("expected_cost")).isNull();
+        assertThat(milestoneMap.get("allocated_amount")).isNull();
+        assertThat(milestoneMap.get("due_date")).isNull();
     }
 
     @Test
@@ -160,10 +175,10 @@ class SpendingEventMetadataSerialiserTest {
         CBORMetadataList milestoneList = (CBORMetadataList) eventMap.get("milestone");
         MetadataMap milestoneMap = (MetadataMap) milestoneList.getValueAt(0);
         assertThat(milestoneMap.get("milestone_id")).isEqualTo("ms1");
-        assertThat(milestoneMap.get("label")).isEqualTo("Milestone AB");
-        assertThat(milestoneMap.get("amount")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("50.00")));
-        assertThat(milestoneMap.get("date")).isEqualTo("2025-06-30");
-        assertThat(((MetadataMap) milestoneMap.get("currency")).get("id")).isEqualTo("ISO_4217:USD");
+        assertThat(milestoneMap.get("milestone_label")).isNull();
+        assertThat(milestoneMap.get("allocated_amount")).isNull();
+        assertThat(milestoneMap.get("due_date")).isNull();
+        assertThat(milestoneMap.get("currency")).isNull();
 
         // FUNDING/REFUND allocation does not require a milestone_id on the allocation block
         MetadataMap allocationMap = (MetadataMap) eventMap.get("allocation");

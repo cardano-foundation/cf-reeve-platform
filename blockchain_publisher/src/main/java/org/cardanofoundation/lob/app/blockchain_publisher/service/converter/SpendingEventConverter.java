@@ -91,11 +91,12 @@ public class SpendingEventConverter {
                 .map(milestone -> EventMilestoneAllocationEntity.builder()
                         .event(event)
                         .milestoneId(milestone.getMilestoneId())
-                        .milestoneLabel(milestone.getLabel())
-                        .allocatedAmount(orZero(milestone.getAmount()))
+                        .milestoneLabel(milestone.getMilestoneLabel())
+                        .expectedCost(milestone.getExpectedCost())
+                        .allocatedAmount(milestone.getAllocatedAmount())
                         .currency(custCode(milestone.getCurrency()))
                         .currencyId(currencyId(milestone.getCurrency()))
-                        .dueDate(milestone.getDate())
+                        .dueDate(milestone.getDueDate())
                         .build())
                 .collect(Collectors.toList());
     }

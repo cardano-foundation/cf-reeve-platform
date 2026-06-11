@@ -98,10 +98,11 @@ class SpendingEventConverterTest {
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
                 .milestoneId("ms-1")
-                .label("Milestone AB")
-                .amount(new BigDecimal("50.00"))
+                .milestoneLabel("Milestone AB")
+                .expectedCost(new BigDecimal("60.00"))
+                .allocatedAmount(new BigDecimal("50.00"))
                 .currency(usd())
-                .date(LocalDate.of(2025, 6, 30))
+                .dueDate(LocalDate.of(2025, 6, 30))
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
@@ -132,6 +133,7 @@ class SpendingEventConverterTest {
         var allocationEntity = entity.getMilestoneAllocations().get(0);
         assertEquals("ms-1", allocationEntity.getMilestoneId());
         assertEquals("Milestone AB", allocationEntity.getMilestoneLabel());
+        assertEquals(new BigDecimal("60.00"), allocationEntity.getExpectedCost());
         assertEquals(new BigDecimal("50.00"), allocationEntity.getAllocatedAmount());
         assertEquals("ISO_4217:USD", allocationEntity.getCurrencyId());
         assertEquals(entity, allocationEntity.getEvent());

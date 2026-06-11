@@ -72,10 +72,13 @@ public class SpendingEventPublishView {
     @NoArgsConstructor
     public static class Milestone {
         private String milestoneId;
-        private String label;
-        private BigDecimal amount;
+        private String milestoneLabel;
+        @Nullable
+        private BigDecimal expectedCost;
+        @Nullable
+        private BigDecimal allocatedAmount;
         private Currency currency;
-        private LocalDate date;
+        private LocalDate dueDate;
     }
 
     @Getter
