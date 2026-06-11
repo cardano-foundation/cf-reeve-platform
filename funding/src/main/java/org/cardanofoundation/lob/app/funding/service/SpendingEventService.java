@@ -288,6 +288,10 @@ public class SpendingEventService {
                 .map(this::toAllocationView)
                 .toList();
 
+        MilestoneEntity milestone = event.getMilestone() != null
+                ? milestoneRepository.findById(event.getMilestone().getId()).orElse(null)
+                : null;
+
         return SpendingEventView.builder()
                 .eventId(event.getId())
                 .projectId(event.getProject().getId())
@@ -299,8 +303,8 @@ public class SpendingEventService {
                 .currency(event.getCurrency())
                 .txHash(event.getTxHash())
                 .fundingTx(event.getFundingTx())
-                .milestoneId(event.getMilestone() != null ? event.getMilestone().getId() : null)
-                .milestoneLabel(event.getMilestone() != null ? event.getMilestone().getLabel() : null)
+                .milestoneId(milestone != null ? milestone.getId() : null)
+                .milestoneLabel(milestone != null ? milestone.getLabel() : null)
                 .spendingItems(itemViews)
                 .milestoneAllocations(allocationViews)
                 .build();
