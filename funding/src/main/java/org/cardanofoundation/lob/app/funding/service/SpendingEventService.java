@@ -288,9 +288,10 @@ public class SpendingEventService {
                 .map(this::toAllocationView)
                 .toList();
 
-        MilestoneEntity milestone = event.getMilestone() != null
-                ? milestoneRepository.findById(event.getMilestone().getId()).orElse(null)
-                : null;
+        MilestoneEntity milestone = Optional.ofNullable(event.getMilestone())
+                .map(MilestoneEntity::getId)
+                .flatMap(milestoneRepository::findById)
+                .orElse(null);
 
         return SpendingEventView.builder()
                 .eventId(event.getId())
