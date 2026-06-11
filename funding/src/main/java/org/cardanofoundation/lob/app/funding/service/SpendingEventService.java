@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
+import org.hibernate.Hibernate;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
@@ -25,6 +27,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateReque
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingItemRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingItemView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
@@ -147,7 +150,10 @@ public class SpendingEventService {
         }
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);
-        return Either.right(spendingEventRepository.saveAndFlush(event));
+        event = spendingEventRepository.saveAndFlush(event);
+        // loading the entity to avoid lazyloading exception
+        Hibernate.initialize(event.getMilestone());
+        return Either.right(event);
     }
 
     @Transactional
@@ -303,6 +309,7 @@ public class SpendingEventService {
                 .totalAmount(event.getTotalAmount())
                 .currency(event.getCurrency())
                 .txHash(event.getTxHash())
+                .ledgerDispatchStatus(event.getLedgerDispatchStatus())
                 .fundingTx(event.getFundingTx())
                 .milestoneId(milestone != null ? milestone.getId() : null)
                 .milestoneLabel(milestone != null ? milestone.getLabel() : null)
@@ -353,6 +360,108 @@ public class SpendingEventService {
                 .allocatedAmount(allocation.getAllocatedAmount())
                 .currency(milestone != null ? milestone.getCurrency() : null)
                 .dueDate(milestone != null ? milestone.getDueDate() : null)
+                .build();
+    }
+
+    /**
+     * Builds the {@link SpendingEventPublishView} (blockchain-publisher contract) for a publishable event,
+     * resolving the funding context, milestones and spend items needed for the {@code EVENT_BUNDLE} metadata.
+     */
+    public SpendingEventPublishView toPublishView(SpendingEventEntity event) {
+        ProjectEntity project = event.getProject();
+
+        LocalDate date = event.getCreatedAt() != null
+                ? event.getCreatedAt().toLocalDate()
+                : (event.getPublishedAt() != null ? event.getPublishedAt().toLocalDate() : null);
+
+        List<SpendingEventPublishView.SpendItem> items = spendingItemRepository.findByEvent_Id(event.getId()).stream()
+                .map(this::toPublishItem)
+                .toList();
+
+        // SPENDING events target a single milestone (event.milestone); FUNDING/REFUND carry milestone allocations.
+        List<SpendingEventPublishView.Milestone> milestones = event.getEventType() == EventType.SPENDING
+                ? spendingMilestone(event)
+                : allocationRepository.findById_EventId(event.getId()).stream()
+                        .map(this::toPublishMilestone)
+                        .toList();
+
+        return SpendingEventPublishView.builder()
+                .eventId(event.getId())
+                .projectId(event.getProject().getId())
+                .eventType(event.getEventType())
+                .date(date)
+                .fundingId(event.getFundingId())
+                .activityId(event.getActivityId())
+                .activityTitle(project != null ? project.getActivityTitle() : null)
+                .fundingTx(event.getFundingTx())
+                .fundingDocHash(null)
+                .amount(event.getTotalAmount())
+                .currency(toCurrency(event.getCurrency()))
+                .milestones(milestones)
+                .items(items)
+                .build();
+    }
+
+    private SpendingEventPublishView.SpendItem toPublishItem(SpendingItemEntity item) {
+        return SpendingEventPublishView.SpendItem.builder()
+                .itemId(item.getId())
+                .category(item.getCategory())
+                .vendor(item.getVendor())
+                .amountFcy(item.getAmountFcy())
+                .currency(toCurrency(item.getCurrency()))
+                .fxRate(item.getFxRate())
+                .amountRcy(item.getAmountRcy())
+                .spendDate(item.getSpendDate())
+                .documentHash(item.getHash())
+                .notes(item.getNotes())
+                .build();
+    }
+
+    /** The single targeted milestone of a SPENDING event (no allocated amount - that is a FUNDING/REFUND concept). */
+    private List<SpendingEventPublishView.Milestone> spendingMilestone(SpendingEventEntity event) {
+        // event may be detached; reading the proxy's id is safe, the rest is loaded via the repository.
+        String milestoneId = event.getMilestone() != null ? event.getMilestone().getId() : null;
+        if (milestoneId == null) {
+            return List.of();
+        }
+        return milestoneRepository.findById(milestoneId)
+                .map(milestone -> List.of(SpendingEventPublishView.Milestone.builder()
+                        .milestoneId(milestone.getId())
+                        .milestoneLabel(milestone.getLabel())
+                        .expectedCost(milestone.getExpectedCost())
+                        .allocatedAmount(null)
+                        .currency(toCurrency(milestone.getCurrency()))
+                        .dueDate(milestone.getDueDate())
+                        .build()))
+                .orElseGet(List::of);
+    }
+
+    private SpendingEventPublishView.Milestone toPublishMilestone(EventMilestoneAllocationEntity allocation) {
+        MilestoneEntity milestone = milestoneRepository.findById(allocation.getId().getMilestoneId()).orElse(null);
+        return SpendingEventPublishView.Milestone.builder()
+                .milestoneId(allocation.getId().getMilestoneId())
+                .milestoneLabel(milestone != null ? milestone.getLabel() : null)
+                .expectedCost(milestone != null ? milestone.getExpectedCost() : null)
+                .allocatedAmount(allocation.getAllocatedAmount())
+                .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
+                .dueDate(milestone != null ? milestone.getDueDate() : null)
+                .build();
+    }
+
+    /**
+     * TODO Needs to add here the connection to the org module.
+     */
+    private static SpendingEventPublishView.Currency toCurrency(String currencyCode) {
+        if (currencyCode == null) {
+            return null;
+        }
+        if (currencyCode.startsWith("ISO_")) {
+            String custCode = currencyCode.substring(currencyCode.lastIndexOf(':') + 1);
+            return SpendingEventPublishView.Currency.builder().id(currencyCode).custCode(custCode).build();
+        }
+        return SpendingEventPublishView.Currency.builder()
+                .id("ISO_4217:" + currencyCode)
+                .custCode(currencyCode)
                 .build();
     }
 

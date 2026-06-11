@@ -16,12 +16,14 @@ import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API1L1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API1MetadataSerialiser;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API3L1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3MetadataSerialiser;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventMetadataSerialiser;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
@@ -66,6 +68,7 @@ public class TransactionSubmissionConfig {
                                                              @Qualifier("api1JsonSchemaMetadataChecker") MetadataChecker metadataChecker,
                                                              Account organiserAccount,
                                                              Optional<IpfsPublisher> ipfsPublisher,
+                                                             @Value("${lob.transaction.ipfs.enabled:false}") boolean useIpfs,
                                                              @Value("${l1.transaction.metadata_label:1447}") int metadataLabel,
                                                              @Value("${l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
     ) {
@@ -75,6 +78,30 @@ public class TransactionSubmissionConfig {
                 metadataChecker,
                 organiserAccount,
                 ipfsPublisher,
+                useIpfs,
+                metadataLabel,
+                debugStoreOutputTx
+        );
+    }
+
+    @Bean
+    public SpendingEventL1TransactionCreator spendingEventL1TransactionCreator(@Qualifier("yaci_blockfrost") BackendService backendService,
+                                                                              SpendingEventMetadataSerialiser metadataSerialiser,
+                                                                              BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+                                                                              @Qualifier("spendingEventJsonSchemaMetadataChecker") MetadataChecker metadataChecker,
+                                                                              Account organiserAccount,
+                                                                              Optional<IpfsPublisher> ipfsPublisher,
+                                                                              @Value("${lob.funding.ipfs.enabled:false}") boolean useIpfs,
+                                                                              @Value("${l1.transaction.metadata_label:1447}") int metadataLabel,
+                                                                              @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
+    ) {
+        return new SpendingEventL1TransactionCreator(backendService,
+                metadataSerialiser,
+                blockchainReaderPublicApi,
+                metadataChecker,
+                organiserAccount,
+                ipfsPublisher,
+                useIpfs,
                 metadataLabel,
                 debugStoreOutputTx
         );

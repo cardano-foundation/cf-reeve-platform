@@ -1,7 +1,5 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.event_publish;
 
-import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent.VERSION;
-
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -14,113 +12,76 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import org.apache.commons.lang3.tuple.Pair;
-
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.blockchain_common.domain.BlockchainReceipt;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.publish.PublishableEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublishStatusMapper;
-import org.cardanofoundation.lob.app.reporting.dto.events.ReportsLedgerUpdatedEvent;
-import org.cardanofoundation.lob.app.reporting.model.ReportStatusUpdate;
 import org.cardanofoundation.lob.app.support.collections.Partitions;
-import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
+/**
+ * Publishes ledger-update events back to the originating modules. The whole "read each entity's
+ * {@link L1SubmissionData} and turn it into a status update" logic lives here once and works for any
+ * {@link PublishableEntity} (transactions, reports, spending events) - the caller only supplies the
+ * {@link LedgerUpdateType} that lets each consumer pick out the updates relevant to it.
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class LedgerUpdatedEventPublisher {
 
+    public static final String BLOCKCHAIN_TYPE = "CARDANO_L1";
+
     private final ApplicationEventPublisher applicationEventPublisher;
     private final BlockchainPublishStatusMapper blockchainPublishStatusMapper;
-
-    private static String BLOCKCHAIN_TYPE = "CARDANO_L1";
 
     @Value("${lob.blockchain_publisher.send.batch.size:100}")
     protected int dispatchBatchSize = 100;
 
     @Transactional
-    public void sendTxLedgerUpdatedEvents(String organisationId,
-                                          Set<TransactionEntity> allTxs) {
-        log.info("Sending tx ledger updated event for organisation:{}, submittedTransactions:{}", organisationId, allTxs.size());
+    public <E extends PublishableEntity> void send(String organisationId,
+                                                   LedgerUpdateType type,
+                                                   Set<E> entities) {
+        if (entities.isEmpty()) {
+            return;
+        }
 
-        val partitions = Partitions.partition(allTxs, dispatchBatchSize);
+        log.info("Sending {} ledger updated event for organisation:{}, count:{}", type, organisationId, entities.size());
 
-        for (val partition : partitions) {
-            val txStatuses = partition.asSet().stream()
-                    .map(txEntity -> {
-                        val publishStatusM = txEntity.getL1SubmissionData().flatMap(L1SubmissionData::getPublishStatus);
-                        val cardanoFinalityScoreM = txEntity.getL1SubmissionData().flatMap(L1SubmissionData::getFinalityScore);
-                        val ledgerDispatchStatus = blockchainPublishStatusMapper.convert(publishStatusM, cardanoFinalityScoreM);
-                        val txId = txEntity.getId();
-
-                        val blockchainHashM = txEntity.getL1SubmissionData().flatMap(L1SubmissionData::getTransactionHash);
-
-                        String blockchainHash = blockchainHashM.orElse(null);
-
-                        val blockchainReceipts = Set.of(
-                                new BlockchainReceipt(
-                                        BLOCKCHAIN_TYPE,
-                                        blockchainHash
-                                )
-                        );
-
-                        return new TxStatusUpdate(txId, ledgerDispatchStatus, txEntity.getL1SubmissionData().get().getPublishStatusErrorReason().orElse(null), blockchainReceipts);
-                    })
+        for (val partition : Partitions.partition(entities, dispatchBatchSize)) {
+            val statusUpdates = partition.asSet().stream()
+                    .map(this::toStatusUpdate)
                     .collect(Collectors.toSet());
 
-            log.info("Sending txs ledger updated event for organisation:{}, statuses:{}", organisationId, txStatuses);
-
-            val event = TxsLedgerUpdatedEvent.builder()
-                    .metadata(EventMetadata.create(VERSION))
+            val event = LedgerUpdatedEvent.builder()
                     .organisationId(organisationId)
-                    .statusUpdates(txStatuses)
+                    .type(type)
+                    .statusUpdates(statusUpdates)
                     .build();
+
+            log.info("Sending {} ledger updated event for organisation:{}, statuses:{}", type, organisationId, statusUpdates);
 
             applicationEventPublisher.publishEvent(event);
         }
     }
 
-    @Transactional
-    public void sendReportLedgerUpdatedEvents(String organisationId,
-                                              Set<Pair<String, L1SubmissionData>> pair) {
-        log.info("Sending report ledger updated event for organisation:{}, reports:{}", organisationId, pair.size());
+    private LedgerStatusUpdate toStatusUpdate(PublishableEntity entity) {
+        val l1SubmissionData = entity.getL1SubmissionData();
 
-        val partitions = Partitions.partition(pair, dispatchBatchSize);
-        for (val partition : partitions) {
-            val reportStatuses = partition.asSet().stream()
-                    .map(reportPair -> {
-                        val publishStatusM = reportPair.getRight().getPublishStatus();
-                        val cardanoFinalityScoreM = reportPair.getRight().getFinalityScore();
-                        val ledgerDispatchStatus = blockchainPublishStatusMapper.convert(publishStatusM, cardanoFinalityScoreM);
-                        val reportId = reportPair.getLeft();
+        val ledgerDispatchStatus = blockchainPublishStatusMapper.convert(
+                l1SubmissionData.flatMap(L1SubmissionData::getPublishStatus),
+                l1SubmissionData.flatMap(L1SubmissionData::getFinalityScore));
 
-                        val blockchainHashM = reportPair.getRight().getTransactionHash();
+        val blockchainHash = l1SubmissionData.flatMap(L1SubmissionData::getTransactionHash).orElse(null);
+        val errorReason = l1SubmissionData.flatMap(L1SubmissionData::getPublishStatusErrorReason).orElse(null);
 
-                        String blockchainHash = blockchainHashM.orElse(null);
-
-                        val blockchainReceipts = Set.of(
-                                new BlockchainReceipt(
-                                        BLOCKCHAIN_TYPE,
-                                        blockchainHash
-                                )
-                        );
-
-                        return new ReportStatusUpdate(reportId, ledgerDispatchStatus, reportPair.getRight().getPublishStatusErrorReason().orElse(null), blockchainReceipts);
-                    })
-                    .collect(Collectors.toSet());
-
-            log.info("Sending report ledger updated event for organisation:{}, statuses: {}", organisationId, reportStatuses);
-
-            val event = ReportsLedgerUpdatedEvent.builder()
-                    .metadata(EventMetadata.create(VERSION))
-                    .organisationId(organisationId)
-                    .statusUpdates(reportStatuses)
-                    .build();
-
-            applicationEventPublisher.publishEvent(event);
-        }
+        return new LedgerStatusUpdate(
+                entity.getId(),
+                ledgerDispatchStatus,
+                errorReason,
+                Set.of(new BlockchainReceipt(BLOCKCHAIN_TYPE, blockchainHash)));
     }
 
 }

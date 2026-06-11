@@ -9,6 +9,7 @@ import lombok.*;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
@@ -44,6 +45,10 @@ public class SpendingEventView {
     @Nullable
     @Schema(example = "2736...FF28")
     private String txHash;
+
+    @Nullable
+    @Schema(example = "FINALIZED")
+    private LedgerDispatchStatus ledgerDispatchStatus;
 
     @Nullable
     @Schema(example = "2736ff28...")

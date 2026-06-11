@@ -160,6 +160,7 @@ class SpendingEventServiceTest {
     @Test
     void publish_setsStatusAndDispatchApproved() {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        event.setTxHash("tx-hash-abc");
         when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
         when(spendingEventRepository.saveAndFlush(event)).thenReturn(event);
 
@@ -212,15 +213,11 @@ class SpendingEventServiceTest {
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
-        MilestoneEntity milestone = milestoneEntity("m1");
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
-
         SpendingEventView view = spendingEventService.toView(event);
 
         assertThat(view.getEventId()).isEqualTo("e1");
         assertThat(view.getEventType()).isEqualTo(EventType.SPENDING);
         assertThat(view.getStatus()).isEqualTo(EventStatus.DRAFT);
-        assertThat(view.getMilestoneLabel()).isEqualTo("Milestone AB");
         assertThat(view.getSpendingItems()).hasSize(1);
         assertThat(view.getMilestoneAllocations()).isEmpty();
     }

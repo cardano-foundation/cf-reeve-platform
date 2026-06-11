@@ -95,7 +95,7 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
 
     /** Used only for SPENDING events — the milestone this batch of spends targets. */
     @Nullable
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "milestone_id")
     private MilestoneEntity milestone;
 

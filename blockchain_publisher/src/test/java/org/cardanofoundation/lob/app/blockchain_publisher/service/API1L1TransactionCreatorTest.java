@@ -30,8 +30,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API1BlockchainTransactions;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Batch;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,12 +63,12 @@ class API1L1TransactionCreatorTest {
         creatorNoIpfs = new API1L1TransactionCreator(
                 backendService, api1MetadataSerialiser, blockchainReaderPublicApi,
                 jsonSchemaMetadataChecker, organiserAccount, Optional.empty(),
-                1, false
+                false, 1, false
         );
         creatorWithIpfs = new API1L1TransactionCreator(
                 backendService, api1MetadataSerialiser, blockchainReaderPublicApi,
                 jsonSchemaMetadataChecker, organiserAccount, Optional.of(ipfsPublisher),
-                1, false
+                true, 1, false
         );
     }
 
@@ -73,7 +76,7 @@ class API1L1TransactionCreatorTest {
     void init_setsRunId() throws NoSuchFieldException, IllegalAccessException {
         creatorNoIpfs.init();
 
-        Field runIdField = API1L1TransactionCreator.class.getDeclaredField("runId");
+        Field runIdField = API1L1TransactionCreator.class.getSuperclass().getDeclaredField("runId");
         runIdField.setAccessible(true);
         String runId = (String) runIdField.get(creatorNoIpfs);
 
@@ -86,7 +89,7 @@ class API1L1TransactionCreatorTest {
         error.setTitle("CHAIN_TIP_UNAVAILABLE");
         when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.left(error));
 
-        Either<ProblemDetail, Optional<API1BlockchainTransactions>> result =
+        Either<ProblemDetail, Optional<L1Batch<TransactionEntity>>> result =
                 creatorNoIpfs.pullBlockchainTransaction("org-1", Set.of());
 
         assertThat(result.isLeft()).isTrue();
@@ -97,7 +100,7 @@ class API1L1TransactionCreatorTest {
     void pullBlockchainTransaction_withoutIpfsPublisher_emptyTransactions_returnsOptionalEmpty() {
         when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(chainTip));
 
-        Either<ProblemDetail, Optional<API1BlockchainTransactions>> result =
+        Either<ProblemDetail, Optional<L1Batch<TransactionEntity>>> result =
                 creatorNoIpfs.pullBlockchainTransaction("org-1", Set.of());
 
         assertThat(result.isRight()).isTrue();
@@ -113,7 +116,7 @@ class API1L1TransactionCreatorTest {
         when(api1MetadataSerialiser.serialiseToMetadataMap(any(), any(), anyLong())).thenReturn(metadataMap);
         when(jsonSchemaMetadataChecker.checkTransactionMetadata(anyString())).thenReturn(false);
 
-        Either<ProblemDetail, Optional<API1BlockchainTransactions>> result =
+        Either<ProblemDetail, Optional<L1Batch<TransactionEntity>>> result =
                 creatorWithIpfs.pullBlockchainTransaction("org-1", Set.of());
 
         assertThat(result.isLeft()).isTrue();
@@ -134,7 +137,7 @@ class API1L1TransactionCreatorTest {
         when(jsonSchemaMetadataChecker.checkTransactionMetadata(anyString())).thenReturn(true);
         when(ipfsPublisher.publish(anyString())).thenReturn(Either.left(ipfsError));
 
-        Either<ProblemDetail, Optional<API1BlockchainTransactions>> result =
+        Either<ProblemDetail, Optional<L1Batch<TransactionEntity>>> result =
                 creatorWithIpfs.pullBlockchainTransaction("org-1", Set.of());
 
         assertThat(result.isLeft()).isTrue();
@@ -154,14 +157,14 @@ class API1L1TransactionCreatorTest {
         API1L1TransactionCreator spy = spy(creatorWithIpfs);
         doReturn(new byte[]{1, 2, 3}).when(spy).serialiseTransaction(any(Metadata.class));
 
-        Either<ProblemDetail, Optional<API1BlockchainTransactions>> result =
+        Either<ProblemDetail, Optional<L1Batch<TransactionEntity>>> result =
                 spy.pullBlockchainTransaction("org-1", Set.of());
 
         assertThat(result.isRight()).isTrue();
         assertThat(result.get()).isPresent();
-        API1BlockchainTransactions txs = result.get().get();
+        L1Batch<TransactionEntity> txs = result.get().get();
         assertThat(txs.organisationId()).isEqualTo("org-1");
-        assertThat(txs.remainingTransactions()).isEmpty();
+        assertThat(txs.remaining()).isEmpty();
         assertThat(txs.creationSlot()).isEqualTo(12345L);
         assertThat(txs.serialisedTxData()).isEqualTo(new byte[]{1, 2, 3});
     }

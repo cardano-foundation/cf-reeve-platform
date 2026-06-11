@@ -1,0 +1,81 @@
+package org.cardanofoundation.lob.app.funding.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Optional;
+import java.util.Set;
+
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.cardanofoundation.lob.app.blockchain_common.domain.BlockchainReceipt;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.funding.repository.SpendingEventRepository;
+
+@ExtendWith(MockitoExtension.class)
+class SpendingEventLedgerUpdateHandlerTest {
+
+    @Mock
+    private SpendingEventRepository spendingEventRepository;
+
+    @InjectMocks
+    private SpendingEventLedgerUpdateHandler handler;
+
+    private LedgerUpdatedEvent eventFor(LedgerUpdateType type, LedgerStatusUpdate... updates) {
+        return LedgerUpdatedEvent.builder()
+                .organisationId("org1")
+                .type(type)
+                .statusUpdates(Set.of(updates))
+                .build();
+    }
+
+    @Test
+    void knownEvent_updatesLedgerStatusAndTxHash() {
+        SpendingEventEntity entity = SpendingEventEntity.builder()
+                .id("event-1")
+                .eventType(EventType.SPENDING)
+                .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
+                .build();
+        when(spendingEventRepository.findById("event-1")).thenReturn(Optional.of(entity));
+
+        handler.handleLedgerUpdatedEvent(eventFor(LedgerUpdateType.SPENDING_EVENT,
+                new LedgerStatusUpdate("event-1", LedgerDispatchStatus.DISPATCHED, null,
+                        Set.of(new BlockchainReceipt("CARDANO_L1", "tx-hash-1")))));
+
+        assertThat(entity.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.DISPATCHED);
+        assertThat(entity.getTxHash()).isEqualTo("tx-hash-1");
+        verify(spendingEventRepository).save(entity);
+    }
+
+    @Test
+    void unknownEvent_isIgnored() {
+        when(spendingEventRepository.findById("missing")).thenReturn(Optional.empty());
+
+        handler.handleLedgerUpdatedEvent(eventFor(LedgerUpdateType.SPENDING_EVENT,
+                new LedgerStatusUpdate("missing", LedgerDispatchStatus.DISPATCHED, null, Set.of())));
+
+        verify(spendingEventRepository).findById("missing");
+        verify(spendingEventRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void nonSpendingEventType_isIgnored() {
+        handler.handleLedgerUpdatedEvent(eventFor(LedgerUpdateType.TRANSACTION,
+                new LedgerStatusUpdate("event-1", LedgerDispatchStatus.DISPATCHED, null, Set.of())));
+
+        verify(spendingEventRepository, never()).findById(org.mockito.ArgumentMatchers.anyString());
+    }
+
+}

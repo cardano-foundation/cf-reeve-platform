@@ -15,13 +15,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.BlockchainReceipt;
+import org.cardanofoundation.lob.app.blockchain_common.domain.BlockchainReceipt;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
-import org.cardanofoundation.lob.app.reporting.dto.events.ReportsLedgerUpdatedEvent;
-import org.cardanofoundation.lob.app.reporting.model.ReportStatusUpdate;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.reporting.job.ReprocessJob;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
-import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 @ExtendWith(MockitoExtension.class)
 class ReportingEventHandlerTest {
@@ -29,12 +30,22 @@ class ReportingEventHandlerTest {
     @Mock
     private ReportingRepository reportingRepository;
 
+    @Mock
+    private ReprocessJob reprocessJob;
+
     @InjectMocks
     private ReportingEventHandler reportingEventHandler;
 
+    private LedgerUpdatedEvent reportEvent(String organisationId, LedgerStatusUpdate... updates) {
+        return LedgerUpdatedEvent.builder()
+                .organisationId(organisationId)
+                .type(LedgerUpdateType.REPORT)
+                .statusUpdates(Set.of(updates))
+                .build();
+    }
+
     @Test
     void handleReportsLedgerUpdated_withValidEvent_shouldUpdateReport() {
-        // Given
         String reportId = "report123";
         String organisationId = "org123";
 
@@ -45,25 +56,17 @@ class ReportingEventHandlerTest {
 
         BlockchainReceipt receipt = new BlockchainReceipt("CARDANO", "hash123");
 
-        ReportStatusUpdate statusUpdate = new ReportStatusUpdate(
+        LedgerStatusUpdate statusUpdate = new LedgerStatusUpdate(
                 reportId,
                 LedgerDispatchStatus.DISPATCHED,
                 null,
                 Set.of(receipt)
         );
 
-        ReportsLedgerUpdatedEvent event = ReportsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("test"))
-                .organisationId(organisationId)
-                .statusUpdates(Set.of(statusUpdate))
-                .build();
-
         when(reportingRepository.findAllById(Set.of(reportId))).thenReturn(List.of(reportEntity));
 
-        // When
-        reportingEventHandler.handleReportsLedgerUpdated(event);
+        reportingEventHandler.handleLedgerUpdated(reportEvent(organisationId, statusUpdate));
 
-        // Then
         ArgumentCaptor<ReportEntity> captor = ArgumentCaptor.forClass(ReportEntity.class);
         verify(reportingRepository).findAllById(Set.of(reportId));
         verify(reportingRepository).save(captor.capture());
@@ -77,7 +80,6 @@ class ReportingEventHandlerTest {
 
     @Test
     void handleReportsLedgerUpdated_withErrorReason_shouldSetErrorReason() {
-        // Given
         String reportId = "report456";
         String organisationId = "org456";
         String errorReason = "Transaction failed";
@@ -87,25 +89,17 @@ class ReportingEventHandlerTest {
                 .organisationId(organisationId)
                 .build();
 
-        ReportStatusUpdate statusUpdate = new ReportStatusUpdate(
+        LedgerStatusUpdate statusUpdate = new LedgerStatusUpdate(
                 reportId,
                 LedgerDispatchStatus.FAILED,
                 errorReason,
                 Set.of()
         );
 
-        ReportsLedgerUpdatedEvent event = ReportsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("test"))
-                .organisationId(organisationId)
-                .statusUpdates(Set.of(statusUpdate))
-                .build();
-
         when(reportingRepository.findAllById(Set.of(reportId))).thenReturn(List.of(reportEntity));
 
-        // When
-        reportingEventHandler.handleReportsLedgerUpdated(event);
+        reportingEventHandler.handleLedgerUpdated(reportEvent(organisationId, statusUpdate));
 
-        // Then
         ArgumentCaptor<ReportEntity> captor = ArgumentCaptor.forClass(ReportEntity.class);
         verify(reportingRepository).save(captor.capture());
 
@@ -118,7 +112,6 @@ class ReportingEventHandlerTest {
 
     @Test
     void handleReportsLedgerUpdated_withEmptyBlockchainReceipts_shouldNotSetBlockchainInfo() {
-        // Given
         String reportId = "report789";
         String organisationId = "org789";
 
@@ -127,25 +120,17 @@ class ReportingEventHandlerTest {
                 .organisationId(organisationId)
                 .build();
 
-        ReportStatusUpdate statusUpdate = new ReportStatusUpdate(
+        LedgerStatusUpdate statusUpdate = new LedgerStatusUpdate(
                 reportId,
                 LedgerDispatchStatus.MARK_DISPATCH,
                 null,
                 Set.of()
         );
 
-        ReportsLedgerUpdatedEvent event = ReportsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("test"))
-                .organisationId(organisationId)
-                .statusUpdates(Set.of(statusUpdate))
-                .build();
-
         when(reportingRepository.findAllById(Set.of(reportId))).thenReturn(List.of(reportEntity));
 
-        // When
-        reportingEventHandler.handleReportsLedgerUpdated(event);
+        reportingEventHandler.handleLedgerUpdated(reportEvent(organisationId, statusUpdate));
 
-        // Then
         ArgumentCaptor<ReportEntity> captor = ArgumentCaptor.forClass(ReportEntity.class);
         verify(reportingRepository).save(captor.capture());
 
@@ -157,7 +142,6 @@ class ReportingEventHandlerTest {
 
     @Test
     void handleReportsLedgerUpdated_withMultipleReports_shouldUpdateAll() {
-        // Given
         String reportId1 = "report1";
         String reportId2 = "report2";
         String organisationId = "org123";
@@ -175,33 +159,25 @@ class ReportingEventHandlerTest {
         BlockchainReceipt receipt1 = new BlockchainReceipt("CARDANO", "hash1");
         BlockchainReceipt receipt2 = new BlockchainReceipt("CARDANO", "hash2");
 
-        ReportStatusUpdate statusUpdate1 = new ReportStatusUpdate(
+        LedgerStatusUpdate statusUpdate1 = new LedgerStatusUpdate(
                 reportId1,
                 LedgerDispatchStatus.DISPATCHED,
                 null,
                 Set.of(receipt1)
         );
 
-        ReportStatusUpdate statusUpdate2 = new ReportStatusUpdate(
+        LedgerStatusUpdate statusUpdate2 = new LedgerStatusUpdate(
                 reportId2,
                 LedgerDispatchStatus.COMPLETED,
                 null,
                 Set.of(receipt2)
         );
 
-        ReportsLedgerUpdatedEvent event = ReportsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("test"))
-                .organisationId(organisationId)
-                .statusUpdates(Set.of(statusUpdate1, statusUpdate2))
-                .build();
-
         when(reportingRepository.findAllById(Set.of(reportId1, reportId2)))
                 .thenReturn(List.of(reportEntity1, reportEntity2));
 
-        // When
-        reportingEventHandler.handleReportsLedgerUpdated(event);
+        reportingEventHandler.handleLedgerUpdated(reportEvent(organisationId, statusUpdate1, statusUpdate2));
 
-        // Then
         verify(reportingRepository).findAllById(Set.of(reportId1, reportId2));
         verify(reportingRepository, times(2)).save(any(ReportEntity.class));
 
@@ -216,36 +192,26 @@ class ReportingEventHandlerTest {
 
     @Test
     void handleReportsLedgerUpdated_withNoMatchingReports_shouldNotSaveAnything() {
-        // Given
         String reportId = "nonexistent";
         String organisationId = "org999";
 
-        ReportStatusUpdate statusUpdate = new ReportStatusUpdate(
+        LedgerStatusUpdate statusUpdate = new LedgerStatusUpdate(
                 reportId,
                 LedgerDispatchStatus.DISPATCHED,
                 null,
                 Set.of()
         );
 
-        ReportsLedgerUpdatedEvent event = ReportsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("test"))
-                .organisationId(organisationId)
-                .statusUpdates(Set.of(statusUpdate))
-                .build();
-
         when(reportingRepository.findAllById(Set.of(reportId))).thenReturn(List.of());
 
-        // When
-        reportingEventHandler.handleReportsLedgerUpdated(event);
+        reportingEventHandler.handleLedgerUpdated(reportEvent(organisationId, statusUpdate));
 
-        // Then
         verify(reportingRepository).findAllById(Set.of(reportId));
         verify(reportingRepository, never()).save(any(ReportEntity.class));
     }
 
     @Test
     void handleReportsLedgerUpdated_withRetryingStatus_shouldUpdateStatus() {
-        // Given
         String reportId = "report888";
         String organisationId = "org888";
         String errorReason = "Network timeout, retrying";
@@ -256,25 +222,17 @@ class ReportingEventHandlerTest {
                 .ledgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH)
                 .build();
 
-        ReportStatusUpdate statusUpdate = new ReportStatusUpdate(
+        LedgerStatusUpdate statusUpdate = new LedgerStatusUpdate(
                 reportId,
                 LedgerDispatchStatus.RETRYING,
                 errorReason,
                 Set.of()
         );
 
-        ReportsLedgerUpdatedEvent event = ReportsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("test"))
-                .organisationId(organisationId)
-                .statusUpdates(Set.of(statusUpdate))
-                .build();
-
         when(reportingRepository.findAllById(Set.of(reportId))).thenReturn(List.of(reportEntity));
 
-        // When
-        reportingEventHandler.handleReportsLedgerUpdated(event);
+        reportingEventHandler.handleLedgerUpdated(reportEvent(organisationId, statusUpdate));
 
-        // Then
         ArgumentCaptor<ReportEntity> captor = ArgumentCaptor.forClass(ReportEntity.class);
         verify(reportingRepository).save(captor.capture());
 

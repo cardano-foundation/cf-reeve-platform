@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cardanofoundation.org/reeve/schemas/event-bundle.schema.json",
+  "title": "Reeve label-1447 EVENT_BUNDLE record",
+  "description": "Validates the structure (shape) of a label-1447 metadata transaction of type EVENT_BUNDLE, in both inline and IPFS-anchored storage modes. NOTE: cross-field / cross-document binding rules (org_id == on-chain org.id, event_count == length(events), manifest.id == SHA3-256(org.id::interval::date), and the IPFS CID matching the document bytes) CANNOT be expressed in JSON Schema and must be checked by a programmatic validator. To validate an off-chain document, point your validator at this file's #/$defs/offChainDocument.",
+  "type": "object",
+  "required": ["org", "metadata", "type", "data"],
+  "additionalProperties": true,
+  "properties": {
+      "org": { "$ref": "#/$defs/org" },
+      "metadata": { "$ref": "#/$defs/metadata" },
+      "type": { "const": "EVENT_BUNDLE" },
+      "data": {
+        "description": "Inline: an array of event objects. IPFS-anchored: a manifest object containing ipfs_cid.",
+        "oneOf": [
+          { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/event" } },
+          { "$ref": "#/$defs/ipfsManifest" }
+        ]
+      }
+  },
+  "$defs": {
+    "isoDate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "isoDateTime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?$"
+    },
+    "decimalString": {
+      "type": "string",
+      "pattern": "^-?\\d+(\\.\\d+)?$",
+      "description": "Monetary amount as a string."
+    },
+    "currencyId": {
+      "type": "string",
+      "pattern": "^ISO_(4217|24165):.+$",
+      "description": "ISO_4217:<code> for fiat, ISO_24165:<token>:<dti> for digital assets."
+    },
+    "currency": {
+      "type": "object",
+      "required": ["id", "cust_code"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/currencyId" },
+        "cust_code": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fxRate": {
+      "type": "string",
+      "pattern": "^ISO_(4217|24165):[^:=]+:ISO_(4217|24165):[^:=]+=[0-9]+(\\.[0-9]+)?$",
+      "description": "Format \"<from>:<to>=<rate>\", e.g. ISO_4217:USD:ISO_4217:EUR=0.9200"
+    },
+    "org": {
+      "type": "object",
+      "description": "Publisher identity (org heather). id is derivable as SHA3-256(country_code::tax_id_number).",
+      "required": ["id", "name", "currency_id", "country_code", "tax_id_number"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "currency_id": { "$ref": "#/$defs/currencyId" },
+        "country_code": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "tax_id_number": { "type": "string", "minLength": 1 }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["creation_slot", "timestamp", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "creation_slot": { "type": "integer", "minimum": 0 },
+        "timestamp": { "$ref": "#/$defs/isoDateTime" },
+        "version": { "$ref": "#/$defs/version" }
+      }
+    },
+    "allocation": {
+      "type": "object",
+      "description": "Funding context, present in every grant-lifecycle event.",
+      "required": ["funding_id", "activity_id"],
+      "additionalProperties": false,
+      "properties": {
+        "funding_id": { "type": "string", "minLength": 1 },
+        "activity_id": { "type": "string", "minLength": 1 },
+        "activity_title": { "type": "string" },
+        "funding_tx": { "type": "string" },
+        "funding_doc_hash": { "type": "string", "minLength": 1 }
+      }
+    },
+    "milestone": {
+      "type": "object",
+      "required": ["milestone_id"],
+      "additionalProperties": false,
+      "properties": {
+        "milestone_id": { "type": "string", "minLength": 1 },
+        "milestone_label": { "type": "string" },
+        "expected_cost": { "$ref": "#/$defs/decimalString" },
+        "allocated_amount": { "$ref": "#/$defs/decimalString" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "due_date": { "$ref": "#/$defs/isoDate" }
+      }
+    },
+    "milestoneOrArray": {
+      "oneOf": [
+        { "$ref": "#/$defs/milestone" },
+        { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/milestone" } }
+      ]
+    },
+    "spendItem": {
+      "type": "object",
+      "required": ["id", "category", "vendor", "amount", "currency", "fx_rate", "date"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string", "minLength": 1 },
+        "vendor": { "type": "string", "minLength": 1 },
+        "amount": { "$ref": "#/$defs/decimalString" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "fx_rate": { "$ref": "#/$defs/fxRate" },
+        "amount_rcy": { "$ref": "#/$defs/decimalString" },
+        "date": { "$ref": "#/$defs/isoDate" },
+        "document": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "type": { "type": "string" },
+            "number": { "type": "string" },
+            "date": { "$ref": "#/$defs/isoDate" },
+            "hash": { "type": "string" }
+          }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "grantEvent": {
+      "type": "object",
+      "required": ["id", "type", "date", "allocation"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "enum": ["FUNDING", "SPENDING", "REFUND"] },
+        "date": { "$ref": "#/$defs/isoDate" },
+        "allocation": { "$ref": "#/$defs/allocation" },
+        "milestone": { "$ref": "#/$defs/milestoneOrArray" },
+        "amount": { "$ref": "#/$defs/decimalString" },
+        "currency": { "$ref": "#/$defs/currency" },
+        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/spendItem" } }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["type"],
+            "properties": { "type": { "enum": ["FUNDING", "REFUND"] } }
+          },
+          "then": {
+            "required": ["milestone", "amount", "currency"],
+            "properties": {
+              "allocation": {
+                "required": ["activity_title"],
+                "oneOf": [
+                  { "required": ["funding_tx"] },
+                  { "required": ["funding_doc_hash"] }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": { "type": { "const": "SPENDING" } }
+          },
+          "then": {
+            "required": ["items", "milestone"],
+            "properties": {
+              "amount": false,
+              "milestone": { "$ref": "#/$defs/milestone" }
+            }
+          }
+        }
+      ]
+    },
+    "customEvent": {
+      "type": "object",
+      "description": "Organization-defined event type (e.g., SALE_SUMMARY). Only common fields are mandated; bodies are free-form.",
+      "required": ["id", "type", "date"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "not": { "enum": ["FUNDING", "SPENDING", "REFUND"] }
+        },
+        "date": { "$ref": "#/$defs/isoDate" }
+      }
+    },
+    "event": {
+      "oneOf": [
+        { "$ref": "#/$defs/grantEvent" },
+        { "$ref": "#/$defs/customEvent" }
+      ]
+    },
+    "ipfsManifest": {
+      "type": "object",
+      "description": "On-chain manifest for an IPFS-anchored bundle.",
+      "required": ["id", "ipfs_cid", "interval", "date", "event_count"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "ipfs_cid": {
+          "type": "string",
+          "pattern": "^(bafy[0-9a-z]+|baf[0-9a-z]+|Qm[1-9A-HJ-NP-Za-km-z]{44})$",
+          "description": "IPFS CID (CIDv1 base32 or CIDv0 base58btc)."
+        },
+        "interval": { "type": "string", "enum": ["DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"] },
+        "date": { "$ref": "#/$defs/isoDate" },
+        "event_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "offChainDocument": {
+      "type": "object",
+      "description": "The IPFS document referenced by ipfsManifest.ipfs_cid.",
+      "required": ["org_id", "currency_id", "version", "date", "events"],
+      "additionalProperties": false,
+      "properties": {
+        "org_id": { "type": "string" },
+        "currency_id": { "$ref": "#/$defs/currencyId" },
+        "version": { "$ref": "#/$defs/version" },
+        "date": { "$ref": "#/$defs/isoDate" },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/event" } }
+      }
+    }
+  }
+}

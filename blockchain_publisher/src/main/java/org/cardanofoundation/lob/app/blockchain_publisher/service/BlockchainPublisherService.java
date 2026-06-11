@@ -14,11 +14,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
+import org.cardanofoundation.lob.app.blockchain_publisher.repository.SpendingEventEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepositoryGateway;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.ReportConverter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.SpendingEventConverter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.TransactionConverter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.event_publish.LedgerUpdatedEventPublisher;
+import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 
 @Service("blockchain_publisher.blockchainPublisherService")
@@ -28,8 +35,10 @@ public class BlockchainPublisherService {
 
     private final TransactionEntityRepositoryGateway transactionEntityRepositoryGateway;
     private final ReportEntityRepositoryGateway reportEntityRepositoryGateway;
+    private final SpendingEventEntityRepositoryGateway spendingEventEntityRepositoryGateway;
     private final LedgerUpdatedEventPublisher ledgerUpdatedEventPublisher;
     private final TransactionConverter transactionConverter;
+    private final SpendingEventConverter spendingEventConverter;
     private final ReportConverter reportConverter;
 
     @Transactional
@@ -45,8 +54,8 @@ public class BlockchainPublisherService {
 
         Set<TransactionEntity> rollbackTransaction = transactionEntityRepositoryGateway.updateErrorRollbackTransactions(txEntities);
 
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, storedTransactions);
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents(organisationId, rollbackTransaction);
+        ledgerUpdatedEventPublisher.send(organisationId, LedgerUpdateType.TRANSACTION, storedTransactions);
+        ledgerUpdatedEventPublisher.send(organisationId, LedgerUpdateType.TRANSACTION, rollbackTransaction);
     }
 
 
@@ -63,6 +72,19 @@ public class BlockchainPublisherService {
                 o -> o.getOrganisation().getId(),
                 Collectors.mapping(Function.identity(), Collectors.toSet())
         ));
-        organisationIdTransactionEntityMap.forEach(ledgerUpdatedEventPublisher::sendTxLedgerUpdatedEvents);
+        organisationIdTransactionEntityMap.forEach((orgId, entities) ->
+                ledgerUpdatedEventPublisher.send(orgId, LedgerUpdateType.TRANSACTION, entities));
+    }
+
+    @Transactional
+    public void storeEventsForDispatchLater(SpendingEventsPublishCommand spendingEventsPublishCommand) {
+        String organisationId = spendingEventsPublishCommand.getOrganisationId();
+        log.info("storeEventsForDispatchLater..., orgId:{}, events:{}", organisationId, spendingEventsPublishCommand.getSpendingEvents().size());
+
+        Set<SpendingEventEntity> eventEntities = spendingEventsPublishCommand.getSpendingEvents().stream()
+                .map(view -> spendingEventConverter.convertToDbDetached(organisationId, view))
+                .collect(Collectors.toSet());
+
+        spendingEventEntityRepositoryGateway.storeOnlyNew(eventEntities);
     }
 }
