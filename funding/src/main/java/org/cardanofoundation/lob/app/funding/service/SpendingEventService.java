@@ -122,6 +122,7 @@ public class SpendingEventService {
             if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
         } else {
             event.getMilestoneAllocations().clear();
+            spendingEventRepository.flush();
             Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getMilestoneAllocations(), project);
             if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
         }
