@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
+import org.hibernate.Hibernate;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
@@ -148,7 +149,10 @@ public class SpendingEventService {
         }
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);
-        return Either.right(spendingEventRepository.saveAndFlush(event));
+        event = spendingEventRepository.saveAndFlush(event);
+        // loading the entity to avoid lazyloading exception
+        Hibernate.initialize(event.getMilestone());
+        return Either.right(event);
     }
 
     @Transactional
