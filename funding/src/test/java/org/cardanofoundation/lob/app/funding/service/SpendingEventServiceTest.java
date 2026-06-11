@@ -102,7 +102,7 @@ class SpendingEventServiceTest {
                 && e.getStatus() == EventStatus.DRAFT
                 && e.getSpendingItems().size() == 2
                 && e.getTotalAmount().compareTo(new BigDecimal("300.00")) == 0
-                && e.getMilestoneId() != null
+                && e.getMilestone() != null
         ));
     }
 
@@ -206,7 +206,7 @@ class SpendingEventServiceTest {
     void toView_mapsEventWithSpendingItems() {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         event.setId("e1");
-        event.setMilestoneId("m1");
+        event.setMilestone(milestoneEntity("m1"));
 
         SpendingItemEntity item = spendingItemEntity(event);
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
@@ -256,7 +256,7 @@ class SpendingEventServiceTest {
     void toView_handlesNullMilestoneId() {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         event.setId("e1");
-        event.setMilestoneId(null);
+        event.setMilestone(null);
 
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
@@ -265,6 +265,123 @@ class SpendingEventServiceTest {
 
         assertThat(view.getMilestoneLabel()).isNull();
         verify(milestoneRepository, never()).findById(any());
+    }
+
+    @Test
+    void publish_returnsLeft_whenAlreadyPublished() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.publish("e1");
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_spendingEvent_noMilestone_doesNotSaveMilestone() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
+        // milestone is null — not set on request
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.create("p1", request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(milestoneRepository, never()).saveAndFlush(any());
+        verify(spendingEventRepository).saveAndFlush(argThat(e -> e.getMilestone() == null));
+    }
+
+    @Test
+    void create_returnsLeft_whenMilestoneIdNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(milestoneRepository.findById("m-missing")).thenReturn(Optional.empty());
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
+        request.setMilestone(MilestoneCreateRequest.builder().milestoneId("m-missing").build());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.create("p1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("MILESTONE_NOT_FOUND");
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenMilestoneFieldsMissing() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
+        // no milestoneId and missing required fields
+        request.setMilestone(MilestoneCreateRequest.builder().build());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.create("p1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("MILESTONE_FIELDS_REQUIRED");
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void findByProjectIdAndFilter_delegatesToRepository() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        org.springframework.data.domain.Page<SpendingEventEntity> page =
+                new org.springframework.data.domain.PageImpl<>(List.of());
+        when(spendingEventRepository.findByProjectIdAndFilter("p1", EventStatus.DRAFT, EventType.SPENDING, pageable))
+                .thenReturn(page);
+
+        assertThat(spendingEventService.findByProjectIdAndFilter(
+                "p1", Optional.of(EventStatus.DRAFT), Optional.of(EventType.SPENDING), pageable))
+                .isEqualTo(page);
+    }
+
+    @Test
+    void findByProjectIdAndFilter_passesNulls_whenFiltersEmpty() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        org.springframework.data.domain.Page<SpendingEventEntity> page =
+                new org.springframework.data.domain.PageImpl<>(List.of());
+        when(spendingEventRepository.findByProjectIdAndFilter("p1", null, null, pageable))
+                .thenReturn(page);
+
+        assertThat(spendingEventService.findByProjectIdAndFilter("p1", Optional.empty(), Optional.empty(), pageable))
+                .isEqualTo(page);
+    }
+
+    @Test
+    void toView_mapsAllScalarFields() {
+        SpendingEventEntity event = SpendingEventEntity.builder()
+                .id("e1")
+                .eventType(EventType.SPENDING)
+                .status(EventStatus.PUBLISHED)
+                .fundingId("GRANT-001")
+                .activityId("ACT-01")
+                .currency("EUR")
+                .totalAmount(new java.math.BigDecimal("777.00"))
+                .txHash("tx-abc")
+                .fundingTx("funding-tx-xyz")
+                .project(projectEntity())
+                .build();
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventView view = spendingEventService.toView(event);
+
+        assertThat(view.getEventId()).isEqualTo("e1");
+        assertThat(view.getProjectId()).isEqualTo("p1");
+        assertThat(view.getEventType()).isEqualTo(EventType.SPENDING);
+        assertThat(view.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+        assertThat(view.getFundingId()).isEqualTo("GRANT-001");
+        assertThat(view.getActivityId()).isEqualTo("ACT-01");
+        assertThat(view.getCurrency()).isEqualTo("EUR");
+        assertThat(view.getTotalAmount()).isEqualByComparingTo("777.00");
+        assertThat(view.getTxHash()).isEqualTo("tx-abc");
+        assertThat(view.getFundingTx()).isEqualTo("funding-tx-xyz");
+        assertThat(view.getMilestoneId()).isNull();
+        assertThat(view.getMilestoneLabel()).isNull();
     }
 
     // --- update ---
@@ -384,7 +501,7 @@ class SpendingEventServiceTest {
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository).saveAndFlush(any());
-        verify(spendingEventRepository).saveAndFlush(argThat(e -> "m-new".equals(e.getMilestoneId())));
+        verify(spendingEventRepository).saveAndFlush(argThat(e -> e.getMilestone() != null && "m-new".equals(e.getMilestone().getId())));
     }
 
     @Test
@@ -406,7 +523,7 @@ class SpendingEventServiceTest {
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository, never()).saveAndFlush(any());
-        verify(spendingEventRepository).saveAndFlush(argThat(e -> "m-existing".equals(e.getMilestoneId())));
+        verify(spendingEventRepository).saveAndFlush(argThat(e -> e.getMilestone() != null && "m-existing".equals(e.getMilestone().getId())));
     }
 
     @Test
@@ -459,6 +576,100 @@ class SpendingEventServiceTest {
                 e.getMilestoneAllocations().size() == 1
                 && e.getMilestoneAllocations().stream().noneMatch(a -> "m-old".equals(a.getId().getMilestoneId()))
                 && e.getTotalAmount().compareTo(new BigDecimal("50000.00")) == 0
+        ));
+    }
+
+    @Test
+    void update_funding_flushesAfterClear() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+
+        MilestoneEntity newMilestone = milestoneEntity("m-new");
+        when(milestoneRepository.saveAndFlush(any())).thenReturn(newMilestone);
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.FUNDING, List.of(),
+                List.of(EventMilestoneAllocationRequest.builder()
+                        .milestone(milestoneCreateRequest())
+                        .allocatedAmount(new BigDecimal("20000.00"))
+                        .build()));
+
+        spendingEventService.update("p1", "e1", request);
+
+        verify(spendingEventRepository).flush();
+    }
+
+    @Test
+    void update_funding_returnsLeft_whenMilestoneIdNotFound() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+        when(milestoneRepository.findById("m-missing")).thenReturn(Optional.empty());
+
+        EventMilestoneAllocationRequest alloc = EventMilestoneAllocationRequest.builder()
+                .milestone(MilestoneCreateRequest.builder().milestoneId("m-missing").build())
+                .allocatedAmount(new BigDecimal("10000.00"))
+                .build();
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.FUNDING, List.of(), List.of(alloc));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("MILESTONE_NOT_FOUND");
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_funding_returnsLeft_whenMilestoneFieldsMissing() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+
+        EventMilestoneAllocationRequest alloc = EventMilestoneAllocationRequest.builder()
+                .milestone(MilestoneCreateRequest.builder().build()) // missing all required fields
+                .allocatedAmount(new BigDecimal("10000.00"))
+                .build();
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.FUNDING, List.of(), List.of(alloc));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("MILESTONE_FIELDS_REQUIRED");
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_funding_existingMilestoneById_replacesAllocations() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+
+        MilestoneEntity existing = milestoneEntity("m-existing");
+        when(milestoneRepository.findById("m-existing")).thenReturn(Optional.of(existing));
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        EventMilestoneAllocationRequest alloc = EventMilestoneAllocationRequest.builder()
+                .milestone(MilestoneCreateRequest.builder().milestoneId("m-existing").build())
+                .allocatedAmount(new BigDecimal("30000.00"))
+                .build();
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.FUNDING, List.of(), List.of(alloc));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(milestoneRepository, never()).saveAndFlush(any());
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
+                e.getMilestoneAllocations().size() == 1
+                && "m-existing".equals(e.getMilestoneAllocations().get(0).getId().getMilestoneId())
         ));
     }
 

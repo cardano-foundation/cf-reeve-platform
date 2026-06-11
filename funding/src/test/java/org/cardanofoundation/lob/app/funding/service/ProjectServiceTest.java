@@ -86,6 +86,64 @@ class ProjectServiceTest {
     }
 
     @Test
+    void existsByOrganisationIdAndActivityId_returnsFalse_whenNotExists() {
+        when(projectRepository.existsByOrganisationIdAndActivityId("org1", "NO-PROJECT")).thenReturn(false);
+
+        assertThat(projectService.existsByOrganisationIdAndActivityId("org1", "NO-PROJECT")).isFalse();
+    }
+
+    @Test
+    void createWithMilestones_withNoMilestones_createsProjectOnly() {
+        ProjectEntity saved = projectEntity();
+        when(projectRepository.saveAndFlush(any())).thenReturn(saved);
+        when(projectRepository.findById(saved.getId())).thenReturn(Optional.of(saved));
+
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1")
+                .fundingId("GRANT-2025-001")
+                .activityId("PROJ-AB")
+                .activityTitle("Project AB")
+                .expectedTotalAmount(new BigDecimal("200000.00"))
+                .currency("USD")
+                .milestones(List.of())
+                .build();
+
+        ProjectEntity result = projectService.createWithMilestones(request);
+
+        assertThat(result).isEqualTo(saved);
+        verify(milestoneService, never()).create(any(), any());
+    }
+
+    @Test
+    void toView_mapsProjectWithEventsAndNoMilestones() {
+        ProjectEntity project = projectEntity();
+        org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity event =
+                org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity.builder()
+                        .id("e1").eventType(org.cardanofoundation.lob.app.funding.domain.enums.EventType.FUNDING)
+                        .status(org.cardanofoundation.lob.app.funding.domain.enums.EventStatus.DRAFT)
+                        .fundingId("GRANT-2025-001").activityId("PROJ-AB").currency("USD")
+                        .totalAmount(BigDecimal.ZERO).project(project).build();
+
+        org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView eventView =
+                org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView.builder()
+                        .eventId("e1").projectId(project.getId())
+                        .eventType(org.cardanofoundation.lob.app.funding.domain.enums.EventType.FUNDING)
+                        .status(org.cardanofoundation.lob.app.funding.domain.enums.EventStatus.DRAFT)
+                        .fundingId("GRANT-2025-001").activityId("PROJ-AB").currency("USD")
+                        .totalAmount(BigDecimal.ZERO)
+                        .spendingItems(List.of()).milestoneAllocations(List.of()).build();
+
+        when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of());
+        when(spendingEventService.findByProjectId(project.getId())).thenReturn(List.of(event));
+        when(spendingEventService.toView(event)).thenReturn(eventView);
+
+        ProjectView view = projectService.toView(project);
+
+        assertThat(view.getMilestones()).isEmpty();
+        assertThat(view.getEvents()).containsExactly(eventView);
+    }
+
+    @Test
     void createWithMilestones_createsProjectAndMilestones() {
         ProjectEntity saved = projectEntity();
         when(projectRepository.saveAndFlush(any())).thenReturn(saved);
