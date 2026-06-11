@@ -302,9 +302,9 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, request.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache =
-                fetchTransactionItemTotalsBatch(template.getFields(), startDate, endDate, request.isPreview());
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, request.isPreview(), transactionItemTotalsCache);
+        Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange =
+                fetchAccountCodesTotalsRange(template.getFields(), startDate, endDate, request.isPreview());
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, accountCodesTotalsRange);
 
         // Generate report name
         String reportName = generateReportName(template.getName(), request.getIntervalType(), request.getYear(), request.getPeriod());
@@ -374,9 +374,9 @@ public class ReportingService {
         LocalDate startDate = getReportStartDate(intervalType, period, dto.getYear());
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
-        Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache =
-                fetchTransactionItemTotalsBatch(template.getFields(), startDate, endDate, false);
-        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, false, transactionItemTotalsCache);
+        Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange =
+                fetchAccountCodesTotalsRange(template.getFields(), startDate, endDate, false);
+        List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, accountCodesTotalsRange);
         return Either.right(fields);
     }
 
@@ -634,34 +634,34 @@ public class ReportingService {
     }
 
     private List<ReportFieldDto> fillFieldsFromTemplate(
-            List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate, boolean preview,
-            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache) {
+            List<ReportTemplateFieldEntity> templateFields, LocalDate startDate, LocalDate endDate,
+            Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange) {
         if (templateFields == null) {
             return null;
         }
 
         return templateFields.stream()
                 .filter(field -> field.getParentField() == null) // Only top-level fields
-                .map(field -> fillTemplateFieldRecursively(field, startDate, endDate, preview, transactionItemTotalsCache))
+                .map(field -> fillTemplateFieldRecursively(field, startDate, endDate, accountCodesTotalsRange))
                 .toList();
     }
 
     private ReportFieldDto fillTemplateFieldRecursively(ReportTemplateFieldEntity templateField, LocalDate
-            startDate, LocalDate endDate, boolean preview,
-            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache) {
+            startDate, LocalDate endDate,
+            Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange) {
         List<ReportFieldDto> childColumns = null;
 
         if (templateField.getChildFields() != null && !templateField.getChildFields().isEmpty()) {
             // Has children - recursively fill child fields
             childColumns = templateField.getChildFields().stream()
-                    .map(child -> fillTemplateFieldRecursively(child, startDate, endDate, preview, transactionItemTotalsCache))
+                    .map(child -> fillTemplateFieldRecursively(child, startDate, endDate, accountCodesTotalsRange))
                     .toList();
         }
 
         // Calculate value based on mapping types (if no children or if it's an accumulated field)
         BigDecimal value = null;
         if (templateField.getMappingAccounts() != null && !templateField.getMappingAccounts().isEmpty()) {
-            value = calculateFieldValue(templateField, startDate, endDate, preview, transactionItemTotalsCache);
+            value = calculateFieldValue(templateField, startDate, endDate, accountCodesTotalsRange);
         }
 
         return ReportFieldDto.builder()
@@ -672,8 +672,8 @@ public class ReportingService {
                 .build();
     }
 
-    private BigDecimal calculateFieldValue(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate, boolean preview,
-            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache) {
+    private BigDecimal calculateFieldValue(ReportTemplateFieldEntity field, LocalDate startDate, LocalDate endDate,
+            Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange) {
 
         LocalDate effectiveStartDate = getEffectiveStartDate(field, startDate);
         LocalDate effectiveEndDate = getEffectiveEndDate(field, startDate, endDate);
@@ -691,7 +691,7 @@ public class ReportingService {
             if (!accountCodes.isEmpty()) {
                 // Look up pre-aggregated transaction-item totals for the effective date range
                 DateRange range = new DateRange(effectiveStartDate, effectiveEndDate);
-                Map<String, BigDecimal> accountTotals = transactionItemTotalsCache.getOrDefault(range, Map.of());
+                Map<String, BigDecimal> accountTotals = accountCodesTotalsRange.getOrDefault(range, Map.of());
 
                 for (String accountCode : accountCodes) {
                     BigDecimal accountTotal = accountTotals.get(accountCode);
@@ -710,9 +710,8 @@ public class ReportingService {
         return totalAmount.stripTrailingZeros();
     }
 
-    private record DateRange(LocalDate startDate, LocalDate endDate) {}
 
-    private Map<DateRange, Map<String, BigDecimal>> fetchTransactionItemTotalsBatch(
+    private Map<DateRange, Map<String, BigDecimal>> fetchAccountCodesTotalsRange(
             List<ReportTemplateFieldEntity> templateFields,
             LocalDate reportStartDate,
             LocalDate reportEndDate,
@@ -920,14 +919,13 @@ public class ReportingService {
             LocalDate endDate = getReportEndDate(report.getIntervalType(), startDate);
 
             // Regenerate fields from template
-            Map<DateRange, Map<String, BigDecimal>> transactionItemTotalsCache =
-                    fetchTransactionItemTotalsBatch(report.getReportTemplate().getFields(), startDate, endDate, false);
+            Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange =
+                    fetchAccountCodesTotalsRange(report.getReportTemplate().getFields(), startDate, endDate, false);
             List<ReportFieldDto> regeneratedFields = fillFieldsFromTemplate(
                     report.getReportTemplate().getFields(),
                     startDate,
                     endDate,
-                    false,
-                    transactionItemTotalsCache
+                    accountCodesTotalsRange
             );
 
             // Convert DTOs to entities and update the report
