@@ -30,6 +30,8 @@ import org.cardanofoundation.lob.app.blockchain_publisher.config.TimeConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepository;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoDispatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoStatusWatcher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;
@@ -52,9 +54,9 @@ class BlockchainPublisherServiceDuplicateEventsTest {
     @Autowired
     private ReportEntityRepository reportEntityRepository;
     @MockitoBean
-    private BlockchainReportsDispatcher blockchainReportsDispatcher;
+    private CardanoDispatcher cardanoDispatcher;
     @MockitoBean
-    private BlockchainTransactionsDispatcher blockchainTransactionsDispatcher;
+    private CardanoStatusWatcher cardanoStatusWatcher;
     @MockitoBean
     private BlockchainTransactionSubmissionService blockchainTransactionSubmissionService;
     @MockitoBean
@@ -63,7 +65,7 @@ class BlockchainPublisherServiceDuplicateEventsTest {
     private API1L1TransactionCreator api1L1TransactionCreator;
     @MockitoBean
     private API3L1TransactionCreator api3L1TransactionCreator;
-    @MockBean
+    @MockitoBean
     private SpendingEventL1TransactionCreator spendingEventL1TransactionCreator;
 
 

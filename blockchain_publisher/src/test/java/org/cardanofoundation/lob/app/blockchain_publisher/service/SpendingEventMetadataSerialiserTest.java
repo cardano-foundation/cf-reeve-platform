@@ -71,7 +71,6 @@ class SpendingEventMetadataSerialiserTest {
         event.setFundingId("fund1");
         event.setActivityId("act1");
         event.setActivityTitle("Activity One");
-        event.setMilestoneId("ms1");
         event.setFundingTx("ftx1");
         event.setTotalAmount(new BigDecimal("100.00"));
         event.setCurrency("USD");
@@ -106,7 +105,6 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(allocationMap.get("funding_id")).isEqualTo("fund1");
         assertThat(allocationMap.get("activity_id")).isEqualTo("act1");
         assertThat(allocationMap.get("activity_title")).isEqualTo("Activity One");
-        assertThat(allocationMap.get("milestone_id")).isEqualTo("ms1");
         assertThat(allocationMap.get("funding_tx")).isEqualTo("ftx1");
 
         CBORMetadataList itemsList = (CBORMetadataList) eventMap.get("items");

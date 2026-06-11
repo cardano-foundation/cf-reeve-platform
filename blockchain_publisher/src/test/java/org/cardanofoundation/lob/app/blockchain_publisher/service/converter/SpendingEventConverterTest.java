@@ -53,10 +53,8 @@ class SpendingEventConverterTest {
                 .fundingId("fund-1")
                 .activityId("act-1")
                 .activityTitle("Activity Title")
-                .roundId("round-1")
                 .fundingTx("ftx-1")
                 .fundingDocHash("doc-hash-1")
-                .milestoneId("ms-1")
                 .amount(new BigDecimal("123.45"))
                 .currency(usd())
                 .items(List.of())
@@ -72,10 +70,8 @@ class SpendingEventConverterTest {
         assertEquals("fund-1", entity.getFundingId());
         assertEquals("act-1", entity.getActivityId());
         assertEquals("Activity Title", entity.getActivityTitle());
-        assertEquals("round-1", entity.getRoundId());
         assertEquals("ftx-1", entity.getFundingTx());
         assertEquals("doc-hash-1", entity.getFundingDocHash());
-        assertEquals("ms-1", entity.getMilestoneId());
         assertEquals(new BigDecimal("123.45"), entity.getTotalAmount());
         assertEquals("USD", entity.getCurrency());
         assertEquals("ISO_4217:USD", entity.getCurrencyId());

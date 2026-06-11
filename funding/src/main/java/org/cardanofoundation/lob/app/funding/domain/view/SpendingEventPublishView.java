@@ -54,8 +54,10 @@ public class SpendingEventPublishView {
     private List<SpendItem> items;
 
     @Getter
+    @Setter
     @Builder
     @AllArgsConstructor
+    @NoArgsConstructor
     public static class Currency {
         /** ISO id, e.g. {@code ISO_4217:USD} or {@code ISO_24165:<token>:<dti>}. */
         private String id;
@@ -64,8 +66,10 @@ public class SpendingEventPublishView {
     }
 
     @Getter
+    @Setter
     @Builder
     @AllArgsConstructor
+    @NoArgsConstructor
     public static class Milestone {
         private String milestoneId;
         private String label;
@@ -75,8 +79,10 @@ public class SpendingEventPublishView {
     }
 
     @Getter
+    @Setter
     @Builder
     @AllArgsConstructor
+    @NoArgsConstructor
     public static class SpendItem {
         private String itemId;
         private String category;

@@ -102,7 +102,7 @@ class SpendingEventServiceTest {
                 && e.getStatus() == EventStatus.DRAFT
                 && e.getSpendingItems().size() == 2
                 && e.getTotalAmount().compareTo(new BigDecimal("300.00")) == 0
-                && e.getMilestoneId() != null
+                && e.getMilestone() != null
         ));
     }
 
@@ -207,14 +207,11 @@ class SpendingEventServiceTest {
     void toView_mapsEventWithSpendingItems() {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         event.setId("e1");
-        event.setMilestoneId("m1");
+        event.setMilestone(milestoneEntity("m1"));
 
         SpendingItemEntity item = spendingItemEntity(event);
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
-
-        MilestoneEntity milestone = milestoneEntity("m1");
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
 
         SpendingEventView view = spendingEventService.toView(event);
 
@@ -257,7 +254,7 @@ class SpendingEventServiceTest {
     void toView_handlesNullMilestoneId() {
         SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
         event.setId("e1");
-        event.setMilestoneId(null);
+        event.setMilestone(null);
 
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
@@ -385,7 +382,7 @@ class SpendingEventServiceTest {
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository).saveAndFlush(any());
-        verify(spendingEventRepository).saveAndFlush(argThat(e -> "m-new".equals(e.getMilestoneId())));
+        verify(spendingEventRepository).saveAndFlush(argThat(e -> e.getMilestone() != null && "m-new".equals(e.getMilestone().getId())));
     }
 
     @Test
@@ -407,7 +404,7 @@ class SpendingEventServiceTest {
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository, never()).saveAndFlush(any());
-        verify(spendingEventRepository).saveAndFlush(argThat(e -> "m-existing".equals(e.getMilestoneId())));
+        verify(spendingEventRepository).saveAndFlush(argThat(e -> e.getMilestone() != null && "m-existing".equals(e.getMilestone().getId())));
     }
 
     @Test
