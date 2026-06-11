@@ -268,6 +268,201 @@ class SpendingEventServiceTest {
         verify(milestoneRepository, never()).findById(any());
     }
 
+    // --- update ---
+
+    @Test
+    void update_returnsLeft_whenProjectNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1",
+                spendingCreateRequest(EventType.SPENDING, List.of(), List.of()));
+
+        assertThat(result.isLeft()).isTrue();
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsLeft_whenEventNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1",
+                spendingCreateRequest(EventType.SPENDING, List.of(), List.of()));
+
+        assertThat(result.isLeft()).isTrue();
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_spending_replacesExistingItemsWithRequestItems() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        existingEvent.getSpendingItems().add(spendingItemEntity(existingEvent)); // old item id="item-1"
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING,
+                List.of(spendingItemRequest(new BigDecimal("200.00")), spendingItemRequest(new BigDecimal("300.00"))),
+                List.of());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
+                e.getSpendingItems().size() == 2
+                && e.getSpendingItems().stream().noneMatch(i -> "item-1".equals(i.getId()))
+                && e.getTotalAmount().compareTo(new BigDecimal("500.00")) == 0
+        ));
+    }
+
+    @Test
+    void update_spending_withEmptyRequestItems_clearsPreviousItems() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        existingEvent.getSpendingItems().add(spendingItemEntity(existingEvent));
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1",
+                spendingCreateRequest(EventType.SPENDING, List.of(), List.of()));
+
+        assertThat(result.isRight()).isTrue();
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
+                e.getSpendingItems().isEmpty()
+                && e.getTotalAmount().compareTo(BigDecimal.ZERO) == 0
+        ));
+    }
+
+    @Test
+    void update_spending_updatesScalarFieldsFromRequest() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .eventType(EventType.SPENDING)
+                .fundingId("NEW-GRANT")
+                .activityId("NEW-ACTIVITY")
+                .currency("EUR")
+                .fundingTx("tx-new-hash")
+                .spendingItems(List.of())
+                .milestoneAllocations(List.of())
+                .build();
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
+                "NEW-GRANT".equals(e.getFundingId())
+                && "NEW-ACTIVITY".equals(e.getActivityId())
+                && "EUR".equals(e.getCurrency())
+                && "tx-new-hash".equals(e.getFundingTx())
+        ));
+    }
+
+    @Test
+    void update_spending_createsNewMilestoneWhenNoIdProvided() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+
+        MilestoneEntity created = milestoneEntity("m-new");
+        when(milestoneRepository.saveAndFlush(any())).thenReturn(created);
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
+        request.setMilestone(milestoneCreateRequest());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(milestoneRepository).saveAndFlush(any());
+        verify(spendingEventRepository).saveAndFlush(argThat(e -> "m-new".equals(e.getMilestoneId())));
+    }
+
+    @Test
+    void update_spending_resolvesExistingMilestoneById() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+
+        MilestoneEntity existing = milestoneEntity("m-existing");
+        when(milestoneRepository.findById("m-existing")).thenReturn(Optional.of(existing));
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
+        request.setMilestone(MilestoneCreateRequest.builder().milestoneId("m-existing").build());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(milestoneRepository, never()).saveAndFlush(any());
+        verify(spendingEventRepository).saveAndFlush(argThat(e -> "m-existing".equals(e.getMilestoneId())));
+    }
+
+    @Test
+    void update_spending_returnsLeft_whenMilestoneIdNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+        when(milestoneRepository.findById("m-missing")).thenReturn(Optional.empty());
+
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.SPENDING, List.of(), List.of());
+        request.setMilestone(MilestoneCreateRequest.builder().milestoneId("m-missing").build());
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_funding_clearsMilestoneAllocationsAndRepopulates() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        SpendingEventEntity existingEvent = spendingEventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        MilestoneEntity oldMilestone = milestoneEntity("m-old");
+        EventMilestoneAllocationEntity oldAlloc = EventMilestoneAllocationEntity.builder()
+                .id(new EventMilestoneAllocationEntity.Id("e1", "m-old"))
+                .allocatedAmount(new BigDecimal("10000.00"))
+                .event(existingEvent)
+                .milestone(oldMilestone)
+                .build();
+        existingEvent.getMilestoneAllocations().add(oldAlloc);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(existingEvent));
+
+        MilestoneEntity newMilestone = milestoneEntity("m-new");
+        when(milestoneRepository.saveAndFlush(any())).thenReturn(newMilestone);
+        when(spendingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        EventMilestoneAllocationRequest newAlloc = EventMilestoneAllocationRequest.builder()
+                .milestone(milestoneCreateRequest())
+                .allocatedAmount(new BigDecimal("50000.00"))
+                .build();
+        SpendingEventCreateRequest request = spendingCreateRequest(EventType.FUNDING, List.of(), List.of(newAlloc));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1", request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(spendingEventRepository).saveAndFlush(argThat(e ->
+                e.getMilestoneAllocations().size() == 1
+                && e.getMilestoneAllocations().stream().noneMatch(a -> "m-old".equals(a.getId().getMilestoneId()))
+                && e.getTotalAmount().compareTo(new BigDecimal("50000.00")) == 0
+        ));
+    }
+
     // --- helpers ---
 
     private SpendingEventEntity spendingEventEntity(EventType type, EventStatus status) {

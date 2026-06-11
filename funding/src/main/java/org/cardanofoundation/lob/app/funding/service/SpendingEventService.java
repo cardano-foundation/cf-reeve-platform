@@ -117,11 +117,12 @@ public class SpendingEventService {
         event.setFundingTx(request.getFundingTx());
 
         if (event.getEventType() == EventType.SPENDING) {
-            event.setMilestoneId(null);
+            event.getSpendingItems().clear();
+            populateSpendingItems(event, request.getSpendingItems());
+            event.setMilestone(null);
             Either<ProblemDetail, Void> milestoneResult = applySpendingMilestone(event, request.getMilestone(), project);
             if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
         } else {
-            allocationRepository.deleteById_EventId(eventId);
             event.getMilestoneAllocations().clear();
             Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getMilestoneAllocations(), project);
             if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
@@ -187,14 +188,14 @@ public class SpendingEventService {
         event.getSpendingItems().addAll(items);
     }
 
-    /** Sets event.milestoneId for SPENDING events — finds existing by milestoneId or creates new from request fields. */
+    /** Sets event.milestone for SPENDING events — finds existing by milestoneId or creates new from request fields. */
     private Either<ProblemDetail, Void> applySpendingMilestone(SpendingEventEntity event, MilestoneCreateRequest milestoneRequest, ProjectEntity project) {
         if (milestoneRequest == null) {
             return Either.right(null);
         }
         Either<ProblemDetail, MilestoneEntity> milestoneResult = resolveOrCreateMilestone(milestoneRequest, project);
         if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
-        event.setMilestoneId(milestoneResult.get().getId());
+        event.setMilestone(milestoneResult.get());
         return Either.right(null);
     }
 
@@ -300,10 +301,8 @@ public class SpendingEventService {
                 .txHash(event.getTxHash())
                 .ledgerDispatchStatus(event.getLedgerDispatchStatus())
                 .fundingTx(event.getFundingTx())
-                .milestoneId(event.getMilestoneId())
-                .milestoneLabel(event.getMilestoneId() != null
-                        ? milestoneRepository.findById(event.getMilestoneId()).map(MilestoneEntity::getLabel).orElse(null)
-                        : null)
+                .milestoneId(event.getMilestone() != null ? event.getMilestone().getId() : null)
+                .milestoneLabel(event.getMilestone() != null ? event.getMilestone().getLabel() : null)
                 .spendingItems(itemViews)
                 .milestoneAllocations(allocationViews)
                 .build();
