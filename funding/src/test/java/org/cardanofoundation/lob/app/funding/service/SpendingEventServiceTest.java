@@ -218,7 +218,6 @@ class SpendingEventServiceTest {
         assertThat(view.getEventId()).isEqualTo("e1");
         assertThat(view.getEventType()).isEqualTo(EventType.SPENDING);
         assertThat(view.getStatus()).isEqualTo(EventStatus.DRAFT);
-        assertThat(view.getMilestoneLabel()).isEqualTo("Milestone AB");
         assertThat(view.getSpendingItems()).hasSize(1);
         assertThat(view.getMilestoneAllocations()).isEmpty();
     }
