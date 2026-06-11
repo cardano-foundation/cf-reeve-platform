@@ -10,6 +10,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
 /**
@@ -21,6 +23,8 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 @Getter
 @Builder
 @AllArgsConstructor
+@NoArgsConstructor
+@Setter
 public class SpendingEventPublishView {
 
     private String eventId;
