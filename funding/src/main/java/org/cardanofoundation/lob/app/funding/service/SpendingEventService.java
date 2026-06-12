@@ -112,6 +112,13 @@ public class SpendingEventService {
         ProjectEntity project = projectM.orElseThrow();
         SpendingEventEntity event = eventOrError.get();
 
+        if (event.getStatus() == EventStatus.PUBLISHED) {
+            log.warn("Cannot update published event: {}", eventId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cannot update a published event: %s".formatted(eventId));
+            problem.setTitle("SPENDING_EVENT_ALREADY_PUBLISHED");
+            return Either.left(problem);
+        }
+
         event.setFundingId(request.getFundingId());
         event.setActivityId(request.getActivityId());
         event.setCurrency(request.getCurrency());
