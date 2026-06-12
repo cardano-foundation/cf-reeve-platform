@@ -4,9 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.List;
+
+import jakarta.persistence.EntityManager;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
@@ -17,15 +22,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.http.ProblemDetail;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
-
 import io.vavr.control.Either;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -34,8 +37,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxItemValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionBatchEntity;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
@@ -47,8 +50,6 @@ import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldE
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
-import jakarta.persistence.EntityManager;
-import org.springframework.http.ProblemDetail;
 
 @SpringBootTest
 @ContextConfiguration(classes = ReportingServiceAggregationIntegrationTest.TestConfig.class)
