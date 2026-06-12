@@ -384,6 +384,36 @@ class SpendingEventServiceTest {
     // --- update ---
 
     @Test
+    void update_returnsLeft_whenSpendingEventIsPublished() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        SpendingEventEntity publishedEvent = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(publishedEvent));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1",
+                spendingCreateRequest(EventType.SPENDING, List.of(), List.of()));
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        assertThat(result.getLeft().getStatus()).isEqualTo(409);
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsLeft_whenFundingEventIsPublished() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        SpendingEventEntity publishedEvent = spendingEventEntity(EventType.FUNDING, EventStatus.PUBLISHED);
+        when(spendingEventRepository.findById("e1")).thenReturn(Optional.of(publishedEvent));
+
+        Either<ProblemDetail, SpendingEventEntity> result = spendingEventService.update("p1", "e1",
+                spendingCreateRequest(EventType.FUNDING, List.of(), List.of()));
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        assertThat(result.getLeft().getStatus()).isEqualTo(409);
+        verify(spendingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void update_returnsLeft_whenProjectNotFound() {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 
