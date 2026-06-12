@@ -32,7 +32,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
@@ -677,6 +679,58 @@ class ReportingServiceTest {
         // Then
         assertTrue(result.isLeft());
         assertEquals("REPORT_TEMPLATE_NOT_FOUND", result.getLeft().getTitle());
+    }
+
+    @Test
+    void generate_Success_WithMappedAccounts() {
+        // Given
+        ReportGenerateRequest request = new ReportGenerateRequest();
+        request.setReportTemplateId("abc");
+        request.setOrganisationId("org123");
+        request.setIntervalType("MONTH");
+        request.setYear((short) 2024);
+        request.setPeriod((short) 1);
+        request.setPreview(false);
+
+        // Build a template field with mapped account codes
+        ChartOfAccount chartOfAccount = ChartOfAccount.builder()
+                .id(new ChartOfAccount.Id("org123", "4000"))
+                .eventRefCode("EVT001")
+                .name("Revenue")
+                .currencyId("USD")
+                .counterParty("CLIENT")
+                .build();
+
+        ReportTemplateFieldEntity fieldEntity = new ReportTemplateFieldEntity();
+        fieldEntity.setId(1L);
+        fieldEntity.setName("Revenue");
+        fieldEntity.setMappingAccounts(new HashSet<>(List.of(chartOfAccount)));
+        fieldEntity.setChildFields(List.of());
+        fieldEntity.setDateRange(org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange.PERIOD);
+
+        templateEntity.setFields(List.of(fieldEntity));
+
+        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(transactionItemRepository.aggregateTransactionItemsDebitByAccountCodeAndDateRange(
+                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31))))
+                .thenReturn(List.of(new AccountCodeTotal("4000", new BigDecimal("1000.00"))));
+        when(transactionItemRepository.aggregateTransactionItemsCreditByAccountCodeAndDateRange(
+                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31))))
+                .thenReturn(List.of(new AccountCodeTotal("4000", new BigDecimal("500.00"))));
+        when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
+        when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+
+        // When
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.generate(request);
+
+        // Then
+        assertTrue(result.isRight());
+        assertEquals("Test Report", result.get().getName());
+        verify(transactionItemRepository).aggregateTransactionItemsDebitByAccountCodeAndDateRange(
+                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31)));
+        verify(transactionItemRepository).aggregateTransactionItemsCreditByAccountCodeAndDateRange(
+                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31)));
+        verify(reportRepository, never()).save(any());
     }
 
     @Test
