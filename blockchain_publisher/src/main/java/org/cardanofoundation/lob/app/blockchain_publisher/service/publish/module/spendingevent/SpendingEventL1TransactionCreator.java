@@ -13,6 +13,7 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.AbstractL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 /**
@@ -33,16 +34,14 @@ public class SpendingEventL1TransactionCreator extends AbstractL1TransactionCrea
                                              MetadataChecker jsonSchemaMetadataChecker,
                                              Account organiserAccount,
                                              Optional<IpfsPublisher> ipfsPublisher,
-                                             boolean useIpfs,
-                                             int metadataLabel,
-                                             boolean debugStoreOutputTx) {
-        super(backendService, blockchainReaderPublicApi, jsonSchemaMetadataChecker, organiserAccount, ipfsPublisher, useIpfs, metadataLabel, debugStoreOutputTx);
+                                             L1TransactionCreatorConfig config) {
+        super(backendService, blockchainReaderPublicApi, jsonSchemaMetadataChecker, organiserAccount, ipfsPublisher, config);
         this.spendingEventMetadataSerialiser = spendingEventMetadataSerialiser;
     }
 
     @Override
     protected MetadataMap serialiseToMetadataMap(String organisationId, Set<SpendingEventEntity> batch, long creationSlot) {
-        return spendingEventMetadataSerialiser.serialiseToMetadataMap(organisationId, batch, creationSlot);
+        return spendingEventMetadataSerialiser.serialiseToMetadataMap(batch, creationSlot);
     }
 
     @Override

@@ -36,8 +36,7 @@ public class SpendingEventMetadataSerialiser {
 
     private final Clock clock;
 
-    public MetadataMap serialiseToMetadataMap(String organisationId,
-                                              Set<SpendingEventEntity> events,
+    public MetadataMap serialiseToMetadataMap(Set<SpendingEventEntity> events,
                                               long creationSlot) {
         val globalMetadataMap = MetadataBuilder.createMap();
 

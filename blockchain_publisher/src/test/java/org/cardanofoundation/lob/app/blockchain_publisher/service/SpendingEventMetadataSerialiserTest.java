@@ -47,8 +47,7 @@ class SpendingEventMetadataSerialiserTest {
         return organisation;
     }
 
-    @Test
-    void testSerialiseSpendingEvent() {
+    private MetadataMap serialiseSpendingEvent() {
         SpendingItemEntity item = SpendingItemEntity.builder()
                 .itemId("item1")
                 .category("Personnel")
@@ -88,7 +87,12 @@ class SpendingEventMetadataSerialiserTest {
         event.setSpendingItems(List.of(item));
         event.setMilestoneAllocations(List.of(milestone));
 
-        MetadataMap result = serialiser.serialiseToMetadataMap("org123", Set.of(event), 12345L);
+        return serialiser.serialiseToMetadataMap(Set.of(event), 12345L);
+    }
+
+    @Test
+    void testSerialiseSpendingEvent_globalAndEventFields() {
+        MetadataMap result = serialiseSpendingEvent();
 
         MetadataMap metadata = (MetadataMap) result.get("metadata");
         assertThat(metadata.get("creation_slot")).isEqualTo(BigInteger.valueOf(12345L));
@@ -104,7 +108,6 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(eventMap.get("id")).isEqualTo("event1");
         assertThat(eventMap.get("type")).isEqualTo("SPENDING");
         assertThat(eventMap.get("date")).isEqualTo("2025-04-30");
-        // SPENDING events do not carry an event-level amount (derived from items)
         assertThat(eventMap.get("amount")).isNull();
 
         MetadataMap currencyMap = (MetadataMap) eventMap.get("currency");
@@ -116,6 +119,13 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(allocationMap.get("activity_id")).isEqualTo("act1");
         assertThat(allocationMap.get("activity_title")).isEqualTo("Activity One");
         assertThat(allocationMap.get("funding_tx")).isEqualTo("ftx1");
+    }
+
+    @Test
+    void testSerialiseSpendingEvent_itemDetails() {
+        MetadataMap result = serialiseSpendingEvent();
+        CBORMetadataList dataList = (CBORMetadataList) result.get("data");
+        MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
 
         CBORMetadataList itemsList = (CBORMetadataList) eventMap.get("items");
         MetadataMap itemMap = (MetadataMap) itemsList.getValueAt(0);
@@ -127,8 +137,14 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(((MetadataMap) itemMap.get("currency")).get("id")).isEqualTo("ISO_4217:USD");
         assertThat(((MetadataMap) itemMap.get("document")).get("hash")).isEqualTo("doc-hash-1");
         assertThat(itemMap.get("notes")).isEqualTo("Invoice #1");
+    }
 
-        // SPENDING targets a single milestone object carrying only the milestone_id
+    @Test
+    void testSerialiseSpendingEvent_milestoneDetails() {
+        MetadataMap result = serialiseSpendingEvent();
+        CBORMetadataList dataList = (CBORMetadataList) result.get("data");
+        MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
+
         MetadataMap milestoneMap = (MetadataMap) eventMap.get("milestone");
         assertThat(milestoneMap.get("milestone_id")).isEqualTo("ms1");
         assertThat(milestoneMap.get("milestone_label")).isNull();
@@ -164,7 +180,7 @@ class SpendingEventMetadataSerialiserTest {
         event.setSpendingItems(List.of());
         event.setMilestoneAllocations(List.of(allocation));
 
-        MetadataMap result = serialiser.serialiseToMetadataMap("org123", Set.of(event), 12345L);
+        MetadataMap result = serialiser.serialiseToMetadataMap(Set.of(event), 12345L);
 
         CBORMetadataList dataList = (CBORMetadataList) result.get("data");
         MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);

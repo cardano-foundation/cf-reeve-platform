@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
+import java.util.Objects;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -42,7 +44,7 @@ public class SpendingEventLedgerUpdateHandler {
                         spendingEvent.setLedgerDispatchStatus(update.getStatus());
                         update.getBlockchainReceipts().stream()
                                 .map(BlockchainReceipt::getHash)
-                                .filter(hash -> hash != null)
+                                .filter(Objects::nonNull)
                                 .findFirst()
                                 .ifPresent(spendingEvent::setTxHash);
                         spendingEventRepository.save(spendingEvent);

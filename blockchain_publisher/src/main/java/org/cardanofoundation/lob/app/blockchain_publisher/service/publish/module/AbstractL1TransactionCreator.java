@@ -82,17 +82,15 @@ public abstract class AbstractL1TransactionCreator<E extends PublishableEntity> 
                                            MetadataChecker jsonSchemaMetadataChecker,
                                            Account organiserAccount,
                                            Optional<IpfsPublisher> ipfsPublisher,
-                                           boolean useIpfs,
-                                           int metadataLabel,
-                                           boolean debugStoreOutputTx) {
+                                           L1TransactionCreatorConfig config) {
         this.backendService = backendService;
         this.blockchainReaderPublicApi = blockchainReaderPublicApi;
         this.jsonSchemaMetadataChecker = jsonSchemaMetadataChecker;
         this.organiserAccount = organiserAccount;
         this.ipfsPublisher = ipfsPublisher;
-        this.useIpfs = useIpfs;
-        this.metadataLabel = metadataLabel;
-        this.debugStoreOutputTx = debugStoreOutputTx;
+        this.useIpfs = config.useIpfs();
+        this.metadataLabel = config.metadataLabel();
+        this.debugStoreOutputTx = config.debugStoreOutputTx();
     }
 
     /** Serialise a batch of entities into a Cardano metadata map. Type-specific; supplied by each subclass. */

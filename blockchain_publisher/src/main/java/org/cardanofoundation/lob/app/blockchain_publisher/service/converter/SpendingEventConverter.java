@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.converter;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,7 +78,7 @@ public class SpendingEventConverter {
                         .documentHash(item.getDocumentHash())
                         .notes(item.getNotes())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private List<EventMilestoneAllocationEntity> convertMilestones(SpendingEventEntity event, List<SpendingEventPublishView.Milestone> milestones) {
@@ -98,7 +97,7 @@ public class SpendingEventConverter {
                         .currencyId(currencyId(milestone.getCurrency()))
                         .dueDate(milestone.getDueDate())
                         .build())
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private Organisation resolveOrganisation(String organisationId) {

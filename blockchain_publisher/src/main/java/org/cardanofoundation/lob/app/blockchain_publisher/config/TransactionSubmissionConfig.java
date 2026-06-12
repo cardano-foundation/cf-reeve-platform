@@ -18,6 +18,7 @@ import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
@@ -78,9 +79,7 @@ public class TransactionSubmissionConfig {
                 metadataChecker,
                 organiserAccount,
                 ipfsPublisher,
-                useIpfs,
-                metadataLabel,
-                debugStoreOutputTx
+                new L1TransactionCreatorConfig(useIpfs, metadataLabel, debugStoreOutputTx)
         );
     }
 
@@ -101,9 +100,7 @@ public class TransactionSubmissionConfig {
                 metadataChecker,
                 organiserAccount,
                 ipfsPublisher,
-                useIpfs,
-                metadataLabel,
-                debugStoreOutputTx
+                new L1TransactionCreatorConfig(useIpfs, metadataLabel, debugStoreOutputTx)
         );
     }
 

@@ -115,8 +115,9 @@ class L1SubmissionDataUpdaterTest {
 
         when(blockchainReaderPublicApi.getTxDetails(anyString())).thenReturn(Either.left(null));
 
+        ChainTip chainTip = ChainTip.builder().isSynced(true).absoluteSlot(2L).build();
         assertThrows(RuntimeException.class,
-                () -> updater.updateFromChain(submissionData, ChainTip.builder().isSynced(true).absoluteSlot(2L).build()));
+                () -> updater.updateFromChain(submissionData, chainTip));
     }
 
 }

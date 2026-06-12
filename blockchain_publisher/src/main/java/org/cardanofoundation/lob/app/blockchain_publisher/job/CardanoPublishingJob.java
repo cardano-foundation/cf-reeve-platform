@@ -18,7 +18,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.Cardan
  * spending events, ...) to Cardano L1 through the generic {@link CardanoDispatcher}. Adding a new publishable type
  * requires no change here - the new module bean is picked up automatically.
  */
-@Service("blockchain_publisher.CardanoPublishingJob")
+@Service("blockchainPublisherCardanoPublishingJob")
 @Slf4j
 @RequiredArgsConstructor
 public class CardanoPublishingJob {

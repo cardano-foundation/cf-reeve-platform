@@ -33,6 +33,7 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Batch;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
@@ -63,12 +64,12 @@ class API1L1TransactionCreatorTest {
         creatorNoIpfs = new API1L1TransactionCreator(
                 backendService, api1MetadataSerialiser, blockchainReaderPublicApi,
                 jsonSchemaMetadataChecker, organiserAccount, Optional.empty(),
-                false, 1, false
+                new L1TransactionCreatorConfig(false, 1, false)
         );
         creatorWithIpfs = new API1L1TransactionCreator(
                 backendService, api1MetadataSerialiser, blockchainReaderPublicApi,
                 jsonSchemaMetadataChecker, organiserAccount, Optional.of(ipfsPublisher),
-                true, 1, false
+                new L1TransactionCreatorConfig(true, 1, false)
         );
     }
 

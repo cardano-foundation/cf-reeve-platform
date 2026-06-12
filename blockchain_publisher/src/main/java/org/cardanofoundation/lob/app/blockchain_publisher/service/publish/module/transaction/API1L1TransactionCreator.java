@@ -13,6 +13,7 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.AbstractL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 
 @Slf4j
@@ -26,10 +27,8 @@ public class API1L1TransactionCreator extends AbstractL1TransactionCreator<Trans
                                     MetadataChecker jsonSchemaMetadataChecker,
                                     Account organiserAccount,
                                     Optional<IpfsPublisher> ipfsPublisher,
-                                    boolean useIpfs,
-                                    int metadataLabel,
-                                    boolean debugStoreOutputTx) {
-        super(backendService, blockchainReaderPublicApi, jsonSchemaMetadataChecker, organiserAccount, ipfsPublisher, useIpfs, metadataLabel, debugStoreOutputTx);
+                                    L1TransactionCreatorConfig config) {
+        super(backendService, blockchainReaderPublicApi, jsonSchemaMetadataChecker, organiserAccount, ipfsPublisher, config);
         this.api1MetadataSerialiser = api1MetadataSerialiser;
     }
 

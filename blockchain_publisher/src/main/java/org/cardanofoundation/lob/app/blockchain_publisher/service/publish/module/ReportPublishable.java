@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.modul
 import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 
@@ -48,7 +47,7 @@ public class ReportPublishable implements CardanoPublishable<ReportEntity> {
         // one Cardano transaction per report
         return toDispatch.stream()
                 .<Set<ReportEntity>>map(Set::of)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override

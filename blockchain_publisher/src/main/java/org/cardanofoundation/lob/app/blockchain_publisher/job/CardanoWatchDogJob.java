@@ -18,7 +18,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.Cardan
  * Single scheduled watchdog job that polls the on-chain status of every registered {@link CardanoPublishable}
  * type through the generic {@link CardanoStatusWatcher}.
  */
-@Service("blockchain_publisher.CardanoWatchDogJob")
+@Service("blockchainPublisherCardanoWatchDogJob")
 @Slf4j
 @RequiredArgsConstructor
 public class CardanoWatchDogJob {

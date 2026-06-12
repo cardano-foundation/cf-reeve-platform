@@ -42,6 +42,8 @@ import org.cardanofoundation.lob.app.funding.repository.SpendingItemRepository;
 @Transactional(readOnly = true)
 public class SpendingEventService {
 
+    private static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
+
     private final SpendingEventRepository spendingEventRepository;
     private final FundingProjectRepository projectRepository;
     private final MilestoneRepository milestoneRepository;
@@ -115,7 +117,7 @@ public class SpendingEventService {
         if (event.getStatus() == EventStatus.PUBLISHED) {
             log.warn("Cannot update published event: {}", eventId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cannot update a published event: %s".formatted(eventId));
-            problem.setTitle("SPENDING_EVENT_ALREADY_PUBLISHED");
+            problem.setTitle(SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
 
@@ -152,7 +154,7 @@ public class SpendingEventService {
         if (event.getStatus() == EventStatus.PUBLISHED) {
             log.warn("Event already published: {}", eventId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event is already published: %s".formatted(eventId));
-            problem.setTitle("SPENDING_EVENT_ALREADY_PUBLISHED");
+            problem.setTitle(SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
         event.setStatus(EventStatus.PUBLISHED);
@@ -174,7 +176,7 @@ public class SpendingEventService {
         if (event.getStatus() == EventStatus.PUBLISHED) {
             log.warn("Cannot delete published event: {}", eventId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cannot delete a published event: %s".formatted(eventId));
-            problem.setTitle("SPENDING_EVENT_ALREADY_PUBLISHED");
+            problem.setTitle(SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
 
@@ -377,9 +379,7 @@ public class SpendingEventService {
     public SpendingEventPublishView toPublishView(SpendingEventEntity event) {
         ProjectEntity project = event.getProject();
 
-        LocalDate date = event.getCreatedAt() != null
-                ? event.getCreatedAt().toLocalDate()
-                : (event.getPublishedAt() != null ? event.getPublishedAt().toLocalDate() : null);
+        LocalDate date = resolveEventDate(event);
 
         List<SpendingEventPublishView.SpendItem> items = spendingItemRepository.findByEvent_Id(event.getId()).stream()
                 .map(this::toPublishItem)
@@ -455,9 +455,13 @@ public class SpendingEventService {
                 .build();
     }
 
-    /**
-     * TODO Needs to add here the connection to the org module.
-     */
+    private static LocalDate resolveEventDate(SpendingEventEntity event) {
+        if (event.getCreatedAt() != null) {
+            return event.getCreatedAt().toLocalDate();
+        }
+        return event.getPublishedAt() != null ? event.getPublishedAt().toLocalDate() : null;
+    }
+
     private static SpendingEventPublishView.Currency toCurrency(String currencyCode) {
         if (currencyCode == null) {
             return null;
