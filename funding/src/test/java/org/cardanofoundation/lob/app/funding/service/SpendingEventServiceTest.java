@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,6 +27,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.EventMilestoneAlloca
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingItemRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.*;
 
@@ -698,6 +700,210 @@ class SpendingEventServiceTest {
                 e.getMilestoneAllocations().size() == 1
                 && "m-existing".equals(e.getMilestoneAllocations().get(0).getId().getMilestoneId())
         ));
+    }
+
+    // --- toPublishView ---
+
+    @Test
+    void toPublishView_spendingEvent_mapsAllScalarFieldsAndDate() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        event.setFundingTx("ftx-1");
+        event.setTotalAmount(new BigDecimal("300.00"));
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getEventId()).isEqualTo("e1");
+        assertThat(view.getProjectId()).isEqualTo("p1");
+        assertThat(view.getEventType()).isEqualTo(EventType.SPENDING);
+        assertThat(view.getDate()).isEqualTo(LocalDate.of(2025, 6, 1));
+        assertThat(view.getFundingId()).isEqualTo("GRANT-2025-001");
+        assertThat(view.getActivityId()).isEqualTo("PROJ-AB");
+        assertThat(view.getActivityTitle()).isEqualTo("Project AB");
+        assertThat(view.getFundingTx()).isEqualTo("ftx-1");
+        assertThat(view.getAmount()).isEqualByComparingTo("300.00");
+        assertThat(view.getFundingDocHash()).isNull();
+    }
+
+    @Test
+    void toPublishView_spendingEvent_withItemAndMilestone() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        MilestoneEntity milestone = milestoneEntity("m1");
+        event.setMilestone(milestone);
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(spendingItemEntity(event)));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getItems()).hasSize(1);
+        assertThat(view.getMilestones()).hasSize(1);
+        assertThat(view.getMilestones().get(0).getMilestoneId()).isEqualTo("m1");
+        assertThat(view.getMilestones().get(0).getMilestoneLabel()).isEqualTo("Milestone AB");
+        assertThat(view.getMilestones().get(0).getAllocatedAmount()).isNull();
+        assertThat(view.getMilestones().get(0).getExpectedCost()).isEqualByComparingTo("50000.00");
+    }
+
+    @Test
+    void toPublishView_spendingEvent_noMilestone_returnsEmptyMilestones() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        event.setMilestone(null);
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getMilestones()).isEmpty();
+        verify(milestoneRepository, never()).findById(any());
+    }
+
+    @Test
+    void toPublishView_spendingEvent_milestoneNotFoundInRepo_returnsEmptyMilestones() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        event.setMilestone(milestoneEntity("m-gone"));
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(milestoneRepository.findById("m-gone")).thenReturn(Optional.empty());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getMilestones()).isEmpty();
+    }
+
+    @Test
+    void toPublishView_fundingEvent_allocationWithFoundMilestone() {
+        SpendingEventEntity event = spendingEventEntity(EventType.FUNDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        MilestoneEntity milestone = milestoneEntity("m1");
+        EventMilestoneAllocationEntity alloc = EventMilestoneAllocationEntity.builder()
+                .id(new EventMilestoneAllocationEntity.Id("e1", "m1"))
+                .allocatedAmount(new BigDecimal("50000.00"))
+                .event(event)
+                .build();
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(allocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getMilestones()).hasSize(1);
+        assertThat(view.getMilestones().get(0).getMilestoneId()).isEqualTo("m1");
+        assertThat(view.getMilestones().get(0).getMilestoneLabel()).isEqualTo("Milestone AB");
+        assertThat(view.getMilestones().get(0).getAllocatedAmount()).isEqualByComparingTo("50000.00");
+        assertThat(view.getMilestones().get(0).getCurrency()).isNotNull();
+        assertThat(view.getMilestones().get(0).getDueDate()).isEqualTo(LocalDate.of(2025, 6, 30));
+        assertThat(view.getItems()).isEmpty();
+    }
+
+    @Test
+    void toPublishView_fundingEvent_allocationMilestoneNotFound_nullsForMilestoneFields() {
+        SpendingEventEntity event = spendingEventEntity(EventType.FUNDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        EventMilestoneAllocationEntity alloc = EventMilestoneAllocationEntity.builder()
+                .id(new EventMilestoneAllocationEntity.Id("e1", "m-missing"))
+                .allocatedAmount(new BigDecimal("10000.00"))
+                .event(event)
+                .build();
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(allocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m-missing")).thenReturn(Optional.empty());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getMilestones()).hasSize(1);
+        SpendingEventPublishView.Milestone m = view.getMilestones().get(0);
+        assertThat(m.getMilestoneId()).isEqualTo("m-missing");
+        assertThat(m.getMilestoneLabel()).isNull();
+        assertThat(m.getExpectedCost()).isNull();
+        assertThat(m.getCurrency()).isNull();
+        assertThat(m.getDueDate()).isNull();
+        assertThat(m.getAllocatedAmount()).isEqualByComparingTo("10000.00");
+    }
+
+    @Test
+    void toPublishView_currencyWithIsoPrefix_extractsCustCode() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        event.setCurrency("ISO_4217:CHF");
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getCurrency().getId()).isEqualTo("ISO_4217:CHF");
+        assertThat(view.getCurrency().getCustCode()).isEqualTo("CHF");
+    }
+
+    @Test
+    void toPublishView_currencyPlainCode_buildsIsoId() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        // helper sets currency to "USD" (plain)
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getCurrency().getId()).isEqualTo("ISO_4217:USD");
+        assertThat(view.getCurrency().getCustCode()).isEqualTo("USD");
+    }
+
+    @Test
+    void toPublishView_nullCurrency_returnsNullCurrencyField() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+        event.setCurrency(null);
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getCurrency()).isNull();
+    }
+
+    @Test
+    void toPublishView_spendingEvent_itemFieldsAreMapped() {
+        SpendingEventEntity event = spendingEventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 10, 0));
+
+        SpendingItemEntity item = SpendingItemEntity.builder()
+                .id("item-x")
+                .category("Equipment")
+                .vendor("Vendor XY")
+                .amountFcy(new BigDecimal("250.00"))
+                .currency("EUR")
+                .fxRate(new BigDecimal("1.05"))
+                .amountRcy(new BigDecimal("262.50"))
+                .spendDate(LocalDate.of(2025, 5, 15))
+                .hash("hash-x")
+                .notes("note-x")
+                .event(event)
+                .build();
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getItems()).hasSize(1);
+        SpendingEventPublishView.SpendItem i = view.getItems().get(0);
+        assertThat(i.getItemId()).isEqualTo("item-x");
+        assertThat(i.getCategory()).isEqualTo("Equipment");
+        assertThat(i.getVendor()).isEqualTo("Vendor XY");
+        assertThat(i.getAmountFcy()).isEqualByComparingTo("250.00");
+        assertThat(i.getFxRate()).isEqualByComparingTo("1.05");
+        assertThat(i.getAmountRcy()).isEqualByComparingTo("262.50");
+        assertThat(i.getSpendDate()).isEqualTo(LocalDate.of(2025, 5, 15));
+        assertThat(i.getDocumentHash()).isEqualTo("hash-x");
+        assertThat(i.getNotes()).isEqualTo("note-x");
+        assertThat(i.getCurrency().getCustCode()).isEqualTo("EUR");
+        assertThat(i.getCurrency().getId()).isEqualTo("ISO_4217:EUR");
     }
 
     // --- helpers ---

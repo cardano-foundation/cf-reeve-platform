@@ -6,6 +6,9 @@ import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashSet;
@@ -281,8 +284,10 @@ public abstract class AbstractL1TransactionCreator<E extends PublishableEntity> 
         if (debugStoreOutputTx) {
             String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
             String name = "%s-%s-%s-%s".formatted(metadataFilePrefix(), runId, timestamp, creationSlot);
-            Path tmpJsonTxFile = Files.createTempFile(name, ".json");
-            Path tmpCborFile = Files.createTempFile(name, ".cbor");
+            FileAttribute<Set<PosixFilePermission>> ownerOnly =
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"));
+            Path tmpJsonTxFile = Files.createTempFile(name, ".json", ownerOnly);
+            Path tmpCborFile = Files.createTempFile(name, ".cbor", ownerOnly);
 
             log.info("DebugStoreTx enabled, storing JSON tx metadata to file: {}", tmpJsonTxFile);
             Files.writeString(tmpJsonTxFile, tx.metadataJson());

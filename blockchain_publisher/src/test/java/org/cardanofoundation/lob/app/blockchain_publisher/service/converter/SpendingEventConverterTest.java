@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.converter;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -137,6 +139,77 @@ class SpendingEventConverterTest {
         assertEquals(new BigDecimal("50.00"), allocationEntity.getAllocatedAmount());
         assertEquals("ISO_4217:USD", allocationEntity.getCurrencyId());
         assertEquals(entity, allocationEntity.getEvent());
+    }
+
+    @Test
+    void nullItemsList_returnsEmptySpendingItems() {
+        stubOrganisation();
+        SpendingEventPublishView view = SpendingEventPublishView.builder()
+                .eventId("event-1").projectId("proj-1").eventType(EventType.SPENDING)
+                .currency(usd()).amount(BigDecimal.ONE)
+                .items(null).milestones(List.of())
+                .build();
+
+        SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
+
+        assertThat(entity.getSpendingItems()).isEmpty();
+    }
+
+    @Test
+    void nullMilestonesList_returnsEmptyAllocations() {
+        stubOrganisation();
+        SpendingEventPublishView view = SpendingEventPublishView.builder()
+                .eventId("event-1").projectId("proj-1").eventType(EventType.SPENDING)
+                .currency(usd()).amount(BigDecimal.ONE)
+                .items(List.of()).milestones(null)
+                .build();
+
+        SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
+
+        assertThat(entity.getMilestoneAllocations()).isEmpty();
+    }
+
+    @Test
+    void nullAmount_totalAmountIsZero() {
+        stubOrganisation();
+        SpendingEventPublishView view = SpendingEventPublishView.builder()
+                .eventId("event-1").projectId("proj-1").eventType(EventType.SPENDING)
+                .currency(usd()).amount(null)
+                .items(List.of()).milestones(List.of())
+                .build();
+
+        SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
+
+        assertThat(entity.getTotalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void nullCurrency_nullCustCodeAndCurrencyId() {
+        stubOrganisation();
+        SpendingEventPublishView view = SpendingEventPublishView.builder()
+                .eventId("event-1").projectId("proj-1").eventType(EventType.SPENDING)
+                .currency(null).amount(BigDecimal.ONE)
+                .items(List.of()).milestones(List.of())
+                .build();
+
+        SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
+
+        assertThat(entity.getCurrency()).isNull();
+        assertThat(entity.getCurrencyId()).isNull();
+    }
+
+    @Test
+    void orgNotFound_throwsIllegalStateException() {
+        when(organisationPublicApi.findByOrganisationId("unknown")).thenReturn(Optional.empty());
+        SpendingEventPublishView view = SpendingEventPublishView.builder()
+                .eventId("event-1").projectId("proj-1").eventType(EventType.SPENDING)
+                .currency(usd()).amount(BigDecimal.ONE)
+                .items(List.of()).milestones(List.of())
+                .build();
+
+        assertThatThrownBy(() -> converter.convertToDbDetached("unknown", view))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("unknown");
     }
 
 }

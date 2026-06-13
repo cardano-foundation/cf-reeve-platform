@@ -379,7 +379,7 @@ public class SpendingEventService {
     public SpendingEventPublishView toPublishView(SpendingEventEntity event) {
         ProjectEntity project = event.getProject();
 
-        LocalDate date = resolveEventDate(event);
+        LocalDate date = event.getCreatedAt().toLocalDate();
 
         List<SpendingEventPublishView.SpendItem> items = spendingItemRepository.findByEvent_Id(event.getId()).stream()
                 .map(this::toPublishItem)
@@ -453,13 +453,6 @@ public class SpendingEventService {
                 .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
                 .dueDate(milestone != null ? milestone.getDueDate() : null)
                 .build();
-    }
-
-    private static LocalDate resolveEventDate(SpendingEventEntity event) {
-        if (event.getCreatedAt() != null) {
-            return event.getCreatedAt().toLocalDate();
-        }
-        return event.getPublishedAt() != null ? event.getPublishedAt().toLocalDate() : null;
     }
 
     private static SpendingEventPublishView.Currency toCurrency(String currencyCode) {

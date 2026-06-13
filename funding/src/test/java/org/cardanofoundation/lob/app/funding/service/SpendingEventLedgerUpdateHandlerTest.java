@@ -5,6 +5,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -76,6 +77,73 @@ class SpendingEventLedgerUpdateHandlerTest {
                 new LedgerStatusUpdate("event-1", LedgerDispatchStatus.DISPATCHED, null, Set.of())));
 
         verify(spendingEventRepository, never()).findById(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void knownEvent_allReceiptsHaveNullHash_txHashNotSet() {
+        SpendingEventEntity entity = SpendingEventEntity.builder()
+                .id("event-1")
+                .eventType(EventType.SPENDING)
+                .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
+                .build();
+        when(spendingEventRepository.findById("event-1")).thenReturn(Optional.of(entity));
+
+        handler.handleLedgerUpdatedEvent(eventFor(LedgerUpdateType.SPENDING_EVENT,
+                new LedgerStatusUpdate("event-1", LedgerDispatchStatus.DISPATCHED, null,
+                        Set.of(new BlockchainReceipt("CARDANO_L1", null)))));
+
+        assertThat(entity.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.DISPATCHED);
+        assertThat(entity.getTxHash()).isNull();
+        verify(spendingEventRepository).save(entity);
+    }
+
+    @Test
+    void knownEvent_noReceipts_txHashNotSet() {
+        SpendingEventEntity entity = SpendingEventEntity.builder()
+                .id("event-1")
+                .eventType(EventType.SPENDING)
+                .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
+                .build();
+        when(spendingEventRepository.findById("event-1")).thenReturn(Optional.of(entity));
+
+        handler.handleLedgerUpdatedEvent(eventFor(LedgerUpdateType.SPENDING_EVENT,
+                new LedgerStatusUpdate("event-1", LedgerDispatchStatus.DISPATCHED, null, Set.of())));
+
+        assertThat(entity.getTxHash()).isNull();
+        verify(spendingEventRepository).save(entity);
+    }
+
+    @Test
+    void multipleUpdatesInOneEvent_allProcessed() {
+        SpendingEventEntity entity1 = SpendingEventEntity.builder()
+                .id("event-1").eventType(EventType.SPENDING)
+                .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED).build();
+        SpendingEventEntity entity2 = SpendingEventEntity.builder()
+                .id("event-2").eventType(EventType.SPENDING)
+                .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED).build();
+
+        when(spendingEventRepository.findById("event-1")).thenReturn(Optional.of(entity1));
+        when(spendingEventRepository.findById("event-2")).thenReturn(Optional.of(entity2));
+
+        LedgerUpdatedEvent event = LedgerUpdatedEvent.builder()
+                .organisationId("org1")
+                .type(LedgerUpdateType.SPENDING_EVENT)
+                .statusUpdates(Set.of(
+                        new LedgerStatusUpdate("event-1", LedgerDispatchStatus.DISPATCHED, null,
+                                Set.of(new BlockchainReceipt("CARDANO_L1", "hash-1"))),
+                        new LedgerStatusUpdate("event-2", LedgerDispatchStatus.FINALIZED, null,
+                                Set.of(new BlockchainReceipt("CARDANO_L1", "hash-2")))
+                ))
+                .build();
+
+        handler.handleLedgerUpdatedEvent(event);
+
+        assertThat(entity1.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.DISPATCHED);
+        assertThat(entity1.getTxHash()).isEqualTo("hash-1");
+        assertThat(entity2.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.FINALIZED);
+        assertThat(entity2.getTxHash()).isEqualTo("hash-2");
+        verify(spendingEventRepository).save(entity1);
+        verify(spendingEventRepository).save(entity2);
     }
 
 }
