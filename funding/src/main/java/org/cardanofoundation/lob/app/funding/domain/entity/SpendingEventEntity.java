@@ -77,6 +77,10 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     private String txHash;
 
     @Nullable
+    @Column(name = "ledger_dispatch_status_error_reason")
+    private String ledgerDispatchStatusErrorReason;
+
+    @Nullable
     @Column(name = "funding_tx")
     private String fundingTx;
 

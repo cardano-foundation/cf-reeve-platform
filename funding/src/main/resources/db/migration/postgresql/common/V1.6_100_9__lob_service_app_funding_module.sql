@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS funding_spending_event (
     milestone_id VARCHAR(36),
     ledger_dispatch_approved BOOLEAN,
     ledger_dispatch_status VARCHAR(20),
+    ledger_dispatch_status_error_reason TEXT,
 
     created_by  VARCHAR(255),
     updated_by  VARCHAR(255),
@@ -124,6 +125,7 @@ CREATE TABLE IF NOT EXISTS funding_spending_event_aud (
 
     ledger_dispatch_approved BOOLEAN,
     ledger_dispatch_status   VARCHAR(20),
+    ledger_dispatch_status_error_reason TEXT,
 
     created_by   VARCHAR(255),
     updated_by   VARCHAR(255),

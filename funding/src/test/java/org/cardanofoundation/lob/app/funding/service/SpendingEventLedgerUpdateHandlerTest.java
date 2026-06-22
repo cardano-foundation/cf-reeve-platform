@@ -56,6 +56,44 @@ class SpendingEventLedgerUpdateHandlerTest {
 
         assertThat(entity.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.DISPATCHED);
         assertThat(entity.getTxHash()).isEqualTo("tx-hash-1");
+        assertThat(entity.getLedgerDispatchStatusErrorReason()).isNull();
+        verify(spendingEventRepository).save(entity);
+    }
+
+    @Test
+    void knownEvent_publishError_storesErrorReason() {
+        SpendingEventEntity entity = SpendingEventEntity.builder()
+                .id("event-1")
+                .eventType(EventType.FUNDING)
+                .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
+                .build();
+        when(spendingEventRepository.findById("event-1")).thenReturn(Optional.of(entity));
+
+        handler.handleLedgerUpdatedEvent(eventFor(LedgerUpdateType.SPENDING_EVENT,
+                new LedgerStatusUpdate("event-1", LedgerDispatchStatus.FAILED, "Cardano node timeout", Set.of())));
+
+        assertThat(entity.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.FAILED);
+        assertThat(entity.getLedgerDispatchStatusErrorReason()).isEqualTo("Cardano node timeout");
+        verify(spendingEventRepository).save(entity);
+    }
+
+    @Test
+    void knownEvent_recoveryAfterError_clearsErrorReason() {
+        SpendingEventEntity entity = SpendingEventEntity.builder()
+                .id("event-1")
+                .eventType(EventType.FUNDING)
+                .ledgerDispatchStatus(LedgerDispatchStatus.FAILED)
+                .ledgerDispatchStatusErrorReason("Cardano node timeout")
+                .build();
+        when(spendingEventRepository.findById("event-1")).thenReturn(Optional.of(entity));
+
+        handler.handleLedgerUpdatedEvent(eventFor(LedgerUpdateType.SPENDING_EVENT,
+                new LedgerStatusUpdate("event-1", LedgerDispatchStatus.DISPATCHED, null,
+                        Set.of(new BlockchainReceipt("CARDANO_L1", "tx-hash-ok")))));
+
+        assertThat(entity.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.DISPATCHED);
+        assertThat(entity.getLedgerDispatchStatusErrorReason()).isNull();
+        assertThat(entity.getTxHash()).isEqualTo("tx-hash-ok");
         verify(spendingEventRepository).save(entity);
     }
 

@@ -42,6 +42,7 @@ public class SpendingEventLedgerUpdateHandler {
             spendingEventRepository.findById(update.getId()).ifPresentOrElse(
                     spendingEvent -> {
                         spendingEvent.setLedgerDispatchStatus(update.getStatus());
+                        spendingEvent.setLedgerDispatchStatusErrorReason(update.getLedgerDispatchStatusErrorReason());
                         update.getBlockchainReceipts().stream()
                                 .map(BlockchainReceipt::getHash)
                                 .filter(Objects::nonNull)
