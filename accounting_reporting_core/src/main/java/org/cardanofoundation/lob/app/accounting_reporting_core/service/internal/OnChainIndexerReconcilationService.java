@@ -24,6 +24,7 @@ import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionDto;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OnChainTransactionItemDto;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.IndexerTransactionTransformer.TransformedTransaction;
@@ -149,25 +150,20 @@ public class OnChainIndexerReconcilationService implements IndexerReconcilationS
 
         for (TransactionEntity dbTx : dbTransactions) {
             String txId = dbTx.getId();
-            OnChainTransactionDto indexerTx = indexerTxMap.get(txId);
-
-            if (indexerTx == null) {
-                continue;
-            }
-
-            TransformedTransaction transformedDbTx = indexerTransactionTransformer.transformForIndexerComparison(dbTx);
-            Optional<ReconciliationDiff> diff = compareTransaction(transformedDbTx, indexerTx);
-
-            if (diff.isPresent()) {
-                results.put(txId, new IndexerReconcilationResult(
-                        ReconcilationCode.NOK,
-                        serializeDiff(diff.get())
-                ));
+            if (dbTx.getViolations().stream()
+                    .anyMatch(v -> TransactionViolationCode.exclusions().contains(v.getCode().name()))) {
+                results.put(txId, new IndexerReconcilationResult(ReconcilationCode.OK, null));
             } else {
-                results.put(txId, new IndexerReconcilationResult(
-                        ReconcilationCode.OK,
-                        null
-                ));
+                OnChainTransactionDto indexerTx = indexerTxMap.get(txId);
+                if (indexerTx != null) {
+                    TransformedTransaction transformedDbTx = indexerTransactionTransformer.transformForIndexerComparison(dbTx);
+                    Optional<ReconciliationDiff> diff = compareTransaction(transformedDbTx, indexerTx);
+                    if (diff.isPresent()) {
+                        results.put(txId, new IndexerReconcilationResult(ReconcilationCode.NOK, serializeDiff(diff.get())));
+                    } else {
+                        results.put(txId, new IndexerReconcilationResult(ReconcilationCode.OK, null));
+                    }
+                }
             }
         }
 

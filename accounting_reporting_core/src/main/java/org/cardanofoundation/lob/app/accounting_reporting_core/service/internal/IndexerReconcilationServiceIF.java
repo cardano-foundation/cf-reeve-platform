@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.Map;
 import java.util.Set;
 
+import javax.annotation.Nullable;
+
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
@@ -37,7 +39,7 @@ public interface IndexerReconcilationServiceIF {
      */
     record IndexerReconcilationResult(
             ReconcilationCode status,
-            String mismatchReason
+            @Nullable String mismatchReason
     ) {
     }
 }
