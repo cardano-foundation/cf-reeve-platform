@@ -15,10 +15,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepositoryGateway;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.ReportConverter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.TransactionConverter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.event_publish.LedgerUpdatedEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,7 +51,7 @@ public class BlockchainPublisherServiceTest {
 
         blockchainPublisherService.handleTxStatusRequest(event);
 
-        verify(ledgerUpdatedEventPublisher).sendTxLedgerUpdatedEvents("org1", Set.of(TransactionEntity.builder().organisation(Organisation.builder().id("org1").build()).id("tx1").build()));
+        verify(ledgerUpdatedEventPublisher).send("org1", LedgerUpdateType.TRANSACTION, Set.of(TransactionEntity.builder().organisation(Organisation.builder().id("org1").build()).id("tx1").build()));
     }
 
 }

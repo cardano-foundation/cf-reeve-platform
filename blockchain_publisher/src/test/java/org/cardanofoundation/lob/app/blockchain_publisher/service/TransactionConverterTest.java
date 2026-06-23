@@ -25,7 +25,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Accou
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.AccountEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.CoreCurrency;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Document.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Project;
@@ -37,6 +36,7 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStat
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.converter.TransactionConverter;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 

@@ -59,5 +59,4 @@ public class JsonSchemaMetadataChecker implements MetadataChecker {
             return false;
         }
     }
-
 }
