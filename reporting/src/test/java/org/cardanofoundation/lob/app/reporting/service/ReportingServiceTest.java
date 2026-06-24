@@ -463,7 +463,7 @@ class ReportingServiceTest {
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
         when(reportRepository.findLatestByTemplateAndPeriod(
-                eq("org123"), eq("abc"), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
+                "org123", "abc", IntervalType.MONTH, (short) 2024, (short) 1))
                 .thenReturn(Optional.of(existingReport));
         when(reportMapper.toEntity(any(ReportDto.class), eq(existingReport), eq(templateEntity)))
                 .thenReturn(existingReport);
@@ -496,7 +496,7 @@ class ReportingServiceTest {
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
         when(reportRepository.findLatestByTemplateAndPeriod(
-                eq("org123"), eq("abc"), eq(IntervalType.MONTH), eq((short) 2024), eq((short) 1)))
+                "org123", "abc", IntervalType.MONTH, (short) 2024, (short) 1))
                 .thenReturn(Optional.of(publishedReport));
         when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity)))
                 .thenReturn(newReport);
@@ -712,10 +712,10 @@ class ReportingServiceTest {
 
         when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
         when(transactionItemRepository.aggregateTransactionItemsDebitByAccountCodeAndDateRange(
-                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31))))
+                List.of("4000"), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 31)))
                 .thenReturn(List.of(new AccountCodeTotal("4000", new BigDecimal("1000.00"))));
         when(transactionItemRepository.aggregateTransactionItemsCreditByAccountCodeAndDateRange(
-                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31))))
+                List.of("4000"), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 31)))
                 .thenReturn(List.of(new AccountCodeTotal("4000", new BigDecimal("500.00"))));
         when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
@@ -727,9 +727,9 @@ class ReportingServiceTest {
         assertTrue(result.isRight());
         assertEquals("Test Report", result.get().getName());
         verify(transactionItemRepository).aggregateTransactionItemsDebitByAccountCodeAndDateRange(
-                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31)));
+                List.of("4000"), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 31));
         verify(transactionItemRepository).aggregateTransactionItemsCreditByAccountCodeAndDateRange(
-                eq(List.of("4000")), eq(LocalDate.of(2024, 1, 1)), eq(LocalDate.of(2024, 1, 31)));
+                List.of("4000"), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 31));
         verify(reportRepository, never()).save(any());
     }
 
