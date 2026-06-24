@@ -724,32 +724,35 @@ public class ReportingService {
 
         Map<DateRange, Map<String, BigDecimal>> result = new HashMap<>();
         for (Map.Entry<DateRange, Set<String>> entry : dateRangeToAccountCodes.entrySet()) {
-            DateRange range = entry.getKey();
             List<String> accountCodes = new ArrayList<>(entry.getValue());
             if (!accountCodes.isEmpty()) {
-                List<AccountCodeTotal> debitRows = preview
-                        ? transactionItemRepository.aggregatePreviewTransactionItemsDebitByAccountCodeAndDateRange(
-                                accountCodes, range.startDate(), range.endDate())
-                        : transactionItemRepository.aggregateTransactionItemsDebitByAccountCodeAndDateRange(
-                                accountCodes, range.startDate(), range.endDate());
-
-                List<AccountCodeTotal> creditRows = preview
-                        ? transactionItemRepository.aggregatePreviewTransactionItemsCreditByAccountCodeAndDateRange(
-                                accountCodes, range.startDate(), range.endDate())
-                        : transactionItemRepository.aggregateTransactionItemsCreditByAccountCodeAndDateRange(
-                                accountCodes, range.startDate(), range.endDate());
-
-                Map<String, BigDecimal> totals = new HashMap<>();
-                for (AccountCodeTotal row : debitRows) {
-                    totals.put(row.accountCode(), row.totalAmount());
-                }
-                for (AccountCodeTotal row : creditRows) {
-                    totals.merge(row.accountCode(), row.totalAmount(), BigDecimal::add);
-                }
-                result.put(range, totals);
+                result.put(entry.getKey(), fetchTotalsForDateRange(entry.getKey(), accountCodes, preview));
             }
         }
         return result;
+    }
+
+    private Map<String, BigDecimal> fetchTotalsForDateRange(DateRange range, List<String> accountCodes, boolean preview) {
+        List<AccountCodeTotal> debitRows = preview
+                ? transactionItemRepository.aggregatePreviewTransactionItemsDebitByAccountCodeAndDateRange(
+                        accountCodes, range.startDate(), range.endDate())
+                : transactionItemRepository.aggregateTransactionItemsDebitByAccountCodeAndDateRange(
+                        accountCodes, range.startDate(), range.endDate());
+
+        List<AccountCodeTotal> creditRows = preview
+                ? transactionItemRepository.aggregatePreviewTransactionItemsCreditByAccountCodeAndDateRange(
+                        accountCodes, range.startDate(), range.endDate())
+                : transactionItemRepository.aggregateTransactionItemsCreditByAccountCodeAndDateRange(
+                        accountCodes, range.startDate(), range.endDate());
+
+        Map<String, BigDecimal> totals = new HashMap<>();
+        for (AccountCodeTotal row : debitRows) {
+            totals.put(row.accountCode(), row.totalAmount());
+        }
+        for (AccountCodeTotal row : creditRows) {
+            totals.merge(row.accountCode(), row.totalAmount(), BigDecimal::add);
+        }
+        return totals;
     }
 
     private void collectAccountCodesByDateRange(
