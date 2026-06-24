@@ -26,7 +26,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.config.TimeConfig
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionBatchStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.FilteringParameters;
@@ -36,7 +35,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.functionalTests.TestContainerConfig;
@@ -45,6 +43,9 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Accoun
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.organisation.domain.SystemExtractionParameters;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
@@ -98,11 +99,11 @@ class AccountingCoreEventHandlerDuplicateEventsTest {
         transactionEntity.setExtractorType("NETSUITE");
         accountingCoreTransactionRepository.saveAndFlush(transactionEntity);
 
-        TxsLedgerUpdatedEvent build = TxsLedgerUpdatedEvent.builder()
-                .metadata(EventMetadata.create("1.0", "testUser"))
+        LedgerUpdatedEvent build = LedgerUpdatedEvent.builder()
                 .organisationId("testOrg")
+                .type(LedgerUpdateType.TRANSACTION)
                 // padding the transaction id to 64 characters to match the length of the id in the database
-                .statusUpdates(Set.of(new TxStatusUpdate(String.format("%-64s", transactionEntity.getId()), LedgerDispatchStatus.MARK_DISPATCH, null, Set.of())))
+                .statusUpdates(Set.of(new LedgerStatusUpdate(String.format("%-64s", transactionEntity.getId()), LedgerDispatchStatus.MARK_DISPATCH, null, Set.of())))
                 .build();
 
         // sending events twice to check if the status is updated correctly and no exceptions are thrown

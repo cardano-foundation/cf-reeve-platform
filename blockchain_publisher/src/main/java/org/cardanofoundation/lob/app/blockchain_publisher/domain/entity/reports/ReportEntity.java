@@ -29,6 +29,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.publish.PublishableEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
@@ -42,7 +43,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyEntity;
 @Getter
 @Setter
 @EntityListeners({AuditingEntityListener.class})
-public class ReportEntity extends CommonDateOnlyEntity implements Persistable<String> {
+public class ReportEntity extends CommonDateOnlyEntity implements Persistable<String>, PublishableEntity {
 
     @Id
     private String id;

@@ -7,20 +7,29 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 import java.util.Map;
 import java.util.Optional;
 
-import lombok.RequiredArgsConstructor;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 
-@RequiredArgsConstructor
 public class CostCenterConversionTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
     private final OrganisationPublicApiIF organisationPublicApi;
+
+    public CostCenterConversionTaskItem(OrganisationPublicApiIF organisationPublicApi) {
+        this(true, organisationPublicApi);
+    }
+
+    public CostCenterConversionTaskItem(boolean enabled, OrganisationPublicApiIF organisationPublicApi) {
+        this.enabled = enabled;
+        this.organisationPublicApi = organisationPublicApi;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         val organisationId = tx.getOrganisation().getId();
 
         for (val txItem : tx.getItems()) {

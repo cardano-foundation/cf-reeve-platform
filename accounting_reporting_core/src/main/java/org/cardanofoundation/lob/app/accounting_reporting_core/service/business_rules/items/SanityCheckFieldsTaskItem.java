@@ -18,19 +18,27 @@ import java.util.Set;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 
-import lombok.RequiredArgsConstructor;
-
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-@RequiredArgsConstructor
 public class SanityCheckFieldsTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
     private final Validator validator;
+
+    public SanityCheckFieldsTaskItem(Validator validator) {
+        this(true, validator);
+    }
+
+    public SanityCheckFieldsTaskItem(boolean enabled, Validator validator) {
+        this.enabled = enabled;
+        this.validator = validator;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         Set<ConstraintViolation<TransactionEntity>> errors = validator.validate(tx);
 
         if (tx.getAutomatedValidationStatus() == FAILED) {

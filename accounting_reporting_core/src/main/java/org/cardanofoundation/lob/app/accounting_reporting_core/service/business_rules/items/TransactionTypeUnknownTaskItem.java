@@ -12,12 +12,19 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 
 public class TransactionTypeUnknownTaskItem implements PipelineTaskItem {
 
-    /**
-     * This task item checks if the transaction type is unknown and adds a violation if it is.
-     * It is used to ensure that all transactions have a valid type before processing.
-     */
+    private final boolean enabled;
+
+    public TransactionTypeUnknownTaskItem() {
+        this(true);
+    }
+
+    public TransactionTypeUnknownTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
+
     @Override
     public void run(TransactionEntity transaction) {
+        if (!enabled) return;
         if (transaction.getTransactionType() == null) {
             transaction.setTransactionType(TransactionType.Unknown);
         }

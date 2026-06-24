@@ -24,8 +24,19 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.*;
 @Slf4j
 public class TxItemsAmountsSummingTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
+
+    public TxItemsAmountsSummingTaskItem() {
+        this(true);
+    }
+
+    public TxItemsAmountsSummingTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
+
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         if (tx.getAutomatedValidationStatus() == FAILED) {
             return;
         }

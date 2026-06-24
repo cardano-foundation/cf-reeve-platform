@@ -23,10 +23,11 @@ import org.mockito.MockitoAnnotations;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxStatusUpdate;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TxsLedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.blockchain_common.domain.FinalityScore;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
@@ -43,7 +44,7 @@ class TxsLedgerUpdatedEventPublisherTest {
     private BlockchainPublishStatusMapper blockchainPublishStatusMapper;
 
     @Captor
-    private ArgumentCaptor<TxsLedgerUpdatedEvent> eventCaptor;
+    private ArgumentCaptor<LedgerUpdatedEvent> eventCaptor;
 
     @BeforeEach
     void setUp() {
@@ -58,9 +59,9 @@ class TxsLedgerUpdatedEventPublisherTest {
     void testSendTxLedgerUpdatedEvents_NoTransactions() {
         Set<TransactionEntity> emptyTransactions = Set.of();
 
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents("org1", emptyTransactions);
+        ledgerUpdatedEventPublisher.send("org1", LedgerUpdateType.TRANSACTION, emptyTransactions);
 
-        verify(applicationEventPublisher, never()).publishEvent(any(TxsLedgerUpdatedEvent.class));
+        verify(applicationEventPublisher, never()).publishEvent(any(LedgerUpdatedEvent.class));
     }
 
     @Test
@@ -69,16 +70,17 @@ class TxsLedgerUpdatedEventPublisherTest {
         when(blockchainPublishStatusMapper.convert(any(Optional.class), any(Optional.class)))
                 .thenReturn(LedgerDispatchStatus.COMPLETED);
 
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents("org1", Set.of(transaction));
+        ledgerUpdatedEventPublisher.send("org1", LedgerUpdateType.TRANSACTION, Set.of(transaction));
 
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
-        TxsLedgerUpdatedEvent event = eventCaptor.getValue();
+        LedgerUpdatedEvent event = eventCaptor.getValue();
 
         assertThat(event.getOrganisationId()).isEqualTo("org1");
+        assertThat(event.getType()).isEqualTo(LedgerUpdateType.TRANSACTION);
         assertThat(event.getStatusUpdates()).hasSize(1);
 
-        TxStatusUpdate statusUpdate = event.getStatusUpdates().iterator().next();
-        assertThat(statusUpdate.getTxId()).isEqualTo(transaction.getId());
+        LedgerStatusUpdate statusUpdate = event.getStatusUpdates().iterator().next();
+        assertThat(statusUpdate.getId()).isEqualTo(transaction.getId());
         assertThat(statusUpdate.getStatus()).isEqualTo(LedgerDispatchStatus.COMPLETED);
     }
 
@@ -89,10 +91,10 @@ class TxsLedgerUpdatedEventPublisherTest {
         when(blockchainPublishStatusMapper.convert(any(Optional.class), any(Optional.class)))
                 .thenReturn(LedgerDispatchStatus.DISPATCHED);
 
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents("org1", Set.of(transaction1, transaction2));
+        ledgerUpdatedEventPublisher.send("org1", LedgerUpdateType.TRANSACTION, Set.of(transaction1, transaction2));
 
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
-        TxsLedgerUpdatedEvent event = eventCaptor.getValue();
+        LedgerUpdatedEvent event = eventCaptor.getValue();
 
         assertThat(event.getOrganisationId()).isEqualTo("org1");
         assertThat(event.getStatusUpdates()).hasSize(2);
@@ -107,7 +109,7 @@ class TxsLedgerUpdatedEventPublisherTest {
         when(blockchainPublishStatusMapper.convert(any(Optional.class), any(Optional.class)))
                 .thenReturn(LedgerDispatchStatus.DISPATCHED);
 
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents("org1", Set.of(transaction1, transaction2));
+        ledgerUpdatedEventPublisher.send("org1", LedgerUpdateType.TRANSACTION, Set.of(transaction1, transaction2));
 
         verify(applicationEventPublisher, times(2)).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).hasSize(2);
@@ -119,16 +121,16 @@ class TxsLedgerUpdatedEventPublisherTest {
         when(blockchainPublishStatusMapper.convert(any(Optional.class), any(Optional.class)))
                 .thenReturn(LedgerDispatchStatus.NOT_DISPATCHED);
 
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents("org1", Set.of(transaction));
+        ledgerUpdatedEventPublisher.send("org1", LedgerUpdateType.TRANSACTION, Set.of(transaction));
 
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
-        TxsLedgerUpdatedEvent event = eventCaptor.getValue();
+        LedgerUpdatedEvent event = eventCaptor.getValue();
 
         assertThat(event.getOrganisationId()).isEqualTo("org1");
         assertThat(event.getStatusUpdates()).hasSize(1);
 
-        TxStatusUpdate statusUpdate = event.getStatusUpdates().iterator().next();
-        assertThat(statusUpdate.getTxId()).isEqualTo(transaction.getId());
+        LedgerStatusUpdate statusUpdate = event.getStatusUpdates().iterator().next();
+        assertThat(statusUpdate.getId()).isEqualTo(transaction.getId());
         assertThat(statusUpdate.getStatus()).isEqualTo(LedgerDispatchStatus.NOT_DISPATCHED);
     }
 
@@ -138,16 +140,16 @@ class TxsLedgerUpdatedEventPublisherTest {
         when(blockchainPublishStatusMapper.convert(any(Optional.class), any(Optional.class)))
                 .thenReturn(LedgerDispatchStatus.MARK_DISPATCH);
 
-        ledgerUpdatedEventPublisher.sendTxLedgerUpdatedEvents("org1", Set.of(transaction));
+        ledgerUpdatedEventPublisher.send("org1", LedgerUpdateType.TRANSACTION, Set.of(transaction));
 
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
-        TxsLedgerUpdatedEvent event = eventCaptor.getValue();
+        LedgerUpdatedEvent event = eventCaptor.getValue();
 
         assertThat(event.getOrganisationId()).isEqualTo("org1");
         assertThat(event.getStatusUpdates()).hasSize(1);
 
-        TxStatusUpdate statusUpdate = event.getStatusUpdates().iterator().next();
-        assertThat(statusUpdate.getTxId()).isEqualTo(transaction.getId());
+        LedgerStatusUpdate statusUpdate = event.getStatusUpdates().iterator().next();
+        assertThat(statusUpdate.getId()).isEqualTo(transaction.getId());
         assertThat(statusUpdate.getStatus()).isEqualTo(LedgerDispatchStatus.MARK_DISPATCH);
     }
 

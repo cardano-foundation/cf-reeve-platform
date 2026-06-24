@@ -9,8 +9,19 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 
 public class DiscardZeroBalanceTxItemsTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
+
+    public DiscardZeroBalanceTxItemsTaskItem() {
+        this(true);
+    }
+
+    public DiscardZeroBalanceTxItemsTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
+
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         tx.getItems()
                 .stream().filter(txItem -> txItem.getAmountLcy().signum() == 0 && txItem.getAmountFcy().signum() == 0)
                 .forEach(txItem -> {

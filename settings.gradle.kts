@@ -17,5 +17,6 @@ include (
  ":csv_erp_adapter",
  ":notification_gateway",
  ":organisation",
- ":reporting"
+ ":reporting",
+ ":funding"
 )

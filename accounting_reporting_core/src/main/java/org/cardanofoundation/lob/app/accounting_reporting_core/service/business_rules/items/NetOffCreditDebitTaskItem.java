@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
@@ -24,14 +23,24 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
-@RequiredArgsConstructor
 @Slf4j
 public class NetOffCreditDebitTaskItem implements PipelineTaskItem {
 
+    private final boolean enabled;
     private final OrganisationPublicApiIF organisationPublicApiIF;
+
+    public NetOffCreditDebitTaskItem(OrganisationPublicApiIF organisationPublicApiIF) {
+        this(true, organisationPublicApiIF);
+    }
+
+    public NetOffCreditDebitTaskItem(boolean enabled, OrganisationPublicApiIF organisationPublicApiIF) {
+        this.enabled = enabled;
+        this.organisationPublicApiIF = organisationPublicApiIF;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
 
         if (tx.getTransactionType().equals(TransactionType.Journal)) {
             AtomicLong matches = new AtomicLong();

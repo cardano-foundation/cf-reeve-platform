@@ -7,18 +7,27 @@ import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.cor
 
 import java.util.Map;
 
-import lombok.RequiredArgsConstructor;
 import lombok.val;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Account;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionViolation;
 
-@RequiredArgsConstructor
 public class AccountCodeDebitCheckTaskItem implements PipelineTaskItem {
+
+    private final boolean enabled;
+
+    public AccountCodeDebitCheckTaskItem() {
+        this(true);
+    }
+
+    public AccountCodeDebitCheckTaskItem(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     @Override
     public void run(TransactionEntity tx) {
+        if (!enabled) return;
         if (tx.getTransactionType() == FxRevaluation) {
             return;
         }
