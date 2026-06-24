@@ -87,6 +87,7 @@
         "funding_id": { "type": "string", "minLength": 1 },
         "activity_id": { "type": "string", "minLength": 1 },
         "activity_title": { "type": "string" },
+        "activity_sub_title": { "type": "string" },
         "funding_tx": { "type": "string" },
         "funding_doc_hash": { "type": "string", "minLength": 1 }
       }

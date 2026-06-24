@@ -33,7 +33,7 @@ All metadata entries under label 1447 follow this base structure, containing org
       "timestamp": "string",                       // ISO-8601 timestamp
       "version": "string"                          // Metadata format version (e.g., "1.1")
     },
-    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS" or "REPORT"
+    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS", "REPORT" or "EVENT_BUNDLE"
     "data": {}                   // Type-specific data structure
   }
 }
@@ -51,10 +51,11 @@ All metadata entries under label 1447 follow this base structure, containing org
 
 ### Metadata Types
 
-Reeve currently supports two metadata types:
+Reeve currently supports three metadata types:
 
 - **`INDIVIDUAL_TRANSACTIONS`**: Individual accounting transactions of the organization
 - **`REPORT`**: Custom financial reports (balance sheets, income statements, etc.)
+- **`EVENT_BUNDLE`**: Grant-lifecycle events (funding, spending, refunds) and organization-defined custom events
 
 ## Type: Individual Transactions
 
@@ -225,6 +226,199 @@ Required fields:
       }
     }
   }
+}
+```
+
+## Type: Event Bundle
+
+The `EVENT_BUNDLE` type anchors **grant-lifecycle events** — the funding, spending, and refund activity tied to a grant or project — as well as organization-defined **custom events**. It is used by the funding module to make the flow of grant money publicly verifiable on-chain.
+
+A bundle groups one or more events belonging to a single organization. The `data` field supports two storage modes:
+
+- **Inline**: `data` is an array of event objects, embedded directly in the transaction metadata.
+- **IPFS-anchored**: `data` is a manifest object that references an off-chain document (stored on IPFS) via its CID. Used when the bundle is too large to fit comfortably in transaction metadata.
+
+```json
+{
+  <General structure>,
+  "type": "EVENT_BUNDLE",
+  "data": [ /* array of event objects (inline) */ ]
+}
+```
+
+> **Note on validation**: Several rules cannot be expressed in JSON Schema and are enforced by a programmatic validator instead: `org_id` matching the on-chain `org.id`, `event_count` matching the number of events, the manifest `id` derivation, and the IPFS CID matching the document bytes.
+
+### Event Fields
+
+Every event (grant-lifecycle and custom) shares these common fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier of the event |
+| `type` | string | Yes | Event type — `FUNDING`, `SPENDING`, `REFUND`, or a custom organization-defined value |
+| `date` | string | Yes | Event date in ISO 8601 format (YYYY-MM-DD) |
+
+Grant-lifecycle events (`FUNDING`, `SPENDING`, `REFUND`) additionally carry:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `allocation` | object | Yes | Funding context (see below) |
+| `milestone` | object / array | Conditional | Milestone reference(s); a single object for `SPENDING`, an array for `FUNDING`/`REFUND` |
+| `amount` | string | Conditional | Event amount; **required** for `FUNDING`/`REFUND`, **forbidden** for `SPENDING` |
+| `currency` | object | Yes | Currency of the event with `id` (ISO format) and `cust_code` |
+| `items` | array | Conditional | Spend items; **required** for `SPENDING` |
+
+### Event Types
+
+| Type | Description |
+|------|-------------|
+| `FUNDING` | Funds allocated to a grant/project, optionally split across milestones |
+| `SPENDING` | Expenditure against a grant; the total is derived from the mandatory `items`, so no event-level `amount` is carried |
+| `REFUND` | Funds returned/reversed for a grant |
+| *custom* | Any organization-defined type (not one of the reserved values above); only the common fields are mandated and the body is free-form |
+
+### Allocation Object
+
+The `allocation` object provides the funding context present on every grant-lifecycle event:
+
+| Field | Type | Required | Description                                                                                                     |
+|-------|------|----------|-----------------------------------------------------------------------------------------------------------------|
+| `funding_id` | string | Yes | Identifier of the funding source                                                                                |
+| `activity_id` | string | Yes | Identifier of the funded activity                                                                               |
+| `activity_title` | string | Conditional | Human-readable activity name; required for `FUNDING`/`REFUND`                                                   |
+| `activity_title` | string | Conditional | Human-readable activity sub title; required for `FUNDING`/`REFUND`                                              |
+| `funding_tx` | string | Conditional | Reference to the funding transaction; for `FUNDING`/`REFUND`, either this or `funding_doc_hash` must be present |
+| `funding_doc_hash` | string | Conditional | Hash of the funding document; alternative to `funding_tx`                                                       |
+
+### Milestone Object
+
+The `milestone` field references the milestone(s) a grant-lifecycle event relates to. **On-chain, only the `milestone_id` is published**; the remaining descriptive fields (`milestone_label`, `expected_cost`, `allocated_amount`, `currency`, `due_date`) are resolved off-chain from the milestone reference and are therefore omitted from the metadata.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `milestone_id` | string | Yes | Identifier of the milestone (the only field published on-chain) |
+
+For `SPENDING` events, `milestone` is a single object. For `FUNDING`/`REFUND` events, `milestone` is an array of milestone references.
+
+### Spend Item Object
+
+`SPENDING` events list their individual expenditures under `items`. Each item:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier of the item |
+| `category` | string | Yes | Expense category |
+| `vendor` | string | Yes | Vendor/payee |
+| `amount` | string | Yes | Amount in the item's currency |
+| `currency` | object | Yes | Currency with `id` (ISO format) and `cust_code` |
+| `fx_rate` | string | Yes | FX rate to the reporting currency (see [FX Rate](#fx-rate)) |
+| `amount_rcy` | string | No | Amount converted to the organization's reporting currency |
+| `date` | string | Yes | Spend date in ISO 8601 format (YYYY-MM-DD) |
+| `document` | object | No | Source document details (e.g., `hash`, `number`, `type`, `date`) |
+| `notes` | string | No | Free-text notes |
+
+### IPFS-Anchored Storage
+
+When a bundle is stored off-chain, `data` is a manifest pointing to the IPFS document:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Manifest identifier |
+| `ipfs_cid` | string | Yes | IPFS CID (CIDv1 base32 or CIDv0 base58btc) of the off-chain document |
+| `interval` | string | Yes | Reporting interval (`DAILY`, `WEEKLY`, `MONTHLY`, `QUARTERLY`, `YEARLY`) |
+| `date` | string | Yes | Bundle date in ISO 8601 format |
+| `event_count` | integer | Yes | Number of events in the referenced document |
+
+The referenced off-chain document carries `org_id`, `currency_id`, `version`, `date`, and the `events` array.
+
+### Example: Event Bundle (Spending)
+
+```json
+{
+  "1447": {
+    "org": {
+      "id": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+      "name": "Cardano Foundation",
+      "currency_id": "ISO_4217:CHF",
+      "country_code": "CH",
+      "tax_id_number": "CHE-184477354"
+    },
+    "metadata": {
+      "creation_slot": 12345,
+      "timestamp": "2025-06-01T10:15:30Z",
+      "version": "1.0"
+    },
+    "type": "EVENT_BUNDLE",
+    "data": [
+      {
+        "id": "event1",
+        "type": "SPENDING",
+        "date": "2025-04-30",
+        "allocation": {
+          "funding_id": "fund1",
+          "activity_id": "act1",
+          "activity_title": "Activity One",
+          "funding_tx": "ftx1"
+        },
+        "currency": {
+          "id": "ISO_4217:USD",
+          "cust_code": "USD"
+        },
+        "milestone": {
+          "milestone_id": "ms1"
+        },
+        "items": [
+          {
+            "id": "item1",
+            "category": "Personnel",
+            "vendor": "Vendor AB",
+            "amount": "100.00",
+            "currency": {
+              "id": "ISO_4217:USD",
+              "cust_code": "USD"
+            },
+            "fx_rate": "ISO_4217:USD:ISO_4217:CHF=0.85",
+            "amount_rcy": "85.00",
+            "date": "2025-04-03",
+            "document": {
+              "hash": "doc-hash-1"
+            },
+            "notes": "Invoice #1"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Example: Event Bundle (Funding with Milestones)
+
+```json
+{
+  <General structure>,
+  "type": "EVENT_BUNDLE",
+  "data": [
+    {
+      "id": "event2",
+      "type": "FUNDING",
+      "date": "2025-01-15",
+      "allocation": {
+        "funding_id": "fund1",
+        "activity_id": "act1",
+        "activity_title": "Activity One",
+        "funding_tx": "ftx1"
+      },
+      "amount": "50.00",
+      "currency": {
+        "id": "ISO_4217:USD",
+        "cust_code": "USD"
+      },
+      "milestone": [
+        { "milestone_id": "ms1" }
+      ]
+    }
+  ]
 }
 ```
 

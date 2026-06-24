@@ -75,7 +75,10 @@ public class SpendingEventMetadataSerialiser {
         if (event.getEventDate() != null) {
             metadataMap.put("date", event.getEventDate().toString());
         }
-
+        metadataMap.put("funding_id", event.getFundingId());
+        if (event.getFundingTx() != null) {
+            metadataMap.put("funding_tx", event.getFundingTx());
+        }
         metadataMap.put("allocation", serialiseAllocation(event));
 
         // SPENDING events derive their total from the mandatory items, so no event-level amount is emitted.
@@ -116,14 +119,14 @@ public class SpendingEventMetadataSerialiser {
     private static MetadataMap serialiseAllocation(SpendingEventEntity event) {
         val metadataMap = MetadataBuilder.createMap();
 
-        metadataMap.put("funding_id", event.getFundingId());
+
         metadataMap.put("activity_id", event.getActivityId());
 
         if (event.getActivityTitle() != null) {
             metadataMap.put("activity_title", event.getActivityTitle());
         }
-        if (event.getFundingTx() != null) {
-            metadataMap.put("funding_tx", event.getFundingTx());
+        if (event.getActivitySubTitle() != null) {
+            metadataMap.put("activity_sub_title", event.getActivitySubTitle());
         }
         if (event.getFundingDocHash() != null) {
             metadataMap.put("funding_doc_hash", event.getFundingDocHash());

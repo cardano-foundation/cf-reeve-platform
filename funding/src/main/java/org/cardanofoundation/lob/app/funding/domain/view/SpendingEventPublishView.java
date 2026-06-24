@@ -39,6 +39,8 @@ public class SpendingEventPublishView {
     @Nullable
     private String activityTitle;
     @Nullable
+    private String activitySubTitle;
+    @Nullable
     private String fundingTx;
     @Nullable
     private String fundingDocHash;

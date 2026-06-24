@@ -399,6 +399,7 @@ public class SpendingEventService {
                 .date(date)
                 .fundingId(event.getFundingId())
                 .activityId(event.getActivityId())
+                //.activitySubTitle(project != null ? project.getActivityTitle() : null) // TODO chagne to subtitle once subtitle field is there.
                 .activityTitle(project != null ? project.getActivityTitle() : null)
                 .fundingTx(event.getFundingTx())
                 .fundingDocHash(null)

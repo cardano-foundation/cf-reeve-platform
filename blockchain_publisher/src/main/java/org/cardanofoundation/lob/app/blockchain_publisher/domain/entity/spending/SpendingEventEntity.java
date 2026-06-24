@@ -75,6 +75,10 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     private String activityTitle;
 
     @Nullable
+    @Column(name = "activity_sub_title")
+    private String activitySubTitle;
+
+    @Nullable
     @Column(name = "funding_tx")
     private String fundingTx;
 
