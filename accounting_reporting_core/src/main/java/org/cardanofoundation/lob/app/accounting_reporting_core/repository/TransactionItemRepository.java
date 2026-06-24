@@ -35,6 +35,56 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         """)
     List<TransactionItemEntity> findTransactionItemsByAccountCodeAndDateRange(@Param("customerCodes") List<String> customerCodes, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
+    /**
+     * Aggregates signed transaction-item amounts for debit-side accounts.
+     * Returns one {@link AccountCodeTotal} per mapped account code.
+     * Used together with {@link #aggregateTransactionItemsCreditByAccountCodeAndDateRange}
+     * to replace per-item fetching + Java-side looping used by report generation.
+     */
+    @Query("""
+        SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal(
+            i.accountDebit.code,
+            SUM(CASE WHEN i.operationType = 'DEBIT' THEN i.amountLcy ELSE -i.amountLcy END)
+        )
+        FROM accounting_reporting_core.TransactionItemEntity i
+        JOIN i.transaction t
+        WHERE i.accountDebit.code IN :customerCodes
+          AND t.entryDate >= :startDate
+          AND t.entryDate <= :endDate
+          AND i.amountLcy <> 0
+          AND i.status = 'OK'
+          AND t.ledgerDispatchStatus = 'FINALIZED'
+        GROUP BY i.accountDebit.code
+        """)
+    List<AccountCodeTotal> aggregateTransactionItemsDebitByAccountCodeAndDateRange(
+            @Param("customerCodes") List<String> customerCodes,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    /**
+     * Aggregates signed transaction-item amounts for credit-side accounts.
+     * Returns one {@link AccountCodeTotal} per mapped account code.
+     */
+    @Query("""
+        SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal(
+            i.accountCredit.code,
+            SUM(CASE WHEN i.operationType = 'DEBIT' THEN -i.amountLcy ELSE i.amountLcy END)
+        )
+        FROM accounting_reporting_core.TransactionItemEntity i
+        JOIN i.transaction t
+        WHERE i.accountCredit.code IN :customerCodes
+          AND t.entryDate >= :startDate
+          AND t.entryDate <= :endDate
+          AND i.amountLcy <> 0
+          AND i.status = 'OK'
+          AND t.ledgerDispatchStatus = 'FINALIZED'
+        GROUP BY i.accountCredit.code
+        """)
+    List<AccountCodeTotal> aggregateTransactionItemsCreditByAccountCodeAndDateRange(
+            @Param("customerCodes") List<String> customerCodes,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
     @Query("""
         SELECT DISTINCT t.document.num FROM accounting_reporting_core.TransactionItemEntity t
         """)
@@ -58,6 +108,56 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
     List<TransactionItemEntity> findPreviewTransactionItemsByAccountCodeAndDateRange(
             @Param("customerCodes") List<String> customerCodes,
             @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    /**
+     * Preview variant of {@link #aggregateTransactionItemsDebitByAccountCodeAndDateRange}.
+     * Uses the preview validation filter (VALIDATED + not PENDING/INVALID).
+     */
+    @Query("""
+        SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal(
+            i.accountDebit.code,
+            SUM(CASE WHEN i.operationType = 'DEBIT' THEN i.amountLcy ELSE -i.amountLcy END)
+        )
+        FROM accounting_reporting_core.TransactionItemEntity i
+        JOIN i.transaction t
+        WHERE i.accountDebit.code IN :customerCodes
+          AND t.entryDate >= :startDate
+          AND t.entryDate <= :endDate
+          AND i.amountLcy <> 0
+          AND i.status = 'OK'
+          AND t.automatedValidationStatus = 'VALIDATED'
+          AND t.processingStatus NOT IN ('PENDING','INVALID')
+        GROUP BY i.accountDebit.code
+        """)
+    List<AccountCodeTotal> aggregatePreviewTransactionItemsDebitByAccountCodeAndDateRange(
+            @Param("customerCodes") List<String> customerCodes,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
+
+    /**
+     * Preview variant of {@link #aggregateTransactionItemsCreditByAccountCodeAndDateRange}.
+     * Uses the preview validation filter (VALIDATED + not PENDING/INVALID).
+     */
+    @Query("""
+        SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.repository.AccountCodeTotal(
+            i.accountCredit.code,
+            SUM(CASE WHEN i.operationType = 'DEBIT' THEN -i.amountLcy ELSE i.amountLcy END)
+        )
+        FROM accounting_reporting_core.TransactionItemEntity i
+        JOIN i.transaction t
+        WHERE i.accountCredit.code IN :customerCodes
+          AND t.entryDate >= :startDate
+          AND t.entryDate <= :endDate
+          AND i.amountLcy <> 0
+          AND i.status = 'OK'
+          AND t.automatedValidationStatus = 'VALIDATED'
+          AND t.processingStatus NOT IN ('PENDING','INVALID')
+        GROUP BY i.accountCredit.code
+        """)
+    List<AccountCodeTotal> aggregatePreviewTransactionItemsCreditByAccountCodeAndDateRange(
+            @Param("customerCodes") List<String> customerCodes,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 
     @Query("""
         SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
