@@ -39,7 +39,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/spending")
+@RequestMapping("/api/v1/funding")
 @Tag(name = "Projects", description = "Funding – Project management API")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
@@ -109,9 +109,9 @@ public class ProjectController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @SuppressWarnings("unchecked")
     public ResponseEntity<ProjectView> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
-        if (projectService.existsByOrganisationIdAndActivityId(request.getOrganisationId(), request.getActivityId())) {
+        if (projectService.existsByOrganisationIdAndProjectId(request.getOrganisationId(), request.getProjectId())) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.CONFLICT, "Project already exists for activityId: " + request.getActivityId());
+                    HttpStatus.CONFLICT, "Project already exists for projectId: " + request.getProjectId());
             problem.setTitle(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
             return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
         }

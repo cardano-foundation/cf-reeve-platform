@@ -130,7 +130,7 @@ class MilestoneControllerTest {
 
     @Test
     void updateMilestone_returns404_whenNotFound() {
-        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().label("New").build();
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneTitle("New").build();
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found");
         problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
         when(milestoneService.update("m1", request)).thenReturn(Either.left(problem));
@@ -143,7 +143,7 @@ class MilestoneControllerTest {
 
     @Test
     void updateMilestone_returns200_withView() {
-        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().label("New").build();
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneTitle("New").build();
         MilestoneEntity milestone = milestoneEntity("m1");
         MilestoneView view = milestoneView("m1");
         when(milestoneService.update("m1", request)).thenReturn(Either.right(milestone));
@@ -182,26 +182,26 @@ class MilestoneControllerTest {
 
     private ProjectEntity projectEntity(String id) {
         return ProjectEntity.builder().id(id).organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD").build();
+                .projectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
     private MilestoneEntity milestoneEntity(String id) {
-        return MilestoneEntity.builder().id(id).label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00")).currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30)).project(projectEntity("p1")).build();
+        return MilestoneEntity.builder().id(id).milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.of(2025, 6, 30)).project(projectEntity("p1")).build();
     }
 
     private MilestoneView milestoneView(String id) {
-        return MilestoneView.builder().milestoneId(id).projectId("p1").label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00")).currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30)).build();
+        return MilestoneView.builder().milestoneUid(id).projectUid("p1").milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.of(2025, 6, 30)).build();
     }
 
     private MilestoneCreateRequest createRequest() {
-        return MilestoneCreateRequest.builder().label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00")).currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30)).build();
+        return MilestoneCreateRequest.builder().milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.of(2025, 6, 30)).build();
     }
 
 }

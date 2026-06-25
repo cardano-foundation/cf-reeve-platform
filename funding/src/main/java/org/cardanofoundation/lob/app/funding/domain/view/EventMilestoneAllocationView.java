@@ -18,14 +18,19 @@ public class EventMilestoneAllocationView {
     @Schema(example = "550e8400-e29b-41d4-a716-446655440001")
     private String eventId;
 
-    @Schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    private String milestoneId;
+    @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
+            description = "Internal SHA256 uid of the project (project_uid)")
+    private String projectUid;
+
+    @Schema(example = "550e8400-e29b-41d4-a716-446655440000",
+            description = "Internal UUID of the milestone (milestone_uid)")
+    private String milestoneUid;
 
     @Schema(example = "Milestone AB")
-    private String milestoneLabel;
+    private String milestoneTitle;
 
     @Schema(example = "50000.00")
-    private BigDecimal expectedCost;
+    private BigDecimal milestoneAmount;
 
     @Nullable
     @Schema(example = "50000.00")
@@ -36,6 +41,6 @@ public class EventMilestoneAllocationView {
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-06-30")
-    private LocalDate dueDate;
+    private LocalDate milestoneDate;
 
 }

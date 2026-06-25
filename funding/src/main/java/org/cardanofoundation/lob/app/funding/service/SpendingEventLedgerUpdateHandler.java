@@ -14,18 +14,14 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.BlockchainReceipt;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
-import org.cardanofoundation.lob.app.funding.repository.SpendingEventRepository;
+import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 
-/**
- * Handles blockchain-dispatch status updates coming back from the blockchain publisher and applies the new
- * {@code ledgerDispatchStatus} (and tx hash) to the corresponding published spending events.
- */
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class SpendingEventLedgerUpdateHandler {
 
-    private final SpendingEventRepository spendingEventRepository;
+    private final FundingEventRepository fundingEventRepository;
 
     @EventListener
     @Async
@@ -39,19 +35,18 @@ public class SpendingEventLedgerUpdateHandler {
                 event.getOrganisationId(), event.getStatusUpdates().size());
 
         for (LedgerStatusUpdate update : event.getStatusUpdates()) {
-            spendingEventRepository.findById(update.getId()).ifPresentOrElse(
-                    spendingEvent -> {
-                        spendingEvent.setLedgerDispatchStatus(update.getStatus());
-                        spendingEvent.setLedgerDispatchStatusErrorReason(update.getLedgerDispatchStatusErrorReason());
+            fundingEventRepository.findById(update.getId()).ifPresentOrElse(
+                    fundingEvent -> {
+                        fundingEvent.setLedgerDispatchStatus(update.getStatus());
+                        fundingEvent.setLedgerDispatchStatusErrorReason(update.getLedgerDispatchStatusErrorReason());
                         update.getBlockchainReceipts().stream()
                                 .map(BlockchainReceipt::getHash)
                                 .filter(Objects::nonNull)
                                 .findFirst()
-                                .ifPresent(spendingEvent::setTxHash);
-                        spendingEventRepository.save(spendingEvent);
+                                .ifPresent(fundingEvent::setTxHash);
+                        fundingEventRepository.save(fundingEvent);
                     },
-                    // a tx / event that is unknown to the funding module is ignored
-                    () -> log.debug("Ignoring ledger update for unknown spending event: {}", update.getId())
+                    () -> log.debug("Ignoring ledger update for unknown event: {}", update.getId())
             );
         }
 

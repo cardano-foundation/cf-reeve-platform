@@ -29,15 +29,15 @@ public class ProjectWithMilestonesCreateRequest {
 
     @NotBlank
     @Schema(example = "PROJ-AB")
-    private String activityId;
+    private String projectId;
 
     @NotBlank
     @Schema(example = "Project AB")
-    private String activityTitle;
+    private String projectTitle;
 
     @NotNull
     @Schema(example = "200000.00")
-    private BigDecimal expectedTotalAmount;
+    private BigDecimal totalAmount;
 
     @NotBlank
     @Schema(example = "USD")

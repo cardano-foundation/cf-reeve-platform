@@ -21,8 +21,8 @@ public class SpendingEventView {
     @Schema(example = "550e8400-e29b-41d4-a716-446655440000")
     private String eventId;
 
-    @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa")
-    private String projectId;
+    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+    private String organisationId;
 
     @Schema(example = "SPENDING")
     private EventType eventType;
@@ -32,9 +32,6 @@ public class SpendingEventView {
 
     @Schema(example = "GRANT-2025-001")
     private String fundingId;
-
-    @Schema(example = "PROJ-AB")
-    private String activityId;
 
     @Schema(example = "230000000.00")
     private BigDecimal totalAmount;
@@ -52,18 +49,16 @@ public class SpendingEventView {
 
     @Nullable
     @Schema(example = "2736ff28...")
-    private String fundingTx;
+    private String fundingHash;
 
     @Nullable
-    @Schema(example = "550e8400-e29b-41d4-a716-446655440001")
-    private String milestoneId;
+    @Schema(example = "Cardano Foundation")
+    private String fundingEntity;
 
-    @Nullable
-    @Schema(example = "Milestone AB")
-    private String milestoneLabel;
+    /** One entry per project this event is allocated to. */
+    private List<EventProjectAllocationView> projectAllocations;
 
+    /** Spend line items (SPENDING events only). */
     private List<SpendingItemView> spendingItems;
-
-    private List<EventMilestoneAllocationView> milestoneAllocations;
 
 }

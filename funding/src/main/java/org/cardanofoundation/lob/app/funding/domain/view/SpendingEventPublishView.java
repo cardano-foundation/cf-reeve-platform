@@ -6,19 +6,14 @@ import java.util.List;
 
 import jakarta.annotation.Nullable;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
 /**
- * Communication object published by the funding module to the blockchain publisher for a single spending /
- * grant-lifecycle event. Unlike {@link SpendingEventView} (a generic read/REST projection), this object carries
- * exactly the fields required to build a schema-valid {@code EVENT_BUNDLE} ({@code grantEvent}) Cardano metadata
- * record - including the {@code allocation} block, structured {@link Currency} objects, milestones and spend items.
+ * Communication object published by the funding module to the blockchain publisher. Carries exactly
+ * the fields needed to build a schema-valid {@code EVENT_BUNDLE} Cardano metadata record, including
+ * multi-project allocations, structured currency objects, milestones and spend items.
  */
 @Getter
 @Builder
@@ -28,43 +23,41 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 public class SpendingEventPublishView {
 
     private String eventId;
-    /** Not part of the on-chain metadata; retained on the publisher entity for traceability. */
-    private String projectId;
+    private String organisationId;
     private EventType eventType;
     private LocalDate date;
 
-    // --- allocation (funding context) ---
     private String fundingId;
-    private String activityId;
     @Nullable
-    private String activityTitle;
+    private String fundingHash;
     @Nullable
-    private String activitySubTitle;
-    @Nullable
-    private String fundingTx;
-    @Nullable
-    private String fundingDocHash;
+    private String fundingEntity;
 
-    // --- event amount / currency ---
     private BigDecimal amount;
     private Currency currency;
 
-    // --- FUNDING / REFUND events ---
-    private List<Milestone> milestones;
+    /** One entry per project this event is allocated to (FUNDING / REFUND / SPENDING context). */
+    private List<ProjectAllocation> projectAllocations;
 
-    // --- SPENDING events ---
+    /** Spend items — populated for SPENDING events only. */
     private List<SpendItem> items;
+
+    // -------------------------------------------------------------------------
 
     @Getter
     @Setter
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
-    public static class Currency {
-        /** ISO id, e.g. {@code ISO_4217:USD} or {@code ISO_24165:<token>:<dti>}. */
-        private String id;
-        /** Customer / short code, e.g. {@code USD}. */
-        private String custCode;
+    public static class ProjectAllocation {
+        private String projectUid;
+        private String projectId;
+        @Nullable
+        private String projectTitle;
+        /** Set when the allocation targets a sub-project; contains the root project UID (SHA256). */
+        @Nullable
+        private String parentProjectUid;
+        private List<Milestone> milestones;
     }
 
     @Getter
@@ -73,14 +66,14 @@ public class SpendingEventPublishView {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class Milestone {
-        private String milestoneId;
-        private String milestoneLabel;
+        private String milestoneUid;
+        private String milestoneTitle;
         @Nullable
-        private BigDecimal expectedCost;
+        private BigDecimal milestoneAmount;
         @Nullable
         private BigDecimal allocatedAmount;
         private Currency currency;
-        private LocalDate dueDate;
+        private LocalDate milestoneDate;
     }
 
     @Getter
@@ -102,6 +95,18 @@ public class SpendingEventPublishView {
         private String documentHash;
         @Nullable
         private String notes;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class Currency {
+        /** ISO id, e.g. {@code ISO_4217:USD}. */
+        private String id;
+        /** Short code, e.g. {@code USD}. */
+        private String custCode;
     }
 
 }

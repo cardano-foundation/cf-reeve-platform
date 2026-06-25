@@ -20,7 +20,6 @@ import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
-import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 
 @Slf4j
@@ -31,10 +30,9 @@ public class ProjectService {
 
     private final FundingProjectRepository projectRepository;
     private final MilestoneService milestoneService;
-    private final SpendingEventService spendingEventService;
 
-    public Optional<ProjectEntity> findById(String projectId) {
-        return projectRepository.findById(projectId);
+    public Optional<ProjectEntity> findById(String projectUid) {
+        return projectRepository.findById(projectUid);
     }
 
     public List<ProjectEntity> findByOrganisationId(String organisationId) {
@@ -45,68 +43,45 @@ public class ProjectService {
         return projectRepository.findByOrganisationId(organisationId, pageable);
     }
 
-    public boolean existsByOrganisationIdAndActivityId(String organisationId, String activityId) {
-        return projectRepository.existsByOrganisationIdAndActivityId(organisationId, activityId);
+    public boolean existsByOrganisationIdAndProjectId(String organisationId, String projectId) {
+        return projectRepository.existsByOrganisationIdAndProjectId(organisationId, projectId);
     }
 
     @Transactional
     public ProjectEntity createWithMilestones(ProjectWithMilestonesCreateRequest request) {
-        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getActivityId());
-
-        projectRepository.saveAndFlush(toEntity(projectId, request));
-
-        request.getMilestones().forEach(milestoneRequest ->
-                milestoneService.create(projectId, milestoneRequest));
-
-        return projectRepository.findById(projectId).orElseThrow();
-    }
-
-    private ProjectEntity toEntity(String projectId, ProjectWithMilestonesCreateRequest request) {
-        return ProjectEntity.builder()
-                .id(projectId)
-                .organisationId(request.getOrganisationId())
-                .fundingId(request.getFundingId())
-                .activityId(request.getActivityId())
-                .activityTitle(request.getActivityTitle())
-                .expectedTotalAmount(request.getExpectedTotalAmount())
-                .currency(request.getCurrency())
-                .build();
+        String projectUid = ProjectEntity.id(request.getOrganisationId(), request.getProjectId());
+        projectRepository.saveAndFlush(toEntity(projectUid, request));
+        request.getMilestones().forEach(milestoneRequest -> milestoneService.create(projectUid, milestoneRequest));
+        return projectRepository.findById(projectUid).orElseThrow();
     }
 
     @Transactional
-    public Either<ProblemDetail, ProjectEntity> update(String projectId, ProjectUpdateRequest request) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
-
+    public Either<ProblemDetail, ProjectEntity> update(String projectUid, ProjectUpdateRequest request) {
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectUid);
         if (projectM.isEmpty()) {
-            log.warn("Project not found for id: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found for id: %s".formatted(projectId));
+            log.warn("Project not found: {}", projectUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectUid));
             problem.setTitle("PROJECT_NOT_FOUND");
             return Either.left(problem);
         }
 
-        ProjectEntity project = projectM.orElseThrow();
-        if (request.getActivityTitle() != null) {
-            project.setActivityTitle(request.getActivityTitle());
-        }
-        if (request.getExpectedTotalAmount() != null) {
-            project.setExpectedTotalAmount(request.getExpectedTotalAmount());
-        }
-        if (request.getCurrency() != null) {
-            project.setCurrency(request.getCurrency());
-        }
+        ProjectEntity project = projectM.get();
+        if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
+        if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
+        if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
 
         return Either.right(projectRepository.saveAndFlush(project));
     }
 
     @Transactional
-    public Either<ProblemDetail, Void> delete(String projectId) {
-        if (!projectRepository.existsById(projectId)) {
-            log.warn("Project not found for id: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found for id: %s".formatted(projectId));
+    public Either<ProblemDetail, Void> delete(String projectUid) {
+        if (!projectRepository.existsById(projectUid)) {
+            log.warn("Project not found: {}", projectUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectUid));
             problem.setTitle("PROJECT_NOT_FOUND");
             return Either.left(problem);
         }
-        projectRepository.deleteById(projectId);
+        projectRepository.deleteById(projectUid);
         return Either.right(null);
     }
 
@@ -115,21 +90,36 @@ public class ProjectService {
                 .map(milestoneService::toView)
                 .toList();
 
-        List<SpendingEventView> eventViews = spendingEventService.findByProjectId(project.getId()).stream()
-                .map(spendingEventService::toView)
+        List<ProjectView> subProjectViews = projectRepository.findByParentProject_Id(project.getId()).stream()
+                .map(this::toView)
                 .toList();
 
+        String parentProjectUid = project.getParentProject() != null ? project.getParentProject().getId() : null;
+
         return ProjectView.builder()
-                .projectId(project.getId())
+                .projectUid(project.getId())
                 .organisationId(project.getOrganisationId())
                 .fundingId(project.getFundingId())
-                .activityId(project.getActivityId())
-                .activityTitle(project.getActivityTitle())
-                .expectedTotalAmount(project.getExpectedTotalAmount())
+                .projectId(project.getProjectId())
+                .projectTitle(project.getProjectTitle())
+                .totalAmount(project.getTotalAmount())
                 .currency(project.getCurrency())
+                .parentProjectUid(parentProjectUid)
                 .createdAt(project.getCreatedAt())
                 .milestones(milestoneViews)
-                .events(eventViews)
+                .subProjects(subProjectViews)
+                .build();
+    }
+
+    private ProjectEntity toEntity(String projectUid, ProjectWithMilestonesCreateRequest request) {
+        return ProjectEntity.builder()
+                .id(projectUid)
+                .organisationId(request.getOrganisationId())
+                .fundingId(request.getFundingId())
+                .projectId(request.getProjectId())
+                .projectTitle(request.getProjectTitle())
+                .totalAmount(request.getTotalAmount())
+                .currency(request.getCurrency())
                 .build();
     }
 

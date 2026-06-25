@@ -23,7 +23,6 @@ import org.hibernate.envers.Audited;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
-import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -31,11 +30,11 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Builder
-@Entity(name = "funding.SpendingEventEntity")
-@Table(name = "funding_spending_event")
+@Entity(name = "funding.FundingEventEntity")
+@Table(name = "funding_event")
 @Audited
 @EntityListeners({AuditingEntityListener.class})
-public class SpendingEventEntity extends CommonEntity implements Persistable<String> {
+public class FundingEventEntity extends CommonEntity implements Persistable<String> {
 
     @Id
     @Column(name = "event_id", nullable = false)
@@ -53,12 +52,12 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     private EventStatus status = EventStatus.DRAFT;
 
     @NotBlank
-    @Column(name = "funding_id", nullable = false)
-    private String fundingId;
+    @Column(name = "organisation_id", nullable = false)
+    private String organisationId;
 
     @NotBlank
-    @Column(name = "activity_id", nullable = false)
-    private String activityId;
+    @Column(name = "funding_id", nullable = false)
+    private String fundingId;
 
     @Builder.Default
     @Column(name = "ledger_dispatch_approved")
@@ -81,8 +80,13 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     private String ledgerDispatchStatusErrorReason;
 
     @Nullable
-    @Column(name = "funding_tx")
-    private String fundingTx;
+    @Column(name = "funding_hash")
+    private String fundingHash;
+
+    /** Identifying name of the entity providing the funding. Populated for FUNDING events only. */
+    @Nullable
+    @Column(name = "funding_entity")
+    private String fundingEntity;
 
     @NotNull
     @Column(name = "total_amount", nullable = false)
@@ -93,37 +97,15 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     @Column(name = "currency", nullable = false)
     private String currency;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", nullable = false)
-    private ProjectEntity project;
-
-    /** Used only for SPENDING events — the milestone this batch of spends targets. */
-    @Nullable
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "milestone_id")
-    private MilestoneEntity milestone;
+    /** One entry per project this event is allocated to; each carries its milestone allocations. */
+    @Builder.Default
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<EventProjectAllocationEntity> projectAllocations = new ArrayList<>();
 
     /** Spend line items — populated only for SPENDING events. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SpendingItemEntity> spendingItems = new ArrayList<>();
-
-    /** Milestone allocations — populated only for FUNDING and REFUND events. */
-    @Builder.Default
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
-
-    @PrePersist
-    private void generateId() {
-        if (this.id == null) {
-            String hashInput = String.format("%s:%s:%s",
-                    project != null ? project.getId() : "",
-                    fundingId,
-                    activityId
-            );
-            this.id = SHA3.digestAsHex(hashInput);
-        }
-    }
 
     @Override
     public boolean isNew() {

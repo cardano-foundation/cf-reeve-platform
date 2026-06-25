@@ -18,11 +18,11 @@ public class ProjectUpdateRequest {
 
     @Nullable
     @Schema(example = "Updated Project Name")
-    private String activityTitle;
+    private String projectTitle;
 
     @Nullable
     @Schema(example = "250000.00")
-    private BigDecimal expectedTotalAmount;
+    private BigDecimal totalAmount;
 
     @Nullable
     @NotBlank

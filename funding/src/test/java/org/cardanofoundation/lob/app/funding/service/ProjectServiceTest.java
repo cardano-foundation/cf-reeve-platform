@@ -40,8 +40,6 @@ class ProjectServiceTest {
     private FundingProjectRepository projectRepository;
     @Mock
     private MilestoneService milestoneService;
-    @Mock
-    private SpendingEventService spendingEventService;
 
     @InjectMocks
     private ProjectService projectService;
@@ -79,17 +77,17 @@ class ProjectServiceTest {
     }
 
     @Test
-    void existsByOrganisationIdAndActivityId_delegatesToRepository() {
-        when(projectRepository.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(true);
+    void existsByOrganisationIdAndProjectId_delegatesToRepository() {
+        when(projectRepository.existsByOrganisationIdAndProjectId("org1", "PROJ-AB")).thenReturn(true);
 
-        assertThat(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).isTrue();
+        assertThat(projectService.existsByOrganisationIdAndProjectId("org1", "PROJ-AB")).isTrue();
     }
 
     @Test
-    void existsByOrganisationIdAndActivityId_returnsFalse_whenNotExists() {
-        when(projectRepository.existsByOrganisationIdAndActivityId("org1", "NO-PROJECT")).thenReturn(false);
+    void existsByOrganisationIdAndProjectId_returnsFalse_whenNotExists() {
+        when(projectRepository.existsByOrganisationIdAndProjectId("org1", "NO-PROJECT")).thenReturn(false);
 
-        assertThat(projectService.existsByOrganisationIdAndActivityId("org1", "NO-PROJECT")).isFalse();
+        assertThat(projectService.existsByOrganisationIdAndProjectId("org1", "NO-PROJECT")).isFalse();
     }
 
     @Test
@@ -101,9 +99,9 @@ class ProjectServiceTest {
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
                 .organisationId("org1")
                 .fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB")
-                .activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00"))
+                .projectId("PROJ-AB")
+                .projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00"))
                 .currency("USD")
                 .milestones(List.of())
                 .build();
@@ -115,35 +113,6 @@ class ProjectServiceTest {
     }
 
     @Test
-    void toView_mapsProjectWithEventsAndNoMilestones() {
-        ProjectEntity project = projectEntity();
-        org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity event =
-                org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity.builder()
-                        .id("e1").eventType(org.cardanofoundation.lob.app.funding.domain.enums.EventType.FUNDING)
-                        .status(org.cardanofoundation.lob.app.funding.domain.enums.EventStatus.DRAFT)
-                        .fundingId("GRANT-2025-001").activityId("PROJ-AB").currency("USD")
-                        .totalAmount(BigDecimal.ZERO).project(project).build();
-
-        org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView eventView =
-                org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView.builder()
-                        .eventId("e1").projectId(project.getId())
-                        .eventType(org.cardanofoundation.lob.app.funding.domain.enums.EventType.FUNDING)
-                        .status(org.cardanofoundation.lob.app.funding.domain.enums.EventStatus.DRAFT)
-                        .fundingId("GRANT-2025-001").activityId("PROJ-AB").currency("USD")
-                        .totalAmount(BigDecimal.ZERO)
-                        .spendingItems(List.of()).milestoneAllocations(List.of()).build();
-
-        when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of());
-        when(spendingEventService.findByProjectId(project.getId())).thenReturn(List.of(event));
-        when(spendingEventService.toView(event)).thenReturn(eventView);
-
-        ProjectView view = projectService.toView(project);
-
-        assertThat(view.getMilestones()).isEmpty();
-        assertThat(view.getEvents()).containsExactly(eventView);
-    }
-
-    @Test
     void createWithMilestones_createsProjectAndMilestones() {
         ProjectEntity saved = projectEntity();
         when(projectRepository.saveAndFlush(any())).thenReturn(saved);
@@ -151,18 +120,18 @@ class ProjectServiceTest {
         when(milestoneService.create(eq(saved.getId()), any())).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.NOT_FOUND)));
 
         MilestoneCreateRequest milestoneReq = MilestoneCreateRequest.builder()
-                .label("MS-1")
-                .expectedCost(new BigDecimal("50000.00"))
+                .milestoneTitle("MS-1")
+                .milestoneAmount(new BigDecimal("50000.00"))
                 .currency("USD")
-                .dueDate(java.time.LocalDate.of(2025, 6, 30))
+                .milestoneDate(java.time.LocalDate.of(2025, 6, 30))
                 .build();
 
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
                 .organisationId("org1")
                 .fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB")
-                .activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00"))
+                .projectId("PROJ-AB")
+                .projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00"))
                 .currency("USD")
                 .milestones(List.of(milestoneReq))
                 .build();
@@ -187,16 +156,16 @@ class ProjectServiceTest {
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectUpdateRequest request = ProjectUpdateRequest.builder()
-                .activityTitle("Updated Title")
-                .expectedTotalAmount(new BigDecimal("250000.00"))
+                .projectTitle("Updated Title")
+                .totalAmount(new BigDecimal("250000.00"))
                 .currency("EUR")
                 .build();
 
         Either<ProblemDetail, ProjectEntity> result = projectService.update("p1", request);
 
         assertThat(result.isRight()).isTrue();
-        assertThat(project.getActivityTitle()).isEqualTo("Updated Title");
-        assertThat(project.getExpectedTotalAmount()).isEqualByComparingTo("250000.00");
+        assertThat(project.getProjectTitle()).isEqualTo("Updated Title");
+        assertThat(project.getTotalAmount()).isEqualByComparingTo("250000.00");
         assertThat(project.getCurrency()).isEqualTo("EUR");
     }
 
@@ -208,7 +177,7 @@ class ProjectServiceTest {
 
         projectService.update("p1", ProjectUpdateRequest.builder().build());
 
-        assertThat(project.getActivityTitle()).isEqualTo("Project AB");
+        assertThat(project.getProjectTitle()).isEqualTo("Project AB");
         assertThat(project.getCurrency()).isEqualTo("USD");
     }
 
@@ -232,27 +201,26 @@ class ProjectServiceTest {
     void toView_mapsProjectWithMilestonesAndEvents() {
         ProjectEntity project = projectEntity();
         MilestoneEntity milestone = MilestoneEntity.builder()
-                .id("m1").label("MS-1").expectedCost(new BigDecimal("50000")).currency("USD")
-                .dueDate(java.time.LocalDate.of(2025, 6, 30)).project(project).build();
+                .id("m1").milestoneTitle("MS-1").milestoneAmount(new BigDecimal("50000")).currency("USD")
+                .milestoneDate(java.time.LocalDate.of(2025, 6, 30)).project(project).build();
 
         MilestoneView milestoneView = MilestoneView.builder()
-                .milestoneId("m1").projectId(project.getId()).label("MS-1").expectedCost(new BigDecimal("50000")).currency("USD")
-                .dueDate(java.time.LocalDate.of(2025, 6, 30)).build();
+                .milestoneUid("m1").projectUid(project.getId()).milestoneTitle("MS-1")
+                .milestoneAmount(new BigDecimal("50000")).currency("USD")
+                .milestoneDate(java.time.LocalDate.of(2025, 6, 30)).build();
 
         when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of(milestone));
         when(milestoneService.toView(milestone)).thenReturn(milestoneView);
-        when(spendingEventService.findByProjectId(project.getId())).thenReturn(List.of());
 
         ProjectView view = projectService.toView(project);
 
-        assertThat(view.getProjectId()).isEqualTo(project.getId());
+        assertThat(view.getProjectUid()).isEqualTo(project.getId());
         assertThat(view.getOrganisationId()).isEqualTo("org1");
         assertThat(view.getFundingId()).isEqualTo("GRANT-2025-001");
-        assertThat(view.getActivityId()).isEqualTo("PROJ-AB");
-        assertThat(view.getActivityTitle()).isEqualTo("Project AB");
+        assertThat(view.getProjectId()).isEqualTo("PROJ-AB");
+        assertThat(view.getProjectTitle()).isEqualTo("Project AB");
         assertThat(view.getCurrency()).isEqualTo("USD");
         assertThat(view.getMilestones()).containsExactly(milestoneView);
-        assertThat(view.getEvents()).isEmpty();
     }
 
     // --- helpers ---
@@ -262,9 +230,9 @@ class ProjectServiceTest {
                 .id(ProjectEntity.id("org1", "PROJ-AB"))
                 .organisationId("org1")
                 .fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB")
-                .activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00"))
+                .projectId("PROJ-AB")
+                .projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00"))
                 .currency("USD")
                 .build();
     }

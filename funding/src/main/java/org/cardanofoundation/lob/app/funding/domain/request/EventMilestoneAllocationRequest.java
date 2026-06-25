@@ -17,10 +17,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Builder
 public class EventMilestoneAllocationRequest {
 
+    /** Milestone details — supply milestoneId to reference an existing one, or fill the other fields to create a new one. */
     @NotNull
     @Valid
     private MilestoneCreateRequest milestone;
 
+    /** Amount allocated to this milestone (required for FUNDING and REFUND events). */
     @Nullable
     @Schema(example = "50000.00")
     private BigDecimal allocatedAmount;

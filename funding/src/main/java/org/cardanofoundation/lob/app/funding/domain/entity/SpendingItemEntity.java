@@ -70,7 +70,7 @@ public class SpendingItemEntity extends CommonEntity implements Persistable<Stri
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
-    private SpendingEventEntity event;
+    private FundingEventEntity event;
 
     @Override
     public boolean isNew() {

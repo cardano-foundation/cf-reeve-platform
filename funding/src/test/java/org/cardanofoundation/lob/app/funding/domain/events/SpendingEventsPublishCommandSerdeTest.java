@@ -17,12 +17,8 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 
 /**
- * Verifies the funding -> blockchain-publisher event ({@link SpendingEventsPublishCommand} and its nested
- * {@link SpendingEventPublishView} graph) survives a JSON serialize/deserialize round trip, as it must when sent
- * over Kafka.
- *
- * <p>NOTE: the consuming {@code ObjectMapper} (e.g. the Kafka {@code JsonDeserializer}) must register
- * {@link JavaTimeModule}; otherwise the {@link LocalDate} fields fail to (de)serialise.
+ * Verifies the funding → blockchain-publisher event ({@link SpendingEventsPublishCommand} and its nested
+ * {@link SpendingEventPublishView} graph) survives a JSON serialize/deserialize round trip.
  */
 class SpendingEventsPublishCommandSerdeTest {
 
@@ -48,18 +44,23 @@ class SpendingEventsPublishCommandSerdeTest {
                 .notes("Invoice #1")
                 .build();
 
+        SpendingEventPublishView.ProjectAllocation allocation = SpendingEventPublishView.ProjectAllocation.builder()
+                .projectUid("proj-uid-1")
+                .projectId("PROJ-AB")
+                .projectTitle("Activity One")
+                .milestones(List.of())
+                .build();
+
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1")
-                .projectId("proj-1")
+                .organisationId("org-1")
                 .eventType(EventType.SPENDING)
                 .date(LocalDate.of(2025, 4, 30))
                 .fundingId("fund-1")
-                .activityId("act-1")
-                .activityTitle("Activity One")
-                .fundingTx("ftx-1")
+                .fundingHash("ftx-1")
                 .amount(new BigDecimal("100.00"))
                 .currency(usd)
-                .milestones(List.of())
+                .projectAllocations(List.of(allocation))
                 .items(List.of(item))
                 .build();
 
@@ -77,6 +78,8 @@ class SpendingEventsPublishCommandSerdeTest {
         assertThat(resultView.getDate()).isEqualTo(LocalDate.of(2025, 4, 30));
         assertThat(resultView.getCurrency().getId()).isEqualTo("ISO_4217:USD");
         assertThat(resultView.getCurrency().getCustCode()).isEqualTo("USD");
+        assertThat(resultView.getProjectAllocations()).hasSize(1);
+        assertThat(resultView.getProjectAllocations().get(0).getProjectId()).isEqualTo("PROJ-AB");
 
         assertThat(resultView.getItems()).hasSize(1);
         SpendingEventPublishView.SpendItem resultItem = resultView.getItems().get(0);
@@ -92,24 +95,29 @@ class SpendingEventsPublishCommandSerdeTest {
                 .id("ISO_4217:USD").custCode("USD").build();
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
-                .milestoneId("ms-1")
-                .milestoneLabel("Milestone AB")
-                .expectedCost(new BigDecimal("60.00"))
+                .milestoneUid("ms-uid-1")
+                .milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("60.00"))
                 .allocatedAmount(new BigDecimal("50.00"))
                 .currency(usd)
-                .dueDate(LocalDate.of(2025, 6, 30))
+                .milestoneDate(LocalDate.of(2025, 6, 30))
+                .build();
+
+        SpendingEventPublishView.ProjectAllocation allocation = SpendingEventPublishView.ProjectAllocation.builder()
+                .projectUid("proj-uid-1")
+                .projectId("PROJ-AB")
+                .milestones(List.of(milestone))
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-2")
-                .projectId("proj-1")
+                .organisationId("org-1")
                 .eventType(EventType.FUNDING)
                 .date(LocalDate.of(2025, 1, 15))
                 .fundingId("fund-1")
-                .activityId("act-1")
                 .amount(new BigDecimal("50.00"))
                 .currency(usd)
-                .milestones(List.of(milestone))
+                .projectAllocations(List.of(allocation))
                 .items(List.of())
                 .build();
 
@@ -119,12 +127,14 @@ class SpendingEventsPublishCommandSerdeTest {
         SpendingEventsPublishCommand result = objectMapper.readValue(json, SpendingEventsPublishCommand.class);
 
         SpendingEventPublishView resultView = result.getSpendingEvents().iterator().next();
-        assertThat(resultView.getMilestones()).hasSize(1);
-        SpendingEventPublishView.Milestone resultMilestone = resultView.getMilestones().get(0);
-        assertThat(resultMilestone.getMilestoneId()).isEqualTo("ms-1");
-        assertThat(resultMilestone.getExpectedCost()).isEqualByComparingTo("60.00");
+        assertThat(resultView.getProjectAllocations()).hasSize(1);
+        SpendingEventPublishView.ProjectAllocation resultAlloc = resultView.getProjectAllocations().get(0);
+        assertThat(resultAlloc.getMilestones()).hasSize(1);
+        SpendingEventPublishView.Milestone resultMilestone = resultAlloc.getMilestones().get(0);
+        assertThat(resultMilestone.getMilestoneUid()).isEqualTo("ms-uid-1");
+        assertThat(resultMilestone.getMilestoneAmount()).isEqualByComparingTo("60.00");
         assertThat(resultMilestone.getAllocatedAmount()).isEqualByComparingTo("50.00");
-        assertThat(resultMilestone.getDueDate()).isEqualTo(LocalDate.of(2025, 6, 30));
+        assertThat(resultMilestone.getMilestoneDate()).isEqualTo(LocalDate.of(2025, 6, 30));
         assertThat(resultMilestone.getCurrency().getId()).isEqualTo("ISO_4217:USD");
     }
 
