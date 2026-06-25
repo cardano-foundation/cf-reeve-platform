@@ -293,6 +293,73 @@ public class SpendingEventController {
                                                       ],
                                                       "items": []
                                                     }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – new project + sub-project + milestone",
+                                            summary = "Step 1 – Create project PROJ-GH with sub-project WP-1 and milestone MS-001 on-the-fly",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-2025-001",
+                                                      "fundingHash": "7e8f9a0b1c...",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currency": "USD",
+                                                      "allocations": [
+                                                        {
+                                                          "fundingId": "GRANT-2025-001-GH",
+                                                          "projectId": "PROJ-GH",
+                                                          "projectTitle": "Project GH",
+                                                          "totalAmount": "300000.00",
+                                                          "currency": "USD",
+                                                          "subProject": {
+                                                            "subProjectId": "WP-1",
+                                                            "projectTitle": "Work Package 1"
+                                                          },
+                                                          "milestones": [
+                                                            {
+                                                              "milestone": {
+                                                                "milestoneId": "MS-001",
+                                                                "milestoneTitle": "Deliverable 1",
+                                                                "milestoneAmount": "50000.00",
+                                                                "currency": "USD",
+                                                                "milestoneDate": "2025-09-30"
+                                                              },
+                                                              "allocatedAmount": "50000.00"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ],
+                                                      "items": []
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – existing project + sub-project + milestone",
+                                            summary = "Step 2 – Reference PROJ-GH / WP-1 / MS-001 created above",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-2025-001",
+                                                      "fundingHash": "8f9a0b1c2d...",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currency": "USD",
+                                                      "allocations": [
+                                                        {
+                                                          "projectId": "PROJ-GH",
+                                                          "subProject": {
+                                                            "subProjectId": "WP-1"
+                                                          },
+                                                          "milestones": [
+                                                            {
+                                                              "milestone": { "milestoneId": "MS-001" },
+                                                              "allocatedAmount": "25000.00"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ],
+                                                      "items": []
+                                                    }"""
                                     )
                             }
                     )

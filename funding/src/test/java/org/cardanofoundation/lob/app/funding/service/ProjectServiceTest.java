@@ -198,6 +198,40 @@ class ProjectServiceTest {
     }
 
     @Test
+    void toView_includesSubProjects() {
+        ProjectEntity parent = projectEntity();
+        ProjectEntity subProject = ProjectEntity.builder()
+                .id("sub-p1").organisationId("org1").projectId("SUB-AB")
+                .projectTitle("Sub Project AB").parentProject(parent).build();
+
+        when(milestoneService.findByProjectId(parent.getId())).thenReturn(List.of());
+        when(projectRepository.findByParentProject_Id(parent.getId())).thenReturn(List.of(subProject));
+        when(milestoneService.findByProjectId(subProject.getId())).thenReturn(List.of());
+        when(projectRepository.findByParentProject_Id(subProject.getId())).thenReturn(List.of());
+
+        ProjectView view = projectService.toView(parent);
+
+        assertThat(view.getSubProjects()).hasSize(1);
+        assertThat(view.getSubProjects().get(0).getProjectId()).isEqualTo("SUB-AB");
+        assertThat(view.getParentProjectUid()).isNull();
+    }
+
+    @Test
+    void toView_setsParentProjectUid_forSubProject() {
+        ProjectEntity parent = projectEntity();
+        ProjectEntity subProject = ProjectEntity.builder()
+                .id("sub-p1").organisationId("org1").projectId("SUB-AB")
+                .projectTitle("Sub Project AB").parentProject(parent).build();
+
+        when(milestoneService.findByProjectId(subProject.getId())).thenReturn(List.of());
+        when(projectRepository.findByParentProject_Id(subProject.getId())).thenReturn(List.of());
+
+        ProjectView view = projectService.toView(subProject);
+
+        assertThat(view.getParentProjectUid()).isEqualTo(parent.getId());
+    }
+
+    @Test
     void toView_mapsProjectWithMilestonesAndEvents() {
         ProjectEntity project = projectEntity();
         MilestoneEntity milestone = MilestoneEntity.builder()

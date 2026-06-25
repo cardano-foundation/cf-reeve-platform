@@ -2,10 +2,12 @@ package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,6 +28,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.*;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.*;
 
@@ -307,6 +310,249 @@ class SpendingEventServiceTest {
         verify(fundingEventRepository, never()).delete(any());
     }
 
+    // --- findByProjectIdAndFilter ---
+
+    @Test
+    void findByProjectIdAndFilter_delegatesToRepository() {
+        Pageable pageable = PageRequest.of(0, 10);
+        var page = new PageImpl<>(List.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(fundingEventRepository.findByProjectIdAndFilter("p1", EventStatus.DRAFT, EventType.SPENDING, pageable))
+                .thenReturn(page);
+
+        assertThat(spendingEventService.findByProjectIdAndFilter(
+                "p1", Optional.of(EventStatus.DRAFT), Optional.of(EventType.SPENDING), pageable))
+                .isEqualTo(page);
+    }
+
+    @Test
+    void findByProjectIdAndFilter_passesNulls_whenFiltersEmpty() {
+        Pageable pageable = PageRequest.of(0, 10);
+        var page = new PageImpl<FundingEventEntity>(List.of());
+        when(fundingEventRepository.findByProjectIdAndFilter("p1", null, null, pageable)).thenReturn(page);
+
+        assertThat(spendingEventService.findByProjectIdAndFilter("p1", Optional.empty(), Optional.empty(), pageable))
+                .isEqualTo(page);
+    }
+
+    // --- additional create validation paths ---
+
+    @Test
+    void create_returnsLeft_whenProjectIdNull() {
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.SPENDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId(null)
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenNewRootProjectMissingTotalAmount() {
+        when(projectRepository.existsById(any())).thenReturn(false);
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.SPENDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-NEW")
+                        .projectTitle("New Project")
+                        .fundingId("GRANT-2025-001")
+                        // totalAmount and currency absent, no subProject
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenNewRootProjectMissingFundingId() {
+        when(projectRepository.existsById(any())).thenReturn(false);
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.SPENDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-NEW")
+                        .projectTitle("New Project")
+                        .totalAmount(new BigDecimal("100000.00"))
+                        .currency("USD")
+                        // fundingId absent
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    // --- sub-project paths ---
+
+    @Test
+    void create_successWithExistingSubProject() {
+        // projectEntity() uses id("p1"); service resolves root by hash then sub by subId(parent.getId(), "WP-1")
+        ProjectEntity rootProject = projectEntity();
+        String subProjectUid = ProjectEntity.subId(rootProject.getId(), "WP-1");
+        ProjectEntity subProject = ProjectEntity.builder()
+                .id(subProjectUid).organisationId("org1").projectId("WP-1")
+                .projectTitle("Work Package 1").parentProject(rootProject).build();
+        MilestoneEntity milestone = MilestoneEntity.builder()
+                .id("m1").milestoneTitle("Milestone AB").milestoneAmount(new BigDecimal("50000.00"))
+                .currency("USD").milestoneDate(LocalDate.of(2025, 6, 30)).project(subProject).build();
+
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any()))
+                .thenReturn(Optional.of(rootProject))   // root project lookup
+                .thenReturn(Optional.of(subProject));   // sub-project lookup
+        when(milestoneRepository.findByProject_IdAndMilestoneId(any(), eq("MS-1"))).thenReturn(Optional.of(milestone));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.SPENDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-AB")
+                        .subProject(SubProjectRequest.builder().subProjectId("WP-1").build())
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_successWithNewSubProject() {
+        ProjectEntity rootProject = projectEntity();
+
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any()))
+                .thenReturn(Optional.of(rootProject))  // root project lookup
+                .thenReturn(Optional.empty());          // sub-project not found → create new
+        when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.SPENDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-AB")
+                        .subProject(SubProjectRequest.builder()
+                                .subProjectId("WP-NEW")
+                                .projectTitle("New Work Package")
+                                .build())
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder()
+                                        .milestoneTitle("Deliverable 1")
+                                        .milestoneAmount(new BigDecimal("50000.00"))
+                                        .currency("USD")
+                                        .milestoneDate(LocalDate.of(2025, 9, 30))
+                                        .build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(projectRepository).saveAndFlush(argThat(p -> "WP-NEW".equals(p.getProjectId())));
+    }
+
+    @Test
+    void create_returnsLeft_whenSubProjectIdNull() {
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.SPENDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-AB")
+                        .subProject(SubProjectRequest.builder().subProjectId(null).build())
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenNewSubProjectMissingTitle() {
+        ProjectEntity rootProject = projectEntity();
+
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any()))
+                .thenReturn(Optional.of(rootProject))  // root project lookup
+                .thenReturn(Optional.empty());          // sub-project not found
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.SPENDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-AB")
+                        .subProject(SubProjectRequest.builder()
+                                .subProjectId("WP-NEW")
+                                .projectTitle(null)
+                                .build())
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
     // --- update ---
 
     @Test
@@ -348,6 +594,38 @@ class SpendingEventServiceTest {
                 requestWithExistingProject("PROJ-AB", "MS-1"));
 
         assertThat(result.isRight()).isTrue();
+    }
+
+    @Test
+    void update_fundingEvent_doesNotRepopulateItems() {
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProject_IdAndMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1")
+                .eventType(EventType.FUNDING)
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-AB")
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
+                                .allocatedAmount(new BigDecimal("50000.00"))
+                                .build()))
+                        .build()))
+                .items(List.of(itemRequest(new BigDecimal("100.00"))))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getSpendingItems()).isEmpty();
     }
 
     // --- toView ---
@@ -416,6 +694,100 @@ class SpendingEventServiceTest {
 
         assertThat(view.getSpendingItems()).hasSize(1);
         assertThat(view.getSpendingItems().get(0).getCategory()).isEqualTo("Personnel");
+    }
+
+    // --- toPublishView ---
+
+    @Test
+    void toPublishView_mapsScalarFields() {
+        FundingEventEntity event = FundingEventEntity.builder()
+                .id("e1").eventType(EventType.SPENDING).status(EventStatus.PUBLISHED)
+                .organisationId("org1").fundingId("GRANT-001").currency("USD")
+                .totalAmount(new BigDecimal("300.00")).fundingHash("funding-hash").fundingEntity("CF")
+                .build();
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 15, 10, 0));
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getEventId()).isEqualTo("e1");
+        assertThat(view.getOrganisationId()).isEqualTo("org1");
+        assertThat(view.getEventType()).isEqualTo(EventType.SPENDING);
+        assertThat(view.getDate()).isEqualTo(LocalDate.of(2025, 6, 15));
+        assertThat(view.getFundingId()).isEqualTo("GRANT-001");
+        assertThat(view.getFundingHash()).isEqualTo("funding-hash");
+        assertThat(view.getFundingEntity()).isEqualTo("CF");
+        assertThat(view.getAmount()).isEqualByComparingTo("300.00");
+        assertThat(view.getCurrency().getCustCode()).isEqualTo("USD");
+        assertThat(view.getCurrency().getId()).isEqualTo("ISO_4217:USD");
+        assertThat(view.getProjectAllocations()).isEmpty();
+        assertThat(view.getItems()).isEmpty();
+    }
+
+    @Test
+    void toPublishView_currencyAlreadyIsoFormatted_extractsCustCode() {
+        FundingEventEntity event = FundingEventEntity.builder()
+                .id("e1").eventType(EventType.SPENDING).status(EventStatus.DRAFT)
+                .organisationId("org1").fundingId("GRANT-001").currency("ISO_4217:EUR")
+                .totalAmount(BigDecimal.ZERO).build();
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 15, 10, 0));
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getCurrency().getId()).isEqualTo("ISO_4217:EUR");
+        assertThat(view.getCurrency().getCustCode()).isEqualTo("EUR");
+    }
+
+    @Test
+    void toPublishView_mapsSpendingItems() {
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        event.setCreatedAt(LocalDateTime.of(2025, 4, 3, 0, 0));
+        SpendingItemEntity item = itemEntity(event);
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getItems()).hasSize(1);
+        SpendingEventPublishView.SpendItem spendItem = view.getItems().get(0);
+        assertThat(spendItem.getCategory()).isEqualTo("Personnel");
+        assertThat(spendItem.getCurrency().getCustCode()).isEqualTo("USD");
+        assertThat(spendItem.getCurrency().getId()).isEqualTo("ISO_4217:USD");
+        assertThat(spendItem.getAmountFcy()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void toPublishView_mapsProjectAllocations() {
+        FundingEventEntity event = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 0, 0));
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = milestoneEntity("m1");
+        EventMilestoneAllocationEntity.Id allocId = new EventMilestoneAllocationEntity.Id("e1", "m1");
+        EventMilestoneAllocationEntity alloc = EventMilestoneAllocationEntity.builder()
+                .id(allocId).allocatedAmount(new BigDecimal("50000.00")).build();
+
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getProjectAllocations()).hasSize(1);
+        SpendingEventPublishView.ProjectAllocation allocation = view.getProjectAllocations().get(0);
+        assertThat(allocation.getProjectUid()).isEqualTo("p1");
+        assertThat(allocation.getMilestones()).hasSize(1);
+        SpendingEventPublishView.Milestone ms = allocation.getMilestones().get(0);
+        assertThat(ms.getMilestoneUid()).isEqualTo("m1");
+        assertThat(ms.getMilestoneTitle()).isEqualTo("Milestone AB");
+        assertThat(ms.getAllocatedAmount()).isEqualByComparingTo("50000.00");
+        assertThat(ms.getCurrency().getCustCode()).isEqualTo("USD");
+        assertThat(ms.getCurrency().getId()).isEqualTo("ISO_4217:USD");
     }
 
     // --- helpers ---

@@ -328,7 +328,6 @@ public class SpendingEventService {
         ProjectEntity subProject = ProjectEntity.builder()
                 .id(subProjectUid)
                 .organisationId(parent.getOrganisationId())
-                .fundingId(parent.getFundingId())
                 .projectId(subReq.getSubProjectId())
                 .projectTitle(subReq.getProjectTitle())
                 .parentProject(parent)

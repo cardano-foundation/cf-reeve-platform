@@ -38,8 +38,8 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Column(name = "organisation_id", nullable = false)
     private String organisationId;
 
-    @NotBlank
-    @Column(name = "funding_id", nullable = false)
+    @Nullable
+    @Column(name = "funding_id")
     private String fundingId;
 
     @NotBlank
