@@ -43,10 +43,10 @@ class SpendingEventConverterTest {
         return SpendingEventPublishView.Currency.builder().id("ISO_4217:USD").custCode("USD").build();
     }
 
-    private SpendingEventPublishView.ProjectAllocation allocation(String projectId, String activityId, String activityTitle,
+    private SpendingEventPublishView.ProjectAllocation allocation(String projectId, String projectTitle,
                                                                    List<SpendingEventPublishView.Milestone> milestones) {
         return SpendingEventPublishView.ProjectAllocation.builder()
-                .projectId(projectId).activityId(activityId).activityTitle(activityTitle)
+                .projectId(projectId).projectTitle(projectTitle)
                 .milestones(milestones).build();
     }
 
@@ -60,10 +60,10 @@ class SpendingEventConverterTest {
                 .eventType(EventType.SPENDING)
                 .date(LocalDate.of(2026, 6, 9))
                 .fundingId("fund-1")
-                .fundingTx("ftx-1")
+                .fundingHash("ftx-1")
                 .amount(new BigDecimal("123.45"))
                 .currency(usd())
-                .projectAllocations(List.of(allocation("proj-1", "act-1", "Activity Title", List.of())))
+                .projectAllocations(List.of(allocation("proj-1", "Activity Title", List.of())))
                 .items(List.of())
                 .build();
 
@@ -74,7 +74,7 @@ class SpendingEventConverterTest {
         assertEquals(EventType.SPENDING, entity.getEventType());
         assertEquals(LocalDate.of(2026, 6, 9), entity.getEventDate());
         assertEquals("fund-1", entity.getFundingId());
-        assertEquals("act-1", entity.getActivityId());
+        assertEquals("proj-1", entity.getActivityId());
         assertEquals("Activity Title", entity.getActivityTitle());
         assertEquals("ftx-1", entity.getFundingTx());
         assertThat(entity.getFundingDocHash()).isNull();
@@ -97,16 +97,16 @@ class SpendingEventConverterTest {
                 .build();
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
-                .milestoneId("ms-1").milestoneLabel("Milestone AB")
-                .expectedCost(new BigDecimal("60.00")).allocatedAmount(new BigDecimal("50.00"))
-                .currency(usd()).dueDate(LocalDate.of(2025, 6, 30))
+                .milestoneUid("ms-1").milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("60.00")).allocatedAmount(new BigDecimal("50.00"))
+                .currency(usd()).milestoneDate(LocalDate.of(2025, 6, 30))
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
                 .date(LocalDate.of(2026, 6, 9)).fundingId("fund-1")
                 .amount(new BigDecimal("100.00")).currency(usd())
-                .projectAllocations(List.of(allocation("proj-1", "act-1", null, List.of(milestone))))
+                .projectAllocations(List.of(allocation("proj-1", null, List.of(milestone))))
                 .items(List.of(item))
                 .build();
 
