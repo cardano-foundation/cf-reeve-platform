@@ -41,7 +41,11 @@ public class SpendingEventCreateRequest {
 
     @Nullable
     @Schema(example = "2736ff28abc...")
-    private String fundingTx;
+    private String fundingHash;
+
+    @Nullable
+    @Schema(example = "Cardano Foundation", description = "Name of the entity providing the funding. Required for FUNDING events.")
+    private String fundingEntity;
 
     @NotBlank
     @Schema(example = "USD")

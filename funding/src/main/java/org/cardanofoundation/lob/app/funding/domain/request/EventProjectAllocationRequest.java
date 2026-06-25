@@ -19,38 +19,38 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Builder
 public class EventProjectAllocationRequest {
 
-    // --- Existing project: supply projectId only ---
+    // --- Existing project: supply projectId (user-defined) only ---
 
     @Nullable
-    @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
-            description = "ID of an existing project. When set, all new-project fields below are ignored.")
+    @Schema(example = "PROJ-AB",
+            description = "User-defined project ID (projectId field). When projectId maps to an existing project, all new-project fields below are ignored.")
     private String projectId;
 
-    // --- New project: supply the fields below when projectId is null ---
+    // --- New project: supply the fields below when creating a new project ---
 
     @Nullable
     @Schema(example = "GRANT-2025-001")
     private String fundingId;
 
     @Nullable
-    @Schema(example = "PROJ-AB")
-    private String activityId;
-
-    @Nullable
     @Schema(example = "Project AB")
-    private String activityTitle;
+    private String projectTitle;
 
     @Nullable
-    @Schema(example = "WP-1", description = "Optional sub-project / workstream identifier")
-    private String activitySubId;
+    @Schema(example = "200000.00", description = "Required when creating a new root project without a sub-project.")
+    private BigDecimal totalAmount;
 
     @Nullable
-    @Schema(example = "200000.00")
-    private BigDecimal expectedTotalAmount;
-
-    @Nullable
-    @Schema(example = "USD")
+    @Schema(example = "USD", description = "Required when creating a new root project without a sub-project.")
     private String currency;
+
+    /**
+     * Optional sub-project under the resolved/created root project.
+     * When set, milestones are attached to the sub-project and the allocation targets the sub-project.
+     * When null, the allocation targets the root project directly.
+     */
+    @Nullable
+    private SubProjectRequest subProject;
 
     /** At least one milestone must be supplied per project allocation. */
     @NotEmpty

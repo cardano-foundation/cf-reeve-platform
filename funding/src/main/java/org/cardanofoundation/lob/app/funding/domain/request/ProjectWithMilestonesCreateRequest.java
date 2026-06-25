@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -30,19 +29,15 @@ public class ProjectWithMilestonesCreateRequest {
 
     @NotBlank
     @Schema(example = "PROJ-AB")
-    private String activityId;
+    private String projectId;
 
     @NotBlank
     @Schema(example = "Project AB")
-    private String activityTitle;
-
-    @Nullable
-    @Schema(example = "WP-1", description = "Optional sub-project / workstream identifier")
-    private String activitySubId;
+    private String projectTitle;
 
     @NotNull
     @Schema(example = "200000.00")
-    private BigDecimal expectedTotalAmount;
+    private BigDecimal totalAmount;
 
     @NotBlank
     @Schema(example = "USD")

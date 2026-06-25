@@ -18,15 +18,11 @@ public class ProjectUpdateRequest {
 
     @Nullable
     @Schema(example = "Updated Project Name")
-    private String activityTitle;
-
-    @Nullable
-    @Schema(example = "WP-2", description = "Optional sub-project / workstream identifier")
-    private String activitySubId;
+    private String projectTitle;
 
     @Nullable
     @Schema(example = "250000.00")
-    private BigDecimal expectedTotalAmount;
+    private BigDecimal totalAmount;
 
     @Nullable
     @NotBlank

@@ -27,9 +27,9 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
 
     @EmbeddedId
     @AttributeOverrides({
-            @AttributeOverride(name = "eventId",     column = @Column(name = "event_id")),
-            @AttributeOverride(name = "projectId",   column = @Column(name = "project_id")),
-            @AttributeOverride(name = "milestoneId", column = @Column(name = "milestone_id"))
+            @AttributeOverride(name = "eventId",      column = @Column(name = "event_id")),
+            @AttributeOverride(name = "projectUid",   column = @Column(name = "project_uid")),
+            @AttributeOverride(name = "milestoneUid", column = @Column(name = "milestone_uid"))
     })
     private Id id;
 
@@ -40,12 +40,12 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumns({
             @JoinColumn(name = "event_id",   referencedColumnName = "event_id",   insertable = false, updatable = false),
-            @JoinColumn(name = "project_id", referencedColumnName = "project_id", insertable = false, updatable = false)
+            @JoinColumn(name = "project_uid", referencedColumnName = "project_uid", insertable = false, updatable = false)
     })
     private EventProjectAllocationEntity allocation;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "milestone_id", insertable = false, updatable = false)
+    @JoinColumn(name = "milestone_uid", insertable = false, updatable = false)
     private MilestoneEntity milestone;
 
     @Embeddable
@@ -58,11 +58,11 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
         @Column(name = "event_id")
         private String eventId;
 
-        @Column(name = "project_id")
-        private String projectId;
+        @Column(name = "project_uid")
+        private String projectUid;
 
-        @Column(name = "milestone_id")
-        private String milestoneId;
+        @Column(name = "milestone_uid")
+        private String milestoneUid;
     }
 
     @Override

@@ -91,9 +91,9 @@ public class SpendingEventController {
     @Operation(
             summary = "Create a new event with project and milestone allocations",
             description = "Creates an event (FUNDING, SPENDING or REFUND) and resolves or creates the referenced " +
-                    "projects and milestones in a single request. Supply `projectId` to reference an existing project, " +
-                    "or omit it to create a new one. Similarly, supply `milestoneId` to reference an existing milestone " +
-                    "or omit it to create a new one.",
+                    "projects and milestones in a single request. Supply `projectId` (user-defined project ID) to " +
+                    "reference an existing project or create a new one. Supply `milestoneId` (user-defined milestone ID) " +
+                    "to reference an existing milestone, or omit it to create a new one.",
             requestBody = @RequestBody(
                     required = true,
                     content = @Content(
@@ -108,14 +108,14 @@ public class SpendingEventController {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "FUNDING",
                                                       "fundingId": "GRANT-2025-001",
-                                                      "fundingTx": "2736ff28abc...",
+                                                      "fundingHash": "2736ff28abc...",
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
+                                                          "projectId": "PROJ-AB",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "7a6289e0-8409-4c54-814d-35176581df09" },
+                                                              "milestone": { "milestoneId": "MS-1" },
                                                               "allocatedAmount": "50000.00"
                                                             }
                                                           ]
@@ -132,23 +132,22 @@ public class SpendingEventController {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "FUNDING",
                                                       "fundingId": "GRANT-2025-001",
-                                                      "fundingTx": "2736ff28abc...",
+                                                      "fundingHash": "2736ff28abc...",
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001",
-                                                          "activityId": "PROJ-AB",
-                                                          "activityTitle": "Project AB",
-                                                          "activitySubId": "WP-1",
-                                                          "expectedTotalAmount": "200000.00",
+                                                          "projectId": "PROJ-AB",
+                                                          "projectTitle": "Project AB",
+                                                          "totalAmount": "200000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "label": "Milestone 1",
-                                                                "expectedCost": "100000.00",
+                                                                "milestoneTitle": "Milestone 1",
+                                                                "milestoneAmount": "100000.00",
                                                                 "currency": "USD",
-                                                                "dueDate": "2025-12-31"
+                                                                "milestoneDate": "2025-12-31"
                                                               },
                                                               "allocatedAmount": "100000.00"
                                                             }
@@ -169,10 +168,10 @@ public class SpendingEventController {
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
+                                                          "projectId": "PROJ-AB",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "7a6289e0-8409-4c54-814d-35176581df09" }
+                                                              "milestone": { "milestoneId": "MS-1" }
                                                             }
                                                           ]
                                                         }
@@ -204,17 +203,17 @@ public class SpendingEventController {
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001",
-                                                          "activityId": "PROJ-CD",
-                                                          "activityTitle": "Project CD",
-                                                          "expectedTotalAmount": "100000.00",
+                                                          "projectId": "PROJ-CD",
+                                                          "projectTitle": "Project CD",
+                                                          "totalAmount": "100000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "label": "Milestone 2",
-                                                                "expectedCost": "50000.00",
+                                                                "milestoneTitle": "Milestone 2",
+                                                                "milestoneAmount": "50000.00",
                                                                 "currency": "USD",
-                                                                "dueDate": "2025-09-30"
+                                                                "milestoneDate": "2025-09-30"
                                                               }
                                                             }
                                                           ]
@@ -241,14 +240,14 @@ public class SpendingEventController {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "REFUND",
                                                       "fundingId": "GRANT-2025-001",
-                                                      "fundingTx": "refund-tx-hash...",
+                                                      "fundingHash": "refund-tx-hash...",
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
+                                                          "projectId": "PROJ-AB",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "7a6289e0-8409-4c54-814d-35176581df09" },
+                                                              "milestone": { "milestoneId": "MS-1" },
                                                               "allocatedAmount": "10000.00"
                                                             }
                                                           ]
@@ -265,22 +264,22 @@ public class SpendingEventController {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "REFUND",
                                                       "fundingId": "GRANT-2025-001",
-                                                      "fundingTx": "refund-tx-hash...",
+                                                      "fundingHash": "refund-tx-hash...",
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001",
-                                                          "activityId": "PROJ-EF",
-                                                          "activityTitle": "Project EF",
-                                                          "expectedTotalAmount": "80000.00",
+                                                          "projectId": "PROJ-EF",
+                                                          "projectTitle": "Project EF",
+                                                          "totalAmount": "80000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "label": "Final Milestone",
-                                                                "expectedCost": "80000.00",
+                                                                "milestoneTitle": "Final Milestone",
+                                                                "milestoneAmount": "80000.00",
                                                                 "currency": "USD",
-                                                                "dueDate": "2026-03-31"
+                                                                "milestoneDate": "2026-03-31"
                                                               },
                                                               "allocatedAmount": "5000.00"
                                                             }

@@ -20,11 +20,11 @@ public class MilestoneUpdateRequest {
 
     @Nullable
     @Schema(example = "Updated Milestone Name")
-    private String label;
+    private String milestoneTitle;
 
     @Nullable
     @Schema(example = "75000.00")
-    private BigDecimal expectedCost;
+    private BigDecimal milestoneAmount;
 
     @Nullable
     @NotBlank
@@ -34,6 +34,6 @@ public class MilestoneUpdateRequest {
     @Nullable
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-09-30")
-    private LocalDate dueDate;
+    private LocalDate milestoneDate;
 
 }

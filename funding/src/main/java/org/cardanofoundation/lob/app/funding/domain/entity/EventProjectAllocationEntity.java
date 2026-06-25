@@ -27,8 +27,8 @@ public class EventProjectAllocationEntity extends CommonEntity implements Persis
 
     @EmbeddedId
     @AttributeOverrides({
-            @AttributeOverride(name = "eventId",   column = @Column(name = "event_id")),
-            @AttributeOverride(name = "projectId", column = @Column(name = "project_id"))
+            @AttributeOverride(name = "eventId",    column = @Column(name = "event_id")),
+            @AttributeOverride(name = "projectUid", column = @Column(name = "project_uid"))
     })
     private Id id;
 
@@ -37,7 +37,7 @@ public class EventProjectAllocationEntity extends CommonEntity implements Persis
     private FundingEventEntity event;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", insertable = false, updatable = false)
+    @JoinColumn(name = "project_uid", insertable = false, updatable = false)
     private ProjectEntity project;
 
     /** Milestone allocations for this project within the event. */
@@ -55,8 +55,8 @@ public class EventProjectAllocationEntity extends CommonEntity implements Persis
         @Column(name = "event_id")
         private String eventId;
 
-        @Column(name = "project_id")
-        private String projectId;
+        @Column(name = "project_uid")
+        private String projectUid;
     }
 
     @Override

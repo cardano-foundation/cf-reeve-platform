@@ -29,7 +29,9 @@ public class SpendingEventPublishView {
 
     private String fundingId;
     @Nullable
-    private String fundingTx;
+    private String fundingHash;
+    @Nullable
+    private String fundingEntity;
 
     private BigDecimal amount;
     private Currency currency;
@@ -48,12 +50,13 @@ public class SpendingEventPublishView {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class ProjectAllocation {
+        private String projectUid;
         private String projectId;
-        private String activityId;
         @Nullable
-        private String activityTitle;
+        private String projectTitle;
+        /** Set when the allocation targets a sub-project; contains the root project UID (SHA256). */
         @Nullable
-        private String activitySubId;
+        private String parentProjectUid;
         private List<Milestone> milestones;
     }
 
@@ -63,14 +66,14 @@ public class SpendingEventPublishView {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class Milestone {
-        private String milestoneId;
-        private String milestoneLabel;
+        private String milestoneUid;
+        private String milestoneTitle;
         @Nullable
-        private BigDecimal expectedCost;
+        private BigDecimal milestoneAmount;
         @Nullable
         private BigDecimal allocatedAmount;
         private Currency currency;
-        private LocalDate dueDate;
+        private LocalDate milestoneDate;
     }
 
     @Getter

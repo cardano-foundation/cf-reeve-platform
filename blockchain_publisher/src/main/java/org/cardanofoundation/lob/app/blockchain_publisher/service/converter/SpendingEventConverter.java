@@ -40,9 +40,9 @@ public class SpendingEventConverter {
         entity.setEventDate(view.getDate());
 
         entity.setFundingId(view.getFundingId());
-        entity.setActivityId(primary != null ? primary.getActivityId() : null);
-        entity.setActivityTitle(primary != null ? primary.getActivityTitle() : null);
-        entity.setFundingTx(view.getFundingTx());
+        entity.setActivityId(primary != null ? primary.getProjectId() : null);
+        entity.setActivityTitle(primary != null ? primary.getProjectTitle() : null);
+        entity.setFundingTx(view.getFundingHash());
         entity.setFundingDocHash(null);
 
         entity.setTotalAmount(orZero(view.getAmount()));
@@ -93,15 +93,15 @@ public class SpendingEventConverter {
         return view.getProjectAllocations().stream()
                 .filter(a -> a.getMilestones() != null)
                 .flatMap(a -> a.getMilestones().stream())
-                .map(milestone -> EventMilestoneAllocationEntity.builder()
+                .map(milestone -> (EventMilestoneAllocationEntity) EventMilestoneAllocationEntity.builder()
                         .event(event)
-                        .milestoneId(milestone.getMilestoneId())
-                        .milestoneLabel(milestone.getMilestoneLabel())
-                        .expectedCost(milestone.getExpectedCost())
+                        .milestoneId(milestone.getMilestoneUid())
+                        .milestoneLabel(milestone.getMilestoneTitle())
+                        .expectedCost(milestone.getMilestoneAmount())
                         .allocatedAmount(milestone.getAllocatedAmount())
                         .currency(custCode(milestone.getCurrency()))
                         .currencyId(currencyId(milestone.getCurrency()))
-                        .dueDate(milestone.getDueDate())
+                        .dueDate(milestone.getMilestoneDate())
                         .build())
                 .toList();
     }

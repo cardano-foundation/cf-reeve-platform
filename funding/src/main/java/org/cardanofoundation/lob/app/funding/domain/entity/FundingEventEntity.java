@@ -80,8 +80,13 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     private String ledgerDispatchStatusErrorReason;
 
     @Nullable
-    @Column(name = "funding_tx")
-    private String fundingTx;
+    @Column(name = "funding_hash")
+    private String fundingHash;
+
+    /** Identifying name of the entity providing the funding. Populated for FUNDING events only. */
+    @Nullable
+    @Column(name = "funding_entity")
+    private String fundingEntity;
 
     @NotNull
     @Column(name = "total_amount", nullable = false)

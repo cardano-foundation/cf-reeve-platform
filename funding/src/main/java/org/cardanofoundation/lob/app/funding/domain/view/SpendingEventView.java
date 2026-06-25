@@ -49,7 +49,11 @@ public class SpendingEventView {
 
     @Nullable
     @Schema(example = "2736ff28...")
-    private String fundingTx;
+    private String fundingHash;
+
+    @Nullable
+    @Schema(example = "Cardano Foundation")
+    private String fundingEntity;
 
     /** One entry per project this event is allocated to. */
     private List<EventProjectAllocationView> projectAllocations;

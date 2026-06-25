@@ -113,7 +113,7 @@ class ProjectControllerTest {
     @Test
     void createProjectWithMilestones_returns409_whenAlreadyExists() {
         ProjectWithMilestonesCreateRequest request = createWithMilestonesRequest();
-        when(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(true);
+        when(projectService.existsByOrganisationIdAndProjectId("org1", "PROJ-AB")).thenReturn(true);
 
         ResponseEntity<?> response = projectController.createProjectWithMilestones(request);
 
@@ -127,7 +127,7 @@ class ProjectControllerTest {
         ProjectWithMilestonesCreateRequest request = createWithMilestonesRequest();
         ProjectEntity project = projectEntity();
         ProjectView view = projectView();
-        when(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectService.existsByOrganisationIdAndProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectService.createWithMilestones(request)).thenReturn(project);
         when(projectService.toView(project)).thenReturn(view);
 
@@ -141,7 +141,7 @@ class ProjectControllerTest {
 
     @Test
     void updateProject_returns404_whenNotFound() {
-        ProjectUpdateRequest request = ProjectUpdateRequest.builder().activityTitle("New").build();
+        ProjectUpdateRequest request = ProjectUpdateRequest.builder().projectTitle("New").build();
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
         problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
         when(projectService.update("p1", request)).thenReturn(Either.left(problem));
@@ -154,7 +154,7 @@ class ProjectControllerTest {
 
     @Test
     void updateProject_returns200_withView() {
-        ProjectUpdateRequest request = ProjectUpdateRequest.builder().activityTitle("New").build();
+        ProjectUpdateRequest request = ProjectUpdateRequest.builder().projectTitle("New").build();
         ProjectEntity project = projectEntity();
         ProjectView view = projectView();
         when(projectService.update("p1", request)).thenReturn(Either.right(project));
@@ -194,23 +194,23 @@ class ProjectControllerTest {
     private ProjectEntity projectEntity() {
         return ProjectEntity.builder()
                 .id("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD").build();
+                .projectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
     private ProjectView projectView() {
         return ProjectView.builder()
-                .projectId("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD")
+                .projectUid("p1").organisationId("org1").fundingId("GRANT-2025-001")
+                .projectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).build();
     }
 
     private ProjectWithMilestonesCreateRequest createWithMilestonesRequest() {
         return ProjectWithMilestonesCreateRequest.builder()
                 .organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD")
+                .projectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).build();
     }
 

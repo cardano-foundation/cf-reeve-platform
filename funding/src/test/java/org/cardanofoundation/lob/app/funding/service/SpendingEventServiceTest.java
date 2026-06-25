@@ -92,23 +92,25 @@ class SpendingEventServiceTest {
     // --- create ---
 
     @Test
-    void create_returnsLeft_whenProjectIdNotFound() {
-        when(projectRepository.findById("p-missing")).thenReturn(Optional.empty());
+    void create_returnsLeft_whenNewProjectMissingRequiredFields() {
+        // projectId is user-defined; not found → service tries to create, but projectTitle is absent
+        when(projectRepository.existsById(any())).thenReturn(false);
 
-        SpendingEventCreateRequest request = requestWithExistingProject("p-missing", "m1");
+        SpendingEventCreateRequest request = requestWithExistingProject("PROJ-MISSING", "MS-1");
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("PROJECT_NOT_FOUND");
+        assertThat(result.getLeft().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
         verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void create_returnsLeft_whenMilestoneIdNotFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(milestoneRepository.findById("m-missing")).thenReturn(Optional.empty());
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
+        when(milestoneRepository.findByProject_IdAndMilestoneId(any(), eq("MS-MISSING"))).thenReturn(Optional.empty());
 
-        SpendingEventCreateRequest request = requestWithExistingProject("p1", "m-missing");
+        SpendingEventCreateRequest request = requestWithExistingProject("PROJ-AB", "MS-MISSING");
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.isLeft()).isTrue();
@@ -120,11 +122,12 @@ class SpendingEventServiceTest {
     void create_successWithExistingProjectAndMilestone() {
         ProjectEntity project = projectEntity();
         MilestoneEntity milestone = milestoneEntity("m1");
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProject_IdAndMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
-        SpendingEventCreateRequest request = requestWithExistingProject("p1", "m1");
+        SpendingEventCreateRequest request = requestWithExistingProject("PROJ-AB", "MS-1");
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.isRight()).isTrue();
@@ -138,8 +141,8 @@ class SpendingEventServiceTest {
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> {
             MilestoneEntity m = i.getArgument(0);
-            if (m.getId() == null) m = MilestoneEntity.builder().id("m-new").label(m.getLabel())
-                    .expectedCost(m.getExpectedCost()).currency(m.getCurrency()).dueDate(m.getDueDate())
+            if (m.getId() == null) m = MilestoneEntity.builder().id("m-new").milestoneTitle(m.getMilestoneTitle())
+                    .milestoneAmount(m.getMilestoneAmount()).currency(m.getCurrency()).milestoneDate(m.getMilestoneDate())
                     .project(projectEntity()).build();
             return m;
         });
@@ -155,8 +158,11 @@ class SpendingEventServiceTest {
 
     @Test
     void create_spendingEvent_calculatesTotalFromItems() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestoneEntity("m1")));
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProject_IdAndMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
@@ -165,9 +171,9 @@ class SpendingEventServiceTest {
                 .fundingId("GRANT-2025-001")
                 .currency("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder()
-                        .projectId("p1")
+                        .projectId("PROJ-AB")
                         .milestones(List.of(EventMilestoneAllocationRequest.builder()
-                                .milestone(MilestoneCreateRequest.builder().milestoneId("m1").build())
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
                                 .build()))
                         .build()))
                 .items(List.of(
@@ -186,8 +192,11 @@ class SpendingEventServiceTest {
 
     @Test
     void create_fundingEvent_calculatesTotalFromAllocatedAmounts() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestoneEntity("m1")));
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProject_IdAndMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
@@ -196,9 +205,9 @@ class SpendingEventServiceTest {
                 .fundingId("GRANT-2025-001")
                 .currency("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder()
-                        .projectId("p1")
+                        .projectId("PROJ-AB")
                         .milestones(List.of(EventMilestoneAllocationRequest.builder()
-                                .milestone(MilestoneCreateRequest.builder().milestoneId("m1").build())
+                                .milestone(MilestoneCreateRequest.builder().milestoneId("MS-1").build())
                                 .allocatedAmount(new BigDecimal("50000.00"))
                                 .build()))
                         .build()))
@@ -214,7 +223,9 @@ class SpendingEventServiceTest {
 
     @Test
     void create_returnsLeft_whenNewMilestoneFieldsMissing() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        ProjectEntity project = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
 
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
                 .organisationId("org1")
@@ -222,7 +233,7 @@ class SpendingEventServiceTest {
                 .fundingId("GRANT-2025-001")
                 .currency("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder()
-                        .projectId("p1")
+                        .projectId("PROJ-AB")
                         .milestones(List.of(EventMilestoneAllocationRequest.builder()
                                 .milestone(MilestoneCreateRequest.builder().build()) // missing all fields
                                 .build()))
@@ -305,7 +316,7 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.empty());
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
-                requestWithExistingProject("p1", "m1"));
+                requestWithExistingProject("PROJ-AB", "MS-1"));
 
         assertThat(result.isLeft()).isTrue();
         verify(fundingEventRepository, never()).saveAndFlush(any());
@@ -317,7 +328,7 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(published));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
-                requestWithExistingProject("p1", "m1"));
+                requestWithExistingProject("PROJ-AB", "MS-1"));
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
@@ -327,13 +338,16 @@ class SpendingEventServiceTest {
     @Test
     void update_success_replacesAllocationsAndItems() {
         FundingEventEntity existing = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = milestoneEntity("m1");
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestoneEntity("m1")));
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProject_IdAndMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
-                requestWithExistingProject("p1", "m1"));
+                requestWithExistingProject("PROJ-AB", "MS-1"));
 
         assertThat(result.isRight()).isTrue();
     }
@@ -351,7 +365,7 @@ class SpendingEventServiceTest {
                 .currency("EUR")
                 .totalAmount(new BigDecimal("777.00"))
                 .txHash("tx-abc")
-                .fundingTx("funding-tx-xyz")
+                .fundingHash("funding-hash-xyz")
                 .build();
 
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
@@ -367,7 +381,7 @@ class SpendingEventServiceTest {
         assertThat(view.getCurrency()).isEqualTo("EUR");
         assertThat(view.getTotalAmount()).isEqualByComparingTo("777.00");
         assertThat(view.getTxHash()).isEqualTo("tx-abc");
-        assertThat(view.getFundingTx()).isEqualTo("funding-tx-xyz");
+        assertThat(view.getFundingHash()).isEqualTo("funding-hash-xyz");
         assertThat(view.getProjectAllocations()).isEmpty();
         assertThat(view.getSpendingItems()).isEmpty();
     }
@@ -382,13 +396,13 @@ class SpendingEventServiceTest {
 
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
         when(allocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
-        when(milestoneAllocationRepository.findById_EventIdAndId_ProjectId("e1", "p1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventIdAndId_ProjectUid("e1", "p1")).thenReturn(List.of());
 
         SpendingEventView view = spendingEventService.toView(event);
 
         assertThat(view.getProjectAllocations()).hasSize(1);
-        assertThat(view.getProjectAllocations().get(0).getProjectId()).isEqualTo("p1");
-        assertThat(view.getProjectAllocations().get(0).getActivityId()).isEqualTo("PROJ-AB");
+        assertThat(view.getProjectAllocations().get(0).getProjectUid()).isEqualTo("p1");
+        assertThat(view.getProjectAllocations().get(0).getProjectId()).isEqualTo("PROJ-AB");
     }
 
     @Test
@@ -424,9 +438,9 @@ class SpendingEventServiceTest {
                 .id("p1")
                 .organisationId("org1")
                 .fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB")
-                .activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00"))
+                .projectId("PROJ-AB")
+                .projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00"))
                 .currency("USD")
                 .build();
     }
@@ -434,10 +448,10 @@ class SpendingEventServiceTest {
     private MilestoneEntity milestoneEntity(String id) {
         return MilestoneEntity.builder()
                 .id(id)
-                .label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00"))
+                .milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00"))
                 .currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30))
+                .milestoneDate(LocalDate.of(2025, 6, 30))
                 .project(projectEntity())
                 .build();
     }
@@ -486,17 +500,17 @@ class SpendingEventServiceTest {
                 .fundingId("GRANT-2025-001")
                 .currency("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .projectId("PROJ-NEW")
+                        .projectTitle("New Project")
                         .fundingId("GRANT-2025-001")
-                        .activityId("PROJ-NEW")
-                        .activityTitle("New Project")
-                        .expectedTotalAmount(new BigDecimal("100000.00"))
+                        .totalAmount(new BigDecimal("100000.00"))
                         .currency("USD")
                         .milestones(List.of(EventMilestoneAllocationRequest.builder()
                                 .milestone(MilestoneCreateRequest.builder()
-                                        .label("New Milestone")
-                                        .expectedCost(new BigDecimal("50000.00"))
+                                        .milestoneTitle("New Milestone")
+                                        .milestoneAmount(new BigDecimal("50000.00"))
                                         .currency("USD")
-                                        .dueDate(LocalDate.of(2026, 1, 31))
+                                        .milestoneDate(LocalDate.of(2026, 1, 31))
                                         .build())
                                 .build()))
                         .build()))

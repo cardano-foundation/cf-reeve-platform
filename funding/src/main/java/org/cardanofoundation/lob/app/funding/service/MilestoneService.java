@@ -33,34 +33,34 @@ public class MilestoneService {
     private final MilestoneRepository milestoneRepository;
     private final FundingProjectRepository projectRepository;
 
-    public Optional<MilestoneEntity> findById(String milestoneId) {
-        return milestoneRepository.findById(milestoneId);
+    public Optional<MilestoneEntity> findById(String milestoneUid) {
+        return milestoneRepository.findById(milestoneUid);
     }
 
-    public List<MilestoneEntity> findByProjectId(String projectId) {
-        return milestoneRepository.findByProject_Id(projectId);
+    public List<MilestoneEntity> findByProjectId(String projectUid) {
+        return milestoneRepository.findByProject_Id(projectUid);
     }
 
-    public Page<MilestoneEntity> findByProjectId(String projectId, Pageable pageable) {
-        return milestoneRepository.findByProject_Id(projectId, pageable);
+    public Page<MilestoneEntity> findByProjectId(String projectUid, Pageable pageable) {
+        return milestoneRepository.findByProject_Id(projectUid, pageable);
     }
 
     @Transactional
-    public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
-        if (request.getLabel() == null || request.getExpectedCost() == null
-                || request.getCurrency() == null || request.getDueDate() == null) {
-            log.warn("Missing required fields for milestone creation in project: {}", projectId);
+    public Either<ProblemDetail, MilestoneEntity> create(String projectUid, MilestoneCreateRequest request) {
+        if (request.getMilestoneTitle() == null || request.getMilestoneAmount() == null
+                || request.getCurrency() == null || request.getMilestoneDate() == null) {
+            log.warn("Missing required fields for milestone creation in project: {}", projectUid);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                    "label, expectedCost, currency, dueDate are required when creating a new milestone");
+                    "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone");
             problem.setTitle("MILESTONE_FIELDS_REQUIRED");
             return Either.left(problem);
         }
 
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectUid);
 
         if (projectM.isEmpty()) {
-            log.warn("Project not found for id: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found for id: %s".formatted(projectId));
+            log.warn("Project not found for id: {}", projectUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found for id: %s".formatted(projectUid));
             problem.setTitle("PROJECT_NOT_FOUND");
             return Either.left(problem);
         }
@@ -69,42 +69,42 @@ public class MilestoneService {
     }
 
     @Transactional
-    public Either<ProblemDetail, MilestoneEntity> update(String milestoneId, MilestoneUpdateRequest request) {
-        Optional<MilestoneEntity> milestoneM = milestoneRepository.findById(milestoneId);
+    public Either<ProblemDetail, MilestoneEntity> update(String milestoneUid, MilestoneUpdateRequest request) {
+        Optional<MilestoneEntity> milestoneM = milestoneRepository.findById(milestoneUid);
 
         if (milestoneM.isEmpty()) {
-            log.warn("Milestone not found for id: {}", milestoneId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneId));
+            log.warn("Milestone not found for id: {}", milestoneUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneUid));
             problem.setTitle("MILESTONE_NOT_FOUND");
             return Either.left(problem);
         }
 
         MilestoneEntity milestone = milestoneM.orElseThrow();
-        if (request.getLabel() != null) {
-            milestone.setLabel(request.getLabel());
+        if (request.getMilestoneTitle() != null) {
+            milestone.setMilestoneTitle(request.getMilestoneTitle());
         }
-        if (request.getExpectedCost() != null) {
-            milestone.setExpectedCost(request.getExpectedCost());
+        if (request.getMilestoneAmount() != null) {
+            milestone.setMilestoneAmount(request.getMilestoneAmount());
         }
         if (request.getCurrency() != null) {
             milestone.setCurrency(request.getCurrency());
         }
-        if (request.getDueDate() != null) {
-            milestone.setDueDate(request.getDueDate());
+        if (request.getMilestoneDate() != null) {
+            milestone.setMilestoneDate(request.getMilestoneDate());
         }
 
         return Either.right(milestoneRepository.saveAndFlush(milestone));
     }
 
     @Transactional
-    public Either<ProblemDetail, Void> delete(String milestoneId) {
-        if (!milestoneRepository.existsById(milestoneId)) {
-            log.warn("Milestone not found for id: {}", milestoneId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneId));
+    public Either<ProblemDetail, Void> delete(String milestoneUid) {
+        if (!milestoneRepository.existsById(milestoneUid)) {
+            log.warn("Milestone not found for id: {}", milestoneUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneUid));
             problem.setTitle("MILESTONE_NOT_FOUND");
             return Either.left(problem);
         }
-        milestoneRepository.deleteById(milestoneId);
+        milestoneRepository.deleteById(milestoneUid);
         return Either.right(null);
     }
 
@@ -114,22 +114,24 @@ public class MilestoneService {
 
     public MilestoneView toView(MilestoneEntity milestone) {
         return MilestoneView.builder()
-                .milestoneId(milestone.getId())
-                .projectId(milestone.getProject().getId())
-                .label(milestone.getLabel())
-                .expectedCost(milestone.getExpectedCost())
+                .milestoneUid(milestone.getId())
+                .milestoneId(milestone.getMilestoneId())
+                .projectUid(milestone.getProject().getId())
+                .milestoneTitle(milestone.getMilestoneTitle())
+                .milestoneAmount(milestone.getMilestoneAmount())
                 .currency(milestone.getCurrency())
-                .dueDate(milestone.getDueDate())
+                .milestoneDate(milestone.getMilestoneDate())
                 .build();
     }
 
     private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
         return MilestoneEntity.builder()
                 .id(UUID.randomUUID().toString())
-                .label(request.getLabel())
-                .expectedCost(request.getExpectedCost())
+                .milestoneId(request.getMilestoneId())
+                .milestoneTitle(request.getMilestoneTitle())
+                .milestoneAmount(request.getMilestoneAmount())
                 .currency(request.getCurrency())
-                .dueDate(request.getDueDate())
+                .milestoneDate(request.getMilestoneDate())
                 .project(project)
                 .build();
     }
