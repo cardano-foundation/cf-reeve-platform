@@ -93,7 +93,7 @@ public class SpendingEventConverter {
         return view.getProjectAllocations().stream()
                 .filter(a -> a.getMilestones() != null)
                 .flatMap(a -> a.getMilestones().stream())
-                .map(milestone -> (EventMilestoneAllocationEntity) EventMilestoneAllocationEntity.builder()
+                .map(milestone -> EventMilestoneAllocationEntity.builder()
                         .event(event)
                         .milestoneId(milestone.getMilestoneUid())
                         .milestoneLabel(milestone.getMilestoneTitle())

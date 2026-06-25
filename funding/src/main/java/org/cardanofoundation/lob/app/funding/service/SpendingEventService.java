@@ -35,6 +35,7 @@ import org.cardanofoundation.lob.app.funding.repository.*;
 public class SpendingEventService {
 
     private static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
+    private static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
 
     private final FundingEventRepository fundingEventRepository;
     private final FundingProjectRepository projectRepository;
@@ -267,7 +268,7 @@ public class SpendingEventService {
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateRootProject(EventProjectAllocationRequest req, String organisationId) {
         if (req.getProjectId() == null) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "projectId is required");
-            problem.setTitle("PROJECT_FIELDS_REQUIRED");
+            problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
         }
 
@@ -278,19 +279,19 @@ public class SpendingEventService {
 
         if (req.getProjectTitle() == null) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "projectTitle is required when creating a new project");
-            problem.setTitle("PROJECT_FIELDS_REQUIRED");
+            problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
         }
 
         if (req.getSubProject() == null && (req.getTotalAmount() == null || req.getCurrency() == null)) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "totalAmount and currency are required when creating a new root project");
-            problem.setTitle("PROJECT_FIELDS_REQUIRED");
+            problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
         }
 
         if (req.getFundingId() == null) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "fundingId is required when creating a new project");
-            problem.setTitle("PROJECT_FIELDS_REQUIRED");
+            problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
         }
 
@@ -309,7 +310,7 @@ public class SpendingEventService {
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateSubProject(SubProjectRequest subReq, ProjectEntity parent) {
         if (subReq.getSubProjectId() == null) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "subProjectId is required for sub-project resolution");
-            problem.setTitle("PROJECT_FIELDS_REQUIRED");
+            problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
         }
 
@@ -321,7 +322,7 @@ public class SpendingEventService {
 
         if (subReq.getProjectTitle() == null) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "projectTitle is required when creating a new sub-project");
-            problem.setTitle("PROJECT_FIELDS_REQUIRED");
+            problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
         }
 
