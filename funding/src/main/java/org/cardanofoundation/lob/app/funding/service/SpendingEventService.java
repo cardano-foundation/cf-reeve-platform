@@ -368,18 +368,21 @@ public class SpendingEventService {
 
     private Either<ProblemDetail, MilestoneEntity> resolveOrCreateMilestone(MilestoneCreateRequest req, ProjectEntity project) {
         if (req.getMilestoneId() != null) {
-            // Look up by (projectUid, milestoneId)
+            // Look up existing by (projectUid, user-defined milestoneId)
             Optional<MilestoneEntity> existing = milestoneRepository.findByProject_IdAndMilestoneId(project.getId(), req.getMilestoneId());
-            if (existing.isEmpty()) {
-                log.warn("Milestone not found for project: {} milestoneId: {}", project.getId(), req.getMilestoneId());
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found: %s".formatted(req.getMilestoneId()));
+            if (existing.isPresent()) {
+                return Either.right(existing.get());
+            }
+            // Not found — create it if creation fields are present; otherwise error
+            if (req.getMilestoneTitle() == null || req.getMilestoneAmount() == null
+                    || req.getCurrency() == null || req.getMilestoneDate() == null) {
+                log.warn("Milestone not found: {} in project: {}", req.getMilestoneId(), project.getId());
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND,
+                        "Milestone not found: %s".formatted(req.getMilestoneId()));
                 problem.setTitle("MILESTONE_NOT_FOUND");
                 return Either.left(problem);
             }
-            return Either.right(existing.get());
-        }
-
-        if (req.getMilestoneTitle() == null || req.getMilestoneAmount() == null
+        } else if (req.getMilestoneTitle() == null || req.getMilestoneAmount() == null
                 || req.getCurrency() == null || req.getMilestoneDate() == null) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
                     "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone");
@@ -389,6 +392,7 @@ public class SpendingEventService {
 
         MilestoneEntity newMilestone = MilestoneEntity.builder()
                 .id(UUID.randomUUID().toString())
+                .milestoneId(req.getMilestoneId())
                 .milestoneTitle(req.getMilestoneTitle())
                 .milestoneAmount(req.getMilestoneAmount())
                 .currency(req.getCurrency())

@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS funding_project (
     created_at  TIMESTAMP WITHOUT TIME ZONE,
     updated_at  TIMESTAMP WITHOUT TIME ZONE,
 
-    CONSTRAINT pk_funding_project PRIMARY KEY (project_id),
+    CONSTRAINT pk_funding_project              PRIMARY KEY (project_id),
     CONSTRAINT uq_funding_project_org_activity UNIQUE (organisation_id, activity_id),
-    CONSTRAINT uq_funding_project_funding_id    UNIQUE (funding_id)
+    CONSTRAINT uq_funding_project_funding_id   UNIQUE (funding_id)
 );
 
 CREATE TABLE IF NOT EXISTS funding_project_aud (
