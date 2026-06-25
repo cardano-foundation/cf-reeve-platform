@@ -766,7 +766,6 @@ class SpendingEventServiceTest {
     void toPublishView_mapsProjectAllocations() {
         FundingEventEntity event = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
         event.setCreatedAt(LocalDateTime.of(2025, 6, 1, 0, 0));
-        ProjectEntity project = projectEntity();
         MilestoneEntity milestone = milestoneEntity("m1");
         EventMilestoneAllocationEntity.Id allocId = new EventMilestoneAllocationEntity.Id("e1", "m1");
         EventMilestoneAllocationEntity alloc = EventMilestoneAllocationEntity.builder()
