@@ -28,7 +28,6 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
     @EmbeddedId
     @AttributeOverrides({
             @AttributeOverride(name = "eventId",      column = @Column(name = "event_id")),
-            @AttributeOverride(name = "projectUid",   column = @Column(name = "project_uid")),
             @AttributeOverride(name = "milestoneUid", column = @Column(name = "milestone_uid"))
     })
     private Id id;
@@ -38,11 +37,8 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
     private BigDecimal allocatedAmount;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-            @JoinColumn(name = "event_id",   referencedColumnName = "event_id",   insertable = false, updatable = false),
-            @JoinColumn(name = "project_uid", referencedColumnName = "project_uid", insertable = false, updatable = false)
-    })
-    private EventProjectAllocationEntity allocation;
+    @JoinColumn(name = "event_id", insertable = false, updatable = false)
+    private FundingEventEntity event;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "milestone_uid", insertable = false, updatable = false)
@@ -57,9 +53,6 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
     public static class Id {
         @Column(name = "event_id")
         private String eventId;
-
-        @Column(name = "project_uid")
-        private String projectUid;
 
         @Column(name = "milestone_uid")
         private String milestoneUid;

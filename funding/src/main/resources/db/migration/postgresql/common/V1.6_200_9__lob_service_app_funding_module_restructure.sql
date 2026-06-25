@@ -92,64 +92,26 @@ ALTER TABLE funding_milestone_aud RENAME COLUMN project_id    TO project_uid;
 ALTER TABLE funding_milestone_aud ADD COLUMN IF NOT EXISTS milestone_id VARCHAR(255);
 
 -- ============================================================
--- 4. Create funding_event_project_allocation
---    Links one event to one project (M:M via composite PK).
---    Uses final column name project_uid from the start.
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS funding_event_project_allocation (
-    event_id    VARCHAR(36) NOT NULL,
-    project_uid CHAR(64)    NOT NULL,
-
-    created_by VARCHAR(255),
-    updated_by VARCHAR(255),
-    created_at TIMESTAMP WITHOUT TIME ZONE,
-    updated_at TIMESTAMP WITHOUT TIME ZONE,
-
-    CONSTRAINT pk_funding_epa    PRIMARY KEY (event_id, project_uid),
-    CONSTRAINT fk_fepa_event     FOREIGN KEY (event_id)    REFERENCES funding_event   (event_id)    ON DELETE CASCADE,
-    CONSTRAINT fk_fepa_project   FOREIGN KEY (project_uid) REFERENCES funding_project (project_uid) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS funding_event_project_allocation_aud (
-    event_id    VARCHAR(36),
-    project_uid CHAR(64),
-
-    created_by VARCHAR(255),
-    updated_by VARCHAR(255),
-    created_at TIMESTAMP WITHOUT TIME ZONE,
-    updated_at TIMESTAMP WITHOUT TIME ZONE,
-
-    rev     INTEGER  NOT NULL,
-    revtype SMALLINT,
-
-    CONSTRAINT pk_funding_epa_aud     PRIMARY KEY (event_id, project_uid, rev, revtype),
-    CONSTRAINT fk_funding_epa_aud_rev FOREIGN KEY (rev) REFERENCES revinfo (rev)
-);
-
--- ============================================================
--- 5. Restructure funding_event_milestone_allocation
+-- 4. Restructure funding_event_milestone_allocation
 --    Old PK: (event_id, milestone_id)
---    New PK: (event_id, project_uid, milestone_uid)
+--    New PK: (event_id, milestone_uid)
+--    Project is implicit via milestone.project_uid FK — no separate allocation table needed.
 -- ============================================================
 
 ALTER TABLE funding_event_milestone_allocation DROP CONSTRAINT IF EXISTS pk_funding_event_milestone_allocation;
 ALTER TABLE funding_event_milestone_allocation DROP CONSTRAINT IF EXISTS fk_fema_event;
-
--- Add project_uid (nullable during migration)
-ALTER TABLE funding_event_milestone_allocation ADD COLUMN IF NOT EXISTS project_uid CHAR(64);
 
 -- Rename milestone_id → milestone_uid (fk_fema_milestone already dropped above)
 ALTER TABLE funding_event_milestone_allocation RENAME COLUMN milestone_id TO milestone_uid;
 
 -- New composite PK
 ALTER TABLE funding_event_milestone_allocation
-    ADD CONSTRAINT pk_funding_ema PRIMARY KEY (event_id, project_uid, milestone_uid);
+    ADD CONSTRAINT pk_funding_ema PRIMARY KEY (event_id, milestone_uid);
 
--- FK to allocation table
+-- FK directly to event
 ALTER TABLE funding_event_milestone_allocation
-    ADD CONSTRAINT fk_fema_allocation FOREIGN KEY (event_id, project_uid)
-        REFERENCES funding_event_project_allocation (event_id, project_uid) ON DELETE CASCADE;
+    ADD CONSTRAINT fk_fema_event FOREIGN KEY (event_id)
+        REFERENCES funding_event (event_id) ON DELETE CASCADE;
 
 -- FK to milestone
 ALTER TABLE funding_event_milestone_allocation
@@ -158,10 +120,9 @@ ALTER TABLE funding_event_milestone_allocation
 
 -- Audit table
 ALTER TABLE funding_event_milestone_allocation_aud DROP CONSTRAINT IF EXISTS pk_funding_event_milestone_allocation_aud;
-ALTER TABLE funding_event_milestone_allocation_aud ADD COLUMN IF NOT EXISTS project_uid CHAR(64);
 ALTER TABLE funding_event_milestone_allocation_aud RENAME COLUMN milestone_id TO milestone_uid;
 ALTER TABLE funding_event_milestone_allocation_aud
-    ADD CONSTRAINT pk_funding_ema_aud PRIMARY KEY (event_id, project_uid, milestone_uid, rev, revtype);
+    ADD CONSTRAINT pk_funding_ema_aud PRIMARY KEY (event_id, milestone_uid, rev, revtype);
 
 -- ============================================================
 -- 6. Update FK on funding_spending_item to point to funding_event

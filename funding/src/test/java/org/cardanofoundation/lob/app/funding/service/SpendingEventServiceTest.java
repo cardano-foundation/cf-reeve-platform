@@ -41,8 +41,6 @@ class SpendingEventServiceTest {
     @Mock
     private SpendingItemRepository spendingItemRepository;
     @Mock
-    private EventProjectAllocationRepository allocationRepository;
-    @Mock
     private EventMilestoneAllocationRepository milestoneAllocationRepository;
 
     @InjectMocks
@@ -369,7 +367,7 @@ class SpendingEventServiceTest {
                 .build();
 
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
-        when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
         SpendingEventView view = spendingEventService.toView(event);
 
@@ -390,13 +388,14 @@ class SpendingEventServiceTest {
     void toView_mapsProjectAllocations() {
         FundingEventEntity event = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
         ProjectEntity project = projectEntity();
-        EventProjectAllocationEntity.Id allocId = new EventProjectAllocationEntity.Id("e1", "p1");
-        EventProjectAllocationEntity alloc = EventProjectAllocationEntity.builder()
-                .id(allocId).event(event).project(project).build();
+        MilestoneEntity milestone = milestoneEntity("m1");
+        EventMilestoneAllocationEntity.Id allocId = new EventMilestoneAllocationEntity.Id("e1", "m1");
+        EventMilestoneAllocationEntity alloc = EventMilestoneAllocationEntity.builder()
+                .id(allocId).build();
 
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
-        when(allocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
-        when(milestoneAllocationRepository.findById_EventIdAndId_ProjectUid("e1", "p1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
 
         SpendingEventView view = spendingEventService.toView(event);
 
@@ -411,7 +410,7 @@ class SpendingEventServiceTest {
         SpendingItemEntity item = itemEntity(event);
 
         when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of(item));
-        when(allocationRepository.findById_EventId("e1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
         SpendingEventView view = spendingEventService.toView(event);
 
