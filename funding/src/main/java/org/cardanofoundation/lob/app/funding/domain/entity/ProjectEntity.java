@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -50,6 +51,10 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Column(name = "activity_title", nullable = false)
     private String activityTitle;
 
+    @Nullable
+    @Column(name = "activity_sub_id")
+    private String activitySubId;
+
     @NotNull
     @Column(name = "expected_total_amount", nullable = false)
     private BigDecimal expectedTotalAmount;
@@ -61,10 +66,6 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Builder.Default
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
     private List<MilestoneEntity> milestones = new ArrayList<>();
-
-    @Builder.Default
-    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
-    private List<SpendingEventEntity> events = new ArrayList<>();
 
     public static String id(String organisationId, String activityId) {
         return digestAsHex("%s::%s".formatted(organisationId, activityId));

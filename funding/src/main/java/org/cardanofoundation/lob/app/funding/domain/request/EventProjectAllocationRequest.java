@@ -6,8 +6,7 @@ import java.util.List;
 
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
 
 import lombok.*;
 
@@ -18,21 +17,26 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class ProjectWithMilestonesCreateRequest {
+public class EventProjectAllocationRequest {
 
-    @NotBlank
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    private String organisationId;
+    // --- Existing project: supply projectId only ---
 
-    @NotBlank
+    @Nullable
+    @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
+            description = "ID of an existing project. When set, all new-project fields below are ignored.")
+    private String projectId;
+
+    // --- New project: supply the fields below when projectId is null ---
+
+    @Nullable
     @Schema(example = "GRANT-2025-001")
     private String fundingId;
 
-    @NotBlank
+    @Nullable
     @Schema(example = "PROJ-AB")
     private String activityId;
 
-    @NotBlank
+    @Nullable
     @Schema(example = "Project AB")
     private String activityTitle;
 
@@ -40,17 +44,18 @@ public class ProjectWithMilestonesCreateRequest {
     @Schema(example = "WP-1", description = "Optional sub-project / workstream identifier")
     private String activitySubId;
 
-    @NotNull
+    @Nullable
     @Schema(example = "200000.00")
     private BigDecimal expectedTotalAmount;
 
-    @NotBlank
+    @Nullable
     @Schema(example = "USD")
     private String currency;
 
+    /** At least one milestone must be supplied per project allocation. */
+    @NotEmpty
     @Builder.Default
     @Valid
-    @Schema(description = "Milestones to create together with the project")
-    private List<MilestoneCreateRequest> milestones = new ArrayList<>();
+    private List<EventMilestoneAllocationRequest> milestones = new ArrayList<>();
 
 }

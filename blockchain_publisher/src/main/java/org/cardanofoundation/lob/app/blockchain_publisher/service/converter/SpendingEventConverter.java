@@ -31,17 +31,19 @@ public class SpendingEventConverter {
     private final OrganisationPublicApi organisationPublicApi;
 
     public SpendingEventEntity convertToDbDetached(String organisationId, SpendingEventPublishView view) {
+        SpendingEventPublishView.ProjectAllocation primary = primaryAllocation(view);
+
         SpendingEventEntity entity = new SpendingEventEntity();
         entity.setEventId(view.getEventId());
-        entity.setProjectId(view.getProjectId());
+        entity.setProjectId(primary != null ? primary.getProjectId() : null);
         entity.setEventType(view.getEventType());
         entity.setEventDate(view.getDate());
 
         entity.setFundingId(view.getFundingId());
-        entity.setActivityId(view.getActivityId());
-        entity.setActivityTitle(view.getActivityTitle());
+        entity.setActivityId(primary != null ? primary.getActivityId() : null);
+        entity.setActivityTitle(primary != null ? primary.getActivityTitle() : null);
         entity.setFundingTx(view.getFundingTx());
-        entity.setFundingDocHash(view.getFundingDocHash());
+        entity.setFundingDocHash(null);
 
         entity.setTotalAmount(orZero(view.getAmount()));
         entity.setCurrency(custCode(view.getCurrency()));
@@ -53,16 +55,20 @@ public class SpendingEventConverter {
                 .build()));
 
         entity.setSpendingItems(convertItems(entity, view.getItems()));
-        entity.setMilestoneAllocations(convertMilestones(entity, view.getMilestones()));
+        entity.setMilestoneAllocations(convertMilestones(entity, view));
 
         return entity;
     }
 
-    private List<SpendingItemEntity> convertItems(SpendingEventEntity event, List<SpendingEventPublishView.SpendItem> items) {
-        if (items == null) {
-            return List.of();
+    private SpendingEventPublishView.ProjectAllocation primaryAllocation(SpendingEventPublishView view) {
+        if (view.getProjectAllocations() == null || view.getProjectAllocations().isEmpty()) {
+            return null;
         }
+        return view.getProjectAllocations().get(0);
+    }
 
+    private List<SpendingItemEntity> convertItems(SpendingEventEntity event, List<SpendingEventPublishView.SpendItem> items) {
+        if (items == null) return List.of();
         return items.stream()
                 .map(item -> SpendingItemEntity.builder()
                         .itemId(item.getItemId())
@@ -81,12 +87,12 @@ public class SpendingEventConverter {
                 .toList();
     }
 
-    private List<EventMilestoneAllocationEntity> convertMilestones(SpendingEventEntity event, List<SpendingEventPublishView.Milestone> milestones) {
-        if (milestones == null) {
-            return List.of();
-        }
-
-        return milestones.stream()
+    /** Flattens milestones from all project allocations into the publisher's flat list. */
+    private List<EventMilestoneAllocationEntity> convertMilestones(SpendingEventEntity event, SpendingEventPublishView view) {
+        if (view.getProjectAllocations() == null) return List.of();
+        return view.getProjectAllocations().stream()
+                .filter(a -> a.getMilestones() != null)
+                .flatMap(a -> a.getMilestones().stream())
                 .map(milestone -> EventMilestoneAllocationEntity.builder()
                         .event(event)
                         .milestoneId(milestone.getMilestoneId())
@@ -109,7 +115,7 @@ public class SpendingEventConverter {
                         .taxIdNumber(org.getTaxIdNumber())
                         .currencyId(org.getCurrencyId())
                         .build())
-                .orElseThrow(() -> new IllegalStateException("Organisation not found for id: " + organisationId));
+                .orElseThrow(() -> new IllegalStateException("Organisation not found: " + organisationId));
     }
 
     private static String custCode(SpendingEventPublishView.Currency currency) {

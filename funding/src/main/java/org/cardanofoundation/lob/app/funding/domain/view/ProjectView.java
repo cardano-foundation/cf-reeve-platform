@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import jakarta.annotation.Nullable;
+
 import lombok.*;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -17,7 +19,7 @@ public class ProjectView {
     @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa")
     private String projectId;
 
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94", description = "Organisation ID")
+    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
     private String organisationId;
 
     @Schema(example = "GRANT-2025-001")
@@ -28,6 +30,10 @@ public class ProjectView {
 
     @Schema(example = "Project AB")
     private String activityTitle;
+
+    @Nullable
+    @Schema(example = "WP-1")
+    private String activitySubId;
 
     @Schema(example = "200000.00")
     private BigDecimal expectedTotalAmount;
@@ -40,7 +46,5 @@ public class ProjectView {
     private LocalDateTime createdAt;
 
     private List<MilestoneView> milestones;
-
-    private List<SpendingEventView> events;
 
 }

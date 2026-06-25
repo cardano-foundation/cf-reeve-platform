@@ -40,8 +40,6 @@ class ProjectServiceTest {
     private FundingProjectRepository projectRepository;
     @Mock
     private MilestoneService milestoneService;
-    @Mock
-    private SpendingEventService spendingEventService;
 
     @InjectMocks
     private ProjectService projectService;
@@ -112,35 +110,6 @@ class ProjectServiceTest {
 
         assertThat(result).isEqualTo(saved);
         verify(milestoneService, never()).create(any(), any());
-    }
-
-    @Test
-    void toView_mapsProjectWithEventsAndNoMilestones() {
-        ProjectEntity project = projectEntity();
-        org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity event =
-                org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity.builder()
-                        .id("e1").eventType(org.cardanofoundation.lob.app.funding.domain.enums.EventType.FUNDING)
-                        .status(org.cardanofoundation.lob.app.funding.domain.enums.EventStatus.DRAFT)
-                        .fundingId("GRANT-2025-001").activityId("PROJ-AB").currency("USD")
-                        .totalAmount(BigDecimal.ZERO).project(project).build();
-
-        org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView eventView =
-                org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView.builder()
-                        .eventId("e1").projectId(project.getId())
-                        .eventType(org.cardanofoundation.lob.app.funding.domain.enums.EventType.FUNDING)
-                        .status(org.cardanofoundation.lob.app.funding.domain.enums.EventStatus.DRAFT)
-                        .fundingId("GRANT-2025-001").activityId("PROJ-AB").currency("USD")
-                        .totalAmount(BigDecimal.ZERO)
-                        .spendingItems(List.of()).milestoneAllocations(List.of()).build();
-
-        when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of());
-        when(spendingEventService.findByProjectId(project.getId())).thenReturn(List.of(event));
-        when(spendingEventService.toView(event)).thenReturn(eventView);
-
-        ProjectView view = projectService.toView(project);
-
-        assertThat(view.getMilestones()).isEmpty();
-        assertThat(view.getEvents()).containsExactly(eventView);
     }
 
     @Test
@@ -241,7 +210,6 @@ class ProjectServiceTest {
 
         when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of(milestone));
         when(milestoneService.toView(milestone)).thenReturn(milestoneView);
-        when(spendingEventService.findByProjectId(project.getId())).thenReturn(List.of());
 
         ProjectView view = projectService.toView(project);
 
@@ -252,7 +220,6 @@ class ProjectServiceTest {
         assertThat(view.getActivityTitle()).isEqualTo("Project AB");
         assertThat(view.getCurrency()).isEqualTo("USD");
         assertThat(view.getMilestones()).containsExactly(milestoneView);
-        assertThat(view.getEvents()).isEmpty();
     }
 
     // --- helpers ---

@@ -10,6 +10,8 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
 
     List<EventMilestoneAllocationEntity> findById_EventId(String eventId);
 
+    List<EventMilestoneAllocationEntity> findById_EventIdAndId_ProjectId(String eventId, String projectId);
+
     void deleteById_EventId(String eventId);
 
 }

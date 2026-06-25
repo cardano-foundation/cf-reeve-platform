@@ -203,7 +203,7 @@ class ProjectControllerTest {
                 .projectId("p1").organisationId("org1").fundingId("GRANT-2025-001")
                 .activityId("PROJ-AB").activityTitle("Project AB")
                 .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD")
-                .milestones(List.of()).events(List.of()).build();
+                .milestones(List.of()).build();
     }
 
     private ProjectWithMilestonesCreateRequest createWithMilestonesRequest() {

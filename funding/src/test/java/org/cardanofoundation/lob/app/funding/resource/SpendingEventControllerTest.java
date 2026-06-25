@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.resource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
@@ -23,13 +24,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
-import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
-import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
@@ -38,8 +37,6 @@ class SpendingEventControllerTest {
 
     @Mock
     private SpendingEventService spendingEventService;
-    @Mock
-    private ProjectService projectService;
 
     @InjectMocks
     private SpendingEventController spendingEventController;
@@ -47,51 +44,32 @@ class SpendingEventControllerTest {
     // --- listEvents ---
 
     @Test
-    void listEvents_returns404_whenProjectNotFound() {
-        when(projectService.findById("p1")).thenReturn(Optional.empty());
-
-        ResponseEntity<?> response = spendingEventController.listEvents(
-                "p1", Optional.empty(), Optional.empty(), PageRequest.of(0, 10));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
-    }
-
-    @Test
     void listEvents_returns200_withList() {
         Pageable pageable = PageRequest.of(0, 10);
-        ProjectEntity project = projectEntity();
-        when(projectService.findById("p1")).thenReturn(Optional.of(project));
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
-        when(spendingEventService.findByProjectIdAndFilter(eq("p1"), any(), any(), eq(pageable)))
+        when(spendingEventService.findByOrganisationIdAndFilter(eq("org1"), any(), any(), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(event)));
         when(spendingEventService.toView(event)).thenReturn(view);
 
         ResponseEntity<?> response = spendingEventController.listEvents(
-                "p1", Optional.empty(), Optional.empty(), pageable);
+                "org1", Optional.empty(), Optional.empty(), pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(List.of(view));
     }
 
     @Test
-    void listEvents_returns200_withFilteredList() {
+    void listEvents_returns200_withEmptyList() {
         Pageable pageable = PageRequest.of(0, 10);
-        ProjectEntity project = projectEntity();
-        when(projectService.findById("p1")).thenReturn(Optional.of(project));
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
-        when(spendingEventService.findByProjectIdAndFilter(
-                "p1", Optional.of(EventStatus.DRAFT), Optional.of(EventType.SPENDING), pageable))
-                .thenReturn(new PageImpl<>(List.of(event)));
-        when(spendingEventService.toView(event)).thenReturn(view);
+        when(spendingEventService.findByOrganisationIdAndFilter(eq("org1"), any(), any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         ResponseEntity<?> response = spendingEventController.listEvents(
-                "p1", Optional.of(EventStatus.DRAFT), Optional.of(EventType.SPENDING), pageable);
+                "org1", Optional.empty(), Optional.empty(), pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(List.of(view));
+        assertThat((List<?>) response.getBody()).isEmpty();
     }
 
     // --- getEvent ---
@@ -100,7 +78,7 @@ class SpendingEventControllerTest {
     void getEvent_returns404_whenNotFound() {
         when(spendingEventService.findById("e1")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = spendingEventController.getEvent("p1", "e1");
+        ResponseEntity<?> response = spendingEventController.getEvent("e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
@@ -108,12 +86,12 @@ class SpendingEventControllerTest {
 
     @Test
     void getEvent_returns200_withView() {
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
         when(spendingEventService.findById("e1")).thenReturn(Optional.of(event));
         when(spendingEventService.toView(event)).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.getEvent("p1", "e1");
+        ResponseEntity<?> response = spendingEventController.getEvent("e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -122,27 +100,27 @@ class SpendingEventControllerTest {
     // --- createEvent ---
 
     @Test
-    void createEvent_returns404_whenProjectNotFound() {
+    void createEvent_returns400_whenProjectFieldsMissing() {
         SpendingEventCreateRequest request = createRequest();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
-        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-        when(spendingEventService.create("p1", request)).thenReturn(Either.left(problem));
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Project fields required");
+        problem.setTitle(ErrorTitleConstants.PROJECT_FIELDS_REQUIRED);
+        when(spendingEventService.create(request)).thenReturn(Either.left(problem));
 
-        ResponseEntity<?> response = spendingEventController.createEvent("p1", request);
+        ResponseEntity<?> response = spendingEventController.createEvent(request);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FIELDS_REQUIRED);
     }
 
     @Test
     void createEvent_returns201_withView() {
         SpendingEventCreateRequest request = createRequest();
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
-        when(spendingEventService.create("p1", request)).thenReturn(Either.right(event));
+        when(spendingEventService.create(request)).thenReturn(Either.right(event));
         when(spendingEventService.toView(event)).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.createEvent("p1", request);
+        ResponseEntity<?> response = spendingEventController.createEvent(request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isEqualTo(view);
@@ -156,7 +134,7 @@ class SpendingEventControllerTest {
         problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
         when(spendingEventService.publish("e1")).thenReturn(Either.left(problem));
 
-        ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1");
+        ResponseEntity<?> response = spendingEventController.publishEvent("e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
@@ -164,12 +142,12 @@ class SpendingEventControllerTest {
 
     @Test
     void publishEvent_returns200_withView() {
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.PUBLISHED);
         when(spendingEventService.publish("e1")).thenReturn(Either.right(event));
         when(spendingEventService.toView(event)).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.publishEvent("p1", "e1");
+        ResponseEntity<?> response = spendingEventController.publishEvent("e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -183,7 +161,7 @@ class SpendingEventControllerTest {
         problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
         when(spendingEventService.delete("e1")).thenReturn(Either.left(problem));
 
-        ResponseEntity<?> response = spendingEventController.deleteEvent("p1", "e1");
+        ResponseEntity<?> response = spendingEventController.deleteEvent("e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
@@ -195,7 +173,7 @@ class SpendingEventControllerTest {
         problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         when(spendingEventService.delete("e1")).thenReturn(Either.left(problem));
 
-        ResponseEntity<?> response = spendingEventController.deleteEvent("p1", "e1");
+        ResponseEntity<?> response = spendingEventController.deleteEvent("e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
@@ -205,7 +183,7 @@ class SpendingEventControllerTest {
     void deleteEvent_returns204_forDraftEvent() {
         when(spendingEventService.delete("e1")).thenReturn(Either.right(null));
 
-        ResponseEntity<?> response = spendingEventController.deleteEvent("p1", "e1");
+        ResponseEntity<?> response = spendingEventController.deleteEvent("e1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         verify(spendingEventService).delete("e1");
@@ -216,12 +194,12 @@ class SpendingEventControllerTest {
     @Test
     void updateEvent_returns200_withView() {
         SpendingEventCreateRequest request = createRequest();
-        SpendingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
         SpendingEventView view = eventView(EventType.SPENDING, EventStatus.DRAFT);
-        when(spendingEventService.update("p1", "e1", request)).thenReturn(Either.right(event));
+        when(spendingEventService.update("e1", request)).thenReturn(Either.right(event));
         when(spendingEventService.toView(event)).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.updateEvent("p1", "e1", request);
+        ResponseEntity<?> response = spendingEventController.updateEvent("e1", request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -230,72 +208,42 @@ class SpendingEventControllerTest {
     @Test
     void updateEvent_returnsServiceErrorStatus_whenUpdateFails() {
         SpendingEventCreateRequest request = createRequest();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
-        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-        when(spendingEventService.update("p1", "e1", request)).thenReturn(Either.left(problem));
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Event not found");
+        problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+        when(spendingEventService.update("e1", request)).thenReturn(Either.left(problem));
 
-        ResponseEntity<?> response = spendingEventController.updateEvent("p1", "e1", request);
+        ResponseEntity<?> response = spendingEventController.updateEvent("e1", request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
-    }
-
-    @Test
-    void updateEvent_returns400_whenMilestoneFieldsMissing() {
-        SpendingEventCreateRequest request = createRequest();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Missing milestone fields");
-        problem.setTitle("MILESTONE_FIELDS_REQUIRED");
-        when(spendingEventService.update("p1", "e1", request)).thenReturn(Either.left(problem));
-
-        ResponseEntity<?> response = spendingEventController.updateEvent("p1", "e1", request);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo("MILESTONE_FIELDS_REQUIRED");
-    }
-
-    @Test
-    void listEvents_returns200_withEmptyList() {
-        Pageable pageable = PageRequest.of(0, 10);
-        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(spendingEventService.findByProjectIdAndFilter(eq("p1"), any(), any(), eq(pageable)))
-                .thenReturn(new PageImpl<>(List.of()));
-
-        ResponseEntity<?> response = spendingEventController.listEvents(
-                "p1", Optional.empty(), Optional.empty(), pageable);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat((List<?>) response.getBody()).isEmpty();
+        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
     }
 
     // --- helpers ---
 
-    private ProjectEntity projectEntity() {
-        return ProjectEntity.builder()
-                .id("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD").build();
-    }
-
-    private SpendingEventEntity eventEntity(EventType type, EventStatus status) {
-        return SpendingEventEntity.builder()
+    private FundingEventEntity eventEntity(EventType type, EventStatus status) {
+        return FundingEventEntity.builder()
                 .id("e1").eventType(type).status(status)
-                .fundingId("GRANT-2025-001").activityId("PROJ-AB")
+                .organisationId("org1")
+                .fundingId("GRANT-2025-001")
                 .currency("USD").totalAmount(BigDecimal.ZERO)
-                .project(projectEntity()).build();
+                .build();
     }
 
     private SpendingEventView eventView(EventType type, EventStatus status) {
         return SpendingEventView.builder()
-                .eventId("e1").projectId("p1").eventType(type).status(status)
-                .fundingId("GRANT-2025-001").activityId("PROJ-AB")
+                .eventId("e1").organisationId("org1").eventType(type).status(status)
+                .fundingId("GRANT-2025-001")
                 .currency("USD").totalAmount(BigDecimal.ZERO)
-                .spendingItems(List.of()).milestoneAllocations(List.of()).build();
+                .spendingItems(List.of()).projectAllocations(List.of()).build();
     }
 
     private SpendingEventCreateRequest createRequest() {
         return SpendingEventCreateRequest.builder()
+                .organisationId("org1")
                 .eventType(EventType.SPENDING)
-                .fundingId("GRANT-2025-001").activityId("PROJ-AB").currency("USD").build();
+                .fundingId("GRANT-2025-001")
+                .currency("USD")
+                .build();
     }
 
 }

@@ -18,6 +18,9 @@ public class EventMilestoneAllocationView {
     @Schema(example = "550e8400-e29b-41d4-a716-446655440001")
     private String eventId;
 
+    @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa")
+    private String projectId;
+
     @Schema(example = "550e8400-e29b-41d4-a716-446655440000")
     private String milestoneId;
 
