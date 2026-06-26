@@ -1,8 +1,10 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.converter;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventProjectAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingItemEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
@@ -20,8 +23,9 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 /**
  * Converts a funding-module {@link SpendingEventPublishView} into a blockchain-publisher
- * {@link SpendingEventEntity} (with its spending items / milestone allocations), ready to be stored in
- * {@code STORED} state for later dispatch and metadata serialisation.
+ * {@link SpendingEventEntity} (with its spending items and per-project allocations), ready to be
+ * stored in {@code STORED} state for later dispatch and metadata serialisation. The view's nested
+ * project → milestone structure is preserved (not flattened).
  */
 @Service
 @Slf4j
@@ -31,19 +35,14 @@ public class SpendingEventConverter {
     private final OrganisationPublicApi organisationPublicApi;
 
     public SpendingEventEntity convertToDbDetached(String organisationId, SpendingEventPublishView view) {
-        SpendingEventPublishView.ProjectAllocation primary = primaryAllocation(view);
-
         SpendingEventEntity entity = new SpendingEventEntity();
         entity.setEventId(view.getEventId());
-        entity.setProjectId(primary != null ? primary.getProjectId() : null);
         entity.setEventType(view.getEventType());
         entity.setEventDate(view.getDate());
 
         entity.setFundingId(view.getFundingId());
-        entity.setActivityId(primary != null ? primary.getProjectId() : null);
-        entity.setActivityTitle(primary != null ? primary.getProjectTitle() : null);
         entity.setFundingTx(view.getFundingHash());
-        entity.setFundingDocHash(null);
+        entity.setFundingEntity(view.getFundingEntity());
 
         entity.setTotalAmount(orZero(view.getAmount()));
         entity.setCurrency(custCode(view.getCurrency()));
@@ -55,55 +54,57 @@ public class SpendingEventConverter {
                 .build()));
 
         entity.setSpendingItems(convertItems(entity, view.getItems()));
-        entity.setMilestoneAllocations(convertMilestones(entity, view));
+        entity.setProjectAllocations(convertAllocations(entity, view.getProjectAllocations()));
 
         return entity;
     }
 
-    private SpendingEventPublishView.ProjectAllocation primaryAllocation(SpendingEventPublishView view) {
-        if (view.getProjectAllocations() == null || view.getProjectAllocations().isEmpty()) {
-            return null;
-        }
-        return view.getProjectAllocations().get(0);
-    }
-
     private List<SpendingItemEntity> convertItems(SpendingEventEntity event, List<SpendingEventPublishView.SpendItem> items) {
-        if (items == null) return List.of();
+        if (items == null) return new ArrayList<>();
         return items.stream()
                 .map(item -> SpendingItemEntity.builder()
                         .itemId(item.getItemId())
                         .event(event)
                         .category(item.getCategory())
                         .vendor(item.getVendor())
-                        .amountFcy(orZero(item.getAmountFcy()))
+                        .amountFcy(item.getAmountFcy())
                         .amountRcy(orZero(item.getAmountRcy()))
                         .currency(custCode(item.getCurrency()))
                         .currencyId(currencyId(item.getCurrency()))
-                        .fxRate(orZero(item.getFxRate()))
+                        .fxRate(item.getFxRate())
                         .spendDate(item.getSpendDate())
                         .documentHash(item.getDocumentHash())
                         .notes(item.getNotes())
                         .build())
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    /** Flattens milestones from all project allocations into the publisher's flat list. */
-    private List<EventMilestoneAllocationEntity> convertMilestones(SpendingEventEntity event, SpendingEventPublishView view) {
-        if (view.getProjectAllocations() == null) return List.of();
-        return view.getProjectAllocations().stream()
-                .filter(a -> a.getMilestones() != null)
-                .flatMap(a -> a.getMilestones().stream())
-                .map(milestone -> (EventMilestoneAllocationEntity) EventMilestoneAllocationEntity.builder()
-                        .event(event)
+    private List<EventProjectAllocationEntity> convertAllocations(SpendingEventEntity event, List<SpendingEventPublishView.ProjectAllocation> allocations) {
+        if (allocations == null) return new ArrayList<>();
+        return allocations.stream()
+                .map(allocation -> {
+                    EventProjectAllocationEntity entity = EventProjectAllocationEntity.builder()
+                            .event(event)
+                            .projectId(allocation.getProjectId())
+                            .projectTitle(allocation.getProjectTitle())
+                            .subProjectTitle(allocation.getSubProjectTitle())
+                            .build();
+                    entity.setMilestones(convertMilestones(entity, allocation.getMilestones()));
+                    return entity;
+                })
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    private List<EventMilestoneAllocationEntity> convertMilestones(EventProjectAllocationEntity allocation, List<SpendingEventPublishView.Milestone> milestones) {
+        if (milestones == null) return new ArrayList<>();
+        return milestones.stream()
+                .map(milestone -> EventMilestoneAllocationEntity.builder()
+                        .allocation(allocation)
                         .milestoneId(milestone.getMilestoneUid())
-                        .milestoneLabel(milestone.getMilestoneTitle())
-                        .expectedCost(milestone.getMilestoneAmount())
-                        .allocatedAmount(milestone.getAllocatedAmount())
-                        .currency(custCode(milestone.getCurrency()))
-                        .currencyId(currencyId(milestone.getCurrency()))
-                        .dueDate(milestone.getMilestoneDate())
+                        .milestoneTitle(milestone.getMilestoneTitle())
+                        .amountRcy(milestone.getMilestoneAmount())
                         .build())
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private Organisation resolveOrganisation(String organisationId) {

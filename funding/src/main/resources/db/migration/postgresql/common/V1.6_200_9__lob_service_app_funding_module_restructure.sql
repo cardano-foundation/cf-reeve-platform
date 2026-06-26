@@ -170,3 +170,13 @@ ALTER TABLE funding_event_milestone_allocation_aud
 ALTER TABLE funding_spending_item DROP CONSTRAINT IF EXISTS fk_funding_item_event;
 ALTER TABLE funding_spending_item
     ADD CONSTRAINT fk_funding_item_event FOREIGN KEY (event_id) REFERENCES funding_event (event_id) ON DELETE CASCADE;
+
+-- ============================================================
+-- 7. Relax item columns that are SPENDING-only.
+--    FUNDING/REFUND events now also carry line items, but those items only carry the
+--    reporting-currency amount (amount_rcy); category/vendor/amount_fcy are SPENDING-only.
+-- ============================================================
+
+ALTER TABLE funding_spending_item ALTER COLUMN category   DROP NOT NULL;
+ALTER TABLE funding_spending_item ALTER COLUMN vendor     DROP NOT NULL;
+ALTER TABLE funding_spending_item ALTER COLUMN amount_fcy DROP NOT NULL;

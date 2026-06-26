@@ -12,13 +12,20 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 
+import org.springframework.core.io.ClassPathResource;
+
+import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataList;
+import com.bloxbean.cardano.client.metadata.helper.MetadataToJsonNoSchemaConverter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.JsonSchemaMetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventProjectAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingItemEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
@@ -47,7 +54,22 @@ class SpendingEventMetadataSerialiserTest {
         return organisation;
     }
 
-    private MetadataMap serialiseSpendingEvent() {
+    private EventProjectAllocationEntity projectAllocation() {
+        EventMilestoneAllocationEntity milestone = EventMilestoneAllocationEntity.builder()
+                .milestoneId("ms1")
+                .milestoneTitle("Milestone AB")
+                .amountRcy(new BigDecimal("100.00"))
+                .build();
+
+        return EventProjectAllocationEntity.builder()
+                .projectId("ProjectID1")
+                .projectTitle("ProjectTitle")
+                .subProjectTitle("SubProjectTitle")
+                .milestones(List.of(milestone))
+                .build();
+    }
+
+    private SpendingEventEntity spendingEvent() {
         SpendingItemEntity item = SpendingItemEntity.builder()
                 .itemId("item1")
                 .category("Personnel")
@@ -64,30 +86,19 @@ class SpendingEventMetadataSerialiserTest {
 
         SpendingEventEntity event = new SpendingEventEntity();
         event.setEventId("event1");
-        event.setProjectId("proj1");
         event.setEventType(EventType.SPENDING);
-        event.setEventDate(LocalDate.of(2025, 4, 30));
         event.setFundingId("fund1");
-        event.setActivityId("act1");
-        event.setActivityTitle("Activity One");
         event.setFundingTx("ftx1");
-        event.setTotalAmount(new BigDecimal("100.00"));
         event.setCurrency("USD");
         event.setCurrencyId("ISO_4217:USD");
         event.setOrganisation(organisation());
-        EventMilestoneAllocationEntity milestone = EventMilestoneAllocationEntity.builder()
-                .milestoneId("ms1")
-                .milestoneLabel("Milestone AB")
-                .expectedCost(new BigDecimal("60.00"))
-                .currency("USD")
-                .currencyId("ISO_4217:USD")
-                .dueDate(LocalDate.of(2025, 6, 30))
-                .build();
-
+        event.setProjectAllocations(List.of(projectAllocation()));
         event.setSpendingItems(List.of(item));
-        event.setMilestoneAllocations(List.of(milestone));
+        return event;
+    }
 
-        return serialiser.serialiseToMetadataMap(Set.of(event), 12345L);
+    private MetadataMap serialiseSpendingEvent() {
+        return serialiser.serialiseToMetadataMap(Set.of(spendingEvent()), 12345L);
     }
 
     @Test
@@ -107,18 +118,33 @@ class SpendingEventMetadataSerialiserTest {
 
         assertThat(eventMap.get("id")).isEqualTo("event1");
         assertThat(eventMap.get("type")).isEqualTo("SPENDING");
-        assertThat(eventMap.get("date")).isEqualTo("2025-04-30");
+        assertThat(eventMap.get("funding_tx")).isEqualTo("ftx1");
+        assertThat(eventMap.get("funding_id")).isEqualTo("fund1");
+
+        // SPENDING events have no funding_entity, and no event-level currency/amount/date.
+        assertThat(eventMap.get("funding_entity")).isNull();
+        assertThat(eventMap.get("currency")).isNull();
         assertThat(eventMap.get("amount")).isNull();
+        assertThat(eventMap.get("date")).isNull();
+    }
 
-        MetadataMap currencyMap = (MetadataMap) eventMap.get("currency");
-        assertThat(currencyMap.get("id")).isEqualTo("ISO_4217:USD");
-        assertThat(currencyMap.get("cust_code")).isEqualTo("USD");
+    @Test
+    void testSerialiseSpendingEvent_allocationAndMilestones() {
+        MetadataMap result = serialiseSpendingEvent();
+        CBORMetadataList dataList = (CBORMetadataList) result.get("data");
+        MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
 
-        MetadataMap allocationMap = (MetadataMap) eventMap.get("allocation");
-        assertThat(allocationMap.get("funding_id")).isEqualTo("fund1");
-        assertThat(allocationMap.get("activity_id")).isEqualTo("act1");
-        assertThat(allocationMap.get("activity_title")).isEqualTo("Activity One");
-        assertThat(allocationMap.get("funding_tx")).isEqualTo("ftx1");
+        CBORMetadataList allocationList = (CBORMetadataList) eventMap.get("allocation");
+        MetadataMap allocationMap = (MetadataMap) allocationList.getValueAt(0);
+        assertThat(allocationMap.get("project_id")).isEqualTo("ProjectID1");
+        assertThat(allocationMap.get("project_title")).isEqualTo("ProjectTitle");
+        assertThat(allocationMap.get("sub_project_title")).isEqualTo("SubProjectTitle");
+
+        CBORMetadataList milestoneList = (CBORMetadataList) allocationMap.get("milestones");
+        MetadataMap milestoneMap = (MetadataMap) milestoneList.getValueAt(0);
+        assertThat(milestoneMap.get("milestone_id")).isEqualTo("ms1");
+        assertThat(milestoneMap.get("milestone_title")).isEqualTo("Milestone AB");
+        assertThat(milestoneMap.get("amount_rcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("100.00")));
     }
 
     @Test
@@ -127,79 +153,97 @@ class SpendingEventMetadataSerialiserTest {
         CBORMetadataList dataList = (CBORMetadataList) result.get("data");
         MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
 
-        CBORMetadataList itemsList = (CBORMetadataList) eventMap.get("items");
-        MetadataMap itemMap = (MetadataMap) itemsList.getValueAt(0);
-        assertThat(itemMap.get("id")).isEqualTo("item1");
-        assertThat(itemMap.get("amount")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("100.00")));
+        CBORMetadataList itemList = (CBORMetadataList) eventMap.get("item");
+        MetadataMap itemMap = (MetadataMap) itemList.getValueAt(0);
         assertThat(itemMap.get("amount_rcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("85.00")));
-        assertThat(itemMap.get("date")).isEqualTo("2025-04-03");
-        assertThat(itemMap.get("fx_rate")).isEqualTo("ISO_4217:USD:ISO_4217:CHF=0.85");
-        assertThat(((MetadataMap) itemMap.get("currency")).get("id")).isEqualTo("ISO_4217:USD");
-        assertThat(((MetadataMap) itemMap.get("document")).get("hash")).isEqualTo("doc-hash-1");
+        assertThat(itemMap.get("amount_fcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("100.00")));
+        assertThat(itemMap.get("vendor")).isEqualTo("Vendor AB");
+        assertThat(itemMap.get("spending_category")).isEqualTo("Personnel");
+        assertThat(itemMap.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("0.85")));
+        assertThat(itemMap.get("hash")).isEqualTo("doc-hash-1");
         assertThat(itemMap.get("notes")).isEqualTo("Invoice #1");
+        assertThat(itemMap.get("date")).isEqualTo("2025-04-03");
+        assertThat(((MetadataMap) itemMap.get("currency")).get("id")).isEqualTo("ISO_4217:USD");
+        assertThat(((MetadataMap) itemMap.get("currency")).get("cust_code")).isEqualTo("USD");
+        // the old nested document object is gone
+        assertThat(itemMap.get("document")).isNull();
     }
 
-    @Test
-    void testSerialiseSpendingEvent_milestoneDetails() {
-        MetadataMap result = serialiseSpendingEvent();
-        CBORMetadataList dataList = (CBORMetadataList) result.get("data");
-        MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
-
-        MetadataMap milestoneMap = (MetadataMap) eventMap.get("milestone");
-        assertThat(milestoneMap.get("milestone_id")).isEqualTo("ms1");
-        assertThat(milestoneMap.get("milestone_label")).isNull();
-        assertThat(milestoneMap.get("expected_cost")).isNull();
-        assertThat(milestoneMap.get("allocated_amount")).isNull();
-        assertThat(milestoneMap.get("due_date")).isNull();
-    }
-
-    @Test
-    void testSerialiseFundingEventWithMilestones() {
-        EventMilestoneAllocationEntity allocation = EventMilestoneAllocationEntity.builder()
-                .milestoneId("ms1")
-                .milestoneLabel("Milestone AB")
-                .allocatedAmount(new BigDecimal("50.00"))
+    private SpendingEventEntity fundingEvent() {
+        SpendingItemEntity fundingItem = SpendingItemEntity.builder()
+                .itemId("fitem1")
+                .amountRcy(new BigDecimal("100.00"))
                 .currency("USD")
                 .currencyId("ISO_4217:USD")
-                .dueDate(LocalDate.of(2025, 6, 30))
+                .spendDate(LocalDate.of(2026, 6, 11))
+                .build();
+
+        EventMilestoneAllocationEntity milestone = EventMilestoneAllocationEntity.builder()
+                .milestoneId("ms1").milestoneTitle("Milestone AB").amountRcy(new BigDecimal("100.00"))
+                .build();
+        EventProjectAllocationEntity allocation = EventProjectAllocationEntity.builder()
+                .projectId("ProjectID1").projectTitle("ProjectTitle")
+                .milestones(List.of(milestone))
                 .build();
 
         SpendingEventEntity event = new SpendingEventEntity();
         event.setEventId("event2");
-        event.setProjectId("proj1");
         event.setEventType(EventType.FUNDING);
-        event.setEventDate(LocalDate.of(2025, 1, 15));
         event.setFundingId("fund1");
-        event.setActivityId("act1");
-        event.setActivityTitle("Activity One");
         event.setFundingTx("ftx1");
-        event.setTotalAmount(new BigDecimal("50.00"));
+        event.setFundingEntity("FundingEntity");
         event.setCurrency("USD");
         event.setCurrencyId("ISO_4217:USD");
         event.setOrganisation(organisation());
-        event.setSpendingItems(List.of());
-        event.setMilestoneAllocations(List.of(allocation));
+        event.setProjectAllocations(List.of(allocation));
+        event.setSpendingItems(List.of(fundingItem));
+        return event;
+    }
 
-        MetadataMap result = serialiser.serialiseToMetadataMap(Set.of(event), 12345L);
-
+    @Test
+    void testSerialiseFundingEvent_lightItemAndFundingEntity() {
+        MetadataMap result = serialiser.serialiseToMetadataMap(Set.of(fundingEvent()), 12345L);
         CBORMetadataList dataList = (CBORMetadataList) result.get("data");
         MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
 
         assertThat(eventMap.get("type")).isEqualTo("FUNDING");
-        assertThat(eventMap.get("items")).isNull();
+        assertThat(eventMap.get("funding_entity")).isEqualTo("FundingEntity");
 
-        CBORMetadataList milestoneList = (CBORMetadataList) eventMap.get("milestone");
-        MetadataMap milestoneMap = (MetadataMap) milestoneList.getValueAt(0);
-        assertThat(milestoneMap.get("milestone_id")).isEqualTo("ms1");
-        assertThat(milestoneMap.get("milestone_label")).isNull();
-        assertThat(milestoneMap.get("allocated_amount")).isNull();
-        assertThat(milestoneMap.get("due_date")).isNull();
-        assertThat(milestoneMap.get("currency")).isNull();
+        // root-only allocation -> no sub_project_title
+        CBORMetadataList allocationList = (CBORMetadataList) eventMap.get("allocation");
+        MetadataMap allocationMap = (MetadataMap) allocationList.getValueAt(0);
+        assertThat(allocationMap.get("sub_project_title")).isNull();
 
-        // FUNDING/REFUND allocation does not require a milestone_id on the allocation block
-        MetadataMap allocationMap = (MetadataMap) eventMap.get("allocation");
-        assertThat(allocationMap.get("activity_title")).isEqualTo("Activity One");
-        assertThat(allocationMap.get("funding_tx")).isEqualTo("ftx1");
+        CBORMetadataList itemList = (CBORMetadataList) eventMap.get("item");
+        MetadataMap itemMap = (MetadataMap) itemList.getValueAt(0);
+        assertThat(itemMap.get("amount_rcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("100.00")));
+        assertThat(itemMap.get("date")).isEqualTo("2026-06-11");
+        assertThat(((MetadataMap) itemMap.get("currency")).get("cust_code")).isEqualTo("USD");
+        // FUNDING items omit the SPENDING-only fields
+        assertThat(itemMap.get("amount_fcy")).isNull();
+        assertThat(itemMap.get("spending_category")).isNull();
+        assertThat(itemMap.get("vendor")).isNull();
+        assertThat(itemMap.get("fx_rate")).isNull();
+        assertThat(itemMap.get("hash")).isNull();
+    }
+
+    /**
+     * End-to-end guard that the serialiser output and the JSON schema agree: serialise a mixed
+     * FUNDING + SPENDING bundle exactly as the L1 creator does (CBOR → JSON) and validate it against
+     * {@code spending_event_blockchain_transaction_metadata-schema.json} with the production checker.
+     */
+    @Test
+    void serialisedBundleValidatesAgainstSchema() throws Exception {
+        MetadataMap map = serialiser.serialiseToMetadataMap(Set.of(spendingEvent(), fundingEvent()), 12345L);
+
+        byte[] bytes = CborSerializationUtil.serialize(map.getMap());
+        String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
+
+        JsonSchemaMetadataChecker checker = new JsonSchemaMetadataChecker(new ObjectMapper());
+        checker.setMetadataSchemaResource(new ClassPathResource("spending_event_blockchain_transaction_metadata-schema.json"));
+        checker.setEnableChecker(true);
+
+        assertThat(checker.checkTransactionMetadata(json)).isTrue();
     }
 
 }

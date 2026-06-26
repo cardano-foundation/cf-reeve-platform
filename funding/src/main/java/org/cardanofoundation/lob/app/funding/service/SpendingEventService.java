@@ -70,14 +70,16 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
+        Either<ProblemDetail, Void> itemResult = validateItems(request.getEventType(), request.getItems());
+        if (itemResult.isLeft()) return Either.left(itemResult.getLeft());
+
         FundingEventEntity event = toEntity(request);
 
         Either<ProblemDetail, Void> allocResult = populateProjectAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
 
-        if (request.getEventType() == EventType.SPENDING) {
-            populateSpendingItems(event, request.getItems());
-        }
+        // Both SPENDING and FUNDING/REFUND events carry line items; FUNDING/REFUND items are lighter.
+        populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
         return Either.right(fundingEventRepository.saveAndFlush(event));
@@ -97,6 +99,9 @@ public class SpendingEventService {
             return Either.left(problem);
         }
 
+        Either<ProblemDetail, Void> itemResult = validateItems(event.getEventType(), request.getItems());
+        if (itemResult.isLeft()) return Either.left(itemResult.getLeft());
+
         event.setFundingId(request.getFundingId());
         event.setFundingHash(request.getFundingHash());
         event.setFundingEntity(request.getFundingEntity());
@@ -109,9 +114,7 @@ public class SpendingEventService {
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
 
         event.getSpendingItems().clear();
-        if (event.getEventType() == EventType.SPENDING) {
-            populateSpendingItems(event, request.getItems());
-        }
+        populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
         return Either.right(fundingEventRepository.saveAndFlush(event));
@@ -402,6 +405,36 @@ public class SpendingEventService {
         return Either.right(milestoneRepository.saveAndFlush(newMilestone));
     }
 
+    /**
+     * Enforces the per-event-type item requirements that bean validation can't express: SPENDING items
+     * need the full {@code category}/{@code vendor}/{@code amountFcy} set, while FUNDING/REFUND items
+     * only carry the reporting-currency {@code amountRcy}. {@code currency} and {@code spendDate} are
+     * always required and remain bean-validated on the request.
+     */
+    private Either<ProblemDetail, Void> validateItems(EventType eventType, List<SpendingItemRequest> items) {
+        if (items == null) return Either.right(null);
+        for (SpendingItemRequest item : items) {
+            if (eventType == EventType.SPENDING) {
+                if (isBlank(item.getCategory()) || isBlank(item.getVendor()) || item.getAmountFcy() == null) {
+                    return Either.left(itemProblem("category, vendor and amountFcy are required for SPENDING items"));
+                }
+            } else if (item.getAmountRcy() == null) {
+                return Either.left(itemProblem("amountRcy is required for FUNDING/REFUND items"));
+            }
+        }
+        return Either.right(null);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static ProblemDetail itemProblem(String detail) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        problem.setTitle("ITEM_FIELDS_REQUIRED");
+        return problem;
+    }
+
     private void populateSpendingItems(FundingEventEntity event, List<SpendingItemRequest> itemRequests) {
         itemRequests.stream()
                 .map(req -> toSpendingItemEntity(req, event))
@@ -513,14 +546,15 @@ public class SpendingEventService {
                         .map(this::toPublishMilestone)
                         .toList();
 
-        String parentProjectUid = (project != null && project.getParentProject() != null)
-                ? project.getParentProject().getId() : null;
+        // When the allocation targets a sub-project, publish the root project's id/title and
+        // surface the sub-project's title separately; otherwise the allocation's own project is the root.
+        boolean isSubProject = project != null && project.getParentProject() != null;
+        ProjectEntity root = isSubProject ? project.getParentProject() : project;
 
         return SpendingEventPublishView.ProjectAllocation.builder()
-                .projectUid(alloc.getId().getProjectUid())
-                .projectId(project != null ? project.getProjectId() : null)
-                .projectTitle(project != null ? project.getProjectTitle() : null)
-                .parentProjectUid(parentProjectUid)
+                .projectId(root != null ? root.getProjectId() : null)
+                .projectTitle(root != null ? root.getProjectTitle() : null)
+                .subProjectTitle(isSubProject ? project.getProjectTitle() : null)
                 .milestones(milestones)
                 .build();
     }

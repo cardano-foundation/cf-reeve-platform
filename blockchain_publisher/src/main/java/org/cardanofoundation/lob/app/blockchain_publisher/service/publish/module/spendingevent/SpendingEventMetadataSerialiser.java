@@ -15,18 +15,22 @@ import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventProjectAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingItemEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
-import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
 /**
- * Serialises a batch of {@link SpendingEventEntity} into the {@code EVENT_BUNDLE} (label 1447) Cardano metadata
- * record, following {@code spending_event_blockchain_transaction_metadata-schema.json}.
+ * Serialises a batch of {@link SpendingEventEntity} into the {@code EVENT_BUNDLE} (label 1447) Cardano
+ * metadata record, following {@code spending_event_blockchain_transaction_metadata-schema.json}.
  *
  * <p>The produced map is the <em>content</em> of the {@code 1447} object ({@code org}/{@code metadata}/
  * {@code type}/{@code data}); the {@code 1447} wrapper itself is added by {@code AbstractL1TransactionCreator}.
+ *
+ * <p>Every monetary value is emitted as a decimal string (e.g. {@code "100"}, {@code "0.85"}) because
+ * Cardano on-chain transaction metadata cannot encode floats/decimals — this applies to amounts and to
+ * {@code fx_rate} alike.
  */
 @Service
 @RequiredArgsConstructor
@@ -42,8 +46,8 @@ public class SpendingEventMetadataSerialiser {
 
         globalMetadataMap.put("metadata", createMetadataSection(creationSlot));
 
-        // The schema requires a single top-level "org" and forbids a per-event "org" (grantEvent additionalProperties=false).
-        // The dispatcher batches per organisation, so every event in the bundle shares the same organisation.
+        // The schema requires a single top-level "org". The dispatcher batches per organisation, so
+        // every event in the bundle shares the same organisation.
         globalMetadataMap.put("org", serialise(events.stream().findFirst().orElseThrow().getOrganisation()));
 
         val eventList = MetadataBuilder.createList();
@@ -72,104 +76,92 @@ public class SpendingEventMetadataSerialiser {
 
         metadataMap.put("id", event.getEventId());
         metadataMap.put("type", event.getEventType().name());
-        if (event.getEventDate() != null) {
-            metadataMap.put("date", event.getEventDate().toString());
-        }
-        metadataMap.put("funding_id", event.getFundingId());
         if (event.getFundingTx() != null) {
             metadataMap.put("funding_tx", event.getFundingTx());
         }
-        metadataMap.put("allocation", serialiseAllocation(event));
-
-        // SPENDING events derive their total from the mandatory items, so no event-level amount is emitted.
-        if (event.getEventType() != EventType.SPENDING) {
-            metadataMap.put("amount", BigDecimals.normaliseString(event.getTotalAmount()));
-        }
-        metadataMap.put("currency", serialiseCurrency(event.getCurrencyId(), event.getCurrency()));
-
-        // reporting currency (RCY) used as the "to" side of every spend item's fx_rate
-        val reportingCurrencyId = event.getOrganisation().getCurrencyId();
-
-        // SPENDING targets a single milestone object; FUNDING / REFUND carry an array of milestone allocations.
-        if (event.getEventType() == EventType.SPENDING) {
-            if (!event.getMilestoneAllocations().isEmpty()) {
-                metadataMap.put("milestone", serialise(event.getMilestoneAllocations().get(0)));
-            }
-        } else {
-            val milestoneMetadataList = MetadataBuilder.createList();
-            for (val allocation : event.getMilestoneAllocations()) {
-                milestoneMetadataList.add(serialise(allocation));
-            }
-            if (milestoneMetadataList.size() > 0) {
-                metadataMap.put("milestone", milestoneMetadataList);
-            }
+        metadataMap.put("funding_id", event.getFundingId());
+        // funding_entity is published for FUNDING events only.
+        if (event.getFundingEntity() != null) {
+            metadataMap.put("funding_entity", event.getFundingEntity());
         }
 
-        val itemsMetadataList = MetadataBuilder.createList();
+        val allocationList = MetadataBuilder.createList();
+        for (val allocation : event.getProjectAllocations()) {
+            allocationList.add(serialise(allocation));
+        }
+        metadataMap.put("allocation", allocationList);
+
+        val itemList = MetadataBuilder.createList();
         for (val item : event.getSpendingItems()) {
-            itemsMetadataList.add(serialise(item, reportingCurrencyId));
+            itemList.add(serialise(item));
         }
-        if (itemsMetadataList.size() > 0) {
-            metadataMap.put("items", itemsMetadataList);
-        }
-
-        return metadataMap;
-    }
-
-    private static MetadataMap serialiseAllocation(SpendingEventEntity event) {
-        val metadataMap = MetadataBuilder.createMap();
-
-
-        metadataMap.put("activity_id", event.getActivityId());
-
-        if (event.getActivityTitle() != null) {
-            metadataMap.put("activity_title", event.getActivityTitle());
-        }
-        if (event.getActivitySubTitle() != null) {
-            metadataMap.put("activity_sub_title", event.getActivitySubTitle());
-        }
-        if (event.getFundingDocHash() != null) {
-            metadataMap.put("funding_doc_hash", event.getFundingDocHash());
+        if (itemList.size() > 0) {
+            metadataMap.put("item", itemList);
         }
 
         return metadataMap;
     }
 
-    private static MetadataMap serialise(SpendingItemEntity item, String reportingCurrencyId) {
+    private static MetadataMap serialise(EventProjectAllocationEntity allocation) {
         val metadataMap = MetadataBuilder.createMap();
 
-        metadataMap.put("id", item.getItemId());
-        metadataMap.put("category", item.getCategory());
-        metadataMap.put("vendor", item.getVendor());
-        metadataMap.put("amount", BigDecimals.normaliseString(item.getAmountFcy()));
-        metadataMap.put("currency", serialiseCurrency(item.getCurrencyId(), item.getCurrency()));
-
-        if (item.getCurrencyId() != null && reportingCurrencyId != null && item.getFxRate() != null) {
-            // schema fxRate format: "<from>:<to>=<rate>", e.g. ISO_4217:USD:ISO_4217:EUR=0.9200
-            metadataMap.put("fx_rate", "%s:%s=%s".formatted(item.getCurrencyId(), reportingCurrencyId, item.getFxRate().toPlainString()));
+        metadataMap.put("project_id", allocation.getProjectId());
+        if (allocation.getProjectTitle() != null) {
+            metadataMap.put("project_title", allocation.getProjectTitle());
         }
+        if (allocation.getSubProjectTitle() != null) {
+            metadataMap.put("sub_project_title", allocation.getSubProjectTitle());
+        }
+
+        val milestoneList = MetadataBuilder.createList();
+        for (val milestone : allocation.getMilestones()) {
+            milestoneList.add(serialise(milestone));
+        }
+        metadataMap.put("milestones", milestoneList);
+
+        return metadataMap;
+    }
+
+    private static MetadataMap serialise(EventMilestoneAllocationEntity milestone) {
+        val metadataMap = MetadataBuilder.createMap();
+
+        metadataMap.put("milestone_id", milestone.getMilestoneId());
+        if (milestone.getMilestoneTitle() != null) {
+            metadataMap.put("milestone_title", milestone.getMilestoneTitle());
+        }
+        if (milestone.getAmountRcy() != null) {
+            metadataMap.put("amount_rcy", BigDecimals.normaliseString(milestone.getAmountRcy()));
+        }
+
+        return metadataMap;
+    }
+
+    private static MetadataMap serialise(SpendingItemEntity item) {
+        val metadataMap = MetadataBuilder.createMap();
+
         if (item.getAmountRcy() != null) {
             metadataMap.put("amount_rcy", BigDecimals.normaliseString(item.getAmountRcy()));
         }
-        metadataMap.put("date", item.getSpendDate().toString());
+        if (item.getAmountFcy() != null) {
+            metadataMap.put("amount_fcy", BigDecimals.normaliseString(item.getAmountFcy()));
+        }
+        if (item.getVendor() != null) {
+            metadataMap.put("vendor", item.getVendor());
+        }
+        if (item.getCategory() != null) {
+            metadataMap.put("spending_category", item.getCategory());
+        }
+        if (item.getFxRate() != null) {
+            metadataMap.put("fx_rate", BigDecimals.normaliseString(item.getFxRate()));
+        }
         if (item.getDocumentHash() != null) {
-            val documentMap = MetadataBuilder.createMap();
-            documentMap.put("hash", item.getDocumentHash());
-            metadataMap.put("document", documentMap);
+            metadataMap.put("hash", item.getDocumentHash());
         }
         if (item.getNotes() != null) {
             metadataMap.put("notes", item.getNotes());
         }
-
-        return metadataMap;
-    }
-
-    private static MetadataMap serialise(EventMilestoneAllocationEntity allocation) {
-        val metadataMap = MetadataBuilder.createMap();
-
-        // Only the milestone_id is published on-chain; the remaining fields (label, costs, currency, due date)
-        // are resolved off-chain from the milestone reference.
-        metadataMap.put("milestone_id", allocation.getMilestoneId());
+        metadataMap.put("date", item.getSpendDate().toString());
+        metadataMap.put("currency", serialiseCurrency(item.getCurrencyId(), item.getCurrency()));
 
         return metadataMap;
     }

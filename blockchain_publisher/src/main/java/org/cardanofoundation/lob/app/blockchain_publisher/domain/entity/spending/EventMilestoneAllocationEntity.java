@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
@@ -28,6 +27,11 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.envers.Audited;
 
+/**
+ * A single milestone within a {@link EventProjectAllocationEntity}. Carries only what the on-chain
+ * {@code allocation[].milestones[]} record needs: the milestone identifier, its title and the
+ * reporting-currency amount.
+ */
 @Getter
 @Setter
 @Entity(name = "blockchain_publisher.spending.event_milestone_allocation_entity")
@@ -44,33 +48,19 @@ public class EventMilestoneAllocationEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne
+    @JoinColumn(name = "project_allocation_id")
+    private EventProjectAllocationEntity allocation;
+
     @Column(name = "milestone_id", nullable = false)
     private String milestoneId;
 
-    @ManyToOne
-    @JoinColumn(name = "event_id")
-    private SpendingEventEntity event;
-
     @NotBlank
-    @Column(name = "milestone_label", nullable = false)
-    private String milestoneLabel;
+    @Column(name = "milestone_title", nullable = false)
+    private String milestoneTitle;
 
+    /** Reporting-currency amount of the milestone (the milestone's full cost). */
     @Nullable
-    @Column(name = "expected_cost")
-    private BigDecimal expectedCost;
-
-    @Nullable
-    @Column(name = "allocated_amount")
-    private BigDecimal allocatedAmount;
-
-    @NotBlank
-    @Column(name = "currency", nullable = false)
-    private String currency;
-
-    @Nullable
-    @Column(name = "currency_id")
-    private String currencyId;
-
-    @Column(name = "due_date", nullable = false)
-    private LocalDate dueDate;
+    @Column(name = "amount_rcy")
+    private BigDecimal amountRcy;
 }

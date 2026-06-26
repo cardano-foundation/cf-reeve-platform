@@ -50,13 +50,14 @@ public class SpendingEventPublishView {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class ProjectAllocation {
-        private String projectUid;
+        /** User-defined id of the root project (the parent when this allocation targets a sub-project). */
         private String projectId;
+        /** Title of the root project. */
         @Nullable
         private String projectTitle;
-        /** Set when the allocation targets a sub-project; contains the root project UID (SHA256). */
+        /** Set only when the allocation targets a sub-project; carries the sub-project's own title. */
         @Nullable
-        private String parentProjectUid;
+        private String subProjectTitle;
         private List<Milestone> milestones;
     }
 

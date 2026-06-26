@@ -310,7 +310,7 @@ public class SpendingEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     @SuppressWarnings("unchecked")
     public ResponseEntity<SpendingEventView> createEvent(
-            @Valid @org.springframework.web.bind.annotation.RequestBody SpendingEventCreateRequest request) {
+            @Valid @RequestBody SpendingEventCreateRequest request) {
 
         Either<ProblemDetail, FundingEventEntity> created = spendingEventService.create(request);
         if (created.isLeft()) {

@@ -45,9 +45,9 @@ class SpendingEventsPublishCommandSerdeTest {
                 .build();
 
         SpendingEventPublishView.ProjectAllocation allocation = SpendingEventPublishView.ProjectAllocation.builder()
-                .projectUid("proj-uid-1")
                 .projectId("PROJ-AB")
-                .projectTitle("Activity One")
+                .projectTitle("Project One")
+                .subProjectTitle("Sub Project One")
                 .milestones(List.of())
                 .build();
 
@@ -80,6 +80,8 @@ class SpendingEventsPublishCommandSerdeTest {
         assertThat(resultView.getCurrency().getCustCode()).isEqualTo("USD");
         assertThat(resultView.getProjectAllocations()).hasSize(1);
         assertThat(resultView.getProjectAllocations().get(0).getProjectId()).isEqualTo("PROJ-AB");
+        assertThat(resultView.getProjectAllocations().get(0).getProjectTitle()).isEqualTo("Project One");
+        assertThat(resultView.getProjectAllocations().get(0).getSubProjectTitle()).isEqualTo("Sub Project One");
 
         assertThat(resultView.getItems()).hasSize(1);
         SpendingEventPublishView.SpendItem resultItem = resultView.getItems().get(0);
@@ -104,8 +106,8 @@ class SpendingEventsPublishCommandSerdeTest {
                 .build();
 
         SpendingEventPublishView.ProjectAllocation allocation = SpendingEventPublishView.ProjectAllocation.builder()
-                .projectUid("proj-uid-1")
                 .projectId("PROJ-AB")
+                .projectTitle("Project One")
                 .milestones(List.of(milestone))
                 .build();
 

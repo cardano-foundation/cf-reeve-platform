@@ -32,16 +32,19 @@ public class SpendingItemEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "item_id", nullable = false)
     private String id;
 
-    @NotBlank
-    @Column(name = "category", nullable = false)
+    /** Required for SPENDING items; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "category")
     private String category;
 
-    @NotBlank
-    @Column(name = "vendor", nullable = false)
+    /** Required for SPENDING items; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "vendor")
     private String vendor;
 
-    @NotNull
-    @Column(name = "amount_fcy", nullable = false)
+    /** Foreign-currency amount. Required for SPENDING items; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "amount_fcy")
     private BigDecimal amountFcy;
 
     @NotBlank

@@ -59,32 +59,18 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     @Column(name = "event_id", nullable = false)
     private String eventId;
 
-    @Column(name = "project_id", nullable = false)
-    private String projectId;
+    @Nullable
+    @Column(name = "funding_tx")
+    private String fundingTx;
 
     @NotBlank
     @Column(name = "funding_id", nullable = false)
     private String fundingId;
 
-    @NotBlank
-    @Column(name = "activity_id", nullable = false)
-    private String activityId;
-
+    /** Name of the entity providing the funding. Populated for FUNDING events only. */
     @Nullable
-    @Column(name = "activity_title")
-    private String activityTitle;
-
-    @Nullable
-    @Column(name = "activity_sub_title")
-    private String activitySubTitle;
-
-    @Nullable
-    @Column(name = "funding_tx")
-    private String fundingTx;
-
-    @Nullable
-    @Column(name = "funding_doc_hash")
-    private String fundingDocHash;
+    @Column(name = "funding_entity")
+    private String fundingEntity;
 
     @NotNull
     @Enumerated(EnumType.STRING)
@@ -99,23 +85,23 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     @Builder.Default
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
-    @NotBlank
-    @Column(name = "currency", nullable = false)
+    @Nullable
+    @Column(name = "currency")
     private String currency;
 
     @Nullable
     @Column(name = "currency_id")
     private String currencyId;
 
-    /** Spend line items — populated only for SPENDING events. */
+    /** Spend line items — SPENDING items carry the full set, FUNDING/REFUND items only amount_rcy. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
     private List<SpendingItemEntity> spendingItems = new ArrayList<>();
 
-    /** Milestone allocations — populated only for FUNDING and REFUND events. */
+    /** Project allocations — one per project this event targets, each with its milestones. */
     @Builder.Default
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
-    private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<EventProjectAllocationEntity> projectAllocations = new ArrayList<>();
 
     @Embedded
     @AttributeOverrides({

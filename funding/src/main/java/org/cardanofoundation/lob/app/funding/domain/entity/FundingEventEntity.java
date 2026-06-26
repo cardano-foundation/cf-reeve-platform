@@ -59,6 +59,15 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "funding_id", nullable = false)
     private String fundingId;
 
+    @Nullable
+    @Column(name = "funding_hash")
+    private String fundingHash;
+
+    /** Identifying name of the entity providing the funding. Populated for FUNDING events only. */
+    @Nullable
+    @Column(name = "funding_entity")
+    private String fundingEntity;
+
     @Builder.Default
     @Column(name = "ledger_dispatch_approved")
     private boolean ledgerDispatchApproved = false;
@@ -78,15 +87,6 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Nullable
     @Column(name = "ledger_dispatch_status_error_reason")
     private String ledgerDispatchStatusErrorReason;
-
-    @Nullable
-    @Column(name = "funding_hash")
-    private String fundingHash;
-
-    /** Identifying name of the entity providing the funding. Populated for FUNDING events only. */
-    @Nullable
-    @Column(name = "funding_entity")
-    private String fundingEntity;
 
     @NotNull
     @Column(name = "total_amount", nullable = false)
