@@ -31,8 +31,8 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
     @Query("""
             SELECT e FROM funding.FundingEventEntity e
             WHERE EXISTS (
-                SELECT a FROM funding.EventProjectAllocationEntity a
-                WHERE a.event = e AND a.project.id = :projectId
+                SELECT a FROM funding.EventMilestoneAllocationEntity a
+                WHERE a.event = e AND a.milestone.project.id = :projectId
             )
             AND (:status IS NULL OR e.status = :status)
             AND (:eventType IS NULL OR e.eventType = :eventType)

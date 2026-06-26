@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS funding_project (
     project_id       CHAR(64)       NOT NULL,
     organisation_id  VARCHAR(255)   NOT NULL,
-    funding_id       VARCHAR(255)   NOT NULL,
+    funding_id       VARCHAR(255),
     activity_id      VARCHAR(255)   NOT NULL,
     activity_title   VARCHAR(255)   NOT NULL,
     expected_total_amount NUMERIC(30, 10)   NOT NULL,

@@ -97,10 +97,10 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "currency", nullable = false)
     private String currency;
 
-    /** One entry per project this event is allocated to; each carries its milestone allocations. */
+    /** Milestone allocations for this event — one per (event, milestone) pair. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<EventProjectAllocationEntity> projectAllocations = new ArrayList<>();
+    private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
 
     /** Spend line items — populated only for SPENDING events. */
     @Builder.Default
