@@ -597,7 +597,7 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void update_fundingEvent_doesNotRepopulateItems() {
+    void update_fundingEvent_populatesItems() {
         FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
         ProjectEntity project = projectEntity();
         MilestoneEntity milestone = milestoneEntity("m1");
@@ -606,6 +606,13 @@ class SpendingEventServiceTest {
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
         when(milestoneRepository.findByProject_IdAndMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        // FUNDING/REFUND items are the light variant: only amount_rcy + date + currency.
+        SpendingItemRequest fundingItem = SpendingItemRequest.builder()
+                .amountRcy(new BigDecimal("100.00"))
+                .currency("USD")
+                .spendDate(LocalDate.of(2025, 4, 3))
+                .build();
 
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
                 .organisationId("org1")
@@ -619,13 +626,14 @@ class SpendingEventServiceTest {
                                 .allocatedAmount(new BigDecimal("50000.00"))
                                 .build()))
                         .build()))
-                .items(List.of(itemRequest(new BigDecimal("100.00"))))
+                .items(List.of(fundingItem))
                 .build();
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
 
         assertThat(result.isRight()).isTrue();
-        assertThat(result.get().getSpendingItems()).isEmpty();
+        assertThat(result.get().getSpendingItems()).hasSize(1);
+        assertThat(result.get().getSpendingItems().get(0).getAmountRcy()).isEqualByComparingTo("100.00");
     }
 
     // --- toView ---
@@ -779,7 +787,9 @@ class SpendingEventServiceTest {
 
         assertThat(view.getProjectAllocations()).hasSize(1);
         SpendingEventPublishView.ProjectAllocation allocation = view.getProjectAllocations().get(0);
-        assertThat(allocation.getProjectUid()).isEqualTo("p1");
+        assertThat(allocation.getProjectId()).isEqualTo("PROJ-AB");
+        assertThat(allocation.getProjectTitle()).isEqualTo("Project AB");
+        assertThat(allocation.getSubProjectTitle()).isNull();
         assertThat(allocation.getMilestones()).hasSize(1);
         SpendingEventPublishView.Milestone ms = allocation.getMilestones().get(0);
         assertThat(ms.getMilestoneUid()).isEqualTo("m1");

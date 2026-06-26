@@ -461,11 +461,14 @@ public class SpendingEventService {
                     List<SpendingEventPublishView.Milestone> milestones = entry.getValue().stream()
                             .map(this::toPublishMilestone)
                             .toList();
+                    // When the allocation targets a sub-project, publish the root project's id/title and
+                    // surface the sub-project's title separately; otherwise the project itself is the root.
+                    boolean isSubProject = project.getParentProject() != null;
+                    ProjectEntity root = isSubProject ? project.getParentProject() : project;
                     return SpendingEventPublishView.ProjectAllocation.builder()
-                            .projectUid(project.getId())
-                            .projectId(project.getProjectId())
-                            .projectTitle(project.getProjectTitle())
-                            .parentProjectUid(project.getParentProject() != null ? project.getParentProject().getId() : null)
+                            .projectId(root.getProjectId())
+                            .projectTitle(root.getProjectTitle())
+                            .subProjectTitle(isSubProject ? project.getProjectTitle() : null)
                             .milestones(milestones)
                             .build();
                 })
@@ -543,39 +546,6 @@ public class SpendingEventService {
                 .build();
     }
 
-    private SpendingEventPublishView.ProjectAllocation toPublishProjectAllocation(EventProjectAllocationEntity alloc) {
-        ProjectEntity project = alloc.getProject();
-
-        List<SpendingEventPublishView.Milestone> milestones =
-                milestoneAllocationRepository.findById_EventIdAndId_ProjectUid(
-                        alloc.getId().getEventId(), alloc.getId().getProjectUid()).stream()
-                        .map(this::toPublishMilestone)
-                        .toList();
-
-        // When the allocation targets a sub-project, publish the root project's id/title and
-        // surface the sub-project's title separately; otherwise the allocation's own project is the root.
-        boolean isSubProject = project != null && project.getParentProject() != null;
-        ProjectEntity root = isSubProject ? project.getParentProject() : project;
-
-        return SpendingEventPublishView.ProjectAllocation.builder()
-                .projectId(root != null ? root.getProjectId() : null)
-                .projectTitle(root != null ? root.getProjectTitle() : null)
-                .subProjectTitle(isSubProject ? project.getProjectTitle() : null)
-                .milestones(milestones)
-                .build();
-    }
-
-    private SpendingEventPublishView.Milestone toPublishMilestone(EventMilestoneAllocationEntity alloc) {
-        MilestoneEntity milestone = milestoneRepository.findById(alloc.getId().getMilestoneUid()).orElse(null);
-        return SpendingEventPublishView.Milestone.builder()
-                .milestoneUid(alloc.getId().getMilestoneUid())
-                .milestoneTitle(milestone != null ? milestone.getMilestoneTitle() : null)
-                .milestoneAmount(milestone != null ? milestone.getMilestoneAmount() : null)
-                .allocatedAmount(alloc.getAllocatedAmount())
-                .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
-                .milestoneDate(milestone != null ? milestone.getMilestoneDate() : null)
-                .build();
-    }
 
     private SpendingEventPublishView.SpendItem toPublishItem(SpendingItemEntity item) {
         return SpendingEventPublishView.SpendItem.builder()
