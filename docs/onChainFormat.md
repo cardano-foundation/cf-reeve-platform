@@ -250,72 +250,73 @@ A bundle groups one or more events belonging to a single organization. The `data
 
 ### Event Fields
 
-Every event (grant-lifecycle and custom) shares these common fields:
+Grant-lifecycle events (`FUNDING`, `SPENDING`, `REFUND`) carry:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | Yes | Unique identifier of the event |
-| `type` | string | Yes | Event type — `FUNDING`, `SPENDING`, `REFUND`, or a custom organization-defined value |
-| `date` | string | Yes | Event date in ISO 8601 format (YYYY-MM-DD) |
+| `type` | string | Yes | Event type — `FUNDING`, `SPENDING`, or `REFUND` |
+| `funding_tx` | string | No | Reference to the funding transaction |
+| `funding_id` | string | Yes | Identifier of the funding source |
+| `funding_entity` | string | No | Name of the entity providing the funding (`FUNDING` events only) |
+| `allocation` | array | Yes | One entry per project this event targets, each with its milestones (see below) |
+| `item` | array | Conditional | Line items; **required** for `SPENDING`, optional for `FUNDING`/`REFUND` |
 
-Grant-lifecycle events (`FUNDING`, `SPENDING`, `REFUND`) additionally carry:
+Custom (organization-defined) events carry only the common fields:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `allocation` | object | Yes | Funding context (see below) |
-| `milestone` | object / array | Conditional | Milestone reference(s); a single object for `SPENDING`, an array for `FUNDING`/`REFUND` |
-| `amount` | string | Conditional | Event amount; **required** for `FUNDING`/`REFUND`, **forbidden** for `SPENDING` |
-| `currency` | object | Yes | Currency of the event with `id` (ISO format) and `cust_code` |
-| `items` | array | Conditional | Spend items; **required** for `SPENDING` |
+| `id` | string | Yes | Unique identifier of the event |
+| `type` | string | Yes | A custom organization-defined value (not `FUNDING`/`SPENDING`/`REFUND`) |
+| `date` | string | Yes | Event date in ISO 8601 format (YYYY-MM-DD) |
+
+> Grant-lifecycle events no longer carry an event-level `date`, `amount`, or `currency`: dates and amounts live on the individual `milestones`/`item` entries, and the organization's reporting currency is declared once in the top-level `org` block.
 
 ### Event Types
 
 | Type | Description |
 |------|-------------|
-| `FUNDING` | Funds allocated to a grant/project, optionally split across milestones |
-| `SPENDING` | Expenditure against a grant; the total is derived from the mandatory `items`, so no event-level `amount` is carried |
+| `FUNDING` | Funds allocated to a grant, split across one or more projects and their milestones |
+| `SPENDING` | Expenditure against a grant, listed as line `item`s |
 | `REFUND` | Funds returned/reversed for a grant |
 | *custom* | Any organization-defined type (not one of the reserved values above); only the common fields are mandated and the body is free-form |
 
-### Allocation Object
+### Allocation Array
 
-The `allocation` object provides the funding context present on every grant-lifecycle event:
+`allocation` is an array with one entry per project the event targets. Each entry nests the milestones of that project. When an allocation targets a **sub-project**, `project_id`/`project_title` carry the **root** project and `sub_project_title` carries the sub-project's own title.
 
-| Field | Type | Required | Description                                                                                                     |
-|-------|------|----------|-----------------------------------------------------------------------------------------------------------------|
-| `funding_id` | string | Yes | Identifier of the funding source                                                                                |
-| `activity_id` | string | Yes | Identifier of the funded activity                                                                               |
-| `activity_title` | string | Conditional | Human-readable activity name; required for `FUNDING`/`REFUND`                                                   |
-| `activity_title` | string | Conditional | Human-readable activity sub title; required for `FUNDING`/`REFUND`                                              |
-| `funding_tx` | string | Conditional | Reference to the funding transaction; for `FUNDING`/`REFUND`, either this or `funding_doc_hash` must be present |
-| `funding_doc_hash` | string | Conditional | Hash of the funding document; alternative to `funding_tx`                                                       |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `project_id` | string | Yes | User-defined id of the (root) project |
+| `project_title` | string | Yes | Title of the (root) project |
+| `sub_project_title` | string | No | Sub-project title; present only when the allocation targets a sub-project |
+| `milestones` | array | Yes | Milestones of this project targeted by the event (see below) |
 
 ### Milestone Object
 
-The `milestone` field references the milestone(s) a grant-lifecycle event relates to. **On-chain, only the `milestone_id` is published**; the remaining descriptive fields (`milestone_label`, `expected_cost`, `allocated_amount`, `currency`, `due_date`) are resolved off-chain from the milestone reference and are therefore omitted from the metadata.
+Each entry of an allocation's `milestones` array references a milestone of that project:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `milestone_id` | string | Yes | Identifier of the milestone (the only field published on-chain) |
+| `milestone_id` | string | Yes | Identifier of the milestone |
+| `milestone_title` | string | Yes | Human-readable milestone title |
+| `amount_rcy` | string | Yes | Milestone amount in the organization's reporting currency |
 
-For `SPENDING` events, `milestone` is a single object. For `FUNDING`/`REFUND` events, `milestone` is an array of milestone references.
+### Item Object
 
-### Spend Item Object
-
-`SPENDING` events list their individual expenditures under `items`. Each item:
+Both `SPENDING` and `FUNDING`/`REFUND` events can carry an `item` array. `SPENDING` items carry the full field set; `FUNDING`/`REFUND` items are lighter, carrying only `amount_rcy`, `date`, and `currency`.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | string | Yes | Unique identifier of the item |
-| `category` | string | Yes | Expense category |
-| `vendor` | string | Yes | Vendor/payee |
-| `amount` | string | Yes | Amount in the item's currency |
-| `currency` | object | Yes | Currency with `id` (ISO format) and `cust_code` |
-| `fx_rate` | string | Yes | FX rate to the reporting currency (see [FX Rate](#fx-rate)) |
-| `amount_rcy` | string | No | Amount converted to the organization's reporting currency |
-| `date` | string | Yes | Spend date in ISO 8601 format (YYYY-MM-DD) |
-| `document` | object | No | Source document details (e.g., `hash`, `number`, `type`, `date`) |
+| `amount_rcy` | string | Yes | Amount in the organization's reporting currency |
+| `amount_fcy` | string | No | Amount in the item's (foreign) currency (`SPENDING` only) |
+| `vendor` | string | No | Vendor/payee (`SPENDING` only) |
+| `spending_category` | string | No | Expense category (`SPENDING` only) |
+| `fx_rate` | string | No | FX rate to the reporting currency, as a decimal string (`SPENDING` only; see [FX Rate](#fx-rate)) |
+| `hash` | string | No | Hash of the supporting document |
 | `notes` | string | No | Free-text notes |
+| `date` | string | Yes | Item date in ISO 8601 format (YYYY-MM-DD) |
+| `currency` | object | Yes | Currency with `id` (ISO format) and `cust_code` |
 
 ### IPFS-Anchored Storage
 
@@ -353,37 +354,36 @@ The referenced off-chain document carries `org_id`, `currency_id`, `version`, `d
       {
         "id": "event1",
         "type": "SPENDING",
-        "date": "2025-04-30",
-        "allocation": {
-          "funding_id": "fund1",
-          "activity_id": "act1",
-          "activity_title": "Activity One",
-          "funding_tx": "ftx1"
-        },
-        "currency": {
-          "id": "ISO_4217:USD",
-          "cust_code": "USD"
-        },
-        "milestone": {
-          "milestone_id": "ms1"
-        },
-        "items": [
+        "funding_tx": "ftx1",
+        "funding_id": "fund1",
+        "allocation": [
           {
-            "id": "item1",
-            "category": "Personnel",
+            "project_id": "ProjectID1",
+            "project_title": "ProjectTitle",
+            "sub_project_title": "SubProjectTitle",
+            "milestones": [
+              {
+                "milestone_id": "ms1",
+                "milestone_title": "Milestone AB",
+                "amount_rcy": "100"
+              }
+            ]
+          }
+        ],
+        "item": [
+          {
+            "amount_rcy": "85",
+            "amount_fcy": "100",
             "vendor": "Vendor AB",
-            "amount": "100.00",
+            "spending_category": "Personnel",
+            "fx_rate": "0.85",
+            "hash": "doc-hash-1",
+            "notes": "Invoice #1",
+            "date": "2025-04-03",
             "currency": {
               "id": "ISO_4217:USD",
               "cust_code": "USD"
-            },
-            "fx_rate": "ISO_4217:USD:ISO_4217:CHF=0.85",
-            "amount_rcy": "85.00",
-            "date": "2025-04-03",
-            "document": {
-              "hash": "doc-hash-1"
-            },
-            "notes": "Invoice #1"
+            }
           }
         ]
       }
@@ -402,20 +402,31 @@ The referenced off-chain document carries `org_id`, `currency_id`, `version`, `d
     {
       "id": "event2",
       "type": "FUNDING",
-      "date": "2025-01-15",
-      "allocation": {
-        "funding_id": "fund1",
-        "activity_id": "act1",
-        "activity_title": "Activity One",
-        "funding_tx": "ftx1"
-      },
-      "amount": "50.00",
-      "currency": {
-        "id": "ISO_4217:USD",
-        "cust_code": "USD"
-      },
-      "milestone": [
-        { "milestone_id": "ms1" }
+      "funding_tx": "ftx1",
+      "funding_id": "fund1",
+      "funding_entity": "FundingEntity",
+      "allocation": [
+        {
+          "project_id": "ProjectID1",
+          "project_title": "ProjectTitle",
+          "milestones": [
+            {
+              "milestone_id": "ms1",
+              "milestone_title": "Milestone AB",
+              "amount_rcy": "100"
+            }
+          ]
+        }
+      ],
+      "item": [
+        {
+          "amount_rcy": "100",
+          "date": "2026-06-11",
+          "currency": {
+            "id": "ISO_4217:USD",
+            "cust_code": "USD"
+          }
+        }
       ]
     }
   ]
@@ -440,11 +451,11 @@ A counterparty is another entity involved in a transaction or business relations
 
 ### FX Rate
 
-The foreign exchange (FX) rate is the conversion rate between two currencies at the time of a transaction. It is used when transactions involve multiple currencies to provide transparency about the exchange rate applied.
+The foreign exchange (FX) rate is the conversion rate from an item's currency to the organization's reporting/functional currency at the time of the transaction. It provides transparency about the exchange rate applied to multi-currency entries.
 
-**Format**: `"<from_currency>:<to_currency>=<rate>"`
+**Format**: a decimal string. Cardano transaction metadata cannot encode floating-point numbers, so every amount and rate is stored as a string.
 
-**Example**: `"ISO_4217:EUR:ISO_4217:CHF=0.9345"` indicates 1 EUR equals 0.9345 CHF.
+**Example**: `"0.85"` indicates 1 unit of the item currency equals 0.85 units of the reporting currency.
 
 ### VAT (Value Added Tax)
 
