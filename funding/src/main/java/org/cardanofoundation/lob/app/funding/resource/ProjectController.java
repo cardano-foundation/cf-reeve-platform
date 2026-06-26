@@ -109,9 +109,9 @@ public class ProjectController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @SuppressWarnings("unchecked")
     public ResponseEntity<ProjectView> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
-        if (projectService.existsByOrganisationIdAndProjectId(request.getOrganisationId(), request.getProjectId())) {
+        if (projectService.existsByOrganisationIdAndExternalProjectId(request.getOrganisationId(), request.getExternalProjectId())) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                    HttpStatus.CONFLICT, "Project already exists for projectId: " + request.getProjectId());
+                    HttpStatus.CONFLICT, "Project already exists for externalProjectId: " + request.getExternalProjectId());
             problem.setTitle(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
             return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
         }

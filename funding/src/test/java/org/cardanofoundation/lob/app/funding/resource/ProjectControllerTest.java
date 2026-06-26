@@ -113,7 +113,7 @@ class ProjectControllerTest {
     @Test
     void createProjectWithMilestones_returns409_whenAlreadyExists() {
         ProjectWithMilestonesCreateRequest request = createWithMilestonesRequest();
-        when(projectService.existsByOrganisationIdAndProjectId("org1", "PROJ-AB")).thenReturn(true);
+        when(projectService.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(true);
 
         ResponseEntity<?> response = projectController.createProjectWithMilestones(request);
 
@@ -127,7 +127,7 @@ class ProjectControllerTest {
         ProjectWithMilestonesCreateRequest request = createWithMilestonesRequest();
         ProjectEntity project = projectEntity();
         ProjectView view = projectView();
-        when(projectService.existsByOrganisationIdAndProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectService.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectService.createWithMilestones(request)).thenReturn(project);
         when(projectService.toView(project)).thenReturn(view);
 
@@ -194,14 +194,14 @@ class ProjectControllerTest {
     private ProjectEntity projectEntity() {
         return ProjectEntity.builder()
                 .id("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .projectId("PROJ-AB").projectTitle("Project AB")
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
     private ProjectView projectView() {
         return ProjectView.builder()
-                .projectUid("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .projectId("PROJ-AB").projectTitle("Project AB")
+                .projectId("p1").organisationId("org1").fundingId("GRANT-2025-001")
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).build();
     }
@@ -209,7 +209,7 @@ class ProjectControllerTest {
     private ProjectWithMilestonesCreateRequest createWithMilestonesRequest() {
         return ProjectWithMilestonesCreateRequest.builder()
                 .organisationId("org1").fundingId("GRANT-2025-001")
-                .projectId("PROJ-AB").projectTitle("Project AB")
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).build();
     }

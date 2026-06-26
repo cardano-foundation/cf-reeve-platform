@@ -15,6 +15,6 @@ public interface MilestoneRepository extends JpaRepository<MilestoneEntity, Stri
 
     Page<MilestoneEntity> findByProject_Id(String projectUid, Pageable pageable);
 
-    Optional<MilestoneEntity> findByProject_IdAndMilestoneId(String projectUid, String milestoneId);
+    Optional<MilestoneEntity> findByProject_IdAndExternalMilestoneId(String projectId, String externalMilestoneId);
 
 }

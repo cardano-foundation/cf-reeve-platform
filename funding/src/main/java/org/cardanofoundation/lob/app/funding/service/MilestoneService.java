@@ -114,9 +114,9 @@ public class MilestoneService {
 
     public MilestoneView toView(MilestoneEntity milestone) {
         return MilestoneView.builder()
-                .milestoneUid(milestone.getId())
-                .milestoneId(milestone.getMilestoneId())
-                .projectUid(milestone.getProject().getId())
+                .milestoneId(milestone.getId())
+                .externalMilestoneId(milestone.getExternalMilestoneId())
+                .projectId(milestone.getProject().getId())
                 .milestoneTitle(milestone.getMilestoneTitle())
                 .milestoneAmount(milestone.getMilestoneAmount())
                 .currency(milestone.getCurrency())
@@ -127,7 +127,7 @@ public class MilestoneService {
     private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
         return MilestoneEntity.builder()
                 .id(UUID.randomUUID().toString())
-                .milestoneId(request.getMilestoneId())
+                .externalMilestoneId(request.getExternalMilestoneId())
                 .milestoneTitle(request.getMilestoneTitle())
                 .milestoneAmount(request.getMilestoneAmount())
                 .currency(request.getCurrency())

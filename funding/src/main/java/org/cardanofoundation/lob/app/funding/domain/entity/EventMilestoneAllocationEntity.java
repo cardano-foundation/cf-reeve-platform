@@ -27,8 +27,8 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
 
     @EmbeddedId
     @AttributeOverrides({
-            @AttributeOverride(name = "eventId",      column = @Column(name = "event_id")),
-            @AttributeOverride(name = "milestoneUid", column = @Column(name = "milestone_uid"))
+            @AttributeOverride(name = "eventId",     column = @Column(name = "event_id")),
+            @AttributeOverride(name = "milestoneId", column = @Column(name = "milestone_id"))
     })
     private Id id;
 
@@ -41,7 +41,7 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
     private FundingEventEntity event;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "milestone_uid", insertable = false, updatable = false)
+    @JoinColumn(name = "milestone_id", insertable = false, updatable = false)
     private MilestoneEntity milestone;
 
     @Embeddable
@@ -54,8 +54,8 @@ public class EventMilestoneAllocationEntity extends CommonEntity implements Pers
         @Column(name = "event_id")
         private String eventId;
 
-        @Column(name = "milestone_uid")
-        private String milestoneUid;
+        @Column(name = "milestone_id")
+        private String milestoneId;
     }
 
     @Override

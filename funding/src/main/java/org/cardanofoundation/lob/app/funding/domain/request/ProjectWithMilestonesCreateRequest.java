@@ -29,7 +29,7 @@ public class ProjectWithMilestonesCreateRequest {
 
     @NotBlank
     @Schema(example = "PROJ-AB")
-    private String projectId;
+    private String externalProjectId;
 
     @NotBlank
     @Schema(example = "Project AB")

@@ -23,7 +23,6 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
@@ -91,10 +90,10 @@ public class SpendingEventController {
     @Operation(
             summary = "Create a new event with project and milestone allocations",
             description = "Creates an event (FUNDING, SPENDING or REFUND) and resolves or creates the referenced " +
-                    "projects and milestones in a single request. Supply `projectId` (user-defined project ID) to " +
-                    "reference an existing project or create a new one. Supply `milestoneId` (user-defined milestone ID) " +
+                    "projects and milestones in a single request. Supply `externalProjectId` (user-defined project ID) to " +
+                    "reference an existing project or create a new one. Supply `externalMilestoneId` (user-defined milestone ID) " +
                     "to reference an existing milestone, or omit it to create a new one.",
-            requestBody = @RequestBody(
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(
                             mediaType = APPLICATION_JSON_VALUE,
@@ -114,14 +113,14 @@ public class SpendingEventController {
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-AB",
-                                                          "projectId": "PROJ-AB",
+                                                          "externalProjectId": "PROJ-AB",
                                                           "projectTitle": "Project AB",
                                                           "totalAmount": "200000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "milestoneId": "MS-001",
+                                                                "externalMilestoneId": "MS-001",
                                                                 "milestoneTitle": "Milestone 1",
                                                                 "milestoneAmount": "100000.00",
                                                                 "currency": "USD",
@@ -148,10 +147,10 @@ public class SpendingEventController {
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "PROJ-AB",
+                                                          "externalProjectId": "PROJ-AB",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "MS-001" },
+                                                              "milestone": { "externalMilestoneId": "MS-001" },
                                                               "allocatedAmount": "50000.00"
                                                             }
                                                           ]
@@ -172,14 +171,14 @@ public class SpendingEventController {
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-CD",
-                                                          "projectId": "PROJ-CD",
+                                                          "externalProjectId": "PROJ-CD",
                                                           "projectTitle": "Project CD",
                                                           "totalAmount": "100000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "milestoneId": "MS-001",
+                                                                "externalMilestoneId": "MS-001",
                                                                 "milestoneTitle": "Milestone 1",
                                                                 "milestoneAmount": "50000.00",
                                                                 "currency": "USD",
@@ -213,10 +212,10 @@ public class SpendingEventController {
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "PROJ-CD",
+                                                          "externalProjectId": "PROJ-CD",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "MS-001" }
+                                                              "milestone": { "externalMilestoneId": "MS-001" }
                                                             }
                                                           ]
                                                         }
@@ -249,14 +248,14 @@ public class SpendingEventController {
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-EF",
-                                                          "projectId": "PROJ-EF",
+                                                          "externalProjectId": "PROJ-EF",
                                                           "projectTitle": "Project EF",
                                                           "totalAmount": "80000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "milestoneId": "MS-001",
+                                                                "externalMilestoneId": "MS-001",
                                                                 "milestoneTitle": "Final Milestone",
                                                                 "milestoneAmount": "80000.00",
                                                                 "currency": "USD",
@@ -282,10 +281,10 @@ public class SpendingEventController {
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "PROJ-EF",
+                                                          "externalProjectId": "PROJ-EF",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "MS-001" },
+                                                              "milestone": { "externalMilestoneId": "MS-001" },
                                                               "allocatedAmount": "10000.00"
                                                             }
                                                           ]
@@ -308,7 +307,7 @@ public class SpendingEventController {
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-GH",
-                                                          "projectId": "PROJ-GH",
+                                                          "externalProjectId": "PROJ-GH",
                                                           "projectTitle": "Project GH",
                                                           "totalAmount": "300000.00",
                                                           "currency": "USD",
@@ -319,7 +318,7 @@ public class SpendingEventController {
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "milestoneId": "MS-001",
+                                                                "externalMilestoneId": "MS-001",
                                                                 "milestoneTitle": "Deliverable 1",
                                                                 "milestoneAmount": "50000.00",
                                                                 "currency": "USD",
@@ -346,13 +345,13 @@ public class SpendingEventController {
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "PROJ-GH",
+                                                          "externalProjectId": "PROJ-GH",
                                                           "subProject": {
                                                             "subProjectId": "WP-1"
                                                           },
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "MS-001" },
+                                                              "milestone": { "externalMilestoneId": "MS-001" },
                                                               "allocatedAmount": "25000.00"
                                                             }
                                                           ]
@@ -403,7 +402,7 @@ public class SpendingEventController {
     @SuppressWarnings("unchecked")
     public ResponseEntity<SpendingEventView> updateEvent(
             @PathVariable String eventId,
-            @Valid @org.springframework.web.bind.annotation.RequestBody SpendingEventCreateRequest request) {
+            @Valid @RequestBody SpendingEventCreateRequest request) {
 
         Either<ProblemDetail, FundingEventEntity> updated = spendingEventService.update(eventId, request);
         if (updated.isLeft()) {

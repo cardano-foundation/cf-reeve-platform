@@ -18,8 +18,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class MilestoneCreateRequest {
 
     @Nullable
-    @Schema(example = "MS-1", description = "User-defined milestone ID. Used to reference an existing milestone by (projectUid, milestoneId) or to name a new milestone.")
-    private String milestoneId;
+    @Schema(example = "MS-1", description = "User-defined milestone ID. Used to reference an existing milestone by (projectId, externalMilestoneId) or to name a new milestone.")
+    private String externalMilestoneId;
 
     @Nullable
     @Schema(example = "Milestone AB")

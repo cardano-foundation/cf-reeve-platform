@@ -15,19 +15,19 @@ public class EventProjectAllocationView {
     private String eventId;
 
     @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
-            description = "Internal SHA256 uid of the project (project_uid)")
-    private String projectUid;
+            description = "Internal SHA256 id of the project (project_id)")
+    private String projectId;
 
     @Schema(example = "PROJ-AB", description = "User-defined project identifier")
-    private String projectId;
+    private String externalProjectId;
 
     @Schema(example = "Project AB")
     private String projectTitle;
 
-    /** Set when this allocation targets a sub-project; contains the root project UID (SHA256). */
+    /** Set when this allocation targets a sub-project; contains the root project id (SHA256). */
     @jakarta.annotation.Nullable
     @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa")
-    private String parentProjectUid;
+    private String parentProjectId;
 
     private List<EventMilestoneAllocationView> milestoneAllocations;
 
