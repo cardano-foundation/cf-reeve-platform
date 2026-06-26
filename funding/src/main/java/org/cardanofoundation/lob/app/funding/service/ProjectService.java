@@ -16,11 +16,14 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
+import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
 @Slf4j
 @Service
@@ -30,6 +33,7 @@ public class ProjectService {
 
     private final FundingProjectRepository projectRepository;
     private final MilestoneService milestoneService;
+    private final EventMilestoneAllocationRepository allocationRepository;
 
     public Optional<ProjectEntity> findById(String projectUid) {
         return projectRepository.findById(projectUid);
@@ -66,6 +70,15 @@ public class ProjectService {
         }
 
         ProjectEntity project = projectM.get();
+
+        if (allocationRepository.existsByMilestone_Project_IdAndEvent_Status(projectUid, EventStatus.PUBLISHED)) {
+            log.warn("Cannot update project linked to a published event: {}", projectUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    "Cannot update project linked to a published event: %s".formatted(projectUid));
+            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+            return Either.left(problem);
+        }
+
         if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
         if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
@@ -79,6 +92,13 @@ public class ProjectService {
             log.warn("Project not found: {}", projectUid);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectUid));
             problem.setTitle("PROJECT_NOT_FOUND");
+            return Either.left(problem);
+        }
+        if (allocationRepository.existsByMilestone_Project_IdAndEvent_Status(projectUid, EventStatus.PUBLISHED)) {
+            log.warn("Cannot delete project linked to a published event: {}", projectUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    "Cannot delete project linked to a published event: %s".formatted(projectUid));
+            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
         projectRepository.deleteById(projectUid);

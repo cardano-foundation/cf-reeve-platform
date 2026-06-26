@@ -18,11 +18,14 @@ import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
 @Slf4j
 @Service
@@ -32,6 +35,7 @@ public class MilestoneService {
 
     private final MilestoneRepository milestoneRepository;
     private final FundingProjectRepository projectRepository;
+    private final EventMilestoneAllocationRepository allocationRepository;
 
     public Optional<MilestoneEntity> findById(String milestoneUid) {
         return milestoneRepository.findById(milestoneUid);
@@ -80,6 +84,15 @@ public class MilestoneService {
         }
 
         MilestoneEntity milestone = milestoneM.orElseThrow();
+
+        if (allocationRepository.existsByMilestone_IdAndEvent_Status(milestoneUid, EventStatus.PUBLISHED)) {
+            log.warn("Cannot update milestone linked to a published event: {}", milestoneUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    "Cannot update milestone linked to a published event: %s".formatted(milestoneUid));
+            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+            return Either.left(problem);
+        }
+
         if (request.getMilestoneTitle() != null) {
             milestone.setMilestoneTitle(request.getMilestoneTitle());
         }
@@ -102,6 +115,13 @@ public class MilestoneService {
             log.warn("Milestone not found for id: {}", milestoneUid);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneUid));
             problem.setTitle("MILESTONE_NOT_FOUND");
+            return Either.left(problem);
+        }
+        if (allocationRepository.existsByMilestone_IdAndEvent_Status(milestoneUid, EventStatus.PUBLISHED)) {
+            log.warn("Cannot delete milestone linked to a published event: {}", milestoneUid);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    "Cannot delete milestone linked to a published event: %s".formatted(milestoneUid));
+            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
         milestoneRepository.deleteById(milestoneUid);
