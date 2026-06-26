@@ -26,11 +26,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
+import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +42,8 @@ class ProjectServiceTest {
     private FundingProjectRepository projectRepository;
     @Mock
     private MilestoneService milestoneService;
+    @Mock
+    private EventMilestoneAllocationRepository allocationRepository;
 
     @InjectMocks
     private ProjectService projectService;
@@ -153,6 +157,7 @@ class ProjectServiceTest {
     void update_updatesProvidedFields() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestone_Project_IdAndEvent_Status("p1", EventStatus.PUBLISHED)).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectUpdateRequest request = ProjectUpdateRequest.builder()
@@ -170,9 +175,23 @@ class ProjectServiceTest {
     }
 
     @Test
+    void update_returnsConflict_whenLinkedToPublishedEvent() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestone_Project_IdAndEvent_Status("p1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, ProjectEntity> result = projectService.update("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void update_skipsNullFields() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestone_Project_IdAndEvent_Status("p1", EventStatus.PUBLISHED)).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         projectService.update("p1", ProjectUpdateRequest.builder().build());
@@ -192,9 +211,22 @@ class ProjectServiceTest {
     @Test
     void delete_deletesAndReturnsTrue_whenFound() {
         when(projectRepository.existsById("p1")).thenReturn(true);
+        when(allocationRepository.existsByMilestone_Project_IdAndEvent_Status("p1", EventStatus.PUBLISHED)).thenReturn(false);
 
         assertThat(projectService.delete("p1").isRight()).isTrue();
         verify(projectRepository).deleteById("p1");
+    }
+
+    @Test
+    void delete_returnsConflict_whenLinkedToPublishedEvent() {
+        when(projectRepository.existsById("p1")).thenReturn(true);
+        when(allocationRepository.existsByMilestone_Project_IdAndEvent_Status("p1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, Void> result = projectService.delete("p1");
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        verify(projectRepository, never()).deleteById(any());
     }
 
     @Test
@@ -212,8 +244,13 @@ class ProjectServiceTest {
         ProjectView view = projectService.toView(parent);
 
         assertThat(view.getSubProjects()).hasSize(1);
+<<<<<<< Updated upstream
         assertThat(view.getSubProjects().get(0).getProjectId()).isEqualTo("SUB-AB");
         assertThat(view.getParentProjectUid()).isNull();
+=======
+        assertThat(view.getSubProjects().get(0).getExternalProjectId()).isEqualTo("SUB-AB");
+        assertThat(view.getParentProjectId()).isNull();
+>>>>>>> Stashed changes
     }
 
     @Test
@@ -228,7 +265,7 @@ class ProjectServiceTest {
 
         ProjectView view = projectService.toView(subProject);
 
-        assertThat(view.getParentProjectUid()).isEqualTo(parent.getId());
+        assertThat(view.getParentProjectId()).isEqualTo(parent.getId());
     }
 
     @Test

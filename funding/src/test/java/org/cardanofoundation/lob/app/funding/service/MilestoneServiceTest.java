@@ -21,9 +21,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 
@@ -34,6 +36,8 @@ class MilestoneServiceTest {
     private MilestoneRepository milestoneRepository;
     @Mock
     private FundingProjectRepository projectRepository;
+    @Mock
+    private EventMilestoneAllocationRepository allocationRepository;
 
     @InjectMocks
     private MilestoneService milestoneService;
@@ -130,6 +134,7 @@ class MilestoneServiceTest {
     void update_updatesAllFields_whenAllProvided() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestone_IdAndEvent_Status("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder()
@@ -149,9 +154,23 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void update_returnsConflict_whenLinkedToPublishedEvent() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestone_IdAndEvent_Status("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", MilestoneUpdateRequest.builder().milestoneTitle("New").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void update_skipsNullFields() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestone_IdAndEvent_Status("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().build();
@@ -173,9 +192,22 @@ class MilestoneServiceTest {
     @Test
     void delete_deletesAndReturnsTrue_whenFound() {
         when(milestoneRepository.existsById("m1")).thenReturn(true);
+        when(allocationRepository.existsByMilestone_IdAndEvent_Status("m1", EventStatus.PUBLISHED)).thenReturn(false);
 
         assertThat(milestoneService.delete("m1").isRight()).isTrue();
         verify(milestoneRepository).deleteById("m1");
+    }
+
+    @Test
+    void delete_returnsConflict_whenLinkedToPublishedEvent() {
+        when(milestoneRepository.existsById("m1")).thenReturn(true);
+        when(allocationRepository.existsByMilestone_IdAndEvent_Status("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, Void> result = milestoneService.delete("m1");
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        verify(milestoneRepository, never()).deleteById(any());
     }
 
     @Test
