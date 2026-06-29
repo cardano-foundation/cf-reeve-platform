@@ -10,10 +10,12 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 /**
  * Request body for creating (or updating) a funding event together with its project-milestone
@@ -24,12 +26,8 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
-public class SpendingEventCreateRequest {
-
-    @NotBlank
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    private String organisationId;
+@SuperBuilder
+public class SpendingEventCreateRequest extends BaseRequest {
 
     @NotNull
     @Schema(example = "SPENDING")

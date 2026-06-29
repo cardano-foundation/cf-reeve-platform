@@ -23,6 +23,7 @@ import org.hibernate.envers.Audited;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -110,6 +111,29 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Override
     public boolean isNew() {
         return isNew;
+    }
+
+    /**
+     * Deterministic, reproducible id for a funding event, derived from its immutable header
+     * fields. Two events created for the same organisation, type, funding reference and currency
+     * resolve to the same id (idempotent creation). {@code fundingHash} is part of the key so that
+     * distinct fundings sharing a funding id (but a different hash) do not collide.
+     *
+     * <p>Computed in the service before child allocations/items are built — it intentionally does
+     * <em>not</em> depend on children (a spending item's id is derived from the event id, so
+     * including item ids here would be circular) nor on {@code totalAmount} (derived later).
+     */
+    public static String id(String organisationId,
+                            EventType eventType,
+                            String fundingId,
+                            String fundingHash,
+                            String currency) {
+        return SHA3.digestAsHex("%s::%s::%s::%s::%s".formatted(
+                organisationId,
+                eventType,
+                fundingId,
+                fundingHash == null ? "" : fundingHash,
+                currency));
     }
 
 }

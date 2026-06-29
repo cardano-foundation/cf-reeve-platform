@@ -109,7 +109,7 @@ class SpendingEventServiceTest {
     void create_returnsLeft_whenMilestoneIdNotFound() {
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
-        when(milestoneRepository.findByProject_IdAndExternalMilestoneId(any(), eq("MS-MISSING"))).thenReturn(Optional.empty());
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(any(), eq("MS-MISSING"))).thenReturn(Optional.empty());
 
         SpendingEventCreateRequest request = requestWithExistingProject("PROJ-AB", "MS-MISSING");
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
@@ -125,7 +125,7 @@ class SpendingEventServiceTest {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
-        when(milestoneRepository.findByProject_IdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = requestWithExistingProject("PROJ-AB", "MS-1");
@@ -163,7 +163,7 @@ class SpendingEventServiceTest {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
-        when(milestoneRepository.findByProject_IdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
@@ -197,7 +197,7 @@ class SpendingEventServiceTest {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
-        when(milestoneRepository.findByProject_IdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
@@ -431,7 +431,7 @@ class SpendingEventServiceTest {
         when(projectRepository.findById(any()))
                 .thenReturn(Optional.of(rootProject))   // root project lookup
                 .thenReturn(Optional.of(subProject));   // sub-project lookup
-        when(milestoneRepository.findByProject_IdAndExternalMilestoneId(any(), eq("MS-1"))).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(any(), eq("MS-1"))).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
@@ -587,7 +587,7 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
-        when(milestoneRepository.findByProject_IdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
@@ -604,7 +604,7 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
-        when(milestoneRepository.findByProject_IdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         // FUNDING/REFUND items are the light variant: only amount_rcy + date + currency.

@@ -9,19 +9,18 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
-public class ProjectWithMilestonesCreateRequest {
-
-    @NotBlank
-    @Schema(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
-    private String organisationId;
+@SuperBuilder
+public class ProjectWithMilestonesCreateRequest extends BaseRequest {
 
     @NotBlank
     @Schema(example = "GRANT-2025-001")

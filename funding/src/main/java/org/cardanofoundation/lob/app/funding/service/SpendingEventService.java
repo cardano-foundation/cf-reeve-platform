@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -77,6 +76,9 @@ public class SpendingEventService {
         if (itemResult.isLeft()) return Either.left(itemResult.getLeft());
 
         FundingEventEntity event = toEntity(request);
+        if(fundingEventRepository.existsById(event.getId())) {
+            return Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event already exists: %s".formatted(event.getId())));
+        }
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
@@ -117,6 +119,9 @@ public class SpendingEventService {
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
 
         event.getSpendingItems().clear();
+        // Flush the orphan removals before re-adding: item ids are deterministic (event id + line
+        // number), so a cleared item and its replacement can share a primary key within one flush.
+        fundingEventRepository.flush();
         populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
@@ -341,7 +346,7 @@ public class SpendingEventService {
 
     private Either<ProblemDetail, MilestoneEntity> resolveOrCreateMilestone(MilestoneCreateRequest req, ProjectEntity project) {
         if (req.getExternalMilestoneId() != null) {
-            Optional<MilestoneEntity> existing = milestoneRepository.findByProject_IdAndExternalMilestoneId(project.getId(), req.getExternalMilestoneId());
+            Optional<MilestoneEntity> existing = milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), req.getExternalMilestoneId());
             if (existing.isPresent()) {
                 return Either.right(existing.get());
             }
@@ -361,7 +366,7 @@ public class SpendingEventService {
         }
 
         MilestoneEntity newMilestone = MilestoneEntity.builder()
-                .id(UUID.randomUUID().toString())
+                .id(milestoneId(project.getId(), req))
                 .externalMilestoneId(req.getExternalMilestoneId())
                 .milestoneTitle(req.getMilestoneTitle())
                 .milestoneAmount(req.getMilestoneAmount())
@@ -370,6 +375,17 @@ public class SpendingEventService {
                 .project(project)
                 .build();
         return Either.right(milestoneRepository.saveAndFlush(newMilestone));
+    }
+
+    /**
+     * Deterministic milestone id: the natural key {@code (projectId, externalMilestoneId)} when a
+     * user-defined id is supplied, otherwise a content hash for an anonymous milestone.
+     */
+    private static String milestoneId(String projectId, MilestoneCreateRequest req) {
+        return req.getExternalMilestoneId() != null
+                ? MilestoneEntity.id(projectId, req.getExternalMilestoneId())
+                : MilestoneEntity.contentId(projectId, req.getMilestoneTitle(), req.getMilestoneAmount(),
+                        req.getCurrency(), req.getMilestoneDate());
     }
 
     /**
@@ -403,9 +419,10 @@ public class SpendingEventService {
     }
 
     private void populateSpendingItems(FundingEventEntity event, List<SpendingItemRequest> itemRequests) {
-        itemRequests.stream()
-                .map(req -> toSpendingItemEntity(req, event))
-                .forEach(event.getSpendingItems()::add);
+        for (int i = 0; i < itemRequests.size(); i++) {
+            // 1-based line number drives the deterministic item id (see SpendingItemEntity.id).
+            event.getSpendingItems().add(toSpendingItemEntity(itemRequests.get(i), event, i + 1));
+        }
     }
 
     private void recalculateTotalAmount(FundingEventEntity event) {
@@ -503,7 +520,12 @@ public class SpendingEventService {
 
     private FundingEventEntity toEntity(SpendingEventCreateRequest request) {
         return FundingEventEntity.builder()
-                .id(UUID.randomUUID().toString())
+                .id(FundingEventEntity.id(
+                        request.getOrganisationId(),
+                        request.getEventType(),
+                        request.getFundingId(),
+                        request.getFundingHash(),
+                        request.getCurrency()))
                 .eventType(request.getEventType())
                 .status(EventStatus.DRAFT)
                 .organisationId(request.getOrganisationId())
@@ -514,9 +536,9 @@ public class SpendingEventService {
                 .build();
     }
 
-    private SpendingItemEntity toSpendingItemEntity(SpendingItemRequest req, FundingEventEntity event) {
+    private SpendingItemEntity toSpendingItemEntity(SpendingItemRequest req, FundingEventEntity event, int lineNo) {
         return SpendingItemEntity.builder()
-                .id(UUID.randomUUID().toString())
+                .id(SpendingItemEntity.id(event.getId(), lineNo))
                 .category(req.getCategory())
                 .vendor(req.getVendor())
                 .amountFcy(req.getAmountFcy())

@@ -128,7 +128,7 @@ class ProjectControllerTest {
         ProjectEntity project = projectEntity();
         ProjectView view = projectView();
         when(projectService.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
-        when(projectService.createWithMilestones(request)).thenReturn(project);
+        when(projectService.createWithMilestones(request)).thenReturn(Either.right(project));
         when(projectService.toView(project)).thenReturn(view);
 
         ResponseEntity<?> response = projectController.createProjectWithMilestones(request);

@@ -8,13 +8,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "Report template data transfer object for creating or updating templates")

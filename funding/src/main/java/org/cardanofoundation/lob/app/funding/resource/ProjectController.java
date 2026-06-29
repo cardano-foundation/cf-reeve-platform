@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.resource;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import java.util.List;
@@ -11,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
@@ -47,6 +49,7 @@ public class ProjectController {
 
     private static final String PROJECT_NOT_FOUND_DETAIL = "Project not found: ";
 
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final ProjectService projectService;
     private final OrganisationPublicApiIF organisationPublicApi;
 
@@ -62,7 +65,9 @@ public class ProjectController {
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-
+        if(!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ResponseEntity.status(UNAUTHORIZED).build();
+        }
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(organisationId);
 
         if (orgM.isEmpty()) {
@@ -90,11 +95,15 @@ public class ProjectController {
     @SuppressWarnings("unchecked")
     public ResponseEntity<ProjectView> getProject(@PathVariable String projectId) {
         Optional<ProjectEntity> projectOpt = projectService.findById(projectId);
+
         if (projectOpt.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, PROJECT_NOT_FOUND_DETAIL + projectId);
             problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
             return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        }
+        if(!keycloakSecurityHelper.canUserAccessOrg(projectOpt.get().getOrganisationId())) {
+            return ResponseEntity.status(UNAUTHORIZED).build();
         }
         return ResponseEntity.ok(projectService.toView(projectOpt.get()));
     }
@@ -115,8 +124,12 @@ public class ProjectController {
             problem.setTitle(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
             return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
         }
-        ProjectEntity created = projectService.createWithMilestones(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(projectService.toView(created));
+        Either<ProblemDetail, ProjectEntity> created = projectService.createWithMilestones(request);
+        if (created.isLeft()) {
+            return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity
+                    .status(created.getLeft().getStatus()).body(created.getLeft());
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(projectService.toView(created.get()));
     }
 
     @Operation(description = "Update a project", responses = {
@@ -131,7 +144,6 @@ public class ProjectController {
     public ResponseEntity<ProjectView> updateProject(
             @PathVariable String projectId,
             @Valid @RequestBody ProjectUpdateRequest request) {
-
         Either<ProblemDetail, ProjectEntity> updated = projectService.update(projectId, request);
         if (updated.isLeft()) {
             return (ResponseEntity<ProjectView>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(updated.getLeft());
@@ -148,9 +160,14 @@ public class ProjectController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @SuppressWarnings("unchecked")
     public ResponseEntity<Void> deleteProject(@PathVariable String projectId) {
+        Optional<ProjectEntity> byId = projectService.findById(projectId);
+        if(byId.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(byId.get().getOrganisationId())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         Either<ProblemDetail, Void> deleted = projectService.delete(projectId);
         if (deleted.isLeft()) {
-            return (ResponseEntity<Void>) (ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).body(deleted.getLeft());
+            ProblemDetail left = deleted.getLeft();
+            return (ResponseEntity<Void>) (ResponseEntity<?>) ResponseEntity.status(left.getStatus()).body(deleted.getLeft());
         }
         return ResponseEntity.noContent().build();
     }

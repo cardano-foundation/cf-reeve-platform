@@ -3,10 +3,10 @@ package org.cardanofoundation.lob.app.reporting.dto;
 import jakarta.validation.constraints.NotNull;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -14,7 +14,7 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "Request to publish a report to the blockchain")

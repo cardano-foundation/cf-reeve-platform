@@ -12,11 +12,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
@@ -35,8 +39,8 @@ public class ProjectService {
     private final MilestoneService milestoneService;
     private final EventMilestoneAllocationRepository allocationRepository;
 
-    public Optional<ProjectEntity> findById(String projectUid) {
-        return projectRepository.findById(projectUid);
+    public Optional<ProjectEntity> findById(String projectId) {
+        return projectRepository.findById(projectId);
     }
 
     public List<ProjectEntity> findByOrganisationId(String organisationId) {
@@ -52,29 +56,37 @@ public class ProjectService {
     }
 
     @Transactional
-    public ProjectEntity createWithMilestones(ProjectWithMilestonesCreateRequest request) {
-        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId());
-        projectRepository.saveAndFlush(toEntity(projectId, request));
-        request.getMilestones().forEach(milestoneRequest -> milestoneService.create(projectId, milestoneRequest));
-        return projectRepository.findById(projectId).orElseThrow();
+    public Either<ProblemDetail, ProjectEntity> createWithMilestones(ProjectWithMilestonesCreateRequest request) {
+        ProjectEntity projectEntity = projectRepository.saveAndFlush(toEntity(request));
+        for (MilestoneCreateRequest milestoneRequest : request.getMilestones()) {
+            Either<ProblemDetail, MilestoneEntity> result = milestoneService.create(projectEntity.getId(), milestoneRequest);
+            if (result.isLeft()) {
+                // Keep creation atomic: roll back the project and any milestones already persisted.
+                if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                    TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                }
+                return Either.left(result.getLeft());
+            }
+        }
+        return Either.right(projectEntity);
     }
 
     @Transactional
-    public Either<ProblemDetail, ProjectEntity> update(String projectUid, ProjectUpdateRequest request) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectUid);
+    public Either<ProblemDetail, ProjectEntity> update(String projectId, ProjectUpdateRequest request) {
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
         if (projectM.isEmpty()) {
-            log.warn("Project not found: {}", projectUid);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectUid));
+            log.warn("Project not found: {}", projectId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectId));
             problem.setTitle("PROJECT_NOT_FOUND");
             return Either.left(problem);
         }
 
         ProjectEntity project = projectM.get();
 
-        if (allocationRepository.existsByMilestone_Project_IdAndEvent_Status(projectUid, EventStatus.PUBLISHED)) {
-            log.warn("Cannot update project linked to a published event: {}", projectUid);
+        if (allocationRepository.existsByMilestoneProjectIdAndEventStatus(projectId, EventStatus.PUBLISHED)) {
+            log.warn("Cannot update project linked to a published event: {}", projectId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                    "Cannot update project linked to a published event: %s".formatted(projectUid));
+                    "Cannot update project linked to a published event: %s".formatted(projectId));
             problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
@@ -87,21 +99,21 @@ public class ProjectService {
     }
 
     @Transactional
-    public Either<ProblemDetail, Void> delete(String projectUid) {
-        if (!projectRepository.existsById(projectUid)) {
-            log.warn("Project not found: {}", projectUid);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectUid));
+    public Either<ProblemDetail, Void> delete(String projectId) {
+        if (!projectRepository.existsById(projectId)) {
+            log.warn("Project not found: {}", projectId);
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectId));
             problem.setTitle("PROJECT_NOT_FOUND");
             return Either.left(problem);
         }
-        if (allocationRepository.existsByMilestone_Project_IdAndEvent_Status(projectUid, EventStatus.PUBLISHED)) {
-            log.warn("Cannot delete project linked to a published event: {}", projectUid);
+        if (allocationRepository.existsByMilestoneProjectIdAndEventStatus(projectId, EventStatus.PUBLISHED)) {
+            log.warn("Cannot delete project linked to a published event: {}", projectId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                    "Cannot delete project linked to a published event: %s".formatted(projectUid));
+                    "Cannot delete project linked to a published event: %s".formatted(projectId));
             problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
-        projectRepository.deleteById(projectUid);
+        projectRepository.deleteById(projectId);
         return Either.right(null);
     }
 
@@ -110,7 +122,7 @@ public class ProjectService {
                 .map(milestoneService::toView)
                 .toList();
 
-        List<ProjectView> subProjectViews = projectRepository.findByParentProject_Id(project.getId()).stream()
+        List<ProjectView> subProjectViews = projectRepository.findByParentProjectId(project.getId()).stream()
                 .map(this::toView)
                 .toList();
 
@@ -131,9 +143,9 @@ public class ProjectService {
                 .build();
     }
 
-    private ProjectEntity toEntity(String projectId, ProjectWithMilestonesCreateRequest request) {
+    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request) {
         return ProjectEntity.builder()
-                .id(projectId)
+                .id(ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId()))
                 .organisationId(request.getOrganisationId())
                 .fundingId(request.getFundingId())
                 .externalProjectId(request.getExternalProjectId())

@@ -15,6 +15,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.envers.Audited;
 
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -60,6 +61,31 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     @Override
     public boolean isNew() {
         return isNew;
+    }
+
+    /**
+     * Deterministic id for a milestone identified by its user-defined id, unique within a project.
+     * This is the natural key used by {@code findByProject_IdAndExternalMilestoneId}.
+     */
+    public static String id(String projectId, String externalMilestoneId) {
+        return SHA3.digestAsHex("%s::%s".formatted(projectId, externalMilestoneId));
+    }
+
+    /**
+     * Deterministic id for a milestone created without a user-defined {@code externalMilestoneId};
+     * derived from its content so that re-creating the same milestone within a project is idempotent.
+     */
+    public static String contentId(String projectId,
+                                   String milestoneTitle,
+                                   BigDecimal milestoneAmount,
+                                   String currency,
+                                   LocalDate milestoneDate) {
+        return SHA3.digestAsHex("%s::%s::%s::%s::%s".formatted(
+                projectId,
+                milestoneTitle,
+                milestoneAmount == null ? "" : milestoneAmount.stripTrailingZeros().toPlainString(),
+                currency,
+                milestoneDate));
     }
 
 }

@@ -15,6 +15,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.envers.Audited;
 
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -78,6 +79,16 @@ public class SpendingItemEntity extends CommonEntity implements Persistable<Stri
     @Override
     public boolean isNew() {
         return isNew;
+    }
+
+    /**
+     * Deterministic id for a spending item, derived from its owning event and 1-based line number
+     * within that event (mirrors {@code TransactionItem.id}). Position is part of the key so that
+     * two line items with identical content — or identical items across different events — remain
+     * distinct.
+     */
+    public static String id(String eventId, int lineNo) {
+        return SHA3.digestAsHex("%s::%s".formatted(eventId, lineNo));
     }
 
 }

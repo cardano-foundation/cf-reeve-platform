@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.funding.domain.entity;
 
-import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -17,6 +16,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.envers.Audited;
 
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -74,13 +74,14 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
     private List<MilestoneEntity> milestones = new ArrayList<>();
 
-    public static String id(String organisationId, String projectId) {
-        return digestAsHex("%s::%s".formatted(organisationId, projectId));
+    /** Deterministic id for a root project — unique per organisation by its user-defined id. */
+    public static String id(String organisationId, String externalProjectId) {
+        return SHA3.digestAsHex("%s::%s".formatted(organisationId, externalProjectId));
     }
 
-    /** ID for a sub-project — unique within its parent. */
+    /** Deterministic id for a sub-project — unique within its parent. */
     public static String subId(String parentProjectId, String subProjectId) {
-        return digestAsHex("%s::%s".formatted(parentProjectId, subProjectId));
+        return SHA3.digestAsHex("%s::%s".formatted(parentProjectId, subProjectId));
     }
 
     @Override

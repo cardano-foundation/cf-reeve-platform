@@ -11,8 +11,8 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
 
     List<EventMilestoneAllocationEntity> findById_EventId(String eventId);
 
-    boolean existsByMilestone_IdAndEvent_Status(String milestoneId, EventStatus status);
+    boolean existsByMilestoneIdAndEventStatus(String milestoneId, EventStatus status);
 
-    boolean existsByMilestone_Project_IdAndEvent_Status(String projectId, EventStatus status);
+    boolean existsByMilestoneProjectIdAndEventStatus(String projectId, EventStatus status);
 
 }

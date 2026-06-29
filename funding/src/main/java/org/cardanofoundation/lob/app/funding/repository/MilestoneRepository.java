@@ -11,10 +11,10 @@ import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 
 public interface MilestoneRepository extends JpaRepository<MilestoneEntity, String> {
 
-    List<MilestoneEntity> findByProject_Id(String projectUid);
+    List<MilestoneEntity> findByProjectId(String projectId);
 
-    Page<MilestoneEntity> findByProject_Id(String projectUid, Pageable pageable);
+    Page<MilestoneEntity> findByProjectId(String projectId, Pageable pageable);
 
-    Optional<MilestoneEntity> findByProject_IdAndExternalMilestoneId(String projectId, String externalMilestoneId);
+    Optional<MilestoneEntity> findByProjectIdAndExternalMilestoneId(String projectId, String externalMilestoneId);
 
 }
