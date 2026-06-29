@@ -51,6 +51,10 @@ public class ProjectService {
         return projectRepository.findByOrganisationId(organisationId, pageable);
     }
 
+    public Page<ProjectEntity> findSubProjects(String parentProjectId, Pageable pageable) {
+        return projectRepository.findByParentProjectId(parentProjectId, pageable);
+    }
+
     public boolean existsByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId) {
         return projectRepository.existsByOrganisationIdAndExternalProjectId(organisationId, externalProjectId);
     }

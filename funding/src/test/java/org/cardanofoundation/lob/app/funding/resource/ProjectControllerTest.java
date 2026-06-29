@@ -21,17 +21,20 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectControllerTest {
@@ -42,8 +45,16 @@ class ProjectControllerTest {
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
 
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+
     @InjectMocks
     private ProjectController projectController;
+
+    @BeforeEach
+    void allowOrgAccessByDefault() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     // --- listProjects ---
 
@@ -59,7 +70,7 @@ class ProjectControllerTest {
         ResponseEntity<?> response = projectController.listProjects("org1", pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(List.of(view));
+        assertThat(((PagedResponse<?>) response.getBody()).getContent()).isEqualTo(List.of(view));
     }
 
     @Test
@@ -71,7 +82,7 @@ class ProjectControllerTest {
         ResponseEntity<?> response = projectController.listProjects("org1", pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(List.of());
+        assertThat(((PagedResponse<?>) response.getBody()).getContent()).isEqualTo(List.of());
     }
 
     @Test
@@ -81,6 +92,52 @@ class ProjectControllerTest {
         ResponseEntity<?> response = projectController.listProjects("unknown", PageRequest.of(0, 10));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void listProjects_returns401_whenNoOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> response = projectController.listProjects("org1", PageRequest.of(0, 10));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    // --- listSubProjects ---
+
+    @Test
+    void listSubProjects_returns200_withContent() {
+        Pageable pageable = PageRequest.of(0, 10);
+        ProjectEntity parent = projectEntity();
+        ProjectView subView = projectView();
+        when(projectService.findById("p1")).thenReturn(Optional.of(parent));
+        when(projectService.findSubProjects("p1", pageable)).thenReturn(new PageImpl<>(List.of(parent)));
+        when(projectService.toView(parent)).thenReturn(subView);
+
+        ResponseEntity<?> response = projectController.listSubProjects("p1", pageable);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((PagedResponse<?>) response.getBody()).getContent()).isEqualTo(List.of(subView));
+    }
+
+    @Test
+    void listSubProjects_returns404_whenParentNotFound() {
+        when(projectService.findById("nope")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = projectController.listSubProjects("nope", PageRequest.of(0, 10));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void getProject_returns401_whenNoOrgAccess() {
+        ProjectEntity project = projectEntity();
+        when(projectService.findById("p1")).thenReturn(Optional.of(project));
+        when(keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())).thenReturn(false);
+
+        ResponseEntity<?> response = projectController.getProject("p1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     // --- getProject ---

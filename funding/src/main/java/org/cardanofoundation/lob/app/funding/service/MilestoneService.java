@@ -40,6 +40,11 @@ public class MilestoneService {
         return milestoneRepository.findById(milestoneId);
     }
 
+    /** Returns the milestone only when it belongs to the given project (for ownership-scoped access). */
+    public Optional<MilestoneEntity> findByIdAndProjectId(String milestoneId, String projectId) {
+        return milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
+    }
+
     public List<MilestoneEntity> findByProjectId(String projectId) {
         return milestoneRepository.findByProjectId(projectId);
     }
