@@ -29,13 +29,13 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 public class MilestoneEntity extends CommonEntity implements Persistable<String> {
 
     @Id
-    @Column(name = "milestone_uid", nullable = false)
+    @Column(name = "milestone_id", nullable = false)
     private String id;
 
     /** User-defined milestone identifier (e.g. "MS-1"). */
     @Nullable
-    @Column(name = "milestone_id")
-    private String milestoneId;
+    @Column(name = "external_milestone_id")
+    private String externalMilestoneId;
 
     @NotBlank
     @Column(name = "milestone_title", nullable = false)
@@ -54,7 +54,7 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     private LocalDate milestoneDate;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_uid", nullable = false)
+    @JoinColumn(name = "project_id", nullable = false)
     private ProjectEntity project;
 
     @Override

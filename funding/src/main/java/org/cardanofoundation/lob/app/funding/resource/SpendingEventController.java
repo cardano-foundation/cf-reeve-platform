@@ -23,7 +23,6 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.vavr.control.Either;
@@ -91,10 +90,10 @@ public class SpendingEventController {
     @Operation(
             summary = "Create a new event with project and milestone allocations",
             description = "Creates an event (FUNDING, SPENDING or REFUND) and resolves or creates the referenced " +
-                    "projects and milestones in a single request. Supply `projectId` (user-defined project ID) to " +
-                    "reference an existing project or create a new one. Supply `milestoneId` (user-defined milestone ID) " +
+                    "projects and milestones in a single request. Supply `externalProjectId` (user-defined project ID) to " +
+                    "reference an existing project or create a new one. Supply `externalMilestoneId` (user-defined milestone ID) " +
                     "to reference an existing milestone, or omit it to create a new one.",
-            requestBody = @RequestBody(
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(
                             mediaType = APPLICATION_JSON_VALUE,
@@ -102,26 +101,26 @@ public class SpendingEventController {
                             examples = {
                                     @ExampleObject(
                                             name = "FUNDING – new project, new milestone",
-                                            summary = "Step 1 – Create project PROJ-AB and milestone MS-001 on-the-fly while allocating funding",
+                                            summary = "Create project PROJ-AB and milestone MS-001 on-the-fly while allocating funding",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "FUNDING",
                                                       "fundingId": "GRANT-2025-001",
-                                                      "fundingHash": "2736ff28abc...",
+                                                      "fundingHash": "2736ff28abc1234567890abcdef",
                                                       "fundingEntity": "Cardano Foundation",
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-AB",
-                                                          "projectId": "PROJ-AB",
+                                                          "externalProjectId": "PROJ-AB",
                                                           "projectTitle": "Project AB",
                                                           "totalAmount": "200000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "milestoneId": "MS-001",
+                                                                "externalMilestoneId": "MS-001",
                                                                 "milestoneTitle": "Milestone 1",
                                                                 "milestoneAmount": "100000.00",
                                                                 "currency": "USD",
@@ -137,21 +136,21 @@ public class SpendingEventController {
                                     ),
                                     @ExampleObject(
                                             name = "FUNDING – existing project, existing milestone",
-                                            summary = "Step 2 – Reference PROJ-AB and MS-001 created in the previous FUNDING event",
+                                            summary = "Reference PROJ-AB and MS-001 created in the previous FUNDING event",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "FUNDING",
                                                       "fundingId": "GRANT-2025-002",
-                                                      "fundingHash": "9a1b2c3d4e...",
+                                                      "fundingHash": "9a1b2c3d4e5f6789",
                                                       "fundingEntity": "Cardano Foundation",
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "PROJ-AB",
+                                                          "externalProjectId": "PROJ-AB",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "MS-001" },
+                                                              "milestone": { "externalMilestoneId": "MS-001" },
                                                               "allocatedAmount": "50000.00"
                                                             }
                                                           ]
@@ -162,7 +161,7 @@ public class SpendingEventController {
                                     ),
                                     @ExampleObject(
                                             name = "SPENDING – new project, new milestone",
-                                            summary = "Step 1 – Create project PROJ-CD and milestone MS-001 on-the-fly while recording spending",
+                                            summary = "Create project PROJ-CD and milestone MS-001 on-the-fly while recording spending",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -172,14 +171,14 @@ public class SpendingEventController {
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-CD",
-                                                          "projectId": "PROJ-CD",
+                                                          "externalProjectId": "PROJ-CD",
                                                           "projectTitle": "Project CD",
                                                           "totalAmount": "100000.00",
                                                           "currency": "USD",
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "milestoneId": "MS-001",
+                                                                "externalMilestoneId": "MS-001",
                                                                 "milestoneTitle": "Milestone 1",
                                                                 "milestoneAmount": "50000.00",
                                                                 "currency": "USD",
@@ -203,8 +202,8 @@ public class SpendingEventController {
                                                     }"""
                                     ),
                                     @ExampleObject(
-                                            name = "SPENDING – existing project, existing milestone",
-                                            summary = "Step 2 – Record further spending against PROJ-CD and MS-001 created above",
+                                            name = "SPENDING – all features (subproject + multi-milestone + items)",
+                                            summary = "SPENDING with sub-project WP-1, three milestones, and three spend items",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -213,102 +212,8 @@ public class SpendingEventController {
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "PROJ-CD",
-                                                          "milestones": [
-                                                            {
-                                                              "milestone": { "milestoneId": "MS-001" }
-                                                            }
-                                                          ]
-                                                        }
-                                                      ],
-                                                      "items": [
-                                                        {
-                                                          "category": "Personnel",
-                                                          "vendor": "Vendor AB",
-                                                          "amountFcy": "5000.00",
-                                                          "currency": "USD",
-                                                          "fxRate": "0.85",
-                                                          "amountRcy": "4250.00",
-                                                          "spendDate": "2025-04-03",
-                                                          "hash": "sha256:abc123...",
-                                                          "notes": "Invoice #INV-2025-001"
-                                                        }
-                                                      ]
-                                                    }"""
-                                    ),
-                                    @ExampleObject(
-                                            name = "REFUND – new project, new milestone",
-                                            summary = "Step 1 – Create project PROJ-EF and milestone MS-001 on-the-fly while recording a refund",
-                                            value = """
-                                                    {
-                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "REFUND",
-                                                      "fundingId": "GRANT-2025-001",
-                                                      "fundingHash": "refund-tx-hash...",
-                                                      "currency": "USD",
-                                                      "allocations": [
-                                                        {
-                                                          "fundingId": "GRANT-2025-001-EF",
-                                                          "projectId": "PROJ-EF",
-                                                          "projectTitle": "Project EF",
-                                                          "totalAmount": "80000.00",
-                                                          "currency": "USD",
-                                                          "milestones": [
-                                                            {
-                                                              "milestone": {
-                                                                "milestoneId": "MS-001",
-                                                                "milestoneTitle": "Final Milestone",
-                                                                "milestoneAmount": "80000.00",
-                                                                "currency": "USD",
-                                                                "milestoneDate": "2026-03-31"
-                                                              },
-                                                              "allocatedAmount": "5000.00"
-                                                            }
-                                                          ]
-                                                        }
-                                                      ],
-                                                      "items": []
-                                                    }"""
-                                    ),
-                                    @ExampleObject(
-                                            name = "REFUND – existing project, existing milestone",
-                                            summary = "Step 2 – Return unspent funds referencing PROJ-EF and MS-001 created above",
-                                            value = """
-                                                    {
-                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "REFUND",
-                                                      "fundingId": "GRANT-2025-001",
-                                                      "fundingHash": "refund-tx-2...",
-                                                      "currency": "USD",
-                                                      "allocations": [
-                                                        {
-                                                          "projectId": "PROJ-EF",
-                                                          "milestones": [
-                                                            {
-                                                              "milestone": { "milestoneId": "MS-001" },
-                                                              "allocatedAmount": "10000.00"
-                                                            }
-                                                          ]
-                                                        }
-                                                      ],
-                                                      "items": []
-                                                    }"""
-                                    ),
-                                    @ExampleObject(
-                                            name = "FUNDING – new project + sub-project + milestone",
-                                            summary = "Step 1 – Create project PROJ-GH with sub-project WP-1 and milestone MS-001 on-the-fly",
-                                            value = """
-                                                    {
-                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "FUNDING",
-                                                      "fundingId": "GRANT-2025-001",
-                                                      "fundingHash": "7e8f9a0b1c...",
-                                                      "fundingEntity": "Cardano Foundation",
-                                                      "currency": "USD",
-                                                      "allocations": [
-                                                        {
                                                           "fundingId": "GRANT-2025-001-GH",
-                                                          "projectId": "PROJ-GH",
+                                                          "externalProjectId": "PROJ-GH",
                                                           "projectTitle": "Project GH",
                                                           "totalAmount": "300000.00",
                                                           "currency": "USD",
@@ -319,41 +224,100 @@ public class SpendingEventController {
                                                           "milestones": [
                                                             {
                                                               "milestone": {
-                                                                "milestoneId": "MS-001",
-                                                                "milestoneTitle": "Deliverable 1",
+                                                                "externalMilestoneId": "MS-001",
+                                                                "milestoneTitle": "Deliverable 1 – Design",
                                                                 "milestoneAmount": "50000.00",
                                                                 "currency": "USD",
+                                                                "milestoneDate": "2025-06-30"
+                                                              },
+                                                              "allocatedAmount": "50000.00"
+                                                            },
+                                                            {
+                                                              "milestone": {
+                                                                "externalMilestoneId": "MS-002",
+                                                                "milestoneTitle": "Deliverable 2 – Implementation",
+                                                                "milestoneAmount": "100000.00",
+                                                                "currency": "USD",
                                                                 "milestoneDate": "2025-09-30"
+                                                              },
+                                                              "allocatedAmount": "100000.00"
+                                                            },
+                                                            {
+                                                              "milestone": {
+                                                                "externalMilestoneId": "MS-003",
+                                                                "milestoneTitle": "Deliverable 3 – Audit & Closeout",
+                                                                "milestoneAmount": "50000.00",
+                                                                "currency": "USD",
+                                                                "milestoneDate": "2025-12-31"
                                                               },
                                                               "allocatedAmount": "50000.00"
                                                             }
                                                           ]
                                                         }
                                                       ],
-                                                      "items": []
+                                                      "items": [
+                                                        {
+                                                          "category": "Personnel",
+                                                          "vendor": "Contractor A",
+                                                          "amountFcy": "12000.00",
+                                                          "currency": "USD",
+                                                          "fxRate": "1.00",
+                                                          "amountRcy": "12000.00",
+                                                          "spendDate": "2025-04-01",
+                                                          "hash": "sha256:aabbcc112233",
+                                                          "notes": "Invoice #INV-2025-101"
+                                                        },
+                                                        {
+                                                          "category": "Infrastructure",
+                                                          "vendor": "Cloud Co.",
+                                                          "amountFcy": "3500.00",
+                                                          "currency": "USD",
+                                                          "fxRate": "1.00",
+                                                          "amountRcy": "3500.00",
+                                                          "spendDate": "2025-04-15",
+                                                          "notes": "Monthly hosting – April 2025"
+                                                        },
+                                                        {
+                                                          "category": "Travel",
+                                                          "vendor": "Airline XYZ",
+                                                          "amountFcy": "1800.00",
+                                                          "currency": "EUR",
+                                                          "fxRate": "1.08",
+                                                          "amountRcy": "1944.00",
+                                                          "spendDate": "2025-05-10",
+                                                          "hash": "sha256:ddeeff445566",
+                                                          "notes": "Conference travel – receipt attached"
+                                                        }
+                                                      ]
                                                     }"""
                                     ),
                                     @ExampleObject(
-                                            name = "FUNDING – existing project + sub-project + milestone",
-                                            summary = "Step 2 – Reference PROJ-GH / WP-1 / MS-001 created above",
+                                            name = "REFUND – new project, new milestone",
+                                            summary = "Create project PROJ-EF and milestone MS-001 on-the-fly while recording a refund",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "FUNDING",
+                                                      "eventType": "REFUND",
                                                       "fundingId": "GRANT-2025-001",
-                                                      "fundingHash": "8f9a0b1c2d...",
-                                                      "fundingEntity": "Cardano Foundation",
+                                                      "fundingHash": "refund-tx-hash-abc123",
                                                       "currency": "USD",
                                                       "allocations": [
                                                         {
-                                                          "projectId": "PROJ-GH",
-                                                          "subProject": {
-                                                            "subProjectId": "WP-1"
-                                                          },
+                                                          "fundingId": "GRANT-2025-001-EF",
+                                                          "externalProjectId": "PROJ-EF",
+                                                          "projectTitle": "Project EF",
+                                                          "totalAmount": "80000.00",
+                                                          "currency": "USD",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "milestoneId": "MS-001" },
-                                                              "allocatedAmount": "25000.00"
+                                                              "milestone": {
+                                                                "externalMilestoneId": "MS-001",
+                                                                "milestoneTitle": "Final Milestone",
+                                                                "milestoneAmount": "80000.00",
+                                                                "currency": "USD",
+                                                                "milestoneDate": "2026-03-31"
+                                                              },
+                                                              "allocatedAmount": "5000.00"
                                                             }
                                                           ]
                                                         }
@@ -388,22 +352,59 @@ public class SpendingEventController {
         return ResponseEntity.status(HttpStatus.CREATED).body(spendingEventService.toView(created.get()));
     }
 
-    @Operation(summary = "Update a draft event — replaces all allocations from the payload", responses = {
-            @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = SpendingEventView.class))}),
-            @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ProblemDetail.class))}),
-            @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ProblemDetail.class))}),
-            @ApiResponse(responseCode = "409", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ProblemDetail.class))})
-    })
+    @Operation(
+            summary = "Update a draft event — replaces all allocations from the payload",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    content = @Content(
+                            mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = SpendingEventCreateRequest.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "FUNDING – update allocations",
+                                            summary = "Replace allocations on an existing FUNDING event",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-2025-001",
+                                                      "fundingHash": "updated-hash-abc",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currency": "USD",
+                                                      "allocations": [
+                                                        {
+                                                          "externalProjectId": "PROJ-AB",
+                                                          "milestones": [
+                                                            {
+                                                              "milestone": { "externalMilestoneId": "MS-001" },
+                                                              "allocatedAmount": "150000.00"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ],
+                                                      "items": []
+                                                    }"""
+                                    )
+                            }
+                    )
+            ),
+            responses = {
+                    @ApiResponse(responseCode = "201", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = SpendingEventView.class))}),
+                    @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))}),
+                    @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))}),
+                    @ApiResponse(responseCode = "409", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))})
+            }
+    )
     @PutMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
     @SuppressWarnings("unchecked")
     public ResponseEntity<SpendingEventView> updateEvent(
             @PathVariable String eventId,
-            @Valid @org.springframework.web.bind.annotation.RequestBody SpendingEventCreateRequest request) {
+            @Valid @RequestBody SpendingEventCreateRequest request) {
 
         Either<ProblemDetail, FundingEventEntity> updated = spendingEventService.update(eventId, request);
         if (updated.isLeft()) {

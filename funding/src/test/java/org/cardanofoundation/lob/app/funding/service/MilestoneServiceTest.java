@@ -235,7 +235,7 @@ class MilestoneServiceTest {
 
         MilestoneView view = milestoneService.toView(milestone);
 
-        assertThat(view.getMilestoneUid()).isEqualTo("m1");
+        assertThat(view.getMilestoneId()).isEqualTo("m1");
         assertThat(view.getMilestoneTitle()).isEqualTo("Milestone AB");
         assertThat(view.getMilestoneAmount()).isEqualByComparingTo("50000.00");
         assertThat(view.getCurrency()).isEqualTo("USD");
@@ -261,7 +261,7 @@ class MilestoneServiceTest {
                 .id(id)
                 .organisationId("org1")
                 .fundingId("GRANT-2025-001")
-                .projectId("PROJ-AB")
+                .externalProjectId("PROJ-AB")
                 .projectTitle("Project AB")
                 .totalAmount(new BigDecimal("200000.00"))
                 .currency("USD")

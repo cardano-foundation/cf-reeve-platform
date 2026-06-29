@@ -31,7 +31,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 public class ProjectEntity extends CommonEntity implements Persistable<String> {
 
     @Id
-    @Column(name = "project_uid", nullable = false)
+    @Column(name = "project_id", nullable = false)
     private String id;
 
     @NotBlank
@@ -43,8 +43,8 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     private String fundingId;
 
     @NotBlank
-    @Column(name = "project_id", nullable = false)
-    private String projectId;
+    @Column(name = "external_project_id", nullable = false)
+    private String externalProjectId;
 
     @NotBlank
     @Column(name = "project_title", nullable = false)
@@ -63,7 +63,7 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     /** Self-referential: null for root projects, set for sub-projects. */
     @Nullable
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_project_uid")
+    @JoinColumn(name = "parent_project_id")
     private ProjectEntity parentProject;
 
     @Builder.Default

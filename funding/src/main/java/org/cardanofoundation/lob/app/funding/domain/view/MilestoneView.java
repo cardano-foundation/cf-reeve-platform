@@ -16,16 +16,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class MilestoneView {
 
     @Schema(example = "550e8400-e29b-41d4-a716-446655440000",
-            description = "Internal UUID unique identifier (milestone_uid)")
-    private String milestoneUid;
+            description = "Internal UUID unique identifier (milestone_id)")
+    private String milestoneId;
 
     @Nullable
     @Schema(example = "MS-1", description = "User-defined milestone identifier")
-    private String milestoneId;
+    private String externalMilestoneId;
 
     @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
-            description = "Internal SHA256 uid of the parent project (project_uid)")
-    private String projectUid;
+            description = "Internal SHA256 id of the parent project (project_id)")
+    private String projectId;
 
     @Schema(example = "Milestone AB")
     private String milestoneTitle;

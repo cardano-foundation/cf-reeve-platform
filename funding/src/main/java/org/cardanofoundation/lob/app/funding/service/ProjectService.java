@@ -47,16 +47,16 @@ public class ProjectService {
         return projectRepository.findByOrganisationId(organisationId, pageable);
     }
 
-    public boolean existsByOrganisationIdAndProjectId(String organisationId, String projectId) {
-        return projectRepository.existsByOrganisationIdAndProjectId(organisationId, projectId);
+    public boolean existsByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId) {
+        return projectRepository.existsByOrganisationIdAndExternalProjectId(organisationId, externalProjectId);
     }
 
     @Transactional
     public ProjectEntity createWithMilestones(ProjectWithMilestonesCreateRequest request) {
-        String projectUid = ProjectEntity.id(request.getOrganisationId(), request.getProjectId());
-        projectRepository.saveAndFlush(toEntity(projectUid, request));
-        request.getMilestones().forEach(milestoneRequest -> milestoneService.create(projectUid, milestoneRequest));
-        return projectRepository.findById(projectUid).orElseThrow();
+        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId());
+        projectRepository.saveAndFlush(toEntity(projectId, request));
+        request.getMilestones().forEach(milestoneRequest -> milestoneService.create(projectId, milestoneRequest));
+        return projectRepository.findById(projectId).orElseThrow();
     }
 
     @Transactional
@@ -114,29 +114,29 @@ public class ProjectService {
                 .map(this::toView)
                 .toList();
 
-        String parentProjectUid = project.getParentProject() != null ? project.getParentProject().getId() : null;
+        String parentProjectId = project.getParentProject() != null ? project.getParentProject().getId() : null;
 
         return ProjectView.builder()
-                .projectUid(project.getId())
+                .projectId(project.getId())
                 .organisationId(project.getOrganisationId())
                 .fundingId(project.getFundingId())
-                .projectId(project.getProjectId())
+                .externalProjectId(project.getExternalProjectId())
                 .projectTitle(project.getProjectTitle())
                 .totalAmount(project.getTotalAmount())
                 .currency(project.getCurrency())
-                .parentProjectUid(parentProjectUid)
+                .parentProjectId(parentProjectId)
                 .createdAt(project.getCreatedAt())
                 .milestones(milestoneViews)
                 .subProjects(subProjectViews)
                 .build();
     }
 
-    private ProjectEntity toEntity(String projectUid, ProjectWithMilestonesCreateRequest request) {
+    private ProjectEntity toEntity(String projectId, ProjectWithMilestonesCreateRequest request) {
         return ProjectEntity.builder()
-                .id(projectUid)
+                .id(projectId)
                 .organisationId(request.getOrganisationId())
                 .fundingId(request.getFundingId())
-                .projectId(request.getProjectId())
+                .externalProjectId(request.getExternalProjectId())
                 .projectTitle(request.getProjectTitle())
                 .totalAmount(request.getTotalAmount())
                 .currency(request.getCurrency())

@@ -50,7 +50,7 @@ class SpendingEventConverterTest {
                                                                   String subProjectTitle,
                                                                   List<SpendingEventPublishView.Milestone> milestones) {
         return SpendingEventPublishView.ProjectAllocation.builder()
-                .projectId(projectId).projectTitle(projectTitle).subProjectTitle(subProjectTitle)
+                .externalProjectId(projectId).projectTitle(projectTitle).subProjectTitle(subProjectTitle)
                 .milestones(milestones).build();
     }
 
@@ -99,7 +99,7 @@ class SpendingEventConverterTest {
                 .build();
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
-                .milestoneUid("ms-uid-1").milestoneTitle("Milestone AB")
+                .milestoneId("ms-uid-1").milestoneTitle("Milestone AB")
                 .milestoneAmount(new BigDecimal("60.00")).allocatedAmount(new BigDecimal("50.00"))
                 .currency(usd()).milestoneDate(LocalDate.of(2025, 6, 30))
                 .build();

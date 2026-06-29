@@ -85,7 +85,7 @@ public class SpendingEventConverter {
                 .map(allocation -> {
                     EventProjectAllocationEntity entity = EventProjectAllocationEntity.builder()
                             .event(event)
-                            .projectId(allocation.getProjectId())
+                            .projectId(allocation.getExternalProjectId())
                             .projectTitle(allocation.getProjectTitle())
                             .subProjectTitle(allocation.getSubProjectTitle())
                             .build();
@@ -100,7 +100,7 @@ public class SpendingEventConverter {
         return milestones.stream()
                 .map(milestone -> EventMilestoneAllocationEntity.builder()
                         .allocation(allocation)
-                        .milestoneId(milestone.getMilestoneUid())
+                        .milestoneId(milestone.getMilestoneId())
                         .milestoneTitle(milestone.getMilestoneTitle())
                         .amountRcy(milestone.getMilestoneAmount())
                         .build())

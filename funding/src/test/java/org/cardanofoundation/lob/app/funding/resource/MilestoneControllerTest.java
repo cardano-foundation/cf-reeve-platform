@@ -182,7 +182,7 @@ class MilestoneControllerTest {
 
     private ProjectEntity projectEntity(String id) {
         return ProjectEntity.builder().id(id).organisationId("org1").fundingId("GRANT-2025-001")
-                .projectId("PROJ-AB").projectTitle("Project AB")
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
@@ -193,7 +193,7 @@ class MilestoneControllerTest {
     }
 
     private MilestoneView milestoneView(String id) {
-        return MilestoneView.builder().milestoneUid(id).projectUid("p1").milestoneTitle("Milestone AB")
+        return MilestoneView.builder().milestoneId(id).projectId("p1").milestoneTitle("Milestone AB")
                 .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
                 .milestoneDate(LocalDate.of(2025, 6, 30)).build();
     }

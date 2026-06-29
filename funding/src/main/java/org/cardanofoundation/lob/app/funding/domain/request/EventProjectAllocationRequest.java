@@ -19,12 +19,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Builder
 public class EventProjectAllocationRequest {
 
-    // --- Existing project: supply projectId (user-defined) only ---
+    // --- Existing project: supply externalProjectId (user-defined) only ---
 
     @Nullable
     @Schema(example = "PROJ-AB",
-            description = "User-defined project ID (projectId field). When projectId maps to an existing project, all new-project fields below are ignored.")
-    private String projectId;
+            description = "User-defined project ID (externalProjectId field). When externalProjectId maps to an existing project, all new-project fields below are ignored.")
+    private String externalProjectId;
 
     // --- New project: supply the fields below when creating a new project ---
 
