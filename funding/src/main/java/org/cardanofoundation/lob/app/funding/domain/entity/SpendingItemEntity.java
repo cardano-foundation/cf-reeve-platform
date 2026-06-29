@@ -15,6 +15,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.envers.Audited;
 
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -32,16 +33,19 @@ public class SpendingItemEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "item_id", nullable = false)
     private String id;
 
-    @NotBlank
-    @Column(name = "category", nullable = false)
+    /** Required for SPENDING items; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "category")
     private String category;
 
-    @NotBlank
-    @Column(name = "vendor", nullable = false)
+    /** Required for SPENDING items; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "vendor")
     private String vendor;
 
-    @NotNull
-    @Column(name = "amount_fcy", nullable = false)
+    /** Foreign-currency amount. Required for SPENDING items; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "amount_fcy")
     private BigDecimal amountFcy;
 
     @NotBlank
@@ -70,11 +74,21 @@ public class SpendingItemEntity extends CommonEntity implements Persistable<Stri
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id", nullable = false)
-    private SpendingEventEntity event;
+    private FundingEventEntity event;
 
     @Override
     public boolean isNew() {
         return isNew;
+    }
+
+    /**
+     * Deterministic id for a spending item, derived from its owning event and 1-based line number
+     * within that event (mirrors {@code TransactionItem.id}). Position is part of the key so that
+     * two line items with identical content — or identical items across different events — remain
+     * distinct.
+     */
+    public static String id(String eventId, int lineNo) {
+        return SHA3.digestAsHex("%s::%s".formatted(eventId, lineNo));
     }
 
 }

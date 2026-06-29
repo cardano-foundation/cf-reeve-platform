@@ -18,16 +18,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class MilestoneCreateRequest {
 
     @Nullable
-    @Schema(example = "existing-milestone-id", description = "If provided, reference an existing milestone instead of creating a new one")
-    private String milestoneId;
+    @Schema(example = "MS-1", description = "User-defined milestone ID. Used to reference an existing milestone by (projectId, externalMilestoneId) or to name a new milestone.")
+    private String externalMilestoneId;
 
     @Nullable
     @Schema(example = "Milestone AB")
-    private String label;
+    private String milestoneTitle;
 
     @Nullable
     @Schema(example = "50000.00")
-    private BigDecimal expectedCost;
+    private BigDecimal milestoneAmount;
 
     @Nullable
     @Schema(example = "USD")
@@ -36,6 +36,6 @@ public class MilestoneCreateRequest {
     @Nullable
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-06-30")
-    private LocalDate dueDate;
+    private LocalDate milestoneDate;
 
 }

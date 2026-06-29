@@ -20,15 +20,15 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStat
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
-import org.cardanofoundation.lob.app.funding.domain.entity.SpendingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
-import org.cardanofoundation.lob.app.funding.repository.SpendingEventRepository;
+import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 
 @ExtendWith(MockitoExtension.class)
 class SpendingEventLedgerUpdateHandlerTest {
 
     @Mock
-    private SpendingEventRepository spendingEventRepository;
+    private FundingEventRepository spendingEventRepository;
 
     @InjectMocks
     private SpendingEventLedgerUpdateHandler handler;
@@ -43,7 +43,7 @@ class SpendingEventLedgerUpdateHandlerTest {
 
     @Test
     void knownEvent_updatesLedgerStatusAndTxHash() {
-        SpendingEventEntity entity = SpendingEventEntity.builder()
+        FundingEventEntity entity = FundingEventEntity.builder()
                 .id("event-1")
                 .eventType(EventType.SPENDING)
                 .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
@@ -62,7 +62,7 @@ class SpendingEventLedgerUpdateHandlerTest {
 
     @Test
     void knownEvent_publishError_storesErrorReason() {
-        SpendingEventEntity entity = SpendingEventEntity.builder()
+        FundingEventEntity entity = FundingEventEntity.builder()
                 .id("event-1")
                 .eventType(EventType.FUNDING)
                 .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
@@ -79,7 +79,7 @@ class SpendingEventLedgerUpdateHandlerTest {
 
     @Test
     void knownEvent_recoveryAfterError_clearsErrorReason() {
-        SpendingEventEntity entity = SpendingEventEntity.builder()
+        FundingEventEntity entity = FundingEventEntity.builder()
                 .id("event-1")
                 .eventType(EventType.FUNDING)
                 .ledgerDispatchStatus(LedgerDispatchStatus.FAILED)
@@ -118,7 +118,7 @@ class SpendingEventLedgerUpdateHandlerTest {
 
     @Test
     void knownEvent_allReceiptsHaveNullHash_txHashNotSet() {
-        SpendingEventEntity entity = SpendingEventEntity.builder()
+        FundingEventEntity entity = FundingEventEntity.builder()
                 .id("event-1")
                 .eventType(EventType.SPENDING)
                 .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
@@ -136,7 +136,7 @@ class SpendingEventLedgerUpdateHandlerTest {
 
     @Test
     void knownEvent_noReceipts_txHashNotSet() {
-        SpendingEventEntity entity = SpendingEventEntity.builder()
+        FundingEventEntity entity = FundingEventEntity.builder()
                 .id("event-1")
                 .eventType(EventType.SPENDING)
                 .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED)
@@ -152,10 +152,10 @@ class SpendingEventLedgerUpdateHandlerTest {
 
     @Test
     void multipleUpdatesInOneEvent_allProcessed() {
-        SpendingEventEntity entity1 = SpendingEventEntity.builder()
+        FundingEventEntity entity1 = FundingEventEntity.builder()
                 .id("event-1").eventType(EventType.SPENDING)
                 .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED).build();
-        SpendingEventEntity entity2 = SpendingEventEntity.builder()
+        FundingEventEntity entity2 = FundingEventEntity.builder()
                 .id("event-2").eventType(EventType.SPENDING)
                 .ledgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED).build();
 

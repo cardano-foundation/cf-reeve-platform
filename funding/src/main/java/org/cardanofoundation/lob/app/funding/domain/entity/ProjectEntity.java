@@ -1,14 +1,13 @@
 package org.cardanofoundation.lob.app.funding.domain.entity;
 
-import static org.cardanofoundation.lob.app.support.crypto.SHA3.digestAsHex;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
+import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 import lombok.*;
 
@@ -17,6 +16,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.envers.Audited;
 
+import org.cardanofoundation.lob.app.support.crypto.SHA3;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @AllArgsConstructor
@@ -38,36 +38,50 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Column(name = "organisation_id", nullable = false)
     private String organisationId;
 
-    @NotBlank
-    @Column(name = "funding_id", nullable = false)
+    @Nullable
+    @Column(name = "funding_id")
     private String fundingId;
 
     @NotBlank
-    @Column(name = "activity_id", nullable = false)
-    private String activityId;
+    @Column(name = "external_project_id", nullable = false)
+    private String externalProjectId;
 
     @NotBlank
-    @Column(name = "activity_title", nullable = false)
-    private String activityTitle;
+    @Column(name = "project_title", nullable = false)
+    private String projectTitle;
 
-    @NotNull
-    @Column(name = "expected_total_amount", nullable = false)
-    private BigDecimal expectedTotalAmount;
+    /** Null for root projects; populated for sub-projects. */
+    @Nullable
+    @Column(name = "total_amount")
+    private BigDecimal totalAmount;
 
-    @NotBlank
-    @Column(name = "currency", nullable = false)
+    /** Null for sub-projects (they inherit their parent's currency context). */
+    @Nullable
+    @Column(name = "currency")
     private String currency;
+
+    /** Self-referential: null for root projects, set for sub-projects. */
+    @Nullable
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_project_id")
+    private ProjectEntity parentProject;
+
+    @Builder.Default
+    @OneToMany(mappedBy = "parentProject", cascade = CascadeType.ALL)
+    private List<ProjectEntity> subProjects = new ArrayList<>();
 
     @Builder.Default
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
     private List<MilestoneEntity> milestones = new ArrayList<>();
 
-    @Builder.Default
-    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
-    private List<SpendingEventEntity> events = new ArrayList<>();
+    /** Deterministic id for a root project — unique per organisation by its user-defined id. */
+    public static String id(String organisationId, String externalProjectId) {
+        return SHA3.digestAsHex("%s::%s".formatted(organisationId, externalProjectId));
+    }
 
-    public static String id(String organisationId, String activityId) {
-        return digestAsHex("%s::%s".formatted(organisationId, activityId));
+    /** Deterministic id for a sub-project — unique within its parent. */
+    public static String subId(String parentProjectId, String subProjectId) {
+        return SHA3.digestAsHex("%s::%s".formatted(parentProjectId, subProjectId));
     }
 
     @Override

@@ -33,7 +33,7 @@ All metadata entries under label 1447 follow this base structure, containing org
       "timestamp": "string",                       // ISO-8601 timestamp
       "version": "string"                          // Metadata format version (e.g., "1.1")
     },
-    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS" or "REPORT"
+    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS", "REPORT" or "EVENT_BUNDLE"
     "data": {}                   // Type-specific data structure
   }
 }
@@ -51,10 +51,11 @@ All metadata entries under label 1447 follow this base structure, containing org
 
 ### Metadata Types
 
-Reeve currently supports two metadata types:
+Reeve currently supports three metadata types:
 
 - **`INDIVIDUAL_TRANSACTIONS`**: Individual accounting transactions of the organization
 - **`REPORT`**: Custom financial reports (balance sheets, income statements, etc.)
+- **`EVENT_BUNDLE`**: Grant-lifecycle events (funding, spending, refunds) and organization-defined custom events
 
 ## Type: Individual Transactions
 
@@ -228,6 +229,210 @@ Required fields:
 }
 ```
 
+## Type: Event Bundle
+
+The `EVENT_BUNDLE` type anchors **grant-lifecycle events** — the funding, spending, and refund activity tied to a grant or project — as well as organization-defined **custom events**. It is used by the funding module to make the flow of grant money publicly verifiable on-chain.
+
+A bundle groups one or more events belonging to a single organization. The `data` field supports two storage modes:
+
+- **Inline**: `data` is an array of event objects, embedded directly in the transaction metadata.
+- **IPFS-anchored**: `data` is a manifest object that references an off-chain document (stored on IPFS) via its CID. Used when the bundle is too large to fit comfortably in transaction metadata.
+
+```json
+{
+  <General structure>,
+  "type": "EVENT_BUNDLE",
+  "data": [ /* array of event objects (inline) */ ]
+}
+```
+
+> **Note on validation**: Several rules cannot be expressed in JSON Schema and are enforced by a programmatic validator instead: `org_id` matching the on-chain `org.id`, `event_count` matching the number of events, the manifest `id` derivation, and the IPFS CID matching the document bytes.
+
+### Event Fields
+
+Grant-lifecycle events (`FUNDING`, `SPENDING`, `REFUND`) carry:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier of the event |
+| `type` | string | Yes | Event type — `FUNDING`, `SPENDING`, or `REFUND` |
+| `funding_tx` | string | No | Reference to the funding transaction |
+| `funding_id` | string | Yes | Identifier of the funding source |
+| `funding_entity` | string | No | Name of the entity providing the funding (`FUNDING` events only) |
+| `allocation` | array | Yes | One entry per project this event targets, each with its milestones (see below) |
+| `item` | array | Conditional | Line items; **required** for `SPENDING`, optional for `FUNDING`/`REFUND` |
+
+Custom (organization-defined) events carry only the common fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique identifier of the event |
+| `type` | string | Yes | A custom organization-defined value (not `FUNDING`/`SPENDING`/`REFUND`) |
+| `date` | string | Yes | Event date in ISO 8601 format (YYYY-MM-DD) |
+
+> Grant-lifecycle events no longer carry an event-level `date`, `amount`, or `currency`: dates and amounts live on the individual `milestones`/`item` entries, and the organization's reporting currency is declared once in the top-level `org` block.
+
+### Event Types
+
+| Type | Description |
+|------|-------------|
+| `FUNDING` | Funds allocated to a grant, split across one or more projects and their milestones |
+| `SPENDING` | Expenditure against a grant, listed as line `item`s |
+| `REFUND` | Funds returned/reversed for a grant |
+| *custom* | Any organization-defined type (not one of the reserved values above); only the common fields are mandated and the body is free-form |
+
+### Allocation Array
+
+`allocation` is an array with one entry per project the event targets. Each entry nests the milestones of that project. When an allocation targets a **sub-project**, `project_id`/`project_title` carry the **root** project and `sub_project_title` carries the sub-project's own title.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `project_id` | string | Yes | User-defined id of the (root) project |
+| `project_title` | string | Yes | Title of the (root) project |
+| `sub_project_title` | string | No | Sub-project title; present only when the allocation targets a sub-project |
+| `milestones` | array | Yes | Milestones of this project targeted by the event (see below) |
+
+### Milestone Object
+
+Each entry of an allocation's `milestones` array references a milestone of that project:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `milestone_id` | string | Yes | Identifier of the milestone |
+| `milestone_title` | string | Yes | Human-readable milestone title |
+| `amount_rcy` | string | Yes | Milestone amount in the organization's reporting currency |
+
+### Item Object
+
+Both `SPENDING` and `FUNDING`/`REFUND` events can carry an `item` array. `SPENDING` items carry the full field set; `FUNDING`/`REFUND` items are lighter, carrying only `amount_rcy`, `date`, and `currency`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `amount_rcy` | string | Yes | Amount in the organization's reporting currency |
+| `amount_fcy` | string | No | Amount in the item's (foreign) currency (`SPENDING` only) |
+| `vendor` | string | No | Vendor/payee (`SPENDING` only) |
+| `spending_category` | string | No | Expense category (`SPENDING` only) |
+| `fx_rate` | string | No | FX rate to the reporting currency, as a decimal string (`SPENDING` only; see [FX Rate](#fx-rate)) |
+| `hash` | string | No | Hash of the supporting document |
+| `notes` | string | No | Free-text notes |
+| `date` | string | Yes | Item date in ISO 8601 format (YYYY-MM-DD) |
+| `currency` | object | Yes | Currency with `id` (ISO format) and `cust_code` |
+
+### IPFS-Anchored Storage
+
+When a bundle is stored off-chain, `data` is a manifest pointing to the IPFS document:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Manifest identifier |
+| `ipfs_cid` | string | Yes | IPFS CID (CIDv1 base32 or CIDv0 base58btc) of the off-chain document |
+| `interval` | string | Yes | Reporting interval (`DAILY`, `WEEKLY`, `MONTHLY`, `QUARTERLY`, `YEARLY`) |
+| `date` | string | Yes | Bundle date in ISO 8601 format |
+| `event_count` | integer | Yes | Number of events in the referenced document |
+
+The referenced off-chain document carries `org_id`, `currency_id`, `version`, `date`, and the `events` array.
+
+### Example: Event Bundle (Spending)
+
+```json
+{
+  "1447": {
+    "org": {
+      "id": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+      "name": "Cardano Foundation",
+      "currency_id": "ISO_4217:CHF",
+      "country_code": "CH",
+      "tax_id_number": "CHE-184477354"
+    },
+    "metadata": {
+      "creation_slot": 12345,
+      "timestamp": "2025-06-01T10:15:30Z",
+      "version": "1.0"
+    },
+    "type": "EVENT_BUNDLE",
+    "data": [
+      {
+        "id": "event1",
+        "type": "SPENDING",
+        "funding_tx": "ftx1",
+        "funding_id": "fund1",
+        "allocation": [
+          {
+            "project_id": "ProjectID1",
+            "project_title": "ProjectTitle",
+            "sub_project_title": "SubProjectTitle",
+            "milestones": [
+              {
+                "milestone_id": "ms1",
+                "milestone_title": "Milestone AB",
+                "amount_rcy": "100"
+              }
+            ]
+          }
+        ],
+        "item": [
+          {
+            "amount_rcy": "85",
+            "amount_fcy": "100",
+            "vendor": "Vendor AB",
+            "spending_category": "Personnel",
+            "fx_rate": "0.85",
+            "hash": "doc-hash-1",
+            "notes": "Invoice #1",
+            "date": "2025-04-03",
+            "currency": {
+              "id": "ISO_4217:USD",
+              "cust_code": "USD"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Example: Event Bundle (Funding with Milestones)
+
+```json
+{
+  <General structure>,
+  "type": "EVENT_BUNDLE",
+  "data": [
+    {
+      "id": "event2",
+      "type": "FUNDING",
+      "funding_tx": "ftx1",
+      "funding_id": "fund1",
+      "funding_entity": "FundingEntity",
+      "allocation": [
+        {
+          "project_id": "ProjectID1",
+          "project_title": "ProjectTitle",
+          "milestones": [
+            {
+              "milestone_id": "ms1",
+              "milestone_title": "Milestone AB",
+              "amount_rcy": "100"
+            }
+          ]
+        }
+      ],
+      "item": [
+        {
+          "amount_rcy": "100",
+          "date": "2026-06-11",
+          "currency": {
+            "id": "ISO_4217:USD",
+            "cust_code": "USD"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
 ## Glossary
 
 This section defines key terms used throughout the on-chain metadata format.
@@ -246,11 +451,11 @@ A counterparty is another entity involved in a transaction or business relations
 
 ### FX Rate
 
-The foreign exchange (FX) rate is the conversion rate between two currencies at the time of a transaction. It is used when transactions involve multiple currencies to provide transparency about the exchange rate applied.
+The foreign exchange (FX) rate is the conversion rate from an item's currency to the organization's reporting/functional currency at the time of the transaction. It provides transparency about the exchange rate applied to multi-currency entries.
 
-**Format**: `"<from_currency>:<to_currency>=<rate>"`
+**Format**: a decimal string. Cardano transaction metadata cannot encode floating-point numbers, so every amount and rate is stored as a string.
 
-**Example**: `"ISO_4217:EUR:ISO_4217:CHF=0.9345"` indicates 1 EUR equals 0.9345 CHF.
+**Example**: `"0.85"` indicates 1 unit of the item currency equals 0.85 units of the reporting currency.
 
 ### VAT (Value Added Tax)
 

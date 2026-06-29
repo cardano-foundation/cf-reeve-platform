@@ -20,6 +20,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -28,9 +29,11 @@ import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.service.MilestoneService;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class MilestoneControllerTest {
@@ -39,9 +42,16 @@ class MilestoneControllerTest {
     private MilestoneService milestoneService;
     @Mock
     private ProjectService projectService;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private MilestoneController milestoneController;
+
+    @BeforeEach
+    void allowOrgAccessByDefault() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     // --- listMilestones ---
 
@@ -69,14 +79,26 @@ class MilestoneControllerTest {
         ResponseEntity<?> response = milestoneController.listMilestones("p1", pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(List.of(view));
+        assertThat(((PagedResponse<?>) response.getBody()).getContent()).isEqualTo(List.of(view));
+    }
+
+    @Test
+    void listMilestones_returns401_whenNoOrgAccess() {
+        ProjectEntity project = projectEntity("p1");
+        when(projectService.findById("p1")).thenReturn(Optional.of(project));
+        when(keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())).thenReturn(false);
+
+        ResponseEntity<?> response = milestoneController.listMilestones("p1", PageRequest.of(0, 10));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     // --- getMilestone ---
 
     @Test
     void getMilestone_returns404_whenNotFound() {
-        when(milestoneService.findById("m1")).thenReturn(Optional.empty());
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneService.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
 
         ResponseEntity<?> response = milestoneController.getMilestone("p1", "m1");
 
@@ -85,10 +107,34 @@ class MilestoneControllerTest {
     }
 
     @Test
+    void getMilestone_returns404_whenMilestoneNotInProject() {
+        // IDOR guard: a milestone that exists but belongs to another project must not be reachable.
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneService.findByIdAndProjectId("m-other", "p1")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = milestoneController.getMilestone("p1", "m-other");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+    }
+
+    @Test
+    void getMilestone_returns401_whenNoOrgAccess() {
+        ProjectEntity project = projectEntity("p1");
+        when(projectService.findById("p1")).thenReturn(Optional.of(project));
+        when(keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())).thenReturn(false);
+
+        ResponseEntity<?> response = milestoneController.getMilestone("p1", "m1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
     void getMilestone_returns200_withView() {
         MilestoneEntity milestone = milestoneEntity("m1");
         MilestoneView view = milestoneView("m1");
-        when(milestoneService.findById("m1")).thenReturn(Optional.of(milestone));
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneService.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestone));
         when(milestoneService.toView(milestone)).thenReturn(view);
 
         ResponseEntity<?> response = milestoneController.getMilestone("p1", "m1");
@@ -102,14 +148,13 @@ class MilestoneControllerTest {
     @Test
     void createMilestone_returns404_whenProjectNotFound() {
         MilestoneCreateRequest request = createRequest();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
-        problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-        when(milestoneService.create("p1", request)).thenReturn(Either.left(problem));
+        when(projectService.findById("p1")).thenReturn(Optional.empty());
 
         ResponseEntity<?> response = milestoneController.createMilestone("p1", request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        verify(milestoneService, never()).create(any(), any());
     }
 
     @Test
@@ -117,6 +162,7 @@ class MilestoneControllerTest {
         MilestoneCreateRequest request = createRequest();
         MilestoneEntity milestone = milestoneEntity("m-new");
         MilestoneView view = milestoneView("m-new");
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
         when(milestoneService.create("p1", request)).thenReturn(Either.right(milestone));
         when(milestoneService.toView(milestone)).thenReturn(view);
 
@@ -130,22 +176,24 @@ class MilestoneControllerTest {
 
     @Test
     void updateMilestone_returns404_whenNotFound() {
-        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().label("New").build();
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found");
-        problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
-        when(milestoneService.update("m1", request)).thenReturn(Either.left(problem));
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneTitle("New").build();
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneService.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
 
         ResponseEntity<?> response = milestoneController.updateMilestone("p1", "m1", request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(milestoneService, never()).update(any(), any());
     }
 
     @Test
     void updateMilestone_returns200_withView() {
-        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().label("New").build();
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneTitle("New").build();
         MilestoneEntity milestone = milestoneEntity("m1");
         MilestoneView view = milestoneView("m1");
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneService.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestone));
         when(milestoneService.update("m1", request)).thenReturn(Either.right(milestone));
         when(milestoneService.toView(milestone)).thenReturn(view);
 
@@ -159,18 +207,20 @@ class MilestoneControllerTest {
 
     @Test
     void deleteMilestone_returns404_whenNotFound() {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found");
-        problem.setTitle(ErrorTitleConstants.MILESTONE_NOT_FOUND);
-        when(milestoneService.delete("m1")).thenReturn(Either.left(problem));
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneService.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
 
         ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(milestoneService, never()).delete(any());
     }
 
     @Test
     void deleteMilestone_returns204_whenDeleted() {
+        when(projectService.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneService.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestoneEntity("m1")));
         when(milestoneService.delete("m1")).thenReturn(Either.right(null));
 
         ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
@@ -182,26 +232,26 @@ class MilestoneControllerTest {
 
     private ProjectEntity projectEntity(String id) {
         return ProjectEntity.builder().id(id).organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD").build();
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
     private MilestoneEntity milestoneEntity(String id) {
-        return MilestoneEntity.builder().id(id).label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00")).currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30)).project(projectEntity("p1")).build();
+        return MilestoneEntity.builder().id(id).milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.of(2025, 6, 30)).project(projectEntity("p1")).build();
     }
 
     private MilestoneView milestoneView(String id) {
-        return MilestoneView.builder().milestoneId(id).projectId("p1").label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00")).currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30)).build();
+        return MilestoneView.builder().milestoneId(id).projectId("p1").milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.of(2025, 6, 30)).build();
     }
 
     private MilestoneCreateRequest createRequest() {
-        return MilestoneCreateRequest.builder().label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00")).currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30)).build();
+        return MilestoneCreateRequest.builder().milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.of(2025, 6, 30)).build();
     }
 
 }

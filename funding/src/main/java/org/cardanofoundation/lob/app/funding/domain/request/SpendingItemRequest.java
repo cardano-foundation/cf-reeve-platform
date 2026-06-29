@@ -19,16 +19,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Builder
 public class SpendingItemRequest {
 
-    @NotBlank
-    @Schema(example = "Personnel")
+    @Nullable
+    @Schema(example = "Personnel", description = "Required for SPENDING items; omitted for FUNDING/REFUND items.")
     private String category;
 
-    @NotBlank
-    @Schema(example = "Vendor AB")
+    @Nullable
+    @Schema(example = "Vendor AB", description = "Required for SPENDING items; omitted for FUNDING/REFUND items.")
     private String vendor;
 
-    @NotNull
-    @Schema(example = "100000.00")
+    @Nullable
+    @Schema(example = "100000.00", description = "Foreign-currency amount. Required for SPENDING items; omitted for FUNDING/REFUND items.")
     private BigDecimal amountFcy;
 
     @NotBlank

@@ -34,7 +34,7 @@
     "decimalString": {
       "type": "string",
       "pattern": "^-?\\d+(\\.\\d+)?$",
-      "description": "Monetary amount as a string."
+      "description": "Monetary amount (or fx rate) as a string. On-chain Cardano metadata cannot encode floats."
     },
     "currencyId": {
       "type": "string",
@@ -50,14 +50,9 @@
         "cust_code": { "type": "string", "minLength": 1 }
       }
     },
-    "fxRate": {
-      "type": "string",
-      "pattern": "^ISO_(4217|24165):[^:=]+:ISO_(4217|24165):[^:=]+=[0-9]+(\\.[0-9]+)?$",
-      "description": "Format \"<from>:<to>=<rate>\", e.g. ISO_4217:USD:ISO_4217:EUR=0.9200"
-    },
     "org": {
       "type": "object",
-      "description": "Publisher identity (org heather). id is derivable as SHA3-256(country_code::tax_id_number).",
+      "description": "Publisher identity (org header). id is derivable as SHA3-256(country_code::tax_id_number).",
       "required": ["id", "name", "currency_id", "country_code", "tax_id_number"],
       "additionalProperties": false,
       "properties": {
@@ -78,108 +73,66 @@
         "version": { "$ref": "#/$defs/version" }
       }
     },
-    "allocation": {
-      "type": "object",
-      "description": "Funding context, present in every grant-lifecycle event.",
-      "required": ["funding_id", "activity_id"],
-      "additionalProperties": false,
-      "properties": {
-        "funding_id": { "type": "string", "minLength": 1 },
-        "activity_id": { "type": "string", "minLength": 1 },
-        "activity_title": { "type": "string" },
-        "funding_tx": { "type": "string" },
-        "funding_doc_hash": { "type": "string", "minLength": 1 }
-      }
-    },
     "milestone": {
       "type": "object",
-      "required": ["milestone_id"],
+      "required": ["milestone_id", "milestone_title", "amount_rcy"],
       "additionalProperties": false,
       "properties": {
         "milestone_id": { "type": "string", "minLength": 1 },
-        "milestone_label": { "type": "string" },
-        "expected_cost": { "$ref": "#/$defs/decimalString" },
-        "allocated_amount": { "$ref": "#/$defs/decimalString" },
-        "currency": { "$ref": "#/$defs/currency" },
-        "due_date": { "$ref": "#/$defs/isoDate" }
+        "milestone_title": { "type": "string", "minLength": 1 },
+        "amount_rcy": { "$ref": "#/$defs/decimalString" }
       }
     },
-    "milestoneOrArray": {
-      "oneOf": [
-        { "$ref": "#/$defs/milestone" },
-        { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/milestone" } }
-      ]
-    },
-    "spendItem": {
+    "projectAllocation": {
       "type": "object",
-      "required": ["id", "category", "vendor", "amount", "currency", "fx_rate", "date"],
+      "description": "One project this event targets, with its milestones. project_id/project_title carry the root project; sub_project_title is present only for sub-project allocations.",
+      "required": ["project_id", "project_title", "milestones"],
       "additionalProperties": false,
       "properties": {
-        "id": { "type": "string" },
-        "category": { "type": "string", "minLength": 1 },
-        "vendor": { "type": "string", "minLength": 1 },
-        "amount": { "$ref": "#/$defs/decimalString" },
-        "currency": { "$ref": "#/$defs/currency" },
-        "fx_rate": { "$ref": "#/$defs/fxRate" },
+        "project_id": { "type": "string", "minLength": 1 },
+        "project_title": { "type": "string", "minLength": 1 },
+        "sub_project_title": { "type": "string", "minLength": 1 },
+        "milestones": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/milestone" } }
+      }
+    },
+    "item": {
+      "type": "object",
+      "description": "Line item. SPENDING items carry the full set; FUNDING/REFUND items carry only amount_rcy + date + currency.",
+      "required": ["amount_rcy", "date", "currency"],
+      "additionalProperties": false,
+      "properties": {
         "amount_rcy": { "$ref": "#/$defs/decimalString" },
+        "amount_fcy": { "$ref": "#/$defs/decimalString" },
+        "vendor": { "type": "string", "minLength": 1 },
+        "spending_category": { "type": "string", "minLength": 1 },
+        "fx_rate": { "$ref": "#/$defs/decimalString" },
+        "hash": { "type": "string" },
+        "notes": { "type": "string" },
         "date": { "$ref": "#/$defs/isoDate" },
-        "document": {
-          "type": "object",
-          "additionalProperties": true,
-          "properties": {
-            "type": { "type": "string" },
-            "number": { "type": "string" },
-            "date": { "$ref": "#/$defs/isoDate" },
-            "hash": { "type": "string" }
-          }
-        },
-        "notes": { "type": "string" }
+        "currency": { "$ref": "#/$defs/currency" }
       }
     },
     "grantEvent": {
       "type": "object",
-      "required": ["id", "type", "date", "allocation"],
+      "required": ["id", "type", "funding_id", "allocation"],
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
         "type": { "enum": ["FUNDING", "SPENDING", "REFUND"] },
-        "date": { "$ref": "#/$defs/isoDate" },
-        "allocation": { "$ref": "#/$defs/allocation" },
-        "milestone": { "$ref": "#/$defs/milestoneOrArray" },
-        "amount": { "$ref": "#/$defs/decimalString" },
-        "currency": { "$ref": "#/$defs/currency" },
-        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/spendItem" } }
+        "funding_tx": { "type": "string" },
+        "funding_id": { "type": "string", "minLength": 1 },
+        "funding_entity": { "type": "string", "minLength": 1 },
+        "allocation": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/projectAllocation" } },
+        "item": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/item" } }
       },
       "allOf": [
-        {
-          "if": {
-            "required": ["type"],
-            "properties": { "type": { "enum": ["FUNDING", "REFUND"] } }
-          },
-          "then": {
-            "required": ["milestone", "amount", "currency"],
-            "properties": {
-              "allocation": {
-                "required": ["activity_title"],
-                "oneOf": [
-                  { "required": ["funding_tx"] },
-                  { "required": ["funding_doc_hash"] }
-                ]
-              }
-            }
-          }
-        },
         {
           "if": {
             "required": ["type"],
             "properties": { "type": { "const": "SPENDING" } }
           },
           "then": {
-            "required": ["items", "milestone"],
-            "properties": {
-              "amount": false,
-              "milestone": { "$ref": "#/$defs/milestone" }
-            }
+            "required": ["item"]
           }
         }
       ]

@@ -21,17 +21,20 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectControllerTest {
@@ -42,8 +45,16 @@ class ProjectControllerTest {
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
 
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+
     @InjectMocks
     private ProjectController projectController;
+
+    @BeforeEach
+    void allowOrgAccessByDefault() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     // --- listProjects ---
 
@@ -59,7 +70,7 @@ class ProjectControllerTest {
         ResponseEntity<?> response = projectController.listProjects("org1", pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(List.of(view));
+        assertThat(((PagedResponse<?>) response.getBody()).getContent()).isEqualTo(List.of(view));
     }
 
     @Test
@@ -71,7 +82,7 @@ class ProjectControllerTest {
         ResponseEntity<?> response = projectController.listProjects("org1", pageable);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(List.of());
+        assertThat(((PagedResponse<?>) response.getBody()).getContent()).isEqualTo(List.of());
     }
 
     @Test
@@ -81,6 +92,52 @@ class ProjectControllerTest {
         ResponseEntity<?> response = projectController.listProjects("unknown", PageRequest.of(0, 10));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void listProjects_returns401_whenNoOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> response = projectController.listProjects("org1", PageRequest.of(0, 10));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    // --- listSubProjects ---
+
+    @Test
+    void listSubProjects_returns200_withContent() {
+        Pageable pageable = PageRequest.of(0, 10);
+        ProjectEntity parent = projectEntity();
+        ProjectView subView = projectView();
+        when(projectService.findById("p1")).thenReturn(Optional.of(parent));
+        when(projectService.findSubProjects("p1", pageable)).thenReturn(new PageImpl<>(List.of(parent)));
+        when(projectService.toView(parent)).thenReturn(subView);
+
+        ResponseEntity<?> response = projectController.listSubProjects("p1", pageable);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((PagedResponse<?>) response.getBody()).getContent()).isEqualTo(List.of(subView));
+    }
+
+    @Test
+    void listSubProjects_returns404_whenParentNotFound() {
+        when(projectService.findById("nope")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = projectController.listSubProjects("nope", PageRequest.of(0, 10));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void getProject_returns401_whenNoOrgAccess() {
+        ProjectEntity project = projectEntity();
+        when(projectService.findById("p1")).thenReturn(Optional.of(project));
+        when(keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())).thenReturn(false);
+
+        ResponseEntity<?> response = projectController.getProject("p1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     // --- getProject ---
@@ -113,7 +170,7 @@ class ProjectControllerTest {
     @Test
     void createProjectWithMilestones_returns409_whenAlreadyExists() {
         ProjectWithMilestonesCreateRequest request = createWithMilestonesRequest();
-        when(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(true);
+        when(projectService.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(true);
 
         ResponseEntity<?> response = projectController.createProjectWithMilestones(request);
 
@@ -127,8 +184,8 @@ class ProjectControllerTest {
         ProjectWithMilestonesCreateRequest request = createWithMilestonesRequest();
         ProjectEntity project = projectEntity();
         ProjectView view = projectView();
-        when(projectService.existsByOrganisationIdAndActivityId("org1", "PROJ-AB")).thenReturn(false);
-        when(projectService.createWithMilestones(request)).thenReturn(project);
+        when(projectService.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectService.createWithMilestones(request)).thenReturn(Either.right(project));
         when(projectService.toView(project)).thenReturn(view);
 
         ResponseEntity<?> response = projectController.createProjectWithMilestones(request);
@@ -141,7 +198,7 @@ class ProjectControllerTest {
 
     @Test
     void updateProject_returns404_whenNotFound() {
-        ProjectUpdateRequest request = ProjectUpdateRequest.builder().activityTitle("New").build();
+        ProjectUpdateRequest request = ProjectUpdateRequest.builder().projectTitle("New").build();
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found");
         problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
         when(projectService.update("p1", request)).thenReturn(Either.left(problem));
@@ -154,7 +211,7 @@ class ProjectControllerTest {
 
     @Test
     void updateProject_returns200_withView() {
-        ProjectUpdateRequest request = ProjectUpdateRequest.builder().activityTitle("New").build();
+        ProjectUpdateRequest request = ProjectUpdateRequest.builder().projectTitle("New").build();
         ProjectEntity project = projectEntity();
         ProjectView view = projectView();
         when(projectService.update("p1", request)).thenReturn(Either.right(project));
@@ -194,23 +251,23 @@ class ProjectControllerTest {
     private ProjectEntity projectEntity() {
         return ProjectEntity.builder()
                 .id("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD").build();
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
     private ProjectView projectView() {
         return ProjectView.builder()
                 .projectId("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD")
-                .milestones(List.of()).events(List.of()).build();
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of()).build();
     }
 
     private ProjectWithMilestonesCreateRequest createWithMilestonesRequest() {
         return ProjectWithMilestonesCreateRequest.builder()
                 .organisationId("org1").fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB").activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00")).currency("USD")
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).build();
     }
 

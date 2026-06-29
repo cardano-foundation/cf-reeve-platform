@@ -6,23 +6,26 @@ import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
 
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
-public class ProjectUpdateRequest {
+@SuperBuilder
+public class ProjectUpdateRequest extends BaseRequest {
 
     @Nullable
     @Schema(example = "Updated Project Name")
-    private String activityTitle;
+    private String projectTitle;
 
     @Nullable
     @Schema(example = "250000.00")
-    private BigDecimal expectedTotalAmount;
+    private BigDecimal totalAmount;
 
     @Nullable
     @NotBlank

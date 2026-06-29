@@ -31,11 +31,11 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Builder
-@Entity(name = "funding.SpendingEventEntity")
-@Table(name = "funding_spending_event")
+@Entity(name = "funding.FundingEventEntity")
+@Table(name = "funding_event")
 @Audited
 @EntityListeners({AuditingEntityListener.class})
-public class SpendingEventEntity extends CommonEntity implements Persistable<String> {
+public class FundingEventEntity extends CommonEntity implements Persistable<String> {
 
     @Id
     @Column(name = "event_id", nullable = false)
@@ -53,12 +53,21 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     private EventStatus status = EventStatus.DRAFT;
 
     @NotBlank
+    @Column(name = "organisation_id", nullable = false)
+    private String organisationId;
+
+    @NotBlank
     @Column(name = "funding_id", nullable = false)
     private String fundingId;
 
-    @NotBlank
-    @Column(name = "activity_id", nullable = false)
-    private String activityId;
+    @Nullable
+    @Column(name = "funding_hash")
+    private String fundingHash;
+
+    /** Identifying name of the entity providing the funding. Populated for FUNDING events only. */
+    @Nullable
+    @Column(name = "funding_entity")
+    private String fundingEntity;
 
     @Builder.Default
     @Column(name = "ledger_dispatch_approved")
@@ -80,10 +89,6 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     @Column(name = "ledger_dispatch_status_error_reason")
     private String ledgerDispatchStatusErrorReason;
 
-    @Nullable
-    @Column(name = "funding_tx")
-    private String fundingTx;
-
     @NotNull
     @Column(name = "total_amount", nullable = false)
     @Builder.Default
@@ -93,41 +98,42 @@ public class SpendingEventEntity extends CommonEntity implements Persistable<Str
     @Column(name = "currency", nullable = false)
     private String currency;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", nullable = false)
-    private ProjectEntity project;
-
-    /** Used only for SPENDING events — the milestone this batch of spends targets. */
-    @Nullable
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "milestone_id")
-    private MilestoneEntity milestone;
+    /** Milestone allocations for this event — one per (event, milestone) pair. */
+    @Builder.Default
+    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
 
     /** Spend line items — populated only for SPENDING events. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SpendingItemEntity> spendingItems = new ArrayList<>();
 
-    /** Milestone allocations — populated only for FUNDING and REFUND events. */
-    @Builder.Default
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();
-
-    @PrePersist
-    private void generateId() {
-        if (this.id == null) {
-            String hashInput = String.format("%s:%s:%s",
-                    project != null ? project.getId() : "",
-                    fundingId,
-                    activityId
-            );
-            this.id = SHA3.digestAsHex(hashInput);
-        }
-    }
-
     @Override
     public boolean isNew() {
         return isNew;
+    }
+
+    /**
+     * Deterministic, reproducible id for a funding event, derived from its immutable header
+     * fields. Two events created for the same organisation, type, funding reference and currency
+     * resolve to the same id (idempotent creation). {@code fundingHash} is part of the key so that
+     * distinct fundings sharing a funding id (but a different hash) do not collide.
+     *
+     * <p>Computed in the service before child allocations/items are built — it intentionally does
+     * <em>not</em> depend on children (a spending item's id is derived from the event id, so
+     * including item ids here would be circular) nor on {@code totalAmount} (derived later).
+     */
+    public static String id(String organisationId,
+                            EventType eventType,
+                            String fundingId,
+                            String fundingHash,
+                            String currency) {
+        return SHA3.digestAsHex("%s::%s::%s::%s::%s".formatted(
+                organisationId,
+                eventType,
+                fundingId,
+                fundingHash == null ? "" : fundingHash,
+                currency));
     }
 
 }

@@ -42,18 +42,23 @@ public class SpendingItemEntity {
     @Column(name = "item_id", nullable = false)
     private String itemId;
 
-    @Column(name = "category", nullable = false)
+    /** SPENDING-only; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "category")
     private String category;
 
     @ManyToOne
     @JoinColumn(name = "event_id")
     private SpendingEventEntity event;
 
-    @NotBlank
-    @Column(name = "vendor", nullable = false)
+    /** SPENDING-only; null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "vendor")
     private String vendor;
 
-    @Column(name = "amount_fcy", nullable = false)
+    /** Foreign-currency amount; SPENDING-only, null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "amount_fcy")
     private BigDecimal amountFcy;
 
     @Column(name = "amount_rcy", nullable = false)
@@ -67,7 +72,9 @@ public class SpendingItemEntity {
     @Column(name = "currency_id")
     private String currencyId;
 
-    @Column(name = "fx_rate", nullable = false)
+    /** FX rate to the reporting currency; SPENDING-only, null for FUNDING/REFUND items. */
+    @Nullable
+    @Column(name = "fx_rate")
     private BigDecimal fxRate;
 
     @Column(name = "spend_date", nullable = false)

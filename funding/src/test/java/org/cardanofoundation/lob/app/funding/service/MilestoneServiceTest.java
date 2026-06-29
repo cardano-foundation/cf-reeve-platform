@@ -21,9 +21,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 
@@ -34,6 +36,8 @@ class MilestoneServiceTest {
     private MilestoneRepository milestoneRepository;
     @Mock
     private FundingProjectRepository projectRepository;
+    @Mock
+    private EventMilestoneAllocationRepository allocationRepository;
 
     @InjectMocks
     private MilestoneService milestoneService;
@@ -57,7 +61,7 @@ class MilestoneServiceTest {
     void findByProjectId_returnsList() {
         MilestoneEntity m1 = milestoneEntity("m1");
         MilestoneEntity m2 = milestoneEntity("m2");
-        when(milestoneRepository.findByProject_Id("p1")).thenReturn(List.of(m1, m2));
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(m1, m2));
 
         assertThat(milestoneService.findByProjectId("p1")).containsExactly(m1, m2);
     }
@@ -68,7 +72,7 @@ class MilestoneServiceTest {
         MilestoneEntity m1 = milestoneEntity("m1");
         org.springframework.data.domain.Page<MilestoneEntity> page =
                 new org.springframework.data.domain.PageImpl<>(List.of(m1));
-        when(milestoneRepository.findByProject_Id("p1", pageable)).thenReturn(page);
+        when(milestoneRepository.findByProjectId("p1", pageable)).thenReturn(page);
 
         assertThat(milestoneService.findByProjectId("p1", pageable)).isEqualTo(page);
     }
@@ -76,10 +80,10 @@ class MilestoneServiceTest {
     @Test
     void create_returnsLeft_whenMissingRequiredFields() {
         MilestoneCreateRequest request = MilestoneCreateRequest.builder()
-                .label(null)
-                .expectedCost(null)
+                .milestoneTitle(null)
+                .milestoneAmount(null)
                 .currency(null)
-                .dueDate(null)
+                .milestoneDate(null)
                 .build();
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
@@ -111,10 +115,10 @@ class MilestoneServiceTest {
         assertThat(result.isRight()).isTrue();
         assertThat(result.get()).isEqualTo(saved);
         verify(milestoneRepository).saveAndFlush(argThat(m ->
-                "Milestone AB".equals(m.getLabel())
-                && new BigDecimal("50000.00").equals(m.getExpectedCost())
+                "Milestone AB".equals(m.getMilestoneTitle())
+                && new BigDecimal("50000.00").equals(m.getMilestoneAmount())
                 && "USD".equals(m.getCurrency())
-                && LocalDate.of(2025, 6, 30).equals(m.getDueDate())
+                && LocalDate.of(2025, 6, 30).equals(m.getMilestoneDate())
                 && project.equals(m.getProject())
         ));
     }
@@ -123,42 +127,57 @@ class MilestoneServiceTest {
     void update_returnsEmpty_whenMilestoneNotFound() {
         when(milestoneRepository.findById("m1")).thenReturn(Optional.empty());
 
-        assertThat(milestoneService.update("m1", MilestoneUpdateRequest.builder().label("New").build()).isLeft()).isTrue();
+        assertThat(milestoneService.update("m1", MilestoneUpdateRequest.builder().milestoneTitle("New").build()).isLeft()).isTrue();
     }
 
     @Test
     void update_updatesAllFields_whenAllProvided() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder()
-                .label("Updated Label")
-                .expectedCost(new BigDecimal("99000.00"))
+                .milestoneTitle("Updated Label")
+                .milestoneAmount(new BigDecimal("99000.00"))
                 .currency("EUR")
-                .dueDate(LocalDate.of(2026, 1, 1))
+                .milestoneDate(LocalDate.of(2026, 1, 1))
                 .build();
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
 
         assertThat(result.isRight()).isTrue();
-        assertThat(milestone.getLabel()).isEqualTo("Updated Label");
-        assertThat(milestone.getExpectedCost()).isEqualByComparingTo("99000.00");
+        assertThat(milestone.getMilestoneTitle()).isEqualTo("Updated Label");
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("99000.00");
         assertThat(milestone.getCurrency()).isEqualTo("EUR");
-        assertThat(milestone.getDueDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(milestone.getMilestoneDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+    }
+
+    @Test
+    void update_returnsConflict_whenLinkedToPublishedEvent() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", MilestoneUpdateRequest.builder().milestoneTitle("New").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void update_skipsNullFields() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().build();
         milestoneService.update("m1", request);
 
-        assertThat(milestone.getLabel()).isEqualTo("Milestone AB");
-        assertThat(milestone.getExpectedCost()).isEqualByComparingTo("50000.00");
+        assertThat(milestone.getMilestoneTitle()).isEqualTo("Milestone AB");
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("50000.00");
         assertThat(milestone.getCurrency()).isEqualTo("USD");
     }
 
@@ -173,9 +192,22 @@ class MilestoneServiceTest {
     @Test
     void delete_deletesAndReturnsTrue_whenFound() {
         when(milestoneRepository.existsById("m1")).thenReturn(true);
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
 
         assertThat(milestoneService.delete("m1").isRight()).isTrue();
         verify(milestoneRepository).deleteById("m1");
+    }
+
+    @Test
+    void delete_returnsConflict_whenLinkedToPublishedEvent() {
+        when(milestoneRepository.existsById("m1")).thenReturn(true);
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, Void> result = milestoneService.delete("m1");
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        verify(milestoneRepository, never()).deleteById(any());
     }
 
     @Test
@@ -204,10 +236,10 @@ class MilestoneServiceTest {
         MilestoneView view = milestoneService.toView(milestone);
 
         assertThat(view.getMilestoneId()).isEqualTo("m1");
-        assertThat(view.getLabel()).isEqualTo("Milestone AB");
-        assertThat(view.getExpectedCost()).isEqualByComparingTo("50000.00");
+        assertThat(view.getMilestoneTitle()).isEqualTo("Milestone AB");
+        assertThat(view.getMilestoneAmount()).isEqualByComparingTo("50000.00");
         assertThat(view.getCurrency()).isEqualTo("USD");
-        assertThat(view.getDueDate()).isEqualTo(LocalDate.of(2025, 6, 30));
+        assertThat(view.getMilestoneDate()).isEqualTo(LocalDate.of(2025, 6, 30));
     }
 
     // --- helpers ---
@@ -216,10 +248,10 @@ class MilestoneServiceTest {
         ProjectEntity project = projectEntity("p1");
         return MilestoneEntity.builder()
                 .id(id)
-                .label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00"))
+                .milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00"))
                 .currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30))
+                .milestoneDate(LocalDate.of(2025, 6, 30))
                 .project(project)
                 .build();
     }
@@ -229,19 +261,19 @@ class MilestoneServiceTest {
                 .id(id)
                 .organisationId("org1")
                 .fundingId("GRANT-2025-001")
-                .activityId("PROJ-AB")
-                .activityTitle("Project AB")
-                .expectedTotalAmount(new BigDecimal("200000.00"))
+                .externalProjectId("PROJ-AB")
+                .projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00"))
                 .currency("USD")
                 .build();
     }
 
     private MilestoneCreateRequest createRequest() {
         return MilestoneCreateRequest.builder()
-                .label("Milestone AB")
-                .expectedCost(new BigDecimal("50000.00"))
+                .milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00"))
                 .currency("USD")
-                .dueDate(LocalDate.of(2025, 6, 30))
+                .milestoneDate(LocalDate.of(2025, 6, 30))
                 .build();
     }
 
