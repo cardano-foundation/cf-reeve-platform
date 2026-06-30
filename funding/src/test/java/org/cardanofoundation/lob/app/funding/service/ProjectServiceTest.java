@@ -245,6 +245,57 @@ class ProjectServiceTest {
         verify(projectRepository).deleteById("p1");
     }
 
+    // --- listSubProjects ---
+
+    @Test
+    void listSubProjects_returns404_whenParentNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    @Test
+    void listSubProjects_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(projectRepository, never()).findByParentProjectId("p1", PAGEABLE);
+    }
+
+    @Test
+    void listSubProjects_returnsPage_whenAuthorised() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByParentProjectId("p1", PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of(projectEntity())));
+
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getContent()).hasSize(1);
+    }
+
+    // --- internal delegations ---
+
+    @Test
+    void findById_delegatesToRepository() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        assertThat(projectService.findById("p1")).contains(project);
+    }
+
+    @Test
+    void existsByOrganisationIdAndExternalProjectId_delegatesToRepository() {
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(true);
+
+        assertThat(projectService.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).isTrue();
+    }
+
     private ProjectWithMilestonesCreateRequest createRequest() {
         return ProjectWithMilestonesCreateRequest.builder()
                 .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")

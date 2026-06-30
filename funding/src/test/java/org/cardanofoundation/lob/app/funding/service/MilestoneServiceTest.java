@@ -9,6 +9,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
@@ -25,9 +29,12 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class MilestoneServiceTest {
@@ -38,9 +45,13 @@ class MilestoneServiceTest {
     private FundingProjectRepository projectRepository;
     @Mock
     private EventMilestoneAllocationRepository allocationRepository;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private MilestoneService milestoneService;
+
+    private static final Pageable PAGEABLE = PageRequest.of(0, 10);
 
     @Test
     void findById_returnsEmpty_whenNotFound() {
@@ -240,6 +251,164 @@ class MilestoneServiceTest {
         assertThat(view.getMilestoneAmount()).isEqualByComparingTo("50000.00");
         assertThat(view.getCurrency()).isEqualTo("USD");
         assertThat(view.getMilestoneDate()).isEqualTo(LocalDate.of(2025, 6, 30));
+    }
+
+    // -------------------------------------------------------------------------
+    // View-returning API + org-access authorisation (authorizeProject)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void listMilestones_returns404_whenProjectNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        PagedResponse<MilestoneView> result = milestoneService.listMilestones("p1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        verify(milestoneRepository, never()).findByProjectId(any(), any());
+    }
+
+    @Test
+    void listMilestones_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        PagedResponse<MilestoneView> result = milestoneService.listMilestones("p1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).findByProjectId(any(), any());
+    }
+
+    @Test
+    void listMilestones_returnsPage_whenAuthorised() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByProjectId("p1", PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of(milestoneEntity("m1"))));
+
+        PagedResponse<MilestoneView> result = milestoneService.listMilestones("p1", PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getContent()).hasSize(1);
+    }
+
+    @Test
+    void getMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        MilestoneView result = milestoneService.getMilestone("p1", "m1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).findByIdAndProjectId(any(), any());
+    }
+
+    @Test
+    void getMilestone_returns404_whenMilestoneNotInProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
+
+        MilestoneView result = milestoneService.getMilestone("p1", "m1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+    }
+
+    @Test
+    void getMilestone_returnsView_whenFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestoneEntity("m1")));
+
+        MilestoneView result = milestoneService.getMilestone("p1", "m1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getMilestoneId()).isEqualTo("m1");
+    }
+
+    @Test
+    void createMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        MilestoneView result = milestoneService.createMilestone("p1", createRequest());
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createMilestone_returnsView_whenAuthorisedAndCreated() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findById(any())).thenReturn(Optional.empty());
+        when(milestoneRepository.saveAndFlush(any())).thenReturn(milestoneEntity("m-new"));
+
+        MilestoneView result = milestoneService.createMilestone("p1", createRequest());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getMilestoneId()).isEqualTo("m-new");
+    }
+
+    @Test
+    void updateMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        MilestoneView result = milestoneService.updateMilestone("p1", "m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("New").build());
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateMilestone_returns404_whenMilestoneNotInProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
+
+        MilestoneView result = milestoneService.updateMilestone("p1", "m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("New").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void deleteMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+
+        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteMilestone_returns404_whenMilestoneNotInProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
+
+        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+
+        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(milestoneRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteMilestone_returnsEmpty_whenAuthorisedAndDeleted() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestoneEntity("m1")));
+        when(milestoneRepository.existsById("m1")).thenReturn(true);
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+
+        assertThat(result).isEmpty();
+        verify(milestoneRepository).deleteById("m1");
     }
 
     // --- helpers ---
