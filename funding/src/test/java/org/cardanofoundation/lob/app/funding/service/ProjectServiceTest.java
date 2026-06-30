@@ -322,6 +322,44 @@ class ProjectServiceTest {
         verify(projectRepository, never()).saveAndFlush(any());
     }
 
+    @Test
+    void update_returns400_whenSubProjectTotalExceedsParent() {
+        ProjectEntity project = ProjectEntity.builder().id("p1").organisationId("org1").externalProjectId("PROJ-AB")
+                .projectTitle("Child").totalAmount(new BigDecimal("600000.00")).currency("USD").build();
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1").externalProjectId("PROJ-PARENT")
+                .projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenSubProjectsCumulativeTotalExceedsParent() {
+        ProjectEntity project = ProjectEntity.builder().id("p1").organisationId("org1").externalProjectId("PROJ-AB")
+                .projectTitle("Child").totalAmount(new BigDecimal("300000.00")).currency("USD").build();
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1").externalProjectId("PROJ-PARENT")
+                .projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
+        ProjectEntity existingChild = ProjectEntity.builder().id("child-x").organisationId("org1").externalProjectId("PROJ-X")
+                .projectTitle("Existing").totalAmount(new BigDecimal("300000.00")).currency("USD").parentProject(parent).build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+        when(projectRepository.findByParentProjectId("parent1")).thenReturn(List.of(existingChild));
+
+        // child 300000 fits under parent 500000, but 300000 existing + 300000 = 600000 exceeds it
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
     // --- listSubProjects ---
 
     @Test

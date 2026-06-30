@@ -301,6 +301,49 @@ class SpendingEventServiceTest {
         verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
+    // --- optional milestones + event-total guard ---
+
+    @Test
+    void create_succeedsForSpendingWithNoMilestones_whenItemsPresent() {
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of()) // no milestones — allowed
+                        .build()))
+                .items(List.of(itemRequest(new BigDecimal("2500.00"))))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(fundingEventRepository).saveAndFlush(argThat(e -> e.getTotalAmount().compareTo(new BigDecimal("2500.00")) == 0));
+    }
+
+    @Test
+    void create_returnsLeft_whenFundingEventHasNoAllocations() {
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
+
+        // FUNDING allocation without milestones → no allocated amounts → total 0
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of())
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
     // --- amount / allocation business validations ---
 
     @Test

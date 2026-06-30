@@ -174,6 +174,8 @@ public class SpendingEventService {
         populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
+        Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
+        if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
 
@@ -212,6 +214,8 @@ public class SpendingEventService {
         populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
+        Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
+        if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
 

@@ -84,6 +84,22 @@ public final class FundingValidations {
         return Optional.empty();
     }
 
+    /**
+     * A FUNDING/REFUND event's total is derived from its milestone allocations, so it must end up
+     * strictly positive — guarding against an event whose allocations are absent or sum to zero
+     * (e.g. when no milestones were supplied). SPENDING events derive their total from line items and
+     * are not constrained here.
+     */
+    public static Optional<ProblemDetail> eventTotal(EventType eventType, BigDecimal totalAmount) {
+        if ((eventType == EventType.FUNDING || eventType == EventType.REFUND)
+                && (totalAmount == null || totalAmount.signum() <= 0)) {
+            return Optional.of(Problems.badRequest(
+                    "%s event total must be greater than zero; allocate a positive amount to at least one milestone".formatted(eventType),
+                    ErrorTitleConstants.EVENT_AMOUNT_INVALID));
+        }
+        return Optional.empty();
+    }
+
     /** The sum of an event's allocations to a single project may not exceed that project's total. */
     public static Optional<ProblemDetail> allocationTotal(BigDecimal projectAllocatedTotal, ProjectEntity project) {
         if (project.getTotalAmount() != null && projectAllocatedTotal.compareTo(project.getTotalAmount()) > 0) {
@@ -92,6 +108,40 @@ public final class FundingValidations {
                     ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT));
         }
         return Optional.empty();
+    }
+
+    /**
+     * Validates a project's budget when it is attached under a parent as a sub-project: the
+     * sub-project's total may not exceed the parent's total, and the parent's sub-projects' totals
+     * may not sum to more than the parent's total. {@code otherSubProjectsTotal} is the summed total
+     * of the parent's <em>other</em> sub-projects (excluding the one being attached). Checks are
+     * skipped when either budget is absent (a parent or sub-project without a {@code totalAmount}).
+     */
+    public static Optional<ProblemDetail> subProjectAmount(BigDecimal childTotal, ProjectEntity parent, BigDecimal otherSubProjectsTotal) {
+        if (parent.getTotalAmount() == null || childTotal == null) {
+            return Optional.empty();
+        }
+        if (childTotal.compareTo(parent.getTotalAmount()) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Sub-project total %s exceeds the parent project total %s".formatted(childTotal, parent.getTotalAmount()),
+                    ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT));
+        }
+        BigDecimal cumulative = otherSubProjectsTotal.add(childTotal);
+        if (cumulative.compareTo(parent.getTotalAmount()) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Sub-projects total %s exceeds the parent project total %s".formatted(cumulative, parent.getTotalAmount()),
+                    ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT));
+        }
+        return Optional.empty();
+    }
+
+    /** Sums project total amounts, optionally excluding one project (by id) and ignoring null totals. */
+    public static BigDecimal sumProjectTotals(Collection<ProjectEntity> projects, String excludeId) {
+        return projects.stream()
+                .filter(p -> excludeId == null || !excludeId.equals(p.getId()))
+                .map(ProjectEntity::getTotalAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** A project's total budget, when supplied, must be strictly positive. */

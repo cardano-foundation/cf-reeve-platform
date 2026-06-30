@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.funding.service;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -161,6 +162,13 @@ public class ProjectService {
             return Optional.of(Problems.badRequest(
                     "Assigning parent %s to project %s would create a circular dependency".formatted(parentProjectId, project.getId()),
                     ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY));
+        }
+        BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
+                projectRepository.findByParentProjectId(parent.getId()), project.getId());
+        Optional<ProblemDetail> amountProblem = FundingValidations.subProjectAmount(
+                project.getTotalAmount(), parent, otherSubProjectsTotal);
+        if (amountProblem.isPresent()) {
+            return amountProblem;
         }
         project.setParentProject(parent);
         return Optional.empty();

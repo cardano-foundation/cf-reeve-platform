@@ -128,6 +128,37 @@ class FundingValidationsTest {
         assertThat(FundingValidations.allocation(new BigDecimal("50000"), milestone(new BigDecimal("50000")), EventType.FUNDING)).isEmpty();
     }
 
+    // --- eventTotal(eventType, total) ---
+
+    @Test
+    void eventTotal_fundingZero_isRejected() {
+        assertThat(title(FundingValidations.eventTotal(EventType.FUNDING, BigDecimal.ZERO)))
+                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
+    }
+
+    @Test
+    void eventTotal_fundingNull_isRejected() {
+        assertThat(title(FundingValidations.eventTotal(EventType.FUNDING, null)))
+                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
+    }
+
+    @Test
+    void eventTotal_refundZero_isRejected() {
+        assertThat(title(FundingValidations.eventTotal(EventType.REFUND, BigDecimal.ZERO)))
+                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
+    }
+
+    @Test
+    void eventTotal_fundingPositive_isAllowed() {
+        assertThat(FundingValidations.eventTotal(EventType.FUNDING, new BigDecimal("50000"))).isEmpty();
+    }
+
+    @Test
+    void eventTotal_spendingZero_isAllowed() {
+        // SPENDING totals derive from line items and are not constrained here
+        assertThat(FundingValidations.eventTotal(EventType.SPENDING, BigDecimal.ZERO)).isEmpty();
+    }
+
     // --- allocationTotal(sum, project) ---
 
     @Test
@@ -162,6 +193,47 @@ class FundingValidationsTest {
     void projectAmount_positiveOrNull_isAllowed() {
         assertThat(FundingValidations.projectAmount(new BigDecimal("1"))).isEmpty();
         assertThat(FundingValidations.projectAmount(null)).isEmpty();
+    }
+
+    // --- subProjectAmount(childTotal, parent, otherSubProjectsTotal) ---
+
+    @Test
+    void subProjectAmount_valid_returnsEmpty() {
+        assertThat(FundingValidations.subProjectAmount(new BigDecimal("200000"), project(new BigDecimal("500000")), BigDecimal.ZERO))
+                .isEmpty();
+    }
+
+    @Test
+    void subProjectAmount_childExceedsParent_isRejected() {
+        assertThat(title(FundingValidations.subProjectAmount(new BigDecimal("600000"), project(new BigDecimal("500000")), BigDecimal.ZERO)))
+                .isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+    }
+
+    @Test
+    void subProjectAmount_cumulativeExceedsParent_isRejected() {
+        // child (300000) fits, but together with existing sub-projects (300000) it exceeds the parent (500000)
+        assertThat(title(FundingValidations.subProjectAmount(new BigDecimal("300000"), project(new BigDecimal("500000")), new BigDecimal("300000"))))
+                .isEqualTo(ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT);
+    }
+
+    @Test
+    void subProjectAmount_skipped_whenParentHasNoBudget() {
+        assertThat(FundingValidations.subProjectAmount(new BigDecimal("999999"), project(null), new BigDecimal("999999"))).isEmpty();
+    }
+
+    @Test
+    void subProjectAmount_skipped_whenChildHasNoBudget() {
+        assertThat(FundingValidations.subProjectAmount(null, project(new BigDecimal("500000")), BigDecimal.ZERO)).isEmpty();
+    }
+
+    @Test
+    void sumProjectTotals_excludesIdAndIgnoresNulls() {
+        ProjectEntity p1 = ProjectEntity.builder().id("p1").totalAmount(new BigDecimal("100")).build();
+        ProjectEntity p2 = ProjectEntity.builder().id("p2").totalAmount(new BigDecimal("200")).build();
+        ProjectEntity p3 = ProjectEntity.builder().id("p3").totalAmount(null).build();
+
+        assertThat(FundingValidations.sumProjectTotals(List.of(p1, p2, p3), "p1")).isEqualByComparingTo("200");
+        assertThat(FundingValidations.sumProjectTotals(List.of(p1, p2, p3), null)).isEqualByComparingTo("300");
     }
 
     // --- sumMilestoneAmounts(milestones, excludeId) ---
