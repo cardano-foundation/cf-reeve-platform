@@ -81,10 +81,12 @@ public class SpendingEventService {
         return toView(eventM.get());
     }
 
+    @Transactional
     public SpendingEventView createEvent(SpendingEventCreateRequest request) {
         return create(request).fold(SpendingEventView::error, this::toView);
     }
 
+    @Transactional
     public SpendingEventView updateEvent(String eventId, SpendingEventCreateRequest request) {
         Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
         if (denied.isPresent()) {
@@ -93,6 +95,7 @@ public class SpendingEventService {
         return update(eventId, request).fold(SpendingEventView::error, this::toView);
     }
 
+    @Transactional
     public SpendingEventView publishEvent(String eventId) {
         Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
         if (denied.isPresent()) {
@@ -101,6 +104,7 @@ public class SpendingEventService {
         return publish(eventId).fold(SpendingEventView::error, this::toView);
     }
 
+    @Transactional
     public Optional<ProblemDetail> deleteEvent(String eventId) {
         Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
         if (denied.isPresent()) {
