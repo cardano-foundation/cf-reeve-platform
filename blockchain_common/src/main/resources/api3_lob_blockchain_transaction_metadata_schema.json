@@ -23,49 +23,43 @@
       "type": "integer",
       "minimum": 0
     },
-    "leafFieldPattern": {
+    "leafValue": {
+      "description": "Serialised leaf value. The serialiser always emits this as a string: numeric inputs are normalised to a decimal string, textual inputs are kept verbatim.",
+      "type": "string"
+    },
+    "leaf": {
+      "description": "A value-bearing field. Either an old-format plain decimal string, or a new-format object carrying its value ('v') with optional field order ('_o'). The presence of 'v' is what distinguishes a leaf from a node.",
       "oneOf": [
         {
-          "description": "Old format: plain string decimal value",
+          "description": "Old format: plain decimal string value.",
           "$ref": "#/definitions/bigDecimalPattern"
         },
         {
-          "description": "New format: object with value and field order (both required)",
+          "description": "New format: object with value and optional order.",
           "type": "object",
+          "required": ["v"],
           "properties": {
-            "v":  { "$ref": "#/definitions/bigDecimalPattern" },
+            "v":  { "$ref": "#/definitions/leafValue" },
             "_o": { "$ref": "#/definitions/orderInteger" }
           },
-          "required": ["v", "_o"],
           "additionalProperties": false
         }
       ]
     },
-    "flexibleFieldPattern": {
+    "node": {
+      "description": "A section: an optional field order ('_o') plus any number of arbitrarily-named child fields, each of which is itself a leaf or a node. A node never carries a 'v' key (that marks a leaf). Also covers leaves whose source value was null (serialised as just '{ \"_o\": n }') and empty sections.",
+      "type": "object",
+      "not": { "required": ["v"] },
+      "properties": {
+        "_o": { "$ref": "#/definitions/orderInteger" }
+      },
+      "additionalProperties": { "$ref": "#/definitions/reportField" }
+    },
+    "reportField": {
+      "description": "Every field in the report data tree is exactly one of a leaf or a node — nothing in between.",
       "oneOf": [
-        {
-          "description": "Old format: plain string decimal value",
-          "$ref": "#/definitions/bigDecimalPattern"
-        },
-        {
-          "description": "New format: object with value and field order",
-          "type": "object",
-          "properties": {
-            "v":  { "$ref": "#/definitions/bigDecimalPattern" },
-            "_o": { "$ref": "#/definitions/orderInteger" }
-          },
-          "required": ["v", "_o"],
-          "additionalProperties": false
-        },
-        {
-          "description": "Section format: object with order and child fields",
-          "type": "object",
-          "properties": {
-            "_o": { "$ref": "#/definitions/orderInteger" }
-          },
-          "required": ["_o"],
-          "additionalProperties": true
-        }
+        { "$ref": "#/definitions/leaf" },
+        { "$ref": "#/definitions/node" }
       ]
     }
   },
@@ -132,8 +126,15 @@
       "type": "string",
       "enum": ["USER", "SYSTEM"]
     },
+    "ver": {
+      "type": "integer",
+      "minimum": 0
+    },
     "data": {
-      "description": "The data property shape depends on subType"
+      "description": "Flexible, recursively-structured report data driven by the report template rather than a fixed per-subType layout. Field names are arbitrary and the same shape applies to INCOME_STATEMENT, BALANCE_SHEET and CUSTOM reports. Like every field in the tree, the root is exactly one of a leaf or a node — nothing in between: '_o' carries display order, leaves carry their value under 'v' (old reports use a plain decimal string), and nodes nest further child fields.",
+      "allOf": [
+        { "$ref": "#/definitions/reportField" }
+      ]
     }
   },
   "required": ["metadata", "org", "type", "subType", "data", "interval", "year", "mode", "ver"],
@@ -164,154 +165,6 @@
             "type": ["integer"],
             "minimum": 1,
             "maximum": 4
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "interval": { "enum": ["MONTH", "QUARTER"] }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "subType": { "const": "INCOME_STATEMENT" }
-        }
-      },
-      "then": {
-        "properties": {
-          "data": {
-            "type": "object",
-            "properties": {
-              "revenues": {
-                "type": "object",
-                "properties": {
-                  "_o":                             { "$ref": "#/definitions/orderInteger" },
-                  "other_income":                   { "$ref": "#/definitions/leafFieldPattern" },
-                  "build_of_long_term_provision":   { "$ref": "#/definitions/leafFieldPattern" }
-                }
-              },
-              "cost_of_goods_and_services": {
-                "type": "object",
-                "properties": {
-                  "_o":                          { "$ref": "#/definitions/orderInteger" },
-                  "cost_of_providing_services":  { "$ref": "#/definitions/leafFieldPattern" }
-                }
-              },
-              "operating_expenses": {
-                "type": "object",
-                "properties": {
-                  "_o":                                                          { "$ref": "#/definitions/orderInteger" },
-                  "personnel_expenses":                                          { "$ref": "#/definitions/leafFieldPattern" },
-                  "general_and_administrative_expenses":                         { "$ref": "#/definitions/leafFieldPattern" },
-                  "depreciation_and_impairment_losses_on_tangible_assets":       { "$ref": "#/definitions/leafFieldPattern" },
-                  "amortization_on_intangible_assets":                           { "$ref": "#/definitions/leafFieldPattern" },
-                  "rentExpenses":                                                { "$ref": "#/definitions/leafFieldPattern" }
-                }
-              },
-              "financial_income": {
-                "type": "object",
-                "properties": {
-                  "_o":                                          { "$ref": "#/definitions/orderInteger" },
-                  "financial_revenues":                          { "$ref": "#/definitions/leafFieldPattern" },
-                  "financial_expenses":                          { "$ref": "#/definitions/leafFieldPattern" },
-                  "realised_gains_on_sale_of_cryptocurrencies":  { "$ref": "#/definitions/leafFieldPattern" },
-                  "staking_rewards_income":                      { "$ref": "#/definitions/leafFieldPattern" },
-                  "net_income_options_sale":                     { "$ref": "#/definitions/leafFieldPattern" }
-                }
-              },
-              "extraordinary_income": {
-                "type": "object",
-                "properties": {
-                  "_o":                        { "$ref": "#/definitions/orderInteger" },
-                  "extraordinary_expenses":    { "$ref": "#/definitions/leafFieldPattern" }
-                }
-              },
-              "tax_expenses": {
-                "type": "object",
-                "properties": {
-                  "_o":                   { "$ref": "#/definitions/orderInteger" },
-                  "income_tax_expense":   { "$ref": "#/definitions/leafFieldPattern" }
-                }
-              },
-              "profit_for_the_year": { "$ref": "#/definitions/flexibleFieldPattern" }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "subType": { "const": "BALANCE_SHEET" }
-        }
-      },
-      "then": {
-        "properties": {
-          "data": {
-            "type": "object",
-            "properties": {
-              "assets": {
-                "type": "object",
-                "properties": {
-                  "_o": { "$ref": "#/definitions/orderInteger" },
-                  "non_current_assets": {
-                    "type": "object",
-                    "properties": {
-                      "_o":                        { "$ref": "#/definitions/orderInteger" },
-                      "property_plant_equipment":  { "$ref": "#/definitions/leafFieldPattern" },
-                      "intangible_assets":          { "$ref": "#/definitions/leafFieldPattern" },
-                      "investments":               { "$ref": "#/definitions/leafFieldPattern" },
-                      "financial_assets":          { "$ref": "#/definitions/leafFieldPattern" }
-                    }
-                  },
-                  "current_assets": {
-                    "type": "object",
-                    "properties": {
-                      "_o":                                            { "$ref": "#/definitions/orderInteger" },
-                      "prepayments_and_other_short_term_assets":       { "$ref": "#/definitions/leafFieldPattern" },
-                      "other_receivables":                             { "$ref": "#/definitions/leafFieldPattern" },
-                      "crypto_assets":                                 { "$ref": "#/definitions/leafFieldPattern" },
-                      "cash_and_cash_equivalents":                     { "$ref": "#/definitions/leafFieldPattern" }
-                    }
-                  }
-                }
-              },
-              "liabilities": {
-                "type": "object",
-                "properties": {
-                  "_o": { "$ref": "#/definitions/orderInteger" },
-                  "non_current_liabilities": {
-                    "type": "object",
-                    "properties": {
-                      "_o":          { "$ref": "#/definitions/orderInteger" },
-                      "provisions":  { "$ref": "#/definitions/leafFieldPattern" }
-                    }
-                  },
-                  "current_liabilities": {
-                    "type": "object",
-                    "properties": {
-                      "_o":                                    { "$ref": "#/definitions/orderInteger" },
-                      "trade_accounts_payables":               { "$ref": "#/definitions/leafFieldPattern" },
-                      "other_current_liabilities":             { "$ref": "#/definitions/leafFieldPattern" },
-                      "accruals_and_short_term_provisions":    { "$ref": "#/definitions/leafFieldPattern" }
-                    }
-                  }
-                }
-              },
-              "capital": {
-                "type": "object",
-                "properties": {
-                  "_o":                        { "$ref": "#/definitions/orderInteger" },
-                  "capital":                   { "$ref": "#/definitions/leafFieldPattern" },
-                  "profit_for_the_year":       { "$ref": "#/definitions/flexibleFieldPattern" },
-                  "results_carried_forward":   { "$ref": "#/definitions/leafFieldPattern" }
-                }
-              }
-            }
           }
         }
       }
