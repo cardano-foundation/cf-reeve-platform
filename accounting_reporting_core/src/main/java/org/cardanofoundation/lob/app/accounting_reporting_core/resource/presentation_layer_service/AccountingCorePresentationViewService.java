@@ -468,8 +468,8 @@ public class AccountingCorePresentationViewService {
                 Optional.of(transactionEntity.getAutomatedValidationStatus()),
                 transactionEntity.getTransactionApproved(),
                 transactionEntity.getLedgerDispatchApproved(),
-                transactionEntity.getTotalAmountLcy(), false, // TODO Hard coded
-                // value?
+                transactionEntity.getTotalAmountLcy(),
+                false, // In reconciliations, no need item rejections
                 transactionEntity.getReconcilation().flatMap(
                                 reconcilation -> reconcilation.getSource().map(
                                         TransactionReconciliationTransactionsView.ReconciliationCodeView::of))
@@ -665,7 +665,7 @@ public class AccountingCorePresentationViewService {
             Object transactionsStatistic) {
 
         Object[] result = (Object[]) transactionsStatistic;
-        // TODO we need to find a better solution than handling these object arrays
+        // we need to find a better solution than handling these object arrays
         return new TransactionReconciliationStatisticView(
                 (Integer) ((Long) result[0]).intValue(),
                 (Integer) ((Long) result[1]).intValue(),
@@ -678,7 +678,9 @@ public class AccountingCorePresentationViewService {
                 (Long) result[8],
                 ((Long) result[6]).intValue()
                         + ((Long) result[7]).intValue()
-                        + ((Long) result[8]).intValue());
+                        + ((Long) result[8]).intValue()
+                        + ((Long) result[9]).intValue(),
+                (Integer) ((Long) result[9]).intValue());
     }
 
     private Set<TransactionItemView> getTransactionItemView(TransactionEntity transaction) {

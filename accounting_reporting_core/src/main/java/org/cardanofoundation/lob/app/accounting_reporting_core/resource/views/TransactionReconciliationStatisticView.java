@@ -31,5 +31,7 @@ public class TransactionReconciliationStatisticView {
 
     private Integer TOTAL = 0;
 
+    private Integer excluded = 0;
+
 
 }

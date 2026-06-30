@@ -74,9 +74,12 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                         AND (:source IS NULL
                              OR (:source = 'ERP' AND tr.reconcilation.source = 'OK')
                              OR (:source = 'CSV' AND tr.extractorType = :source)
-                             OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK')))
+                             OR (:source = 'BLOCKCHAIN' AND tr.reconcilation.sink = 'OK'))
+                    )
                     OR (:filter = 'UNRECONCILED'
-                        AND tr.reconcilation.source IS NULL)
+                        AND tr.reconcilation.source IS NULL
+                    )
+
                 )
             """)
     Page<TransactionEntity> findAllReconcilation(
@@ -182,7 +185,17 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                     FROM accounting_reporting_core.TransactionEntity tx
                     WHERE tx.lastReconcilation IS NULL
                     GROUP BY tx.id)
-                ) as txNever
+                ) as txNever,
+
+                (SELECT COUNT(excluded) FROM (
+                    SELECT rv.transactionId excluded
+                    FROM accounting_reporting_core.reconcilation.ReconcilationEntity r
+                    JOIN r.violations rv
+                    LEFT JOIN accounting_reporting_core.TransactionEntity tr ON rv.transactionId = tr.id
+                    WHERE (r.id = tr.lastReconcilation.id OR tr.lastReconcilation IS NULL)
+                    AND (tr IS NULL OR EXISTS (SELECT 1 FROM tr.violations tv WHERE tv.code IN :exclusion))
+                    GROUP BY rv.transactionId)
+                ) as excluded
             """)
     Object findCalcReconciliationStatistic(@Param("exclusion") Set<String> exclusion);
 
@@ -201,6 +214,7 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
                             (rv.rejection_code = 'TX_NOT_IN_ERP' AND tx.ledger_dispatch_approved = true)
                             OR (rv.rejection_code <> 'TX_NOT_IN_ERP')
                         )
+                        AND (tx.transaction_id IS NULL OR NOT EXISTS (SELECT 1 FROM accounting_core_transaction_violation tv WHERE tv.transaction_id = tx.transaction_id AND CAST(tv.code AS text) IN :exclusion))
                     THEN COALESCE(tx.transaction_id, rv.transaction_id)
                     ELSE NULL
                 END) as unreconciledCount
@@ -212,7 +226,6 @@ public interface ReconcilationRepository extends JpaRepository<ReconcilationEnti
             WHERE (tx.organisation_id = :orgId OR r.organisation_id = :orgId)
               AND COALESCE(tx.entry_date, rv.transaction_entry_date) >= :dateFrom
               AND COALESCE(tx.entry_date, rv.transaction_entry_date) <= :dateTo
-              AND (tx.transaction_id IS NULL OR NOT EXISTS (SELECT 1 FROM accounting_core_transaction_violation tv WHERE tv.transaction_id = tx.transaction_id AND CAST(tv.code AS text) IN :exclusion))
             GROUP BY
                 EXTRACT(YEAR FROM COALESCE(tx.entry_date, rv.transaction_entry_date))::int,
                 EXTRACT(MONTH FROM COALESCE(tx.entry_date, rv.transaction_entry_date))::int

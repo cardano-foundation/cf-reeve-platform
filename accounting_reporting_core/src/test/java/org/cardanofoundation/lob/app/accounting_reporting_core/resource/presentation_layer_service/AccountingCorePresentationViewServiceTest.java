@@ -130,7 +130,8 @@ class AccountingCorePresentationViewServiceTest {
         Assertions.assertEquals(6L, responseView.getStatistic().getOK());
         Assertions.assertEquals(7, responseView.getStatistic().getNOK());
         Assertions.assertEquals(8L, responseView.getStatistic().getNEVER());
-        Assertions.assertEquals(21, responseView.getStatistic().getTOTAL()); // Array index 6 + Array index 7 + Array index 8
+        Assertions.assertEquals(30, responseView.getStatistic().getTOTAL()); // OK + NOK + NEVER + excluded (6+7+8+9)
+        Assertions.assertEquals(9, responseView.getStatistic().getExcluded());
         Assertions.assertEquals(Optional.empty(), responseView.getLastDateFrom());
         Assertions.assertEquals(Optional.empty(), responseView.getLastDateTo());
         Assertions.assertEquals(Optional.empty(), responseView.getLastReconciledDate());
@@ -157,6 +158,46 @@ class AccountingCorePresentationViewServiceTest {
         verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
+    }
+
+    @Test
+    void testAllReconiciliationTransaction_excludedFieldAndTotalIncludeExcludedCount() {
+        // result[9] is the excluded count; it is added to TOTAL and mapped to the excluded field
+        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+                .thenReturn(new Object[]{0L, 0L, 0L, 0L, 0L, 0L, 10L, 5L, 3L, 7L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
+                eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Page.empty());
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
+
+        ReconciliationResponseView responseView = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        // excluded = result[9] = 7
+        Assertions.assertEquals(7, responseView.getStatistic().getExcluded());
+        // TOTAL = OK + NOK + NEVER + excluded = 10 + 5 + 3 + 7 = 25
+        Assertions.assertEquals(25, responseView.getStatistic().getTOTAL());
+        // Other fields unchanged
+        Assertions.assertEquals(10L, responseView.getStatistic().getOK());
+        Assertions.assertEquals(5, responseView.getStatistic().getNOK());
+        Assertions.assertEquals(3L, responseView.getStatistic().getNEVER());
+    }
+
+    @Test
+    void testAllReconiciliationTransaction_zeroExcluded_totalOnlyCountsOkNokNever() {
+        // When excluded = 0, TOTAL = OK + NOK + NEVER (same as old behaviour)
+        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+                .thenReturn(new Object[]{0L, 0L, 0L, 0L, 0L, 0L, 6L, 7L, 8L, 0L});
+        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
+                eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Page.empty());
+        ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
+        when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
+
+        ReconciliationResponseView responseView = accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
+
+        Assertions.assertEquals(0, responseView.getStatistic().getExcluded());
+        Assertions.assertEquals(21, responseView.getStatistic().getTOTAL()); // 6 + 7 + 8 + 0
     }
 
     @Test

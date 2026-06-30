@@ -306,6 +306,11 @@ public class TransactionReconcilationService {
                 boolean isLOBTxOnChain = Optional.ofNullable(isOnChainMap.get(attachedTx.getId())).orElse(false);
 
          */
+        if (attachedTx.getViolations().stream()
+                .anyMatch(v -> TransactionViolationCode.exclusions().contains(v.getCode().name()))) {
+            return ReconcilationCode.OK;
+        }
+
         // Check if there's an existing sink value
         if (attachedTx.getReconcilation().isPresent() &&
                 attachedTx.getReconcilation().get().getSink().isPresent()) {
