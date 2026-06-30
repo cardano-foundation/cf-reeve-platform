@@ -41,7 +41,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/funding")
-@Tag(name = "Projects", description = "Funding – Project management API")
+@Tag(name = "Funding", description = "Funding – Manage funding events, milestones and projects")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 public class ProjectController {
