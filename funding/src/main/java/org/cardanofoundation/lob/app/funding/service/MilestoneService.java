@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.funding.service;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,6 +27,7 @@ import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocation
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -150,13 +152,22 @@ public class MilestoneService {
             problem.setTitle("PROJECT_NOT_FOUND");
             return Either.left(problem);
         }
-        MilestoneEntity entity = toEntity(request, projectM.orElseThrow());
+        ProjectEntity project = projectM.orElseThrow();
+        MilestoneEntity entity = toEntity(request, project);
         Optional<MilestoneEntity> milestoneExists = milestoneRepository.findById(entity.getId());
         if(milestoneExists.isPresent()) {
             log.warn("Milestone already exists for id: {}", entity.getId());
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Milestone already exists for id: %s".formatted(entity.getId()));
             problemDetail.setTitle("MILESTONE_ALREADY_EXISTS");
             return Either.left(problemDetail);
+        }
+
+        BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
+                milestoneRepository.findByProjectId(projectId), null);
+        Optional<ProblemDetail> validation = FundingValidations.milestone(
+                request.getMilestoneAmount(), request.getMilestoneDate(), project, otherMilestonesTotal);
+        if (validation.isPresent()) {
+            return Either.left(validation.get());
         }
         return Either.right(milestoneRepository.saveAndFlush(entity));
     }
@@ -180,6 +191,17 @@ public class MilestoneService {
                     "Cannot update milestone linked to a published event: %s".formatted(milestoneId));
             problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
             return Either.left(problem);
+        }
+
+        // Validate only the supplied fields against the milestone's project; cumulative budget
+        // excludes this milestone's current amount so an unchanged amount can't trip the check.
+        ProjectEntity project = milestone.getProject();
+        BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
+                milestoneRepository.findByProjectId(project.getId()), milestoneId);
+        Optional<ProblemDetail> validation = FundingValidations.milestone(
+                request.getMilestoneAmount(), request.getMilestoneDate(), project, otherMilestonesTotal);
+        if (validation.isPresent()) {
+            return Either.left(validation.get());
         }
 
         if (request.getMilestoneTitle() != null) {

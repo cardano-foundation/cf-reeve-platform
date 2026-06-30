@@ -52,6 +52,7 @@ class MilestoneServiceTest {
     private MilestoneService milestoneService;
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);
+    private static final LocalDate FUTURE_DATE = LocalDate.now().plusYears(1);
 
     @Test
     void findById_returnsEmpty_whenNotFound() {
@@ -117,6 +118,7 @@ class MilestoneServiceTest {
     void create_savesAndReturnsMilestone_whenProjectExists() {
         ProjectEntity project = projectEntity("p1");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
         MilestoneEntity saved = milestoneEntity("m-new");
         when(milestoneRepository.saveAndFlush(any())).thenReturn(saved);
 
@@ -129,7 +131,7 @@ class MilestoneServiceTest {
                 "Milestone AB".equals(m.getMilestoneTitle())
                 && new BigDecimal("50000.00").equals(m.getMilestoneAmount())
                 && "USD".equals(m.getCurrency())
-                && LocalDate.of(2025, 6, 30).equals(m.getMilestoneDate())
+                && FUTURE_DATE.equals(m.getMilestoneDate())
                 && project.equals(m.getProject())
         ));
     }
@@ -146,13 +148,14 @@ class MilestoneServiceTest {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(milestone));
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder()
                 .milestoneTitle("Updated Label")
                 .milestoneAmount(new BigDecimal("99000.00"))
                 .currency("EUR")
-                .milestoneDate(LocalDate.of(2026, 1, 1))
+                .milestoneDate(FUTURE_DATE)
                 .build();
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
@@ -161,7 +164,7 @@ class MilestoneServiceTest {
         assertThat(milestone.getMilestoneTitle()).isEqualTo("Updated Label");
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("99000.00");
         assertThat(milestone.getCurrency()).isEqualTo("EUR");
-        assertThat(milestone.getMilestoneDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(milestone.getMilestoneDate()).isEqualTo(FUTURE_DATE);
     }
 
     @Test
@@ -411,6 +414,68 @@ class MilestoneServiceTest {
         verify(milestoneRepository).deleteById("m1");
     }
 
+    // -------------------------------------------------------------------------
+    // Amount / date business validations (wired via FundingValidations)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_returnsLeft_whenMilestoneDateInPast() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("MS").milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.now().minusDays(1)).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenAmountExceedsProjectTotal() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1"))); // total 200000
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("MS").milestoneAmount(new BigDecimal("250000.00")).currency("USD")
+                .milestoneDate(FUTURE_DATE).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_EXCEEDS_PROJECT);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenCumulativeMilestonesExceedProjectTotal() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1"))); // total 200000
+        MilestoneEntity existing = MilestoneEntity.builder().id("m-existing").milestoneAmount(new BigDecimal("180000.00")).build();
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(existing));
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("MS").milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(FUTURE_DATE).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TOTAL_EXCEEDS_PROJECT);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsLeft_whenDateInPast() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneDate(LocalDate.now().minusDays(1)).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
     // --- helpers ---
 
     private MilestoneEntity milestoneEntity(String id) {
@@ -442,7 +507,7 @@ class MilestoneServiceTest {
                 .milestoneTitle("Milestone AB")
                 .milestoneAmount(new BigDecimal("50000.00"))
                 .currency("USD")
-                .milestoneDate(LocalDate.of(2025, 6, 30))
+                .milestoneDate(FUTURE_DATE)
                 .build();
     }
 

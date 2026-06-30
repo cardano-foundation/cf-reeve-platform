@@ -27,6 +27,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.*;
 import org.cardanofoundation.lob.app.funding.domain.view.*;
 import org.cardanofoundation.lob.app.funding.repository.*;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -329,12 +330,21 @@ public class SpendingEventService {
             if (projectResult.isLeft()) return Either.left(projectResult.getLeft());
 
             ProjectEntity project = projectResult.get();
+            BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
 
             for (EventMilestoneAllocationRequest milestoneReq : req.getMilestones()) {
                 Either<ProblemDetail, MilestoneEntity> milestoneResult = resolveOrCreateMilestone(milestoneReq.getMilestone(), project);
                 if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
 
                 MilestoneEntity milestone = milestoneResult.get();
+
+                Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
+                        milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
+                if (allocationProblem.isPresent()) return Either.left(allocationProblem.get());
+                if (milestoneReq.getAllocatedAmount() != null) {
+                    projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
+                }
+
                 EventMilestoneAllocationEntity.Id id = new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId());
 
                 event.getMilestoneAllocations().add(
@@ -343,6 +353,9 @@ public class SpendingEventService {
                                 .allocatedAmount(milestoneReq.getAllocatedAmount())
                                 .build());
             }
+
+            Optional<ProblemDetail> totalProblem = FundingValidations.allocationTotal(projectAllocatedTotal, project);
+            if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         }
         return Either.right(null);
     }
@@ -387,6 +400,11 @@ public class SpendingEventService {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "fundingId is required when creating a new project");
             problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
+        }
+
+        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(req.getTotalAmount());
+        if (amountProblem.isPresent()) {
+            return Either.left(amountProblem.get());
         }
 
         ProjectEntity newProject = ProjectEntity.builder()
@@ -449,6 +467,14 @@ public class SpendingEventService {
                     "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone");
             problem.setTitle("MILESTONE_FIELDS_REQUIRED");
             return Either.left(problem);
+        }
+
+        BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
+                milestoneRepository.findByProjectId(project.getId()), null);
+        Optional<ProblemDetail> validation = FundingValidations.milestone(
+                req.getMilestoneAmount(), req.getMilestoneDate(), project, otherMilestonesTotal);
+        if (validation.isPresent()) {
+            return Either.left(validation.get());
         }
 
         MilestoneEntity newMilestone = MilestoneEntity.builder()

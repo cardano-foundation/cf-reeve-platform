@@ -31,4 +31,10 @@ public class ProjectUpdateRequest {
     @Schema(example = "EUR")
     private String currency;
 
+    @Nullable
+    @Schema(example = "9a1b2c3d4e5f6789",
+            description = "Internal id of the project to attach this project under as a sub-project. "
+                    + "Must belong to the same organisation and must not create a circular dependency.")
+    private String parentProjectId;
+
 }

@@ -15,6 +15,10 @@ public final class Problems {
         return problem;
     }
 
+    public static ProblemDetail badRequest(String detail, String title) {
+        return of(HttpStatus.BAD_REQUEST, detail, title);
+    }
+
     public static ProblemDetail notFound(String detail, String title) {
         return of(HttpStatus.NOT_FOUND, detail, title);
     }

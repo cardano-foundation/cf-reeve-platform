@@ -245,6 +245,83 @@ class ProjectServiceTest {
         verify(projectRepository).deleteById("p1");
     }
 
+    // --- assign parent (attach as sub-project) ---
+
+    @Test
+    void update_assignsParent_whenValid() {
+        ProjectEntity project = projectEntity();
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
+                .externalProjectId("PROJ-PARENT").projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(project.getParentProject()).isEqualTo(parent);
+    }
+
+    @Test
+    void update_returns404_whenParentNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findById("missing")).thenReturn(Optional.empty());
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("missing").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PARENT_PROJECT_NOT_FOUND);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenParentInDifferentOrg() {
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org2")
+                .externalProjectId("PROJ-PARENT").projectTitle("Parent").build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenParentIsSelf() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("p1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenParentIsDescendant() {
+        ProjectEntity project = projectEntity(); // p1
+        // candidate parent is a child of p1 → attaching p1 under it would form a cycle
+        ProjectEntity descendant = ProjectEntity.builder().id("child1").organisationId("org1")
+                .externalProjectId("PROJ-CHILD").projectTitle("Child").parentProject(project).build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findById("child1")).thenReturn(Optional.of(descendant));
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("child1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
     // --- listSubProjects ---
 
     @Test
@@ -277,6 +354,32 @@ class ProjectServiceTest {
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getContent()).hasSize(1);
+    }
+
+    // --- amount validation ---
+
+    @Test
+    void create_returns400_whenTotalAmountNotPositive() {
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .fundingId("GRANT-2025-001").totalAmount(BigDecimal.ZERO).currency("USD").milestones(List.of()).build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_INVALID);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenTotalAmountNotPositive() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("-1")).build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_INVALID);
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     // --- internal delegations ---

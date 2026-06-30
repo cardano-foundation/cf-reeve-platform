@@ -28,6 +28,7 @@ import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -85,6 +86,10 @@ public class ProjectService {
 
     @Transactional
     public ProjectView createWithMilestones(ProjectWithMilestonesCreateRequest request) {
+        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
+        if (amountProblem.isPresent()) {
+            return ProjectView.error(amountProblem.get());
+        }
         if (projectRepository.existsByOrganisationIdAndExternalProjectId(request.getOrganisationId(), request.getExternalProjectId())) {
             return ProjectView.error(Problems.conflict(
                     "Project already exists for externalProjectId: " + request.getExternalProjectId(),
@@ -119,10 +124,62 @@ public class ProjectService {
                     "Cannot update project linked to a published event: %s".formatted(projectId),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
+        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
+        if (amountProblem.isPresent()) {
+            return ProjectView.error(amountProblem.get());
+        }
+        if (request.getParentProjectId() != null) {
+            Optional<ProblemDetail> parentProblem = assignParent(project, request.getParentProjectId());
+            if (parentProblem.isPresent()) {
+                return ProjectView.error(parentProblem.get());
+            }
+        }
         if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
         if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
         return toView(projectRepository.saveAndFlush(project));
+    }
+
+    /**
+     * Attaches {@code project} under {@code parentProjectId} as a sub-project. The parent must exist,
+     * belong to the same organisation, and assigning it must not introduce a cycle (i.e. the parent
+     * may not be the project itself or one of its descendants).
+     */
+    private Optional<ProblemDetail> assignParent(ProjectEntity project, String parentProjectId) {
+        Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
+        if (parentM.isEmpty()) {
+            return Optional.of(Problems.notFound(
+                    "Parent project not found: " + parentProjectId, ErrorTitleConstants.PARENT_PROJECT_NOT_FOUND));
+        }
+        ProjectEntity parent = parentM.get();
+        if (!parent.getOrganisationId().equals(project.getOrganisationId())) {
+            return Optional.of(Problems.badRequest(
+                    "Parent project %s belongs to a different organisation".formatted(parentProjectId),
+                    ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH));
+        }
+        if (createsCycle(project.getId(), parent)) {
+            return Optional.of(Problems.badRequest(
+                    "Assigning parent %s to project %s would create a circular dependency".formatted(parentProjectId, project.getId()),
+                    ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY));
+        }
+        project.setParentProject(parent);
+        return Optional.empty();
+    }
+
+    /**
+     * True when {@code projectId} already appears in the candidate parent's ancestor chain — which
+     * includes the candidate parent being the project itself (self-parenting) or one of its
+     * descendants. Walking up the single parent link terminates at a root project.
+     */
+    private static boolean createsCycle(String projectId, ProjectEntity candidateParent) {
+        ProjectEntity cursor = candidateParent;
+        while (cursor != null) {
+            if (projectId.equals(cursor.getId())) {
+                return true;
+            }
+            cursor = cursor.getParentProject();
+        }
+        return false;
     }
 
     @Transactional
