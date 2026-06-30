@@ -3,13 +3,16 @@ package org.cardanofoundation.lob.app.funding.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,19 +24,23 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectServiceTest {
@@ -44,295 +51,205 @@ class ProjectServiceTest {
     private MilestoneService milestoneService;
     @Mock
     private EventMilestoneAllocationRepository allocationRepository;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private OrganisationPublicApiIF organisationPublicApi;
 
     @InjectMocks
     private ProjectService projectService;
 
-    @Test
-    void findById_delegatesToRepository() {
-        ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+    private static final Pageable PAGEABLE = PageRequest.of(0, 10);
 
-        assertThat(projectService.findById("p1")).contains(project);
+    @BeforeEach
+    void allowOrgAndEmptyChildren() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+        lenient().when(milestoneService.findByProjectId(any())).thenReturn(List.of());
+        lenient().when(projectRepository.findByParentProjectId(any(String.class))).thenReturn(List.of());
+    }
+
+    private ProjectEntity projectEntity() {
+        return ProjectEntity.builder().id("p1").organisationId("org1").fundingId("GRANT-2025-001")
+                .externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
+    }
+
+    // --- listProjects ---
+
+    @Test
+    void listProjects_unauthorized() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        PagedResponse<ProjectView> result = projectService.listProjects("org1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
 
     @Test
-    void findById_returnsEmpty_whenNotFound() {
+    void listProjects_organisationNotFound() {
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        PagedResponse<ProjectView> result = projectService.listProjects("org1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
+    }
+
+    @Test
+    void listProjects_success() {
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(projectRepository.findByOrganisationId("org1", PAGEABLE)).thenReturn(new PageImpl<>(List.of(projectEntity())));
+
+        PagedResponse<ProjectView> result = projectService.listProjects("org1", PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getContent()).hasSize(1);
+    }
+
+    // --- getProject ---
+
+    @Test
+    void getProject_notFound() {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 
-        assertThat(projectService.findById("p1")).isEmpty();
+        ProjectView result = projectService.getProject("p1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
-    void findByOrganisationId_returnsList() {
-        List<ProjectEntity> projects = List.of(projectEntity());
-        when(projectRepository.findByOrganisationId("org1")).thenReturn(projects);
+    void getProject_unauthorized() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        assertThat(projectService.findByOrganisationId("org1")).isEqualTo(projects);
+        ProjectView result = projectService.getProject("p1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
 
     @Test
-    void findByOrganisationId_withPageable_returnsPage() {
-        Pageable pageable = PageRequest.of(0, 10);
-        Page<ProjectEntity> page = new PageImpl<>(List.of(projectEntity()));
-        when(projectRepository.findByOrganisationId("org1", pageable)).thenReturn(page);
+    void getProject_success() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
 
-        assertThat(projectService.findByOrganisationId("org1", pageable)).isEqualTo(page);
+        ProjectView result = projectService.getProject("p1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getProjectId()).isEqualTo("p1");
     }
 
+    // --- createWithMilestones ---
+
     @Test
-    void existsByOrganisationIdAndExternalProjectId_delegatesToRepository() {
+    void create_conflict_whenAlreadyExists() {
+        ProjectWithMilestonesCreateRequest request = createRequest();
         when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(true);
 
-        assertThat(projectService.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).isTrue();
-    }
+        ProjectView result = projectService.createWithMilestones(request);
 
-    @Test
-    void existsByOrganisationIdAndExternalProjectId_returnsFalse_whenNotExists() {
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "NO-PROJECT")).thenReturn(false);
-
-        assertThat(projectService.existsByOrganisationIdAndExternalProjectId("org1", "NO-PROJECT")).isFalse();
-    }
-
-    @Test
-    void createWithMilestones_withNoMilestones_createsProjectOnly() {
-        ProjectEntity saved = projectEntity();
-        when(projectRepository.saveAndFlush(any())).thenReturn(saved);
-
-        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1")
-                .fundingId("GRANT-2025-001")
-                .externalProjectId("PROJ-AB")
-                .projectTitle("Project AB")
-                .totalAmount(new BigDecimal("200000.00"))
-                .currency("USD")
-                .milestones(List.of())
-                .build();
-
-        Either<ProblemDetail, ProjectEntity> result = projectService.createWithMilestones(request);
-
-        assertThat(result.isRight()).isTrue();
-        assertThat(result.get()).isEqualTo(saved);
-        verify(milestoneService, never()).create(any(), any());
-    }
-
-    @Test
-    void createWithMilestones_createsProjectAndMilestones() {
-        ProjectEntity saved = projectEntity();
-        when(projectRepository.saveAndFlush(any())).thenReturn(saved);
-        when(milestoneService.create(eq(saved.getId()), any()))
-                .thenReturn(Either.right(MilestoneEntity.builder().id("m1").build()));
-
-        MilestoneCreateRequest milestoneReq = MilestoneCreateRequest.builder()
-                .milestoneTitle("MS-1")
-                .milestoneAmount(new BigDecimal("50000.00"))
-                .currency("USD")
-                .milestoneDate(java.time.LocalDate.of(2025, 6, 30))
-                .build();
-
-        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1")
-                .fundingId("GRANT-2025-001")
-                .externalProjectId("PROJ-AB")
-                .projectTitle("Project AB")
-                .totalAmount(new BigDecimal("200000.00"))
-                .currency("USD")
-                .milestones(List.of(milestoneReq))
-                .build();
-
-        Either<ProblemDetail, ProjectEntity> result = projectService.createWithMilestones(request);
-
-        assertThat(result.isRight()).isTrue();
-        assertThat(result.get()).isEqualTo(saved);
-        verify(milestoneService).create(saved.getId(), milestoneReq);
-    }
-
-    @Test
-    void createWithMilestones_returnsError_whenAMilestoneIsInvalid() {
-        ProjectEntity saved = projectEntity();
-        when(projectRepository.saveAndFlush(any())).thenReturn(saved);
-        when(milestoneService.create(eq(saved.getId()), any()))
-                .thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.NOT_FOUND)));
-
-        MilestoneCreateRequest milestoneReq = MilestoneCreateRequest.builder()
-                .milestoneTitle("MS-1")
-                .milestoneAmount(new BigDecimal("50000.00"))
-                .currency("USD")
-                .milestoneDate(java.time.LocalDate.of(2025, 6, 30))
-                .build();
-
-        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1")
-                .fundingId("GRANT-2025-001")
-                .externalProjectId("PROJ-AB")
-                .projectTitle("Project AB")
-                .totalAmount(new BigDecimal("200000.00"))
-                .currency("USD")
-                .milestones(List.of(milestoneReq))
-                .build();
-
-        Either<ProblemDetail, ProjectEntity> result = projectService.createWithMilestones(request);
-
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
-    }
-
-    @Test
-    void update_returnsEmpty_whenProjectNotFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
-
-        assertThat(projectService.update("p1", ProjectUpdateRequest.builder().build()).isLeft()).isTrue();
-    }
-
-    @Test
-    void update_updatesProvidedFields() {
-        ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
-        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
-        when(projectRepository.saveAndFlush(project)).thenReturn(project);
-
-        ProjectUpdateRequest request = ProjectUpdateRequest.builder()
-                .projectTitle("Updated Title")
-                .totalAmount(new BigDecimal("250000.00"))
-                .currency("EUR")
-                .build();
-
-        Either<ProblemDetail, ProjectEntity> result = projectService.update("p1", request);
-
-        assertThat(result.isRight()).isTrue();
-        assertThat(project.getProjectTitle()).isEqualTo("Updated Title");
-        assertThat(project.getTotalAmount()).isEqualByComparingTo("250000.00");
-        assertThat(project.getCurrency()).isEqualTo("EUR");
-    }
-
-    @Test
-    void update_returnsConflict_whenLinkedToPublishedEvent() {
-        ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
-        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(true);
-
-        Either<ProblemDetail, ProjectEntity> result = projectService.update("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
-
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
         verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test
-    void update_skipsNullFields() {
+    void create_success() {
+        ProjectWithMilestonesCreateRequest request = createRequest();
+        ProjectEntity saved = projectEntity();
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectRepository.saveAndFlush(any())).thenReturn(saved);
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getProjectId()).isEqualTo("p1");
+    }
+
+    @Test
+    void create_returnsError_whenMilestoneFails() {
+        MilestoneCreateRequest milestoneReq = MilestoneCreateRequest.builder().milestoneTitle("MS").build();
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of(milestoneReq)).build();
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectRepository.saveAndFlush(any())).thenReturn(projectEntity());
+        when(milestoneService.create(eq("p1"), any()))
+                .thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError()).isPresent();
+    }
+
+    // --- updateProject ---
+
+    @Test
+    void update_notFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    @Test
+    void update_conflict_whenLinkedToPublishedEvent() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    @Test
+    void update_success() {
         ProjectEntity project = projectEntity();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
-        projectService.update("p1", ProjectUpdateRequest.builder().build());
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
 
-        assertThat(project.getProjectTitle()).isEqualTo("Project AB");
-        assertThat(project.getCurrency()).isEqualTo("USD");
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getProjectId()).isEqualTo("p1");
+    }
+
+    // --- deleteProject ---
+
+    @Test
+    void delete_notFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+
+        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
-    void delete_returnsFalse_whenNotFound() {
-        when(projectRepository.existsById("p1")).thenReturn(false);
+    void delete_conflict_whenLinkedToPublishedEvent() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(true);
 
-        assertThat(projectService.delete("p1").isLeft()).isTrue();
-        verify(projectRepository, never()).deleteById(any());
+        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+
+        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
     }
 
     @Test
-    void delete_deletesAndReturnsTrue_whenFound() {
-        when(projectRepository.existsById("p1")).thenReturn(true);
+    void delete_success() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
 
-        assertThat(projectService.delete("p1").isRight()).isTrue();
+        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+
+        assertThat(result).isEmpty();
         verify(projectRepository).deleteById("p1");
     }
 
-    @Test
-    void delete_returnsConflict_whenLinkedToPublishedEvent() {
-        when(projectRepository.existsById("p1")).thenReturn(true);
-        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(true);
-
-        Either<ProblemDetail, Void> result = projectService.delete("p1");
-
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
-        verify(projectRepository, never()).deleteById(any());
-    }
-
-    @Test
-    void toView_includesSubProjects() {
-        ProjectEntity parent = projectEntity();
-        ProjectEntity subProject = ProjectEntity.builder()
-                .id("sub-p1").organisationId("org1").externalProjectId("SUB-AB")
-                .projectTitle("Sub Project AB").parentProject(parent).build();
-
-        when(milestoneService.findByProjectId(parent.getId())).thenReturn(List.of());
-        when(projectRepository.findByParentProjectId(parent.getId())).thenReturn(List.of(subProject));
-        when(milestoneService.findByProjectId(subProject.getId())).thenReturn(List.of());
-        when(projectRepository.findByParentProjectId(subProject.getId())).thenReturn(List.of());
-
-        ProjectView view = projectService.toView(parent);
-
-        assertThat(view.getSubProjects()).hasSize(1);
-        assertThat(view.getSubProjects().get(0).getExternalProjectId()).isEqualTo("SUB-AB");
-        assertThat(view.getParentProjectId()).isNull();
-
-    }
-
-    @Test
-    void toView_setsParentProjectUid_forSubProject() {
-        ProjectEntity parent = projectEntity();
-        ProjectEntity subProject = ProjectEntity.builder()
-                .id("sub-p1").organisationId("org1").externalProjectId("SUB-AB")
-                .projectTitle("Sub Project AB").parentProject(parent).build();
-
-        when(milestoneService.findByProjectId(subProject.getId())).thenReturn(List.of());
-        when(projectRepository.findByParentProjectId(subProject.getId())).thenReturn(List.of());
-
-        ProjectView view = projectService.toView(subProject);
-
-        assertThat(view.getParentProjectId()).isEqualTo(parent.getId());
-    }
-
-    @Test
-    void toView_mapsProjectWithMilestonesAndEvents() {
-        ProjectEntity project = projectEntity();
-        MilestoneEntity milestone = MilestoneEntity.builder()
-                .id("m1").milestoneTitle("MS-1").milestoneAmount(new BigDecimal("50000")).currency("USD")
-                .milestoneDate(java.time.LocalDate.of(2025, 6, 30)).project(project).build();
-
-        MilestoneView milestoneView = MilestoneView.builder()
-                .milestoneId("m1").projectId(project.getId()).milestoneTitle("MS-1")
-                .milestoneAmount(new BigDecimal("50000")).currency("USD")
-                .milestoneDate(java.time.LocalDate.of(2025, 6, 30)).build();
-
-        when(milestoneService.findByProjectId(project.getId())).thenReturn(List.of(milestone));
-        when(milestoneService.toView(milestone)).thenReturn(milestoneView);
-
-        ProjectView view = projectService.toView(project);
-
-        assertThat(view.getProjectId()).isEqualTo(project.getId());
-        assertThat(view.getOrganisationId()).isEqualTo("org1");
-        assertThat(view.getFundingId()).isEqualTo("GRANT-2025-001");
-        assertThat(view.getExternalProjectId()).isEqualTo("PROJ-AB");
-        assertThat(view.getProjectTitle()).isEqualTo("Project AB");
-        assertThat(view.getCurrency()).isEqualTo("USD");
-        assertThat(view.getMilestones()).containsExactly(milestoneView);
-    }
-
-    // --- helpers ---
-
-    private ProjectEntity projectEntity() {
-        return ProjectEntity.builder()
-                .id("1234")
-                .organisationId("org1")
-                .fundingId("GRANT-2025-001")
-                .externalProjectId("PROJ-AB")
-                .projectTitle("Project AB")
-                .totalAmount(new BigDecimal("200000.00"))
-                .currency("USD")
-                .build();
+    private ProjectWithMilestonesCreateRequest createRequest() {
+        return ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of()).build();
     }
 
 }

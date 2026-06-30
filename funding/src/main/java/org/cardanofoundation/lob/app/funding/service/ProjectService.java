@@ -6,7 +6,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -24,10 +23,14 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateReque
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.util.Problems;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
 @Service
@@ -35,32 +38,58 @@ import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 @Transactional(readOnly = true)
 public class ProjectService {
 
+    private static final String PROJECT_NOT_FOUND_DETAIL = "Project not found: ";
+
     private final FundingProjectRepository projectRepository;
     private final MilestoneService milestoneService;
     private final EventMilestoneAllocationRepository allocationRepository;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final OrganisationPublicApiIF organisationPublicApi;
 
-    public Optional<ProjectEntity> findById(String projectId) {
-        return projectRepository.findById(projectId);
+    // -------------------------------------------------------------------------
+    // View-returning API (used by the controller — carries the ProblemDetail)
+    // -------------------------------------------------------------------------
+
+    public PagedResponse<ProjectView> listProjects(String organisationId, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
+            return PagedResponse.error(Problems.of(HttpStatus.BAD_REQUEST,
+                    "Organisation with id: %s not found".formatted(organisationId), "ORGANISATION_NOT_FOUND"));
+        }
+        return PagedResponse.of(projectRepository.findByOrganisationId(organisationId, pageable), this::toView);
     }
 
-    public List<ProjectEntity> findByOrganisationId(String organisationId) {
-        return projectRepository.findByOrganisationId(organisationId);
+    public ProjectView getProject(String projectId) {
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+        if (projectM.isEmpty()) {
+            return ProjectView.error(projectNotFound(projectId));
+        }
+        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
+            return ProjectView.error(Problems.unauthorized());
+        }
+        return toView(projectM.get());
     }
 
-    public Page<ProjectEntity> findByOrganisationId(String organisationId, Pageable pageable) {
-        return projectRepository.findByOrganisationId(organisationId, pageable);
-    }
-
-    public Page<ProjectEntity> findSubProjects(String parentProjectId, Pageable pageable) {
-        return projectRepository.findByParentProjectId(parentProjectId, pageable);
-    }
-
-    public boolean existsByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId) {
-        return projectRepository.existsByOrganisationIdAndExternalProjectId(organisationId, externalProjectId);
+    public PagedResponse<ProjectView> listSubProjects(String parentProjectId, Pageable pageable) {
+        Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
+        if (parentM.isEmpty()) {
+            return PagedResponse.error(projectNotFound(parentProjectId));
+        }
+        if (!keycloakSecurityHelper.canUserAccessOrg(parentM.get().getOrganisationId())) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        return PagedResponse.of(projectRepository.findByParentProjectId(parentProjectId, pageable), this::toView);
     }
 
     @Transactional
-    public Either<ProblemDetail, ProjectEntity> createWithMilestones(ProjectWithMilestonesCreateRequest request) {
+    public ProjectView createWithMilestones(ProjectWithMilestonesCreateRequest request) {
+        if (projectRepository.existsByOrganisationIdAndExternalProjectId(request.getOrganisationId(), request.getExternalProjectId())) {
+            return ProjectView.error(Problems.conflict(
+                    "Project already exists for externalProjectId: " + request.getExternalProjectId(),
+                    ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
+        }
         ProjectEntity projectEntity = projectRepository.saveAndFlush(toEntity(request));
         for (MilestoneCreateRequest milestoneRequest : request.getMilestones()) {
             Either<ProblemDetail, MilestoneEntity> result = milestoneService.create(projectEntity.getId(), milestoneRequest);
@@ -69,56 +98,61 @@ public class ProjectService {
                 if (TransactionSynchronizationManager.isActualTransactionActive()) {
                     TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
                 }
-                return Either.left(result.getLeft());
+                return ProjectView.error(result.getLeft());
             }
         }
-        return Either.right(projectEntity);
+        return toView(projectEntity);
     }
 
     @Transactional
-    public Either<ProblemDetail, ProjectEntity> update(String projectId, ProjectUpdateRequest request) {
+    public ProjectView updateProject(String projectId, ProjectUpdateRequest request) {
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
         if (projectM.isEmpty()) {
-            log.warn("Project not found: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectId));
-            problem.setTitle("PROJECT_NOT_FOUND");
-            return Either.left(problem);
+            return ProjectView.error(projectNotFound(projectId));
         }
-
         ProjectEntity project = projectM.get();
-
-        if (allocationRepository.existsByMilestoneProjectIdAndEventStatus(projectId, EventStatus.PUBLISHED)) {
-            log.warn("Cannot update project linked to a published event: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                    "Cannot update project linked to a published event: %s".formatted(projectId));
-            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
-            return Either.left(problem);
+        if (!keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())) {
+            return ProjectView.error(Problems.unauthorized());
         }
-
+        if (allocationRepository.existsByMilestoneProjectIdAndEventStatus(projectId, EventStatus.PUBLISHED)) {
+            return ProjectView.error(Problems.conflict(
+                    "Cannot update project linked to a published event: %s".formatted(projectId),
+                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
+        }
         if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
         if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
-
-        return Either.right(projectRepository.saveAndFlush(project));
+        return toView(projectRepository.saveAndFlush(project));
     }
 
     @Transactional
-    public Either<ProblemDetail, Void> delete(String projectId) {
-        if (!projectRepository.existsById(projectId)) {
-            log.warn("Project not found: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found: %s".formatted(projectId));
-            problem.setTitle("PROJECT_NOT_FOUND");
-            return Either.left(problem);
+    public Optional<ProblemDetail> deleteProject(String projectId) {
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+        if (projectM.isEmpty()) {
+            return Optional.of(projectNotFound(projectId));
+        }
+        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
+            return Optional.of(Problems.unauthorized());
         }
         if (allocationRepository.existsByMilestoneProjectIdAndEventStatus(projectId, EventStatus.PUBLISHED)) {
-            log.warn("Cannot delete project linked to a published event: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                    "Cannot delete project linked to a published event: %s".formatted(projectId));
-            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
-            return Either.left(problem);
+            return Optional.of(Problems.conflict(
+                    "Cannot delete project linked to a published event: %s".formatted(projectId),
+                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
         projectRepository.deleteById(projectId);
-        return Either.right(null);
+        return Optional.empty();
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal lookups / mapping
+    // -------------------------------------------------------------------------
+
+    public Optional<ProjectEntity> findById(String projectId) {
+        return projectRepository.findById(projectId);
+    }
+
+    public boolean existsByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId) {
+        return projectRepository.existsByOrganisationIdAndExternalProjectId(organisationId, externalProjectId);
     }
 
     public ProjectView toView(ProjectEntity project) {
@@ -157,6 +191,10 @@ public class ProjectService {
                 .totalAmount(request.getTotalAmount())
                 .currency(request.getCurrency())
                 .build();
+    }
+
+    private static ProblemDetail projectNotFound(String projectId) {
+        return Problems.notFound(PROJECT_NOT_FOUND_DETAIL + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
 }

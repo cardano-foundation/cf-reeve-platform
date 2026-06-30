@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.domain.view;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 import lombok.AllArgsConstructor;
@@ -9,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import org.springframework.data.domain.Page;
+import org.springframework.http.ProblemDetail;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -22,7 +24,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @NoArgsConstructor
 @AllArgsConstructor
 @Schema(description = "Paginated list response with pagination metadata")
-public class PagedResponse<T> {
+public class PagedResponse<T> implements ErrorAware {
 
     @Schema(description = "Page content")
     private List<T> content;
@@ -39,6 +41,10 @@ public class PagedResponse<T> {
     @Schema(description = "Page size", example = "20")
     private int size;
 
+    @Builder.Default
+    @Schema(description = "Problem detail describing the failure; absent on success")
+    private Optional<ProblemDetail> error = Optional.empty();
+
     /** Builds a {@code PagedResponse} from a Spring Data {@link Page}, mapping each element to a view. */
     public static <E, V> PagedResponse<V> of(Page<E> page, Function<E, V> mapper) {
         return PagedResponse.<V>builder()
@@ -48,5 +54,10 @@ public class PagedResponse<T> {
                 .page(page.getNumber())
                 .size(page.getSize())
                 .build();
+    }
+
+    /** Builds a failed {@code PagedResponse} carrying only the problem detail. */
+    public static <V> PagedResponse<V> error(ProblemDetail error) {
+        return PagedResponse.<V>builder().error(Optional.of(error)).build();
     }
 }

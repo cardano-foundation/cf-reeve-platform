@@ -17,7 +17,7 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
-public class ProjectUpdateRequest extends BaseRequest {
+public class ProjectUpdateRequest {
 
     @Nullable
     @Schema(example = "Updated Project Name")

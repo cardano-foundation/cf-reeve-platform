@@ -2,10 +2,13 @@ package org.cardanofoundation.lob.app.funding.domain.view;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.annotation.Nullable;
 
 import lombok.*;
+
+import org.springframework.http.ProblemDetail;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -16,7 +19,7 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 @Getter
 @Builder
 @AllArgsConstructor
-public class SpendingEventView {
+public class SpendingEventView implements ErrorAware {
 
     @Schema(example = "550e8400-e29b-41d4-a716-446655440000")
     private String eventId;
@@ -60,5 +63,14 @@ public class SpendingEventView {
 
     /** Spend line items (SPENDING events only). */
     private List<SpendingItemView> spendingItems;
+
+    @Builder.Default
+    @Schema(description = "Problem detail describing the failure; absent on success")
+    private Optional<ProblemDetail> error = Optional.empty();
+
+    /** A failure response carrying only the problem detail. */
+    public static SpendingEventView error(ProblemDetail error) {
+        return SpendingEventView.builder().error(Optional.of(error)).build();
+    }
 
 }

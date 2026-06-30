@@ -2,10 +2,13 @@ package org.cardanofoundation.lob.app.funding.domain.view;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Optional;
 
 import jakarta.annotation.Nullable;
 
 import lombok.*;
+
+import org.springframework.http.ProblemDetail;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -13,7 +16,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Getter
 @Builder
 @AllArgsConstructor
-public class MilestoneView {
+public class MilestoneView implements ErrorAware {
 
     @Schema(example = "550e8400-e29b-41d4-a716-446655440000",
             description = "Internal UUID unique identifier (milestone_id)")
@@ -39,5 +42,14 @@ public class MilestoneView {
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-06-30")
     private LocalDate milestoneDate;
+
+    @Builder.Default
+    @Schema(description = "Problem detail describing the failure; absent on success")
+    private Optional<ProblemDetail> error = Optional.empty();
+
+    /** A failure response carrying only the problem detail. */
+    public static MilestoneView error(ProblemDetail error) {
+        return MilestoneView.builder().error(Optional.of(error)).build();
+    }
 
 }

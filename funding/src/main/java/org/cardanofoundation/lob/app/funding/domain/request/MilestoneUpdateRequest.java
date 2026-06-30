@@ -19,7 +19,7 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
-public class MilestoneUpdateRequest extends BaseRequest {
+public class MilestoneUpdateRequest {
 
     @Nullable
     @Schema(example = "Updated Milestone Name")

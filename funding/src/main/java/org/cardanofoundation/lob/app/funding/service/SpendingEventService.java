@@ -26,6 +26,9 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.*;
 import org.cardanofoundation.lob.app.funding.domain.view.*;
 import org.cardanofoundation.lob.app.funding.repository.*;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.util.Problems;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
 @Service
@@ -41,6 +44,83 @@ public class SpendingEventService {
     private final MilestoneRepository milestoneRepository;
     private final SpendingItemRepository spendingItemRepository;
     private final EventMilestoneAllocationRepository milestoneAllocationRepository;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
+
+    // -------------------------------------------------------------------------
+    // View-returning API (used by the controller — carries the ProblemDetail)
+    // -------------------------------------------------------------------------
+
+    public PagedResponse<SpendingEventView> listEvents(String organisationId, Optional<EventStatus> status,
+            Optional<EventType> eventType, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, status, eventType, pageable), this::toView);
+    }
+
+    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, Optional<EventStatus> status,
+            Optional<EventType> eventType, Pageable pageable) {
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+        if (projectM.isEmpty()) {
+            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
+        }
+        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        return PagedResponse.of(findByProjectIdAndFilter(projectId, status, eventType, pageable), this::toView);
+    }
+
+    public SpendingEventView getEvent(String eventId) {
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+        if (eventM.isEmpty()) {
+            return SpendingEventView.error(eventNotFound(eventId));
+        }
+        if (!keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
+            return SpendingEventView.error(Problems.unauthorized());
+        }
+        return toView(eventM.get());
+    }
+
+    public SpendingEventView createEvent(SpendingEventCreateRequest request) {
+        return create(request).fold(SpendingEventView::error, this::toView);
+    }
+
+    public SpendingEventView updateEvent(String eventId, SpendingEventCreateRequest request) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        if (denied.isPresent()) {
+            return SpendingEventView.error(denied.get());
+        }
+        return update(eventId, request).fold(SpendingEventView::error, this::toView);
+    }
+
+    public SpendingEventView publishEvent(String eventId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        if (denied.isPresent()) {
+            return SpendingEventView.error(denied.get());
+        }
+        return publish(eventId).fold(SpendingEventView::error, this::toView);
+    }
+
+    public Optional<ProblemDetail> deleteEvent(String eventId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        if (denied.isPresent()) {
+            return denied;
+        }
+        return delete(eventId).fold(Optional::of, ignored -> Optional.empty());
+    }
+
+    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise. */
+    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId) {
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+        if (eventM.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
+            return Optional.of(Problems.unauthorized());
+        }
+        return Optional.empty();
+    }
+
+    private static ProblemDetail eventNotFound(String eventId) {
+        return Problems.notFound("Event not found: " + eventId, ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+    }
 
     public Optional<FundingEventEntity> findById(String eventId) {
         return fundingEventRepository.findById(eventId);
@@ -77,7 +157,9 @@ public class SpendingEventService {
 
         FundingEventEntity event = toEntity(request);
         if(fundingEventRepository.existsById(event.getId())) {
-            return Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event already exists: %s".formatted(event.getId())));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event already exists: %s".formatted(event.getId()));
+            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS);
+            return Either.left(problem);
         }
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
