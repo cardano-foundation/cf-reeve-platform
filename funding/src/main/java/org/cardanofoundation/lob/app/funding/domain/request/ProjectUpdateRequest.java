@@ -10,7 +10,6 @@ import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
