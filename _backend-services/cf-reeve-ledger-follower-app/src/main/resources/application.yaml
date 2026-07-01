@@ -1,0 +1,23 @@
+store:
+  plugins:
+    enabled: true
+    exit-on-error: true
+    filters:
+      utxo.unspent.save:
+        # ${ADDRESSES_ARRAY} is resolved by Spring's @ConfigurationProperties placeholder binding (yaci-store's
+        # StoreProperties binds inline-script as a String). Default "[]" keeps the script compilable by MVEL at
+        # registry init even when no addresses are configured, so the app still boots. Set ADDRESSES_ARRAY to a
+        # MVEL array literal (e.g. ["addr1","addr2"]) to actually filter unspent UTXOs by owner address.
+        - name: filter-address-utxos
+          lang: mvel
+          inline-script: |
+            inputAddresses = ${ADDRESSES_ARRAY:[]};
+
+            ret = [];
+            for (item : items) {
+              if (inputAddresses.contains(item.ownerAddr)) {
+                ret.add(item);
+              }
+            }
+            return ret;
+
