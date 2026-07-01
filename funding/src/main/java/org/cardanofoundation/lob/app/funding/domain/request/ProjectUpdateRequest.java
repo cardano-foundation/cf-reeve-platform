@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.funding.domain.request;
 import java.math.BigDecimal;
 
 import jakarta.annotation.Nullable;
-import jakarta.validation.constraints.NotBlank;
 
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -27,7 +26,6 @@ public class ProjectUpdateRequest {
     private BigDecimal totalAmount;
 
     @Nullable
-    @NotBlank
     @Schema(example = "EUR")
     private String currency;
 
