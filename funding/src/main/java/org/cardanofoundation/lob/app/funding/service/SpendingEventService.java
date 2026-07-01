@@ -26,6 +26,10 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.*;
 import org.cardanofoundation.lob.app.funding.domain.view.*;
 import org.cardanofoundation.lob.app.funding.repository.*;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.util.FundingValidations;
+import org.cardanofoundation.lob.app.funding.util.Problems;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
 @Service
@@ -41,6 +45,87 @@ public class SpendingEventService {
     private final MilestoneRepository milestoneRepository;
     private final SpendingItemRepository spendingItemRepository;
     private final EventMilestoneAllocationRepository milestoneAllocationRepository;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
+
+    // -------------------------------------------------------------------------
+    // View-returning API (used by the controller — carries the ProblemDetail)
+    // -------------------------------------------------------------------------
+
+    public PagedResponse<SpendingEventView> listEvents(String organisationId, Optional<EventStatus> status,
+            Optional<EventType> eventType, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, status, eventType, pageable), this::toView);
+    }
+
+    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, Optional<EventStatus> status,
+            Optional<EventType> eventType, Pageable pageable) {
+        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+        if (projectM.isEmpty()) {
+            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
+        }
+        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        return PagedResponse.of(findByProjectIdAndFilter(projectId, status, eventType, pageable), this::toView);
+    }
+
+    public SpendingEventView getEvent(String eventId) {
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+        if (eventM.isEmpty()) {
+            return SpendingEventView.error(eventNotFound(eventId));
+        }
+        if (!keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
+            return SpendingEventView.error(Problems.unauthorized());
+        }
+        return toView(eventM.get());
+    }
+
+    @Transactional
+    public SpendingEventView createEvent(SpendingEventCreateRequest request) {
+        return create(request).fold(SpendingEventView::error, this::toView);
+    }
+
+    @Transactional
+    public SpendingEventView updateEvent(String eventId, SpendingEventCreateRequest request) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        if (denied.isPresent()) {
+            return SpendingEventView.error(denied.get());
+        }
+        return update(eventId, request).fold(SpendingEventView::error, this::toView);
+    }
+
+    @Transactional
+    public SpendingEventView publishEvent(String eventId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        if (denied.isPresent()) {
+            return SpendingEventView.error(denied.get());
+        }
+        return publish(eventId).fold(SpendingEventView::error, this::toView);
+    }
+
+    @Transactional
+    public Optional<ProblemDetail> deleteEvent(String eventId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        if (denied.isPresent()) {
+            return denied;
+        }
+        return delete(eventId).fold(Optional::of, ignored -> Optional.empty());
+    }
+
+    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise. */
+    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId) {
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+        if (eventM.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
+            return Optional.of(Problems.unauthorized());
+        }
+        return Optional.empty();
+    }
+
+    private static ProblemDetail eventNotFound(String eventId) {
+        return Problems.notFound("Event not found: " + eventId, ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+    }
 
     public Optional<FundingEventEntity> findById(String eventId) {
         return fundingEventRepository.findById(eventId);
@@ -77,7 +162,9 @@ public class SpendingEventService {
 
         FundingEventEntity event = toEntity(request);
         if(fundingEventRepository.existsById(event.getId())) {
-            return Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event already exists: %s".formatted(event.getId())));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event already exists: %s".formatted(event.getId()));
+            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS);
+            return Either.left(problem);
         }
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
@@ -87,6 +174,8 @@ public class SpendingEventService {
         populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
+        Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
+        if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
 
@@ -125,6 +214,8 @@ public class SpendingEventService {
         populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
+        Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
+        if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
 
@@ -243,12 +334,21 @@ public class SpendingEventService {
             if (projectResult.isLeft()) return Either.left(projectResult.getLeft());
 
             ProjectEntity project = projectResult.get();
+            BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
 
             for (EventMilestoneAllocationRequest milestoneReq : req.getMilestones()) {
                 Either<ProblemDetail, MilestoneEntity> milestoneResult = resolveOrCreateMilestone(milestoneReq.getMilestone(), project);
                 if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
 
                 MilestoneEntity milestone = milestoneResult.get();
+
+                Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
+                        milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
+                if (allocationProblem.isPresent()) return Either.left(allocationProblem.get());
+                if (milestoneReq.getAllocatedAmount() != null) {
+                    projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
+                }
+
                 EventMilestoneAllocationEntity.Id id = new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId());
 
                 event.getMilestoneAllocations().add(
@@ -257,6 +357,9 @@ public class SpendingEventService {
                                 .allocatedAmount(milestoneReq.getAllocatedAmount())
                                 .build());
             }
+
+            Optional<ProblemDetail> totalProblem = FundingValidations.allocationTotal(projectAllocatedTotal, project);
+            if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         }
         return Either.right(null);
     }
@@ -303,6 +406,11 @@ public class SpendingEventService {
             return Either.left(problem);
         }
 
+        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(req.getTotalAmount());
+        if (amountProblem.isPresent()) {
+            return Either.left(amountProblem.get());
+        }
+
         ProjectEntity newProject = ProjectEntity.builder()
                 .id(projectId)
                 .organisationId(organisationId)
@@ -326,6 +434,11 @@ public class SpendingEventService {
         Optional<ProjectEntity> existing = projectRepository.findById(subProjectUid);
         if (existing.isPresent()) {
             return Either.right(existing.get());
+        }
+
+        Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneRepository.existsByProjectId(parent.getId()));
+        if (structure.isPresent()) {
+            return Either.left(structure.get());
         }
 
         if (subReq.getProjectTitle() == null) {
@@ -363,6 +476,19 @@ public class SpendingEventService {
                     "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone");
             problem.setTitle("MILESTONE_FIELDS_REQUIRED");
             return Either.left(problem);
+        }
+
+        Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(projectRepository.existsByParentProjectId(project.getId()));
+        if (structure.isPresent()) {
+            return Either.left(structure.get());
+        }
+
+        BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
+                milestoneRepository.findByProjectId(project.getId()), null);
+        Optional<ProblemDetail> validation = FundingValidations.milestone(
+                req.getMilestoneAmount(), req.getMilestoneDate(), project, otherMilestonesTotal);
+        if (validation.isPresent()) {
+            return Either.left(validation.get());
         }
 
         MilestoneEntity newMilestone = MilestoneEntity.builder()

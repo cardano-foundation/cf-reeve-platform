@@ -6,7 +6,6 @@ import java.util.List;
 
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
 
 import lombok.*;
 
@@ -52,8 +51,11 @@ public class EventProjectAllocationRequest {
     @Nullable
     private SubProjectRequest subProject;
 
-    /** At least one milestone must be supplied per project allocation. */
-    @NotEmpty
+    /**
+     * Milestones to allocate to within this project. Optional — an allocation may carry no milestones
+     * (e.g. a SPENDING event whose amount comes from line items). FUNDING/REFUND events must still
+     * allocate a positive amount overall (see the event-total validation).
+     */
     @Builder.Default
     @Valid
     private List<EventMilestoneAllocationRequest> milestones = new ArrayList<>();

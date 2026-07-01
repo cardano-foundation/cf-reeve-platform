@@ -12,14 +12,13 @@ import lombok.experimental.SuperBuilder;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
-public class MilestoneUpdateRequest extends BaseRequest {
+public class MilestoneUpdateRequest {
 
     @Nullable
     @Schema(example = "Updated Milestone Name")

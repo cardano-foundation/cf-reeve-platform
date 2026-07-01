@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.funding.resource;
 
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import java.util.Arrays;
@@ -27,19 +26,13 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.vavr.control.Either;
 
-import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
-import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
-import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
-import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
-import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
 @RestController
@@ -49,12 +42,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @RequiredArgsConstructor
 public class SpendingEventController {
 
-    private static final String EVENT_NOT_FOUND_DETAIL = "Event not found: ";
-    private static final String PROJECT_NOT_FOUND_DETAIL = "Project not found: ";
-
     private final SpendingEventService spendingEventService;
-    private final ProjectService projectService;
-    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(summary = "List events for an organisation with optional filters", responses = {
             @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
@@ -62,17 +50,12 @@ public class SpendingEventController {
     })
     @GetMapping(value = "/events", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> listEvents(
+    public ResponseEntity<PagedResponse<SpendingEventView>> listEvents(
             @RequestParam String organisationId,
             @RequestParam(required = false) Optional<EventStatus> status,
             @RequestParam(required = false) Optional<EventType> eventType,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
-            return ResponseEntity.status(UNAUTHORIZED).build();
-        }
-        return ResponseEntity.ok(PagedResponse.of(
-                spendingEventService.findByOrganisationIdAndFilter(organisationId, status, eventType, pageable),
-                spendingEventService::toView));
+        return Responses.respond(spendingEventService.listEvents(organisationId, status, eventType, pageable), HttpStatus.OK);
     }
 
     @Operation(summary = "List events for a project with optional filters", responses = {
@@ -83,23 +66,12 @@ public class SpendingEventController {
     })
     @GetMapping(value = "/projects/{projectId}/events", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> listEventsByProject(
+    public ResponseEntity<PagedResponse<SpendingEventView>> listEventsByProject(
             @PathVariable String projectId,
             @RequestParam(required = false) Optional<EventStatus> status,
             @RequestParam(required = false) Optional<EventType> eventType,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        Optional<ProjectEntity> projectOpt = projectService.findById(projectId);
-        if (projectOpt.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, PROJECT_NOT_FOUND_DETAIL + projectId);
-            problem.setTitle(ErrorTitleConstants.PROJECT_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectOpt.get().getOrganisationId())) {
-            return ResponseEntity.status(UNAUTHORIZED).build();
-        }
-        return ResponseEntity.ok(PagedResponse.of(
-                spendingEventService.findByProjectIdAndFilter(projectId, status, eventType, pageable),
-                spendingEventService::toView));
+        return Responses.respond(spendingEventService.listEventsByProject(projectId, status, eventType, pageable), HttpStatus.OK);
     }
 
     @Operation(summary = "List the available event types", responses = {
@@ -130,17 +102,8 @@ public class SpendingEventController {
     })
     @GetMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> getEvent(@PathVariable String eventId) {
-        Optional<FundingEventEntity> eventOpt = spendingEventService.findById(eventId);
-        if (eventOpt.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, EVENT_NOT_FOUND_DETAIL + eventId);
-            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(eventOpt.get().getOrganisationId())) {
-            return ResponseEntity.status(UNAUTHORIZED).build();
-        }
-        return ResponseEntity.ok(spendingEventService.toView(eventOpt.get()));
+    public ResponseEntity<SpendingEventView> getEvent(@PathVariable String eventId) {
+        return Responses.respond(spendingEventService.getEvent(eventId), HttpStatus.OK);
     }
 
     @Operation(
@@ -395,14 +358,9 @@ public class SpendingEventController {
     )
     @PostMapping(value = "/events", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
-    public ResponseEntity<?> createEvent(
+    public ResponseEntity<SpendingEventView> createEvent(
             @Valid @RequestBody SpendingEventCreateRequest request) {
-
-        Either<ProblemDetail, FundingEventEntity> created = spendingEventService.create(request);
-        if (created.isLeft()) {
-            return ResponseEntity.status(created.getLeft().getStatus()).body(created.getLeft());
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).body(spendingEventService.toView(created.get()));
+        return Responses.respond(spendingEventService.createEvent(request), HttpStatus.CREATED);
     }
 
     @Operation(
@@ -454,18 +412,10 @@ public class SpendingEventController {
     )
     @PutMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
-    public ResponseEntity<?> updateEvent(
+    public ResponseEntity<SpendingEventView> updateEvent(
             @PathVariable String eventId,
             @Valid @RequestBody SpendingEventCreateRequest request) {
-        ResponseEntity<?> denied = denyIfNoEventAccess(eventId);
-        if (denied != null) {
-            return denied;
-        }
-        Either<ProblemDetail, FundingEventEntity> updated = spendingEventService.update(eventId, request);
-        if (updated.isLeft()) {
-            return ResponseEntity.status(updated.getLeft().getStatus()).body(updated.getLeft());
-        }
-        return ResponseEntity.ok(spendingEventService.toView(updated.get()));
+        return Responses.respond(spendingEventService.updateEvent(eventId, request), HttpStatus.OK);
     }
 
     @Operation(summary = "Publish an event to the blockchain", responses = {
@@ -478,16 +428,8 @@ public class SpendingEventController {
     })
     @PostMapping(value = "/events/{eventId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> publishEvent(@PathVariable String eventId) {
-        ResponseEntity<?> denied = denyIfNoEventAccess(eventId);
-        if (denied != null) {
-            return denied;
-        }
-        Either<ProblemDetail, FundingEventEntity> published = spendingEventService.publish(eventId);
-        if (published.isLeft()) {
-            return ResponseEntity.status(published.getLeft().getStatus()).body(published.getLeft());
-        }
-        return ResponseEntity.ok(spendingEventService.toView(published.get()));
+    public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId) {
+        return Responses.respond(spendingEventService.publishEvent(eventId), HttpStatus.OK);
     }
 
     @Operation(summary = "Delete a draft event (published events cannot be deleted)", responses = {
@@ -499,28 +441,8 @@ public class SpendingEventController {
     })
     @DeleteMapping(value = "/events/{eventId}")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> deleteEvent(@PathVariable String eventId) {
-        ResponseEntity<?> denied = denyIfNoEventAccess(eventId);
-        if (denied != null) {
-            return denied;
-        }
-        Either<ProblemDetail, Void> deleted = spendingEventService.delete(eventId);
-        if (deleted.isLeft()) {
-            return ResponseEntity.status(deleted.getLeft().getStatus()).body(deleted.getLeft());
-        }
-        return ResponseEntity.noContent().build();
-    }
-
-    /**
-     * Returns a 401 response if the event exists and the caller cannot access its organisation;
-     * {@code null} otherwise (a missing event falls through to the service's 404 handling).
-     */
-    private ResponseEntity<?> denyIfNoEventAccess(String eventId) {
-        Optional<FundingEventEntity> eventOpt = spendingEventService.findById(eventId);
-        if (eventOpt.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(eventOpt.get().getOrganisationId())) {
-            return ResponseEntity.status(UNAUTHORIZED).build();
-        }
-        return null;
+    public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId) {
+        return Responses.respondDelete(spendingEventService.deleteEvent(eventId));
     }
 
 }

@@ -9,6 +9,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
@@ -25,9 +29,12 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class MilestoneServiceTest {
@@ -38,9 +45,14 @@ class MilestoneServiceTest {
     private FundingProjectRepository projectRepository;
     @Mock
     private EventMilestoneAllocationRepository allocationRepository;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private MilestoneService milestoneService;
+
+    private static final Pageable PAGEABLE = PageRequest.of(0, 10);
+    private static final LocalDate FUTURE_DATE = LocalDate.now().plusYears(1);
 
     @Test
     void findById_returnsEmpty_whenNotFound() {
@@ -106,6 +118,7 @@ class MilestoneServiceTest {
     void create_savesAndReturnsMilestone_whenProjectExists() {
         ProjectEntity project = projectEntity("p1");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
         MilestoneEntity saved = milestoneEntity("m-new");
         when(milestoneRepository.saveAndFlush(any())).thenReturn(saved);
 
@@ -118,7 +131,7 @@ class MilestoneServiceTest {
                 "Milestone AB".equals(m.getMilestoneTitle())
                 && new BigDecimal("50000.00").equals(m.getMilestoneAmount())
                 && "USD".equals(m.getCurrency())
-                && LocalDate.of(2025, 6, 30).equals(m.getMilestoneDate())
+                && FUTURE_DATE.equals(m.getMilestoneDate())
                 && project.equals(m.getProject())
         ));
     }
@@ -135,13 +148,14 @@ class MilestoneServiceTest {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(milestone));
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder()
                 .milestoneTitle("Updated Label")
                 .milestoneAmount(new BigDecimal("99000.00"))
                 .currency("EUR")
-                .milestoneDate(LocalDate.of(2026, 1, 1))
+                .milestoneDate(FUTURE_DATE)
                 .build();
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
@@ -150,7 +164,7 @@ class MilestoneServiceTest {
         assertThat(milestone.getMilestoneTitle()).isEqualTo("Updated Label");
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("99000.00");
         assertThat(milestone.getCurrency()).isEqualTo("EUR");
-        assertThat(milestone.getMilestoneDate()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(milestone.getMilestoneDate()).isEqualTo(FUTURE_DATE);
     }
 
     @Test
@@ -242,6 +256,244 @@ class MilestoneServiceTest {
         assertThat(view.getMilestoneDate()).isEqualTo(LocalDate.of(2025, 6, 30));
     }
 
+    // -------------------------------------------------------------------------
+    // View-returning API + org-access authorisation (authorizeProject)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void listMilestones_returns404_whenProjectNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        PagedResponse<MilestoneView> result = milestoneService.listMilestones("p1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        verify(milestoneRepository, never()).findByProjectId(any(), any());
+    }
+
+    @Test
+    void listMilestones_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        PagedResponse<MilestoneView> result = milestoneService.listMilestones("p1", PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).findByProjectId(any(), any());
+    }
+
+    @Test
+    void listMilestones_returnsPage_whenAuthorised() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByProjectId("p1", PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of(milestoneEntity("m1"))));
+
+        PagedResponse<MilestoneView> result = milestoneService.listMilestones("p1", PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getContent()).hasSize(1);
+    }
+
+    @Test
+    void getMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        MilestoneView result = milestoneService.getMilestone("p1", "m1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).findByIdAndProjectId(any(), any());
+    }
+
+    @Test
+    void getMilestone_returns404_whenMilestoneNotInProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
+
+        MilestoneView result = milestoneService.getMilestone("p1", "m1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+    }
+
+    @Test
+    void getMilestone_returnsView_whenFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestoneEntity("m1")));
+
+        MilestoneView result = milestoneService.getMilestone("p1", "m1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getMilestoneId()).isEqualTo("m1");
+    }
+
+    @Test
+    void createMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        MilestoneView result = milestoneService.createMilestone("p1", createRequest());
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createMilestone_returnsView_whenAuthorisedAndCreated() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findById(any())).thenReturn(Optional.empty());
+        when(milestoneRepository.saveAndFlush(any())).thenReturn(milestoneEntity("m-new"));
+
+        MilestoneView result = milestoneService.createMilestone("p1", createRequest());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getMilestoneId()).isEqualTo("m-new");
+    }
+
+    @Test
+    void updateMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        MilestoneView result = milestoneService.updateMilestone("p1", "m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("New").build());
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateMilestone_returns404_whenMilestoneNotInProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
+
+        MilestoneView result = milestoneService.updateMilestone("p1", "m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("New").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void deleteMilestone_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+
+        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(milestoneRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteMilestone_returns404_whenMilestoneNotInProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
+
+        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+
+        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(milestoneRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteMilestone_returnsEmpty_whenAuthorisedAndDeleted() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestoneEntity("m1")));
+        when(milestoneRepository.existsById("m1")).thenReturn(true);
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+
+        assertThat(result).isEmpty();
+        verify(milestoneRepository).deleteById("m1");
+    }
+
+    // -------------------------------------------------------------------------
+    // Amount / date business validations (wired via FundingValidations)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_returnsLeft_whenMilestoneDateInPast() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("MS").milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(LocalDate.now().minusDays(1)).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenAmountExceedsProjectTotal() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1"))); // total 200000
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("MS").milestoneAmount(new BigDecimal("250000.00")).currency("USD")
+                .milestoneDate(FUTURE_DATE).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_EXCEEDS_PROJECT);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenCumulativeMilestonesExceedProjectTotal() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1"))); // total 200000
+        MilestoneEntity existing = MilestoneEntity.builder().id("m-existing").milestoneAmount(new BigDecimal("180000.00")).build();
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(existing));
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("MS").milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                .milestoneDate(FUTURE_DATE).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TOTAL_EXCEEDS_PROJECT);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsLeft_whenDateInPast() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneDate(LocalDate.now().minusDays(1)).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenProjectHasSubProjects() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(projectRepository.existsByParentProjectId("p1")).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", createRequest());
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_ALLOWED_WITH_SUBPROJECTS);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void hasMilestones_delegatesToRepository() {
+        when(milestoneRepository.existsByProjectId("p1")).thenReturn(true);
+
+        assertThat(milestoneService.hasMilestones("p1")).isTrue();
+    }
+
     // --- helpers ---
 
     private MilestoneEntity milestoneEntity(String id) {
@@ -273,7 +525,7 @@ class MilestoneServiceTest {
                 .milestoneTitle("Milestone AB")
                 .milestoneAmount(new BigDecimal("50000.00"))
                 .currency("USD")
-                .milestoneDate(LocalDate.of(2025, 6, 30))
+                .milestoneDate(FUTURE_DATE)
                 .build();
     }
 

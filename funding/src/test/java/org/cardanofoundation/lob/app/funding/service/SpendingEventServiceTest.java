@@ -14,6 +14,7 @@ import java.util.Optional;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
@@ -28,9 +29,12 @@ import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.*;
+import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.*;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class SpendingEventServiceTest {
@@ -45,9 +49,14 @@ class SpendingEventServiceTest {
     private SpendingItemRepository spendingItemRepository;
     @Mock
     private EventMilestoneAllocationRepository milestoneAllocationRepository;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private SpendingEventService spendingEventService;
+
+    private static final Pageable VIEW_PAGEABLE = PageRequest.of(0, 10);
+    private static final LocalDate FUTURE_DATE = LocalDate.now().plusYears(1);
 
     // --- findById ---
 
@@ -246,6 +255,267 @@ class SpendingEventServiceTest {
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("MILESTONE_FIELDS_REQUIRED");
         verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenEventAlreadyExists() {
+        when(fundingEventRepository.existsById(any())).thenReturn(true);
+
+        Either<ProblemDetail, FundingEventEntity> result =
+                spendingEventService.create(requestWithExistingProject("PROJ-AB", "MS-1"));
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenSpendingItemMissingRequiredFields() {
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of())
+                .items(List.of(SpendingItemRequest.builder()
+                        .currency("USD").spendDate(LocalDate.of(2025, 4, 3)).build())) // no category/vendor/amountFcy
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("ITEM_FIELDS_REQUIRED");
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenFundingItemMissingAmountRcy() {
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of())
+                .items(List.of(SpendingItemRequest.builder()
+                        .currency("USD").spendDate(LocalDate.of(2025, 4, 3)).build())) // amountRcy null
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("ITEM_FIELDS_REQUIRED");
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    // --- optional milestones + event-total guard ---
+
+    @Test
+    void create_succeedsForSpendingWithNoMilestones_whenItemsPresent() {
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of()) // no milestones — allowed
+                        .build()))
+                .items(List.of(itemRequest(new BigDecimal("2500.00"))))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
+        verify(fundingEventRepository).saveAndFlush(argThat(e -> e.getTotalAmount().compareTo(new BigDecimal("2500.00")) == 0));
+    }
+
+    @Test
+    void create_returnsLeft_whenFundingEventHasNoAllocations() {
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
+
+        // FUNDING allocation without milestones → no allocated amounts → total 0
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of())
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    // --- milestones XOR sub-projects ---
+
+    @Test
+    void create_returnsLeft_whenAddingMilestoneToProjectWithSubProjects() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-NEW")).thenReturn(Optional.empty());
+        when(projectRepository.existsByParentProjectId(project.getId())).thenReturn(true); // project already has sub-projects
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder()
+                                        .externalMilestoneId("MS-NEW").milestoneTitle("New MS")
+                                        .milestoneAmount(new BigDecimal("50000.00")).currency("USD").milestoneDate(FUTURE_DATE).build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_ALLOWED_WITH_SUBPROJECTS);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenAddingSubProjectToProjectWithMilestones() {
+        ProjectEntity root = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any()))
+                .thenReturn(Optional.of(root))     // root project lookup
+                .thenReturn(Optional.empty());     // sub-project lookup (new)
+        when(milestoneRepository.existsByProjectId(root.getId())).thenReturn(true); // root already has milestones
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .subProject(SubProjectRequest.builder().subProjectId("WP-1").projectTitle("Work Package 1").build())
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().externalMilestoneId("MS-1").build()).build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    // --- amount / allocation business validations ---
+
+    @Test
+    void create_returnsLeft_whenAllocatedAmountMissingForFunding() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestoneEntity("m1")));
+
+        SpendingEventCreateRequest request = fundingEventWithAllocation("MS-1", null);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenAllocatedAmountExceedsMilestone() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestoneEntity("m1"))); // amount 50000
+
+        SpendingEventCreateRequest request = fundingEventWithAllocation("MS-1", new BigDecimal("60000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_EXCEEDS_MILESTONE);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenAllocationTotalExceedsProject() {
+        ProjectEntity project = projectEntity(); // total 200000
+        MilestoneEntity m1 = MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("150000.00")).currency("USD").project(project).build();
+        MilestoneEntity m2 = MilestoneEntity.builder().id("m2").milestoneAmount(new BigDecimal("150000.00")).currency("USD").project(project).build();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(m1));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-2")).thenReturn(Optional.of(m2));
+
+        // each allocation (150000) is within its milestone, but the per-project sum (300000) exceeds the project total
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of(
+                                EventMilestoneAllocationRequest.builder()
+                                        .milestone(MilestoneCreateRequest.builder().externalMilestoneId("MS-1").build())
+                                        .allocatedAmount(new BigDecimal("150000.00")).build(),
+                                EventMilestoneAllocationRequest.builder()
+                                        .milestone(MilestoneCreateRequest.builder().externalMilestoneId("MS-2").build())
+                                        .allocatedAmount(new BigDecimal("150000.00")).build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenNewProjectAmountNotPositive() {
+        when(projectRepository.existsById(any())).thenReturn(false);
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-NEW").projectTitle("New Project").fundingId("GRANT-2025-001")
+                        .totalAmount(BigDecimal.ZERO).currency("USD")
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().externalMilestoneId("MS-1").build()).build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_INVALID);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenNewMilestoneDateInPast() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-NEW")).thenReturn(Optional.empty());
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder()
+                                        .externalMilestoneId("MS-NEW").milestoneTitle("New MS")
+                                        .milestoneAmount(new BigDecimal("50000.00")).currency("USD")
+                                        .milestoneDate(LocalDate.now().minusDays(1)).build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    private SpendingEventCreateRequest fundingEventWithAllocation(String externalMilestoneId, BigDecimal allocatedAmount) {
+        return SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().externalMilestoneId(externalMilestoneId).build())
+                                .allocatedAmount(allocatedAmount).build()))
+                        .build()))
+                .build();
     }
 
     // --- publish ---
@@ -482,7 +752,7 @@ class SpendingEventServiceTest {
                                         .milestoneTitle("Deliverable 1")
                                         .milestoneAmount(new BigDecimal("50000.00"))
                                         .currency("USD")
-                                        .milestoneDate(LocalDate.of(2025, 9, 30))
+                                        .milestoneDate(FUTURE_DATE)
                                         .build())
                                 .build()))
                         .build()))
@@ -799,6 +1069,215 @@ class SpendingEventServiceTest {
         assertThat(ms.getCurrency().getId()).isEqualTo("ISO_4217:USD");
     }
 
+    // -------------------------------------------------------------------------
+    // View-returning API + org-access authorisation
+    // -------------------------------------------------------------------------
+
+    @Test
+    void listEvents_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
+                "org1", Optional.empty(), Optional.empty(), VIEW_PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).findByOrganisationIdAndFilter(any(), any(), any(), any());
+    }
+
+    @Test
+    void listEvents_returnsPage_whenAuthorised() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, VIEW_PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
+                "org1", Optional.empty(), Optional.empty(), VIEW_PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    @Test
+    void listEventsByProject_returns404_whenProjectNotFound() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEventsByProject(
+                "p1", Optional.empty(), Optional.empty(), VIEW_PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    @Test
+    void listEventsByProject_returns401_whenUserCannotAccessOrg() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEventsByProject(
+                "p1", Optional.empty(), Optional.empty(), VIEW_PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).findByProjectIdAndFilter(any(), any(), any(), any());
+    }
+
+    @Test
+    void listEventsByProject_returnsPage_whenAuthorised() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(fundingEventRepository.findByProjectIdAndFilter("p1", null, null, VIEW_PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEventsByProject(
+                "p1", Optional.empty(), Optional.empty(), VIEW_PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    @Test
+    void getEvent_returns404_whenNotFound() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.empty());
+
+        SpendingEventView result = spendingEventService.getEvent("e1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+    }
+
+    @Test
+    void getEvent_returns401_whenUserCannotAccessOrg() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        SpendingEventView result = spendingEventService.getEvent("e1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
+    void getEvent_returnsView_whenAuthorised() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventView result = spendingEventService.getEvent("e1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getEventId()).isEqualTo("e1");
+    }
+
+    @Test
+    void createEvent_returnsErrorView_whenCreateFails() {
+        // externalProjectId null → create() fails validation with PROJECT_FIELDS_REQUIRED
+        // before touching any repository.
+        SpendingEventView result = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId(null)
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().externalMilestoneId("MS-1").build())
+                                .build()))
+                        .build()))
+                .build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
+    }
+
+    @Test
+    void createEvent_returnsView_whenCreated() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1"))
+                .thenReturn(Optional.of(milestoneEntity("m1")));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(spendingItemRepository.findByEvent_Id(any())).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId(any())).thenReturn(List.of());
+
+        SpendingEventView result = spendingEventService.createEvent(requestWithExistingProject("PROJ-AB", "MS-1"));
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    @Test
+    void updateEvent_returns401_whenUserCannotAccessOrg() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        SpendingEventView result = spendingEventService.updateEvent("e1", requestWithExistingProject("PROJ-AB", "MS-1"));
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updateEvent_returnsErrorView_whenUpdateFails() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+
+        SpendingEventView result = spendingEventService.updateEvent("e1", requestWithExistingProject("PROJ-AB", "MS-1"));
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void publishEvent_returns401_whenUserCannotAccessOrg() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        SpendingEventView result = spendingEventService.publishEvent("e1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void publishEvent_returnsView_whenAuthorisedAndPublished() {
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
+        when(spendingItemRepository.findByEvent_Id("e1")).thenReturn(List.of());
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventView result = spendingEventService.publishEvent("e1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(event.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+    }
+
+    @Test
+    void deleteEvent_returns401_whenUserCannotAccessOrg() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        Optional<ProblemDetail> result = spendingEventService.deleteEvent("e1");
+
+        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteEvent_returnsEmpty_whenAuthorisedAndDeleted() {
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+
+        Optional<ProblemDetail> result = spendingEventService.deleteEvent("e1");
+
+        assertThat(result).isEmpty();
+        verify(fundingEventRepository).delete(event);
+    }
+
+    @Test
+    void deleteEvent_returnsError_whenPublished() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+
+        Optional<ProblemDetail> result = spendingEventService.deleteEvent("e1");
+
+        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        verify(fundingEventRepository, never()).delete(any());
+    }
+
     // --- helpers ---
 
     private FundingEventEntity eventEntity(EventType type, EventStatus status) {
@@ -890,7 +1369,7 @@ class SpendingEventServiceTest {
                                         .milestoneTitle("New Milestone")
                                         .milestoneAmount(new BigDecimal("50000.00"))
                                         .currency("USD")
-                                        .milestoneDate(LocalDate.of(2026, 1, 31))
+                                        .milestoneDate(FUTURE_DATE)
                                         .build())
                                 .build()))
                         .build()))

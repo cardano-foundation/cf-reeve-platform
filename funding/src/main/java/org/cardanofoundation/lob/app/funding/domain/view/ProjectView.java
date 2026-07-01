@@ -3,10 +3,13 @@ package org.cardanofoundation.lob.app.funding.domain.view;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.annotation.Nullable;
 
 import lombok.*;
+
+import org.springframework.http.ProblemDetail;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -14,7 +17,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Getter
 @Builder
 @AllArgsConstructor
-public class ProjectView {
+public class ProjectView implements ErrorAware {
 
     @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
             description = "Internal SHA256 unique identifier (project_id)")
@@ -53,5 +56,14 @@ public class ProjectView {
 
     /** Sub-projects; empty for leaf nodes. */
     private List<ProjectView> subProjects;
+
+    @Builder.Default
+    @Schema(description = "Problem detail describing the failure; absent on success")
+    private Optional<ProblemDetail> error = Optional.empty();
+
+    /** A failure response carrying only the problem detail. */
+    public static ProjectView error(ProblemDetail error) {
+        return ProjectView.builder().error(Optional.of(error)).build();
+    }
 
 }
