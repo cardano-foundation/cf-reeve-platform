@@ -177,6 +177,30 @@ class FundingValidationsTest {
         assertThat(FundingValidations.allocationTotal(new BigDecimal("999999"), project(null))).isEmpty();
     }
 
+    // --- milestones XOR sub-projects ---
+
+    @Test
+    void milestoneAllowed_rejected_whenProjectHasSubProjects() {
+        assertThat(title(FundingValidations.milestoneAllowed(true)))
+                .isEqualTo(ErrorTitleConstants.MILESTONE_NOT_ALLOWED_WITH_SUBPROJECTS);
+    }
+
+    @Test
+    void milestoneAllowed_allowed_whenNoSubProjects() {
+        assertThat(FundingValidations.milestoneAllowed(false)).isEmpty();
+    }
+
+    @Test
+    void subProjectAllowed_rejected_whenParentHasMilestones() {
+        assertThat(title(FundingValidations.subProjectAllowed(true)))
+                .isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+    }
+
+    @Test
+    void subProjectAllowed_allowed_whenNoMilestones() {
+        assertThat(FundingValidations.subProjectAllowed(false)).isEmpty();
+    }
+
     // --- projectAmount(total) ---
 
     @Test

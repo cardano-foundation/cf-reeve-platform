@@ -144,6 +144,32 @@ public final class FundingValidations {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    /**
+     * A project node holds either milestones or sub-projects, never both. Rejects adding a milestone
+     * to a project that already has sub-projects.
+     */
+    public static Optional<ProblemDetail> milestoneAllowed(boolean projectHasSubProjects) {
+        if (projectHasSubProjects) {
+            return Optional.of(Problems.badRequest(
+                    "Cannot add a milestone to a project that has sub-projects; a project has either milestones or sub-projects, not both",
+                    ErrorTitleConstants.MILESTONE_NOT_ALLOWED_WITH_SUBPROJECTS));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * A project node holds either milestones or sub-projects, never both. Rejects adding a sub-project
+     * under a parent that already has milestones.
+     */
+    public static Optional<ProblemDetail> subProjectAllowed(boolean parentHasMilestones) {
+        if (parentHasMilestones) {
+            return Optional.of(Problems.badRequest(
+                    "Cannot add a sub-project to a project that has milestones; a project has either milestones or sub-projects, not both",
+                    ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES));
+        }
+        return Optional.empty();
+    }
+
     /** A project's total budget, when supplied, must be strictly positive. */
     public static Optional<ProblemDetail> projectAmount(BigDecimal totalAmount) {
         if (totalAmount != null && totalAmount.signum() <= 0) {

@@ -163,6 +163,10 @@ public class ProjectService {
                     "Assigning parent %s to project %s would create a circular dependency".formatted(parentProjectId, project.getId()),
                     ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY));
         }
+        Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneService.hasMilestones(parent.getId()));
+        if (structure.isPresent()) {
+            return structure;
+        }
         BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                 projectRepository.findByParentProjectId(parent.getId()), project.getId());
         Optional<ProblemDetail> amountProblem = FundingValidations.subProjectAmount(

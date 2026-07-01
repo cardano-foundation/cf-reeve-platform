@@ -436,6 +436,11 @@ public class SpendingEventService {
             return Either.right(existing.get());
         }
 
+        Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneRepository.existsByProjectId(parent.getId()));
+        if (structure.isPresent()) {
+            return Either.left(structure.get());
+        }
+
         if (subReq.getProjectTitle() == null) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "projectTitle is required when creating a new sub-project");
             problem.setTitle(PROJECT_FIELDS_REQUIRED);
@@ -471,6 +476,11 @@ public class SpendingEventService {
                     "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone");
             problem.setTitle("MILESTONE_FIELDS_REQUIRED");
             return Either.left(problem);
+        }
+
+        Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(projectRepository.existsByParentProjectId(project.getId()));
+        if (structure.isPresent()) {
+            return Either.left(structure.get());
         }
 
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(

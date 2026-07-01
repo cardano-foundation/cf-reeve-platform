@@ -360,6 +360,22 @@ class ProjectServiceTest {
         verify(projectRepository, never()).saveAndFlush(any());
     }
 
+    @Test
+    void update_returns400_whenParentHasMilestones() {
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1").externalProjectId("PROJ-PARENT")
+                .projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+        when(milestoneService.hasMilestones("parent1")).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
     // --- listSubProjects ---
 
     @Test

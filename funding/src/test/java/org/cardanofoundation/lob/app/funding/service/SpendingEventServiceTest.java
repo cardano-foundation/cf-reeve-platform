@@ -344,6 +344,59 @@ class SpendingEventServiceTest {
         verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
+    // --- milestones XOR sub-projects ---
+
+    @Test
+    void create_returnsLeft_whenAddingMilestoneToProjectWithSubProjects() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-NEW")).thenReturn(Optional.empty());
+        when(projectRepository.existsByParentProjectId(project.getId())).thenReturn(true); // project already has sub-projects
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder()
+                                        .externalMilestoneId("MS-NEW").milestoneTitle("New MS")
+                                        .milestoneAmount(new BigDecimal("50000.00")).currency("USD").milestoneDate(FUTURE_DATE).build())
+                                .build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_ALLOWED_WITH_SUBPROJECTS);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenAddingSubProjectToProjectWithMilestones() {
+        ProjectEntity root = projectEntity();
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any()))
+                .thenReturn(Optional.of(root))     // root project lookup
+                .thenReturn(Optional.empty());     // sub-project lookup (new)
+        when(milestoneRepository.existsByProjectId(root.getId())).thenReturn(true); // root already has milestones
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB")
+                        .subProject(SubProjectRequest.builder().subProjectId("WP-1").projectTitle("Work Package 1").build())
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().externalMilestoneId("MS-1").build()).build()))
+                        .build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
     // --- amount / allocation business validations ---
 
     @Test

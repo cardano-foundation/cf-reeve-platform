@@ -476,6 +476,24 @@ class MilestoneServiceTest {
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
+    @Test
+    void create_returnsLeft_whenProjectHasSubProjects() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(projectRepository.existsByParentProjectId("p1")).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", createRequest());
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_ALLOWED_WITH_SUBPROJECTS);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void hasMilestones_delegatesToRepository() {
+        when(milestoneRepository.existsByProjectId("p1")).thenReturn(true);
+
+        assertThat(milestoneService.hasMilestones("p1")).isTrue();
+    }
+
     // --- helpers ---
 
     private MilestoneEntity milestoneEntity(String id) {

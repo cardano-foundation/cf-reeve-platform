@@ -20,4 +20,6 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
 
     Page<ProjectEntity> findByParentProjectId(String parentProjectId, Pageable pageable);
 
+    boolean existsByParentProjectId(String parentProjectId);
+
 }

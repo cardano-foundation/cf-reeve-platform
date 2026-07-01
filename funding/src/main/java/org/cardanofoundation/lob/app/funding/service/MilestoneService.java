@@ -129,6 +129,11 @@ public class MilestoneService {
         return milestoneRepository.findByProjectId(projectId);
     }
 
+    /** Whether the project has at least one milestone — used to enforce the milestones-XOR-subprojects rule. */
+    public boolean hasMilestones(String projectId) {
+        return milestoneRepository.existsByProjectId(projectId);
+    }
+
     public Page<MilestoneEntity> findByProjectId(String projectId, Pageable pageable) {
         return milestoneRepository.findByProjectId(projectId, pageable);
     }
@@ -153,6 +158,12 @@ public class MilestoneService {
             return Either.left(problem);
         }
         ProjectEntity project = projectM.orElseThrow();
+
+        Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(projectRepository.existsByParentProjectId(projectId));
+        if (structure.isPresent()) {
+            return Either.left(structure.get());
+        }
+
         MilestoneEntity entity = toEntity(request, project);
         Optional<MilestoneEntity> milestoneExists = milestoneRepository.findById(entity.getId());
         if(milestoneExists.isPresent()) {
