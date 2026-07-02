@@ -215,6 +215,14 @@ public class MilestoneService {
             return Either.left(validation.get());
         }
 
+        if (request.getMilestoneAmount() != null) {
+            Optional<ProblemDetail> coverage = FundingValidations.milestoneCoversAllocations(
+                    request.getMilestoneAmount(), allocationRepository.sumAllocatedByMilestoneId(milestoneId));
+            if (coverage.isPresent()) {
+                return Either.left(coverage.get());
+            }
+        }
+
         if (request.getMilestoneTitle() != null) {
             milestone.setMilestoneTitle(request.getMilestoneTitle());
         }

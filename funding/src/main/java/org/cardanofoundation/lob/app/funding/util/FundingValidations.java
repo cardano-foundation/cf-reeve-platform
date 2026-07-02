@@ -59,6 +59,20 @@ public final class FundingValidations {
     }
 
     /**
+     * When a milestone's amount is changed, it may not drop below the total already allocated to it
+     * by events — a milestone must always be able to cover its outstanding allocations. Skipped when
+     * no new amount is supplied.
+     */
+    public static Optional<ProblemDetail> milestoneCoversAllocations(BigDecimal newAmount, BigDecimal totalAllocated) {
+        if (newAmount != null && totalAllocated != null && newAmount.compareTo(totalAllocated) < 0) {
+            return Optional.of(Problems.badRequest(
+                    "Milestone amount %s is below the total already allocated to it %s".formatted(newAmount, totalAllocated),
+                    ErrorTitleConstants.MILESTONE_AMOUNT_BELOW_ALLOCATED));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Per-allocation validation: an amount is required for FUNDING/REFUND events, must be positive,
      * and may not exceed its milestone's amount.
      */

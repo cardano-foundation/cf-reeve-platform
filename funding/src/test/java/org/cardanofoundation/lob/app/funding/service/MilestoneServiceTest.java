@@ -463,6 +463,37 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void update_returnsLeft_whenNewAmountBelowTotalAllocated() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
+
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("50000.00")).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_BELOW_ALLOCATED);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_succeeds_whenNewAmountEqualsTotalAllocated() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
+
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("60000.00")).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("60000.00");
+    }
+
+    @Test
     void update_returnsLeft_whenDateInPast() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
