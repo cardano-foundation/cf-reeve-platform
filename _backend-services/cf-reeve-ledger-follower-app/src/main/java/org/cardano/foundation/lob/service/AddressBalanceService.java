@@ -2,9 +2,12 @@ package org.cardano.foundation.lob.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.cardano.foundation.lob.repository.AddressBalance;
 import org.cardano.foundation.lob.repository.AddressBalanceRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,7 +27,12 @@ public class AddressBalanceService {
      *         that currently has unspent UTXOs. Addresses with no UTXOs are absent from the map.
      */
     public Map<String, Long> getAllAddressBalances() {
-        Map<String, Long> balances = addressBalanceRepository.findAllAddressBalances();
+        List<AddressBalance> rows = addressBalanceRepository.findAddressBalances();
+        Map<String, Long> balances = new LinkedHashMap<>(rows.size());
+        for (AddressBalance row : rows) {
+            balances.put(row.getOwnerAddr(),
+                    row.getTotal() != null ? row.getTotal().longValue() : 0L);
+        }
         log.debug("Computed UTXO balances for {} address(es)", balances.size());
         return balances;
     }
