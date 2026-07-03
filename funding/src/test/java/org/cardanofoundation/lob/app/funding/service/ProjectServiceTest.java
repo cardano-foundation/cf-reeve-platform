@@ -55,6 +55,8 @@ class ProjectServiceTest {
     private KeycloakSecurityHelper keycloakSecurityHelper;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
+    @Mock
+    private FundingCascadeDeleteService cascadeDeleteService;
 
     @InjectMocks
     private ProjectService projectService;
@@ -225,9 +227,23 @@ class ProjectServiceTest {
     }
 
     @Test
-    void delete_conflict_whenLinkedToPublishedEvent() {
+    void delete_returns401_whenUserCannotAccessOrg() {
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(true);
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+
+        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(cascadeDeleteService, never()).deleteProjectSubtree(any());
+    }
+
+    @Test
+    void delete_propagatesConflict_fromCascade() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        ProblemDetail conflict = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        conflict.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        when(cascadeDeleteService.deleteProjectSubtree(project)).thenReturn(Optional.of(conflict));
 
         Optional<ProblemDetail> result = projectService.deleteProject("p1");
 
@@ -235,14 +251,15 @@ class ProjectServiceTest {
     }
 
     @Test
-    void delete_success() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+    void delete_delegatesToCascade_whenAuthorised() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(cascadeDeleteService.deleteProjectSubtree(project)).thenReturn(Optional.empty());
 
         Optional<ProblemDetail> result = projectService.deleteProject("p1");
 
         assertThat(result).isEmpty();
-        verify(projectRepository).deleteById("p1");
+        verify(cascadeDeleteService).deleteProjectSubtree(project);
     }
 
     // --- assign parent (attach as sub-project) ---

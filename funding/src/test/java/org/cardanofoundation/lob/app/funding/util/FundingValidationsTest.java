@@ -92,6 +92,30 @@ class FundingValidationsTest {
         assertThat(FundingValidations.milestone(null, null, project(new BigDecimal("200000")), BigDecimal.ZERO)).isEmpty();
     }
 
+    // --- milestoneCoversAllocations(newAmount, totalAllocated) ---
+
+    @Test
+    void milestoneCoversAllocations_belowAllocated_isRejected() {
+        assertThat(title(FundingValidations.milestoneCoversAllocations(new BigDecimal("50000"), new BigDecimal("60000"))))
+                .isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_BELOW_ALLOCATED);
+    }
+
+    @Test
+    void milestoneCoversAllocations_equalToAllocated_isAllowed() {
+        assertThat(FundingValidations.milestoneCoversAllocations(new BigDecimal("60000"), new BigDecimal("60000"))).isEmpty();
+    }
+
+    @Test
+    void milestoneCoversAllocations_aboveAllocated_isAllowed() {
+        assertThat(FundingValidations.milestoneCoversAllocations(new BigDecimal("70000"), new BigDecimal("60000"))).isEmpty();
+    }
+
+    @Test
+    void milestoneCoversAllocations_nullInputs_areAllowed() {
+        assertThat(FundingValidations.milestoneCoversAllocations(null, new BigDecimal("60000"))).isEmpty();
+        assertThat(FundingValidations.milestoneCoversAllocations(new BigDecimal("50000"), null)).isEmpty();
+    }
+
     // --- allocation(allocatedAmount, milestone, eventType) ---
 
     @Test
