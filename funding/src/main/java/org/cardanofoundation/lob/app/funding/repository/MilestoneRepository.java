@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,6 +13,8 @@ import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 public interface MilestoneRepository extends JpaRepository<MilestoneEntity, String> {
 
     List<MilestoneEntity> findByProjectId(String projectId);
+
+    List<MilestoneEntity> findByProjectIdIn(Collection<String> projectIds);
 
     Page<MilestoneEntity> findByProjectId(String projectId, Pageable pageable);
 

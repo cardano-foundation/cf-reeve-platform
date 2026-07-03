@@ -47,6 +47,8 @@ class MilestoneServiceTest {
     private EventMilestoneAllocationRepository allocationRepository;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private FundingCascadeDeleteService cascadeDeleteService;
 
     @InjectMocks
     private MilestoneService milestoneService;
@@ -193,35 +195,6 @@ class MilestoneServiceTest {
         assertThat(milestone.getMilestoneTitle()).isEqualTo("Milestone AB");
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("50000.00");
         assertThat(milestone.getCurrency()).isEqualTo("USD");
-    }
-
-    @Test
-    void delete_returnsFalse_whenNotFound() {
-        when(milestoneRepository.existsById("m1")).thenReturn(false);
-
-        assertThat(milestoneService.delete("m1").isLeft()).isTrue();
-        verify(milestoneRepository, never()).deleteById(any());
-    }
-
-    @Test
-    void delete_deletesAndReturnsTrue_whenFound() {
-        when(milestoneRepository.existsById("m1")).thenReturn(true);
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
-
-        assertThat(milestoneService.delete("m1").isRight()).isTrue();
-        verify(milestoneRepository).deleteById("m1");
-    }
-
-    @Test
-    void delete_returnsConflict_whenLinkedToPublishedEvent() {
-        when(milestoneRepository.existsById("m1")).thenReturn(true);
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
-
-        Either<ProblemDetail, Void> result = milestoneService.delete("m1");
-
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
-        verify(milestoneRepository, never()).deleteById(any());
     }
 
     @Test
@@ -385,7 +358,7 @@ class MilestoneServiceTest {
         Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
 
         assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
-        verify(milestoneRepository, never()).deleteById(any());
+        verify(cascadeDeleteService, never()).deleteMilestone(any());
     }
 
     @Test
@@ -397,21 +370,36 @@ class MilestoneServiceTest {
         Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
 
         assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
-        verify(milestoneRepository, never()).deleteById(any());
+        verify(cascadeDeleteService, never()).deleteMilestone(any());
     }
 
     @Test
-    void deleteMilestone_returnsEmpty_whenAuthorisedAndDeleted() {
+    void deleteMilestone_delegatesToCascade_whenAuthorised() {
+        MilestoneEntity milestone = milestoneEntity("m1");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestoneEntity("m1")));
-        when(milestoneRepository.existsById("m1")).thenReturn(true);
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestone));
+        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Optional.empty());
 
         Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
 
         assertThat(result).isEmpty();
-        verify(milestoneRepository).deleteById("m1");
+        verify(cascadeDeleteService).deleteMilestone(milestone);
+    }
+
+    @Test
+    void deleteMilestone_propagatesConflict_fromCascade() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestone));
+        ProblemDetail conflict = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        conflict.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Optional.of(conflict));
+
+        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+
+        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
 
     // -------------------------------------------------------------------------

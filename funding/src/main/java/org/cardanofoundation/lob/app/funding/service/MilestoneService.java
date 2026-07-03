@@ -43,6 +43,7 @@ public class MilestoneService {
     private final FundingProjectRepository projectRepository;
     private final EventMilestoneAllocationRepository allocationRepository;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final FundingCascadeDeleteService cascadeDeleteService;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail).
@@ -95,10 +96,13 @@ public class MilestoneService {
         if (denied.isPresent()) {
             return denied;
         }
-        if (milestoneRepository.findByIdAndProjectId(milestoneId, projectId).isEmpty()) {
+        Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
+        if (milestoneM.isEmpty()) {
             return Optional.of(milestoneNotFound(milestoneId));
         }
-        return delete(milestoneId).fold(Optional::of, ignored -> Optional.empty());
+        // Cascade: fails when the milestone is linked to a published event; otherwise the referencing
+        // draft-event allocations are cleaned up and the milestone is removed.
+        return cascadeDeleteService.deleteMilestone(milestoneM.get());
     }
 
     private Optional<ProblemDetail> authorizeProject(String projectId) {
@@ -237,25 +241,6 @@ public class MilestoneService {
         }
 
         return Either.right(milestoneRepository.saveAndFlush(milestone));
-    }
-
-    @Transactional
-    public Either<ProblemDetail, Void> delete(String mileStoneId) {
-        if (!milestoneRepository.existsById(mileStoneId)) {
-            log.warn("Milestone not found for id: {}", mileStoneId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(mileStoneId));
-            problem.setTitle("MILESTONE_NOT_FOUND");
-            return Either.left(problem);
-        }
-        if (allocationRepository.existsByMilestoneIdAndEventStatus(mileStoneId, EventStatus.PUBLISHED)) {
-            log.warn("Cannot delete milestone linked to a published event: {}", mileStoneId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                    "Cannot delete milestone linked to a published event: %s".formatted(mileStoneId));
-            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
-            return Either.left(problem);
-        }
-        milestoneRepository.deleteById(mileStoneId);
-        return Either.right(null);
     }
 
     public boolean belongsToProject(MilestoneEntity milestone, ProjectEntity project) {

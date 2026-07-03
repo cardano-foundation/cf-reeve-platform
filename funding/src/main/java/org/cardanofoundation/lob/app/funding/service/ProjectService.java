@@ -47,6 +47,7 @@ public class ProjectService {
     private final EventMilestoneAllocationRepository allocationRepository;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
+    private final FundingCascadeDeleteService cascadeDeleteService;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail)
@@ -203,13 +204,9 @@ public class ProjectService {
         if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
             return Optional.of(Problems.unauthorized());
         }
-        if (allocationRepository.existsByMilestoneProjectIdAndEventStatus(projectId, EventStatus.PUBLISHED)) {
-            return Optional.of(Problems.conflict(
-                    "Cannot delete project linked to a published event: %s".formatted(projectId),
-                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
-        }
-        projectRepository.deleteById(projectId);
-        return Optional.empty();
+        // Cascade: fails when any published event is associated anywhere in the subtree; otherwise the
+        // project, its sub-projects, milestones and the referencing draft-event allocations are removed.
+        return cascadeDeleteService.deleteProjectSubtree(projectM.get());
     }
 
     // -------------------------------------------------------------------------
