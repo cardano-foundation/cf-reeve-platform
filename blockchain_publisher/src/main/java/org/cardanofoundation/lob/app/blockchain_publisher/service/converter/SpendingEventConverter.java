@@ -15,7 +15,6 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.Blockchain
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventProjectAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingItemEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
@@ -53,30 +52,9 @@ public class SpendingEventConverter {
                 .publishStatus(BlockchainPublishStatus.STORED)
                 .build()));
 
-        entity.setSpendingItems(convertItems(entity, view.getItems()));
         entity.setProjectAllocations(convertAllocations(entity, view.getProjectAllocations()));
 
         return entity;
-    }
-
-    private List<SpendingItemEntity> convertItems(SpendingEventEntity event, List<SpendingEventPublishView.SpendItem> items) {
-        if (items == null) return new ArrayList<>();
-        return items.stream()
-                .map(item -> SpendingItemEntity.builder()
-                        .itemId(item.getItemId())
-                        .event(event)
-                        .category(item.getCategory())
-                        .vendor(item.getVendor())
-                        .amountFcy(item.getAmountFcy())
-                        .amountRcy(orZero(item.getAmountRcy()))
-                        .currency(custCode(item.getCurrency()))
-                        .currencyId(currencyId(item.getCurrency()))
-                        .fxRate(item.getFxRate())
-                        .spendDate(item.getSpendDate())
-                        .documentHash(item.getDocumentHash())
-                        .notes(item.getNotes())
-                        .build())
-                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private List<EventProjectAllocationEntity> convertAllocations(SpendingEventEntity event, List<SpendingEventPublishView.ProjectAllocation> allocations) {
@@ -102,7 +80,17 @@ public class SpendingEventConverter {
                         .allocation(allocation)
                         .milestoneId(milestone.getMilestoneId())
                         .milestoneTitle(milestone.getMilestoneTitle())
-                        .amountRcy(milestone.getMilestoneAmount())
+                        .allocatedAmount(milestone.getAllocatedAmount())
+                        .category(milestone.getCategory())
+                        .vendor(milestone.getVendor())
+                        .amountFcy(milestone.getAmountFcy())
+                        .amountRcy(milestone.getAmountRcy())
+                        .currency(custCode(milestone.getSpendCurrency()))
+                        .currencyId(currencyId(milestone.getSpendCurrency()))
+                        .fxRate(milestone.getFxRate())
+                        .spendDate(milestone.getSpendDate())
+                        .documentHash(milestone.getDocumentHash())
+                        .notes(milestone.getNotes())
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));
     }

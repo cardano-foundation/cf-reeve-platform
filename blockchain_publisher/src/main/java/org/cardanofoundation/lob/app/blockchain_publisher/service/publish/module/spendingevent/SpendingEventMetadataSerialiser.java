@@ -17,7 +17,6 @@ import com.bloxbean.cardano.client.metadata.MetadataMap;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventProjectAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingItemEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
@@ -91,14 +90,6 @@ public class SpendingEventMetadataSerialiser {
         }
         metadataMap.put("allocation", allocationList);
 
-        val itemList = MetadataBuilder.createList();
-        for (val item : event.getSpendingItems()) {
-            itemList.add(serialise(item));
-        }
-        if (itemList.size() > 0) {
-            metadataMap.put("item", itemList);
-        }
-
         return metadataMap;
     }
 
@@ -129,39 +120,38 @@ public class SpendingEventMetadataSerialiser {
         if (milestone.getMilestoneTitle() != null) {
             metadataMap.put("milestone_title", milestone.getMilestoneTitle());
         }
+        if (milestone.getAllocatedAmount() != null) {
+            metadataMap.put("allocated_amount", BigDecimals.normaliseString(milestone.getAllocatedAmount()));
+        }
+
+        // Spend detail — SPENDING events only.
         if (milestone.getAmountRcy() != null) {
             metadataMap.put("amount_rcy", BigDecimals.normaliseString(milestone.getAmountRcy()));
         }
-
-        return metadataMap;
-    }
-
-    private static MetadataMap serialise(SpendingItemEntity item) {
-        val metadataMap = MetadataBuilder.createMap();
-
-        if (item.getAmountRcy() != null) {
-            metadataMap.put("amount_rcy", BigDecimals.normaliseString(item.getAmountRcy()));
+        if (milestone.getAmountFcy() != null) {
+            metadataMap.put("amount_fcy", BigDecimals.normaliseString(milestone.getAmountFcy()));
         }
-        if (item.getAmountFcy() != null) {
-            metadataMap.put("amount_fcy", BigDecimals.normaliseString(item.getAmountFcy()));
+        if (milestone.getVendor() != null) {
+            metadataMap.put("vendor", milestone.getVendor());
         }
-        if (item.getVendor() != null) {
-            metadataMap.put("vendor", item.getVendor());
+        if (milestone.getCategory() != null) {
+            metadataMap.put("spending_category", milestone.getCategory());
         }
-        if (item.getCategory() != null) {
-            metadataMap.put("spending_category", item.getCategory());
+        if (milestone.getFxRate() != null) {
+            metadataMap.put("fx_rate", BigDecimals.normaliseString(milestone.getFxRate()));
         }
-        if (item.getFxRate() != null) {
-            metadataMap.put("fx_rate", BigDecimals.normaliseString(item.getFxRate()));
+        if (milestone.getDocumentHash() != null) {
+            metadataMap.put("hash", milestone.getDocumentHash());
         }
-        if (item.getDocumentHash() != null) {
-            metadataMap.put("hash", item.getDocumentHash());
+        if (milestone.getNotes() != null) {
+            metadataMap.put("notes", milestone.getNotes());
         }
-        if (item.getNotes() != null) {
-            metadataMap.put("notes", item.getNotes());
+        if (milestone.getSpendDate() != null) {
+            metadataMap.put("date", milestone.getSpendDate().toString());
         }
-        metadataMap.put("date", item.getSpendDate().toString());
-        metadataMap.put("currency", serialiseCurrency(item.getCurrencyId(), item.getCurrency()));
+        if (milestone.getCurrency() != null) {
+            metadataMap.put("currency", serialiseCurrency(milestone.getCurrencyId(), milestone.getCurrency()));
+        }
 
         return metadataMap;
     }

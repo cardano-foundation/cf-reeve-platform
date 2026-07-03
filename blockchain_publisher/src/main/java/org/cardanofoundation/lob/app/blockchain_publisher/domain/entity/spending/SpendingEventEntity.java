@@ -93,11 +93,6 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     @Column(name = "currency_id")
     private String currencyId;
 
-    /** Spend line items — SPENDING items carry the full set, FUNDING/REFUND items only amount_rcy. */
-    @Builder.Default
-    @OneToMany(mappedBy = "event", cascade = CascadeType.ALL)
-    private List<SpendingItemEntity> spendingItems = new ArrayList<>();
-
     /** Project allocations — one per project this event targets, each with its milestones. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)

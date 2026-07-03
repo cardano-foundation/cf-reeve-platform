@@ -61,9 +61,6 @@ public class SpendingEventView implements ErrorAware {
     /** One entry per project this event is allocated to. */
     private List<EventProjectAllocationView> projectAllocations;
 
-    /** Spend line items (SPENDING events only). */
-    private List<SpendingItemView> spendingItems;
-
     @Builder.Default
     @Schema(description = "Problem detail describing the failure; absent on success")
     private Optional<ProblemDetail> error = Optional.empty();
