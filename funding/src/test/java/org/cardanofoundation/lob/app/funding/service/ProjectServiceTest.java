@@ -6,10 +6,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,13 +30,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
@@ -49,6 +55,8 @@ class ProjectServiceTest {
     private FundingProjectRepository projectRepository;
     @Mock
     private MilestoneService milestoneService;
+    @Mock
+    private SpendingEventService spendingEventService;
     @Mock
     private EventMilestoneAllocationRepository allocationRepository;
     @Mock
@@ -68,6 +76,8 @@ class ProjectServiceTest {
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
         lenient().when(milestoneService.findByProjectId(any())).thenReturn(List.of());
         lenient().when(projectRepository.findByParentProjectId(any(String.class))).thenReturn(List.of());
+        lenient().when(spendingEventService.findByProjectIdAndFilter(any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
     }
 
     private ProjectEntity projectEntity() {
@@ -138,6 +148,22 @@ class ProjectServiceTest {
         assertThat(result.getProjectId()).isEqualTo("p1");
     }
 
+    @Test
+    void getProject_includesAssociatedEvents() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        FundingEventEntity event = FundingEventEntity.builder().id("e1").organisationId("org1").build();
+        SpendingEventView eventView = SpendingEventView.builder().eventId("e1").build();
+        when(spendingEventService.findByProjectIdAndFilter(eq("p1"), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(event)));
+        when(spendingEventService.toView(event)).thenReturn(eventView);
+
+        ProjectView result = projectService.getProject("p1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getEvents()).hasSize(1);
+        assertThat(result.getEvents().get(0).getEventId()).isEqualTo("e1");
+    }
+
     // --- createWithMilestones ---
 
     @Test
@@ -179,6 +205,93 @@ class ProjectServiceTest {
         ProjectView result = projectService.createWithMilestones(request);
 
         assertThat(result.getError()).isPresent();
+    }
+
+    // --- createWithMilestones: sub-project tree ---
+
+    @Test
+    void createTree_success_projectWithSubProjectsEachWithMilestones() {
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(projectRepository.existsById(any())).thenReturn(false);
+        when(milestoneService.create(any(), any())).thenReturn(Either.right(mock(MilestoneEntity.class)));
+
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of()) // root has sub-projects, not milestones
+                .subProjects(List.of(
+                        node("WP-1", new BigDecimal("100000.00"), List.of(milestoneReq()), List.of()),
+                        node("WP-2", new BigDecimal("80000.00"), List.of(milestoneReq()), List.of())))
+                .build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError()).isEmpty();
+        verify(projectRepository, times(3)).saveAndFlush(any());   // root + 2 sub-projects
+        verify(milestoneService, times(2)).create(any(), any());   // one milestone per sub-project
+    }
+
+    @Test
+    void createTree_returns400_whenRootHasBothMilestonesAndSubProjects() {
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of(milestoneReq()))
+                .subProjects(List.of(node("WP-1", new BigDecimal("100000.00"), List.of(milestoneReq()), List.of())))
+                .build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createTree_returns400_whenSubProjectNodeHasBothMilestonesAndSubProjects() {
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        ProjectTreeNodeRequest badNode = node("WP-1", new BigDecimal("100000.00"),
+                List.of(milestoneReq()), List.of(node("WP-1-A", new BigDecimal("10000.00"), List.of(milestoneReq()), List.of())));
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of()).subProjects(List.of(badNode)).build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+        verify(projectRepository, times(1)).saveAndFlush(any()); // only the root before the node fails
+    }
+
+    @Test
+    void createTree_returns400_whenSubProjectTotalExceedsParent() {
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of())
+                .subProjects(List.of(node("WP-1", new BigDecimal("250000.00"), List.of(milestoneReq()), List.of())))
+                .build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+    }
+
+    private ProjectTreeNodeRequest node(String extId, BigDecimal total,
+            List<MilestoneCreateRequest> milestones, List<ProjectTreeNodeRequest> subProjects) {
+        return ProjectTreeNodeRequest.builder()
+                .externalProjectId(extId).projectTitle(extId).totalAmount(total).currency("USD")
+                .milestones(milestones).subProjects(subProjects).build();
+    }
+
+    private MilestoneCreateRequest milestoneReq() {
+        return MilestoneCreateRequest.builder().milestoneTitle("MS").milestoneAmount(new BigDecimal("50000.00"))
+                .currency("USD").milestoneDate(LocalDate.now().plusYears(1)).build();
     }
 
     // --- updateProject ---

@@ -391,12 +391,6 @@ public class SpendingEventService {
             return Either.left(problem);
         }
 
-        if (req.getFundingId() == null) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "fundingId is required when creating a new project");
-            problem.setTitle(PROJECT_FIELDS_REQUIRED);
-            return Either.left(problem);
-        }
-
         Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(req.getTotalAmount());
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
