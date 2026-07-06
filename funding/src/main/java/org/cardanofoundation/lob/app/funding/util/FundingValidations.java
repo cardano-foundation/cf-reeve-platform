@@ -73,17 +73,14 @@ public final class FundingValidations {
     }
 
     /**
-     * Per-allocation validation: an amount is required for FUNDING/REFUND events, must be positive,
-     * and may not exceed its milestone's amount.
+     * Per-allocation validation: an amount is always required (the event total is the sum of the
+     * allocations), must be positive, and may not exceed its milestone's amount.
      */
     public static Optional<ProblemDetail> allocation(BigDecimal allocatedAmount, MilestoneEntity milestone, EventType eventType) {
         if (allocatedAmount == null) {
-            if (eventType == EventType.FUNDING || eventType == EventType.REFUND) {
-                return Optional.of(Problems.badRequest(
-                        "allocatedAmount is required for %s events".formatted(eventType),
-                        ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED));
-            }
-            return Optional.empty();
+            return Optional.of(Problems.badRequest(
+                    "allocatedAmount is required",
+                    ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED));
         }
         if (allocatedAmount.signum() <= 0) {
             return Optional.of(Problems.badRequest(
@@ -99,17 +96,61 @@ public final class FundingValidations {
     }
 
     /**
-     * A FUNDING/REFUND event's total is derived from its milestone allocations, so it must end up
-     * strictly positive — guarding against an event whose allocations are absent or sum to zero
-     * (e.g. when no milestones were supplied). SPENDING events derive their total from line items and
-     * are not constrained here.
+     * An event's total is the sum of its milestone allocations, so it must end up strictly positive —
+     * guarding against an event whose allocations are absent or sum to zero (e.g. when no milestones
+     * were supplied).
      */
     public static Optional<ProblemDetail> eventTotal(EventType eventType, BigDecimal totalAmount) {
-        if ((eventType == EventType.FUNDING || eventType == EventType.REFUND)
-                && (totalAmount == null || totalAmount.signum() <= 0)) {
+        if (totalAmount == null || totalAmount.signum() <= 0) {
             return Optional.of(Problems.badRequest(
                     "%s event total must be greater than zero; allocate a positive amount to at least one milestone".formatted(eventType),
                     ErrorTitleConstants.EVENT_AMOUNT_INVALID));
+        }
+        return Optional.empty();
+    }
+
+    private static final BigDecimal FX_TOLERANCE = new BigDecimal("0.01");
+
+    /**
+     * Validates the spend detail on a milestone allocation. Spend fields are only permitted for
+     * SPENDING events; for SPENDING they are required and must be internally consistent
+     * ({@code amountFcy = amountRcy * fxRate}) with the allocated amount not exceeding the
+     * reporting-currency spend ({@code amountRcy}).
+     */
+    public static Optional<ProblemDetail> spendDetail(
+            EventType eventType,
+            BigDecimal allocatedAmount,
+            String category, String vendor,
+            BigDecimal amountFcy, String currency, BigDecimal fxRate, BigDecimal amountRcy,
+            LocalDate spendDate, String hash, String notes) {
+
+        boolean anySpendField = category != null || vendor != null || amountFcy != null || currency != null
+                || fxRate != null || amountRcy != null || spendDate != null || hash != null || notes != null;
+
+        if (eventType != EventType.SPENDING) {
+            if (anySpendField) {
+                return Optional.of(Problems.badRequest(
+                        "Spend detail (amounts, vendor, fxRate, ...) is only allowed for SPENDING events",
+                        ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED));
+            }
+            return Optional.empty();
+        }
+
+        // SPENDING: the amount fields are required to record the spend.
+        if (amountFcy == null || amountRcy == null || fxRate == null || spendDate == null) {
+            return Optional.of(Problems.badRequest(
+                    "amountFcy, amountRcy, fxRate and spendDate are required for SPENDING events",
+                    ErrorTitleConstants.SPEND_FIELDS_REQUIRED));
+        }
+        if (amountRcy.multiply(fxRate).subtract(amountFcy).abs().compareTo(FX_TOLERANCE) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "fxRate %s does not convert amountRcy %s to amountFcy %s".formatted(fxRate, amountRcy, amountFcy),
+                    ErrorTitleConstants.FX_RATE_MISMATCH));
+        }
+        if (allocatedAmount != null && allocatedAmount.compareTo(amountRcy) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "allocatedAmount %s exceeds the line's reporting amount (amountRcy) %s".formatted(allocatedAmount, amountRcy),
+                    ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND));
         }
         return Optional.empty();
     }

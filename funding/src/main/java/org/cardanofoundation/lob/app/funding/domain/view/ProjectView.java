@@ -57,6 +57,10 @@ public class ProjectView implements ErrorAware {
     /** Sub-projects; empty for leaf nodes. */
     private List<ProjectView> subProjects;
 
+    /** Events (FUNDING/SPENDING/REFUND) allocated to this project. Populated on get-by-id only. */
+    @Nullable
+    private List<SpendingEventView> events;
+
     @Builder.Default
     @Schema(description = "Problem detail describing the failure; absent on success")
     private Optional<ProblemDetail> error = Optional.empty();

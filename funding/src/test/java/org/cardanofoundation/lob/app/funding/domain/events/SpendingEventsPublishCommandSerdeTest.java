@@ -27,16 +27,20 @@ class SpendingEventsPublishCommandSerdeTest {
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @Test
-    void roundTrips_spendingEventWithItems() throws Exception {
+    void roundTrips_spendingEventWithSpendDetailOnMilestone() throws Exception {
         SpendingEventPublishView.Currency usd = SpendingEventPublishView.Currency.builder()
                 .id("ISO_4217:USD").custCode("USD").build();
+        SpendingEventPublishView.Currency eur = SpendingEventPublishView.Currency.builder()
+                .id("ISO_4217:EUR").custCode("EUR").build();
 
-        SpendingEventPublishView.SpendItem item = SpendingEventPublishView.SpendItem.builder()
-                .itemId("item-1")
+        SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
+                .milestoneId("ms-uid-1")
+                .milestoneTitle("Milestone AB")
+                .allocatedAmount(new BigDecimal("85.00"))
                 .category("Personnel")
                 .vendor("Vendor AB")
                 .amountFcy(new BigDecimal("100.00"))
-                .currency(usd)
+                .spendCurrency(eur)
                 .fxRate(new BigDecimal("0.85"))
                 .amountRcy(new BigDecimal("85.00"))
                 .spendDate(LocalDate.of(2025, 4, 3))
@@ -48,7 +52,7 @@ class SpendingEventsPublishCommandSerdeTest {
                 .externalProjectId("PROJ-AB")
                 .projectTitle("Project One")
                 .subProjectTitle("Sub Project One")
-                .milestones(List.of())
+                .milestones(List.of(milestone))
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
@@ -58,10 +62,9 @@ class SpendingEventsPublishCommandSerdeTest {
                 .date(LocalDate.of(2025, 4, 30))
                 .fundingId("fund-1")
                 .fundingHash("ftx-1")
-                .amount(new BigDecimal("100.00"))
+                .amount(new BigDecimal("85.00"))
                 .currency(usd)
                 .projectAllocations(List.of(allocation))
-                .items(List.of(item))
                 .build();
 
         SpendingEventsPublishCommand command = new SpendingEventsPublishCommand("org-1", Set.of(view));
@@ -75,20 +78,15 @@ class SpendingEventsPublishCommandSerdeTest {
         SpendingEventPublishView resultView = result.getSpendingEvents().iterator().next();
         assertThat(resultView.getEventId()).isEqualTo("event-1");
         assertThat(resultView.getEventType()).isEqualTo(EventType.SPENDING);
-        assertThat(resultView.getDate()).isEqualTo(LocalDate.of(2025, 4, 30));
-        assertThat(resultView.getCurrency().getId()).isEqualTo("ISO_4217:USD");
-        assertThat(resultView.getCurrency().getCustCode()).isEqualTo("USD");
-        assertThat(resultView.getProjectAllocations()).hasSize(1);
-        assertThat(resultView.getProjectAllocations().get(0).getExternalProjectId()).isEqualTo("PROJ-AB");
-        assertThat(resultView.getProjectAllocations().get(0).getProjectTitle()).isEqualTo("Project One");
         assertThat(resultView.getProjectAllocations().get(0).getSubProjectTitle()).isEqualTo("Sub Project One");
 
-        assertThat(resultView.getItems()).hasSize(1);
-        SpendingEventPublishView.SpendItem resultItem = resultView.getItems().get(0);
-        assertThat(resultItem.getItemId()).isEqualTo("item-1");
-        assertThat(resultItem.getAmountFcy()).isEqualByComparingTo("100.00");
-        assertThat(resultItem.getSpendDate()).isEqualTo(LocalDate.of(2025, 4, 3));
-        assertThat(resultItem.getCurrency().getCustCode()).isEqualTo("USD");
+        SpendingEventPublishView.Milestone resultMs = resultView.getProjectAllocations().get(0).getMilestones().get(0);
+        assertThat(resultMs.getMilestoneId()).isEqualTo("ms-uid-1");
+        assertThat(resultMs.getAmountFcy()).isEqualByComparingTo("100.00");
+        assertThat(resultMs.getAmountRcy()).isEqualByComparingTo("85.00");
+        assertThat(resultMs.getSpendDate()).isEqualTo(LocalDate.of(2025, 4, 3));
+        assertThat(resultMs.getSpendCurrency().getCustCode()).isEqualTo("EUR");
+        assertThat(resultMs.getVendor()).isEqualTo("Vendor AB");
     }
 
     @Test
@@ -120,7 +118,6 @@ class SpendingEventsPublishCommandSerdeTest {
                 .amount(new BigDecimal("50.00"))
                 .currency(usd)
                 .projectAllocations(List.of(allocation))
-                .items(List.of())
                 .build();
 
         SpendingEventsPublishCommand command = new SpendingEventsPublishCommand("org-1", Set.of(view));

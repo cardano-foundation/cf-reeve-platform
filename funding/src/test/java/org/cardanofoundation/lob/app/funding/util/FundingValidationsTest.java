@@ -131,8 +131,9 @@ class FundingValidationsTest {
     }
 
     @Test
-    void allocation_optional_forSpending_whenNull() {
-        assertThat(FundingValidations.allocation(null, milestone(new BigDecimal("50000")), EventType.SPENDING)).isEmpty();
+    void allocation_required_forSpending_whenNull() {
+        assertThat(title(FundingValidations.allocation(null, milestone(new BigDecimal("50000")), EventType.SPENDING)))
+                .isEqualTo(ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED);
     }
 
     @Test
@@ -178,9 +179,58 @@ class FundingValidationsTest {
     }
 
     @Test
-    void eventTotal_spendingZero_isAllowed() {
-        // SPENDING totals derive from line items and are not constrained here
-        assertThat(FundingValidations.eventTotal(EventType.SPENDING, BigDecimal.ZERO)).isEmpty();
+    void eventTotal_spendingZero_isRejected() {
+        // every event's total is the sum of its allocations, so zero is invalid regardless of type
+        assertThat(title(FundingValidations.eventTotal(EventType.SPENDING, BigDecimal.ZERO)))
+                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
+    }
+
+    // --- spendDetail(eventType, allocated, category, vendor, amountFcy, currency, fxRate, amountRcy, spendDate, hash, notes) ---
+
+    @Test
+    void spendDetail_rejected_whenSpendFieldsOnNonSpendingEvent() {
+        assertThat(title(FundingValidations.spendDetail(EventType.FUNDING, new BigDecimal("50000"),
+                null, null, new BigDecimal("100000"), null, null, null, null, null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED);
+    }
+
+    @Test
+    void spendDetail_allowed_whenNonSpendingEventHasNoSpendFields() {
+        assertThat(FundingValidations.spendDetail(EventType.FUNDING, new BigDecimal("50000"),
+                null, null, null, null, null, null, null, null, null)).isEmpty();
+    }
+
+    @Test
+    void spendDetail_required_forSpendingEvent() {
+        assertThat(title(FundingValidations.spendDetail(EventType.SPENDING, new BigDecimal("50000"),
+                "Personnel", "Vendor", null, "EUR", null, null, null, null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_rejected_whenFxRateMismatch() {
+        // amountFcy (100000) != amountRcy (50000) * fxRate (3)
+        assertThat(title(FundingValidations.spendDetail(EventType.SPENDING, new BigDecimal("50000"),
+                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("3"),
+                new BigDecimal("50000"), LocalDate.now(), null, null)))
+                .isEqualTo(ErrorTitleConstants.FX_RATE_MISMATCH);
+    }
+
+    @Test
+    void spendDetail_rejected_whenAllocatedExceedsAmountRcy() {
+        // amountFcy (100000) == amountRcy (40000) * fxRate (2.5); allocated (50000) > amountRcy (40000)
+        assertThat(title(FundingValidations.spendDetail(EventType.SPENDING, new BigDecimal("50000"),
+                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2.5"),
+                new BigDecimal("40000"), LocalDate.now(), null, null)))
+                .isEqualTo(ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND);
+    }
+
+    @Test
+    void spendDetail_valid_forConsistentSpendingLine() {
+        // amountFcy (100000) == amountRcy (50000) * fxRate (2); allocated (50000) <= amountRcy (50000)
+        assertThat(FundingValidations.spendDetail(EventType.SPENDING, new BigDecimal("50000"),
+                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2"),
+                new BigDecimal("50000"), LocalDate.now(), null, null)).isEmpty();
     }
 
     // --- allocationTotal(sum, project) ---

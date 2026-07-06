@@ -20,7 +20,6 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.Blockchain
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventProjectAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingItemEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
@@ -46,6 +45,10 @@ class SpendingEventConverterTest {
         return SpendingEventPublishView.Currency.builder().id("ISO_4217:USD").custCode("USD").build();
     }
 
+    private SpendingEventPublishView.Currency eur() {
+        return SpendingEventPublishView.Currency.builder().id("ISO_4217:EUR").custCode("EUR").build();
+    }
+
     private SpendingEventPublishView.ProjectAllocation allocation(String projectId, String projectTitle,
                                                                   String subProjectTitle,
                                                                   List<SpendingEventPublishView.Milestone> milestones) {
@@ -69,7 +72,6 @@ class SpendingEventConverterTest {
                 .amount(new BigDecimal("123.45"))
                 .currency(usd())
                 .projectAllocations(List.of(allocation("proj-1", "Project One", null, List.of())))
-                .items(List.of())
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -88,58 +90,73 @@ class SpendingEventConverterTest {
     }
 
     @Test
-    void convertsItemsAndAllocationsWithBacklink() {
+    void convertsSpendDetailOntoMilestoneWithBacklink() {
         stubOrganisation();
-
-        SpendingEventPublishView.SpendItem item = SpendingEventPublishView.SpendItem.builder()
-                .itemId("item-1").category("Personnel").vendor("Vendor AB")
-                .amountFcy(new BigDecimal("100.00")).currency(usd())
-                .fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
-                .spendDate(LocalDate.of(2025, 4, 3)).documentHash("hash-1").notes("note")
-                .build();
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
                 .milestoneId("ms-uid-1").milestoneTitle("Milestone AB")
                 .milestoneAmount(new BigDecimal("60.00")).allocatedAmount(new BigDecimal("50.00"))
                 .currency(usd()).milestoneDate(LocalDate.of(2025, 6, 30))
+                // spend detail
+                .category("Personnel").vendor("Vendor AB").amountFcy(new BigDecimal("100.00"))
+                .spendCurrency(eur()).fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
+                .spendDate(LocalDate.of(2025, 4, 3)).documentHash("hash-1").notes("note")
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
                 .date(LocalDate.of(2026, 6, 9)).fundingId("fund-1")
-                .amount(new BigDecimal("100.00")).currency(usd())
+                .amount(new BigDecimal("50.00")).currency(usd())
                 .projectAllocations(List.of(allocation("proj-1", "Project One", "Sub One", List.of(milestone))))
-                .items(List.of(item))
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
 
-        assertEquals(1, entity.getSpendingItems().size());
-        SpendingItemEntity itemEntity = entity.getSpendingItems().get(0);
-        assertEquals("item-1", itemEntity.getItemId());
-        assertEquals("Personnel", itemEntity.getCategory());
-        assertEquals("Vendor AB", itemEntity.getVendor());
-        assertEquals(new BigDecimal("100.00"), itemEntity.getAmountFcy());
-        assertEquals(new BigDecimal("85.00"), itemEntity.getAmountRcy());
-        assertEquals("USD", itemEntity.getCurrency());
-        assertEquals("ISO_4217:USD", itemEntity.getCurrencyId());
-        assertEquals(new BigDecimal("0.85"), itemEntity.getFxRate());
-        assertEquals("hash-1", itemEntity.getDocumentHash());
-        assertEquals(entity, itemEntity.getEvent());
-
         assertEquals(1, entity.getProjectAllocations().size());
         EventProjectAllocationEntity allocationEntity = entity.getProjectAllocations().get(0);
         assertEquals("proj-1", allocationEntity.getProjectId());
-        assertEquals("Project One", allocationEntity.getProjectTitle());
         assertEquals("Sub One", allocationEntity.getSubProjectTitle());
         assertEquals(entity, allocationEntity.getEvent());
 
         assertEquals(1, allocationEntity.getMilestones().size());
-        EventMilestoneAllocationEntity milestoneEntity = allocationEntity.getMilestones().get(0);
-        assertEquals("ms-uid-1", milestoneEntity.getMilestoneId());
-        assertEquals("Milestone AB", milestoneEntity.getMilestoneTitle());
-        assertEquals(new BigDecimal("60.00"), milestoneEntity.getAmountRcy());
-        assertEquals(allocationEntity, milestoneEntity.getAllocation());
+        EventMilestoneAllocationEntity ms = allocationEntity.getMilestones().get(0);
+        assertEquals("ms-uid-1", ms.getMilestoneId());
+        assertEquals("Milestone AB", ms.getMilestoneTitle());
+        assertEquals(new BigDecimal("50.00"), ms.getAllocatedAmount());
+        assertEquals("Personnel", ms.getCategory());
+        assertEquals("Vendor AB", ms.getVendor());
+        assertEquals(new BigDecimal("100.00"), ms.getAmountFcy());
+        assertEquals(new BigDecimal("85.00"), ms.getAmountRcy());
+        assertEquals("EUR", ms.getCurrency());
+        assertEquals("ISO_4217:EUR", ms.getCurrencyId());
+        assertEquals(new BigDecimal("0.85"), ms.getFxRate());
+        assertEquals("hash-1", ms.getDocumentHash());
+        assertEquals(allocationEntity, ms.getAllocation());
+    }
+
+    @Test
+    void fundingMilestone_hasNoSpendDetail() {
+        stubOrganisation();
+
+        SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
+                .milestoneId("ms-1").milestoneTitle("MS").allocatedAmount(new BigDecimal("100.00"))
+                .currency(usd()).milestoneDate(LocalDate.of(2026, 6, 11))
+                .build();
+
+        SpendingEventPublishView view = SpendingEventPublishView.builder()
+                .eventId("event-1").organisationId("org1").eventType(EventType.FUNDING)
+                .currency(usd()).amount(new BigDecimal("100.00"))
+                .projectAllocations(List.of(allocation("proj-1", "Project One", null, List.of(milestone))))
+                .build();
+
+        SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
+
+        EventMilestoneAllocationEntity ms = entity.getProjectAllocations().get(0).getMilestones().get(0);
+        assertEquals(new BigDecimal("100.00"), ms.getAllocatedAmount());
+        assertThat(ms.getCategory()).isNull();
+        assertThat(ms.getVendor()).isNull();
+        assertThat(ms.getAmountFcy()).isNull();
+        assertThat(ms.getFxRate()).isNull();
     }
 
     @Test
@@ -152,7 +169,6 @@ class SpendingEventConverterTest {
                 .projectAllocations(List.of(
                         allocation("proj-1", "Project One", null, List.of()),
                         allocation("proj-2", "Project Two", null, List.of())))
-                .items(List.of())
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -163,55 +179,12 @@ class SpendingEventConverterTest {
     }
 
     @Test
-    void fundingItem_lightFieldsArePreserved() {
-        stubOrganisation();
-
-        // FUNDING/REFUND items only carry the reporting-currency amount.
-        SpendingEventPublishView.SpendItem item = SpendingEventPublishView.SpendItem.builder()
-                .itemId("item-1").amountRcy(new BigDecimal("100.00")).currency(usd())
-                .spendDate(LocalDate.of(2026, 6, 11))
-                .build();
-
-        SpendingEventPublishView view = SpendingEventPublishView.builder()
-                .eventId("event-1").organisationId("org1").eventType(EventType.FUNDING)
-                .currency(usd()).amount(new BigDecimal("100.00"))
-                .projectAllocations(List.of())
-                .items(List.of(item))
-                .build();
-
-        SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
-
-        SpendingItemEntity itemEntity = entity.getSpendingItems().get(0);
-        assertEquals(new BigDecimal("100.00"), itemEntity.getAmountRcy());
-        assertThat(itemEntity.getCategory()).isNull();
-        assertThat(itemEntity.getVendor()).isNull();
-        assertThat(itemEntity.getAmountFcy()).isNull();
-        assertThat(itemEntity.getFxRate()).isNull();
-    }
-
-    @Test
-    void nullItemsList_returnsEmptySpendingItems() {
-        stubOrganisation();
-        SpendingEventPublishView view = SpendingEventPublishView.builder()
-                .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
-                .currency(usd()).amount(BigDecimal.ONE)
-                .projectAllocations(List.of())
-                .items(null)
-                .build();
-
-        SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
-
-        assertThat(entity.getSpendingItems()).isEmpty();
-    }
-
-    @Test
     void nullProjectAllocations_returnsEmptyAllocations() {
         stubOrganisation();
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
                 .currency(usd()).amount(BigDecimal.ONE)
                 .projectAllocations(null)
-                .items(List.of())
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -225,7 +198,7 @@ class SpendingEventConverterTest {
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
                 .currency(usd()).amount(null)
-                .projectAllocations(List.of()).items(List.of())
+                .projectAllocations(List.of())
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -239,7 +212,7 @@ class SpendingEventConverterTest {
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
                 .currency(null).amount(BigDecimal.ONE)
-                .projectAllocations(List.of()).items(List.of())
+                .projectAllocations(List.of())
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -254,7 +227,7 @@ class SpendingEventConverterTest {
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("unknown").eventType(EventType.SPENDING)
                 .currency(usd()).amount(BigDecimal.ONE)
-                .projectAllocations(List.of()).items(List.of())
+                .projectAllocations(List.of())
                 .build();
 
         assertThatThrownBy(() -> converter.convertToDbDetached("unknown", view))

@@ -43,7 +43,6 @@ public class SpendingEventService {
     private final FundingEventRepository fundingEventRepository;
     private final FundingProjectRepository projectRepository;
     private final MilestoneRepository milestoneRepository;
-    private final SpendingItemRepository spendingItemRepository;
     private final EventMilestoneAllocationRepository milestoneAllocationRepository;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
@@ -157,9 +156,6 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
-        Either<ProblemDetail, Void> itemResult = validateItems(request.getEventType(), request.getItems());
-        if (itemResult.isLeft()) return Either.left(itemResult.getLeft());
-
         FundingEventEntity event = toEntity(request);
         if(fundingEventRepository.existsById(event.getId())) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event already exists: %s".formatted(event.getId()));
@@ -169,9 +165,6 @@ public class SpendingEventService {
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
-
-        // Both SPENDING and FUNDING/REFUND events carry line items; FUNDING/REFUND items are lighter.
-        populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
         Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
@@ -193,9 +186,6 @@ public class SpendingEventService {
             return Either.left(problem);
         }
 
-        Either<ProblemDetail, Void> itemResult = validateItems(event.getEventType(), request.getItems());
-        if (itemResult.isLeft()) return Either.left(itemResult.getLeft());
-
         event.setFundingId(request.getFundingId());
         event.setFundingHash(request.getFundingHash());
         event.setFundingEntity(request.getFundingEntity());
@@ -206,12 +196,6 @@ public class SpendingEventService {
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
-
-        event.getSpendingItems().clear();
-        // Flush the orphan removals before re-adding: item ids are deterministic (event id + line
-        // number), so a cleared item and its replacement can share a primary key within one flush.
-        fundingEventRepository.flush();
-        populateSpendingItems(event, request.getItems());
 
         recalculateTotalAmount(event);
         Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
@@ -259,10 +243,6 @@ public class SpendingEventService {
     public SpendingEventView toView(FundingEventEntity event) {
         List<EventProjectAllocationView> projViews = buildProjectAllocationViews(event.getId());
 
-        List<SpendingItemView> itemViews = spendingItemRepository.findByEvent_Id(event.getId()).stream()
-                .map(this::toItemView)
-                .toList();
-
         return SpendingEventView.builder()
                 .eventId(event.getId())
                 .organisationId(event.getOrganisationId())
@@ -276,7 +256,6 @@ public class SpendingEventService {
                 .fundingHash(event.getFundingHash())
                 .fundingEntity(event.getFundingEntity())
                 .projectAllocations(projViews)
-                .spendingItems(itemViews)
                 .build();
     }
 
@@ -284,10 +263,6 @@ public class SpendingEventService {
         LocalDate date = event.getCreatedAt().toLocalDate();
 
         List<SpendingEventPublishView.ProjectAllocation> projAllocations = buildPublishProjectAllocations(event.getId());
-
-        List<SpendingEventPublishView.SpendItem> items = spendingItemRepository.findByEvent_Id(event.getId()).stream()
-                .map(this::toPublishItem)
-                .toList();
 
         return SpendingEventPublishView.builder()
                 .eventId(event.getId())
@@ -300,7 +275,6 @@ public class SpendingEventService {
                 .amount(event.getTotalAmount())
                 .currency(toCurrency(event.getCurrency()))
                 .projectAllocations(projAllocations)
-                .items(items)
                 .build();
     }
 
@@ -345,6 +319,14 @@ public class SpendingEventService {
                 Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
                         milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
                 if (allocationProblem.isPresent()) return Either.left(allocationProblem.get());
+
+                Optional<ProblemDetail> spendProblem = FundingValidations.spendDetail(
+                        event.getEventType(), milestoneReq.getAllocatedAmount(),
+                        milestoneReq.getCategory(), milestoneReq.getVendor(), milestoneReq.getAmountFcy(),
+                        milestoneReq.getCurrency(), milestoneReq.getFxRate(), milestoneReq.getAmountRcy(),
+                        milestoneReq.getSpendDate(), milestoneReq.getHash(), milestoneReq.getNotes());
+                if (spendProblem.isPresent()) return Either.left(spendProblem.get());
+
                 if (milestoneReq.getAllocatedAmount() != null) {
                     projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
                 }
@@ -355,6 +337,15 @@ public class SpendingEventService {
                         EventMilestoneAllocationEntity.builder()
                                 .id(id)
                                 .allocatedAmount(milestoneReq.getAllocatedAmount())
+                                .category(milestoneReq.getCategory())
+                                .vendor(milestoneReq.getVendor())
+                                .amountFcy(milestoneReq.getAmountFcy())
+                                .currency(milestoneReq.getCurrency())
+                                .fxRate(milestoneReq.getFxRate())
+                                .amountRcy(milestoneReq.getAmountRcy())
+                                .spendDate(milestoneReq.getSpendDate())
+                                .hash(milestoneReq.getHash())
+                                .notes(milestoneReq.getNotes())
                                 .build());
             }
 
@@ -396,12 +387,6 @@ public class SpendingEventService {
 
         if (req.getSubProject() == null && (req.getTotalAmount() == null || req.getCurrency() == null)) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "totalAmount and currency are required when creating a new root project");
-            problem.setTitle(PROJECT_FIELDS_REQUIRED);
-            return Either.left(problem);
-        }
-
-        if (req.getFundingId() == null) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "fundingId is required when creating a new project");
             problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
         }
@@ -514,56 +499,13 @@ public class SpendingEventService {
                         req.getCurrency(), req.getMilestoneDate());
     }
 
-    /**
-     * Enforces the per-event-type item requirements that bean validation can't express: SPENDING items
-     * need the full {@code category}/{@code vendor}/{@code amountFcy} set, while FUNDING/REFUND items
-     * only carry the reporting-currency {@code amountRcy}. {@code currency} and {@code spendDate} are
-     * always required and remain bean-validated on the request.
-     */
-    private Either<ProblemDetail, Void> validateItems(EventType eventType, List<SpendingItemRequest> items) {
-        if (items == null) return Either.right(null);
-        for (SpendingItemRequest item : items) {
-            if (eventType == EventType.SPENDING) {
-                if (isBlank(item.getCategory()) || isBlank(item.getVendor()) || item.getAmountFcy() == null) {
-                    return Either.left(itemProblem("category, vendor and amountFcy are required for SPENDING items"));
-                }
-            } else if (item.getAmountRcy() == null) {
-                return Either.left(itemProblem("amountRcy is required for FUNDING/REFUND items"));
-            }
-        }
-        return Either.right(null);
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private static ProblemDetail itemProblem(String detail) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
-        problem.setTitle("ITEM_FIELDS_REQUIRED");
-        return problem;
-    }
-
-    private void populateSpendingItems(FundingEventEntity event, List<SpendingItemRequest> itemRequests) {
-        for (int i = 0; i < itemRequests.size(); i++) {
-            // 1-based line number drives the deterministic item id (see SpendingItemEntity.id).
-            event.getSpendingItems().add(toSpendingItemEntity(itemRequests.get(i), event, i + 1));
-        }
-    }
-
+    /** The event total is the sum of its milestone allocations (all event types). */
     private void recalculateTotalAmount(FundingEventEntity event) {
-        if (event.getEventType() == EventType.SPENDING) {
-            BigDecimal total = event.getSpendingItems().stream()
-                    .map(SpendingItemEntity::getAmountFcy)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            event.setTotalAmount(total);
-        } else {
-            BigDecimal total = event.getMilestoneAllocations().stream()
-                    .filter(m -> m.getAllocatedAmount() != null)
-                    .map(EventMilestoneAllocationEntity::getAllocatedAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            event.setTotalAmount(total);
-        }
+        BigDecimal total = event.getMilestoneAllocations().stream()
+                .map(EventMilestoneAllocationEntity::getAllocatedAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        event.setTotalAmount(total);
     }
 
     /** Groups flat milestone allocations by their project, preserving insertion order. */
@@ -629,6 +571,15 @@ public class SpendingEventService {
                 .allocatedAmount(alloc.getAllocatedAmount())
                 .currency(milestone != null ? milestone.getCurrency() : null)
                 .milestoneDate(milestone != null ? milestone.getMilestoneDate() : null)
+                .category(alloc.getCategory())
+                .vendor(alloc.getVendor())
+                .amountFcy(alloc.getAmountFcy())
+                .spendCurrency(alloc.getCurrency())
+                .fxRate(alloc.getFxRate())
+                .amountRcy(alloc.getAmountRcy())
+                .spendDate(alloc.getSpendDate())
+                .hash(alloc.getHash())
+                .notes(alloc.getNotes())
                 .build();
     }
 
@@ -641,6 +592,15 @@ public class SpendingEventService {
                 .allocatedAmount(alloc.getAllocatedAmount())
                 .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
                 .milestoneDate(milestone != null ? milestone.getMilestoneDate() : null)
+                .category(alloc.getCategory())
+                .vendor(alloc.getVendor())
+                .amountFcy(alloc.getAmountFcy())
+                .spendCurrency(alloc.getCurrency() != null ? toCurrency(alloc.getCurrency()) : null)
+                .fxRate(alloc.getFxRate())
+                .amountRcy(alloc.getAmountRcy())
+                .spendDate(alloc.getSpendDate())
+                .documentHash(alloc.getHash())
+                .notes(alloc.getNotes())
                 .build();
     }
 
@@ -659,54 +619,6 @@ public class SpendingEventService {
                 .fundingHash(request.getFundingHash())
                 .fundingEntity(request.getFundingEntity())
                 .currency(request.getCurrency())
-                .build();
-    }
-
-    private SpendingItemEntity toSpendingItemEntity(SpendingItemRequest req, FundingEventEntity event, int lineNo) {
-        return SpendingItemEntity.builder()
-                .id(SpendingItemEntity.id(event.getId(), lineNo))
-                .category(req.getCategory())
-                .vendor(req.getVendor())
-                .amountFcy(req.getAmountFcy())
-                .currency(req.getCurrency())
-                .fxRate(req.getFxRate())
-                .amountRcy(req.getAmountRcy())
-                .spendDate(req.getSpendDate())
-                .hash(req.getHash())
-                .notes(req.getNotes())
-                .event(event)
-                .build();
-    }
-
-    private SpendingItemView toItemView(SpendingItemEntity item) {
-        return SpendingItemView.builder()
-                .itemId(item.getId())
-                .eventId(item.getEvent().getId())
-                .category(item.getCategory())
-                .vendor(item.getVendor())
-                .amountFcy(item.getAmountFcy())
-                .currency(item.getCurrency())
-                .fxRate(item.getFxRate())
-                .amountRcy(item.getAmountRcy())
-                .spendDate(item.getSpendDate())
-                .hash(item.getHash())
-                .notes(item.getNotes())
-                .build();
-    }
-
-
-    private SpendingEventPublishView.SpendItem toPublishItem(SpendingItemEntity item) {
-        return SpendingEventPublishView.SpendItem.builder()
-                .itemId(item.getId())
-                .category(item.getCategory())
-                .vendor(item.getVendor())
-                .amountFcy(item.getAmountFcy())
-                .currency(toCurrency(item.getCurrency()))
-                .fxRate(item.getFxRate())
-                .amountRcy(item.getAmountRcy())
-                .spendDate(item.getSpendDate())
-                .documentHash(item.getHash())
-                .notes(item.getNotes())
                 .build();
     }
 

@@ -25,7 +25,11 @@ public final class ErrorTitleConstants {
     public static final String ALLOCATION_AMOUNT_INVALID = "ALLOCATION_AMOUNT_INVALID";
     public static final String ALLOCATION_AMOUNT_REQUIRED = "ALLOCATION_AMOUNT_REQUIRED";
     public static final String ALLOCATION_EXCEEDS_MILESTONE = "ALLOCATION_EXCEEDS_MILESTONE";
+    public static final String ALLOCATION_EXCEEDS_SPEND = "ALLOCATION_EXCEEDS_SPEND";
     public static final String ALLOCATION_TOTAL_EXCEEDS_PROJECT = "ALLOCATION_TOTAL_EXCEEDS_PROJECT";
+    public static final String SPEND_FIELDS_NOT_ALLOWED = "SPEND_FIELDS_NOT_ALLOWED";
+    public static final String SPEND_FIELDS_REQUIRED = "SPEND_FIELDS_REQUIRED";
+    public static final String FX_RATE_MISMATCH = "FX_RATE_MISMATCH";
     public static final String EVENT_AMOUNT_INVALID = "EVENT_AMOUNT_INVALID";
     public static final String EVENT_ALLOCATED_TO_OTHER_PROJECTS = "EVENT_ALLOCATED_TO_OTHER_PROJECTS";
     public static final String SPENDING_EVENT_NOT_FOUND = "SPENDING_EVENT_NOT_FOUND";

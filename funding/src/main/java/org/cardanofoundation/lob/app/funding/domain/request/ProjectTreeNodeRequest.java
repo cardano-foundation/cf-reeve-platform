@@ -7,51 +7,50 @@ import java.util.List;
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 import lombok.*;
-import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
-
+/**
+ * A project node in a create-tree request. A node has <em>either</em> milestones <em>or</em>
+ * sub-projects (never both). The organisation is inherited from the root request.
+ */
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@SuperBuilder
-public class ProjectWithMilestonesCreateRequest extends BaseRequest {
-
-    @Nullable
-    @Schema(example = "GRANT-2025-001", description = "Optional funding reference.")
-    private String fundingId;
+@Builder
+public class ProjectTreeNodeRequest {
 
     @NotBlank
-    @Schema(example = "PROJ-AB")
+    @Schema(example = "WP-1", description = "User-defined id, unique within its parent.")
     private String externalProjectId;
 
     @NotBlank
-    @Schema(example = "Project AB")
+    @Schema(example = "Work Package 1")
     private String projectTitle;
 
-    @NotNull
-    @Schema(example = "200000.00")
+    @Nullable
+    @Schema(example = "GRANT-2025-001")
+    private String fundingId;
+
+    @Nullable
+    @Schema(example = "100000.00", description = "Must be > 0 when set, and not exceed the parent's total.")
     private BigDecimal totalAmount;
 
-    @NotBlank
+    @Nullable
     @Schema(example = "USD")
     private String currency;
 
+    /** Milestones of this node — mutually exclusive with {@code subProjects}. */
     @Builder.Default
     @Valid
-    @Schema(description = "Milestones to create together with the project. Mutually exclusive with subProjects.")
     private List<MilestoneCreateRequest> milestones = new ArrayList<>();
 
+    /** Sub-projects of this node — mutually exclusive with {@code milestones}. */
     @Builder.Default
     @Valid
-    @Schema(description = "Sub-projects (each with its own milestones or sub-projects) to create in the same "
-            + "atomic call. Mutually exclusive with milestones.")
     private List<ProjectTreeNodeRequest> subProjects = new ArrayList<>();
 
 }

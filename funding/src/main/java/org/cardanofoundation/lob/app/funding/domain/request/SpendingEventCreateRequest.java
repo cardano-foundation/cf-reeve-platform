@@ -58,9 +58,4 @@ public class SpendingEventCreateRequest extends BaseRequest {
     @Valid
     private List<EventProjectAllocationRequest> allocations = new ArrayList<>();
 
-    /** Spend line items — required for SPENDING events, ignored for FUNDING and REFUND. */
-    @Builder.Default
-    @Valid
-    private List<SpendingItemRequest> items = new ArrayList<>();
-
 }
