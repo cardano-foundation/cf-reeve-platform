@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.domain.view;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,6 +11,7 @@ import lombok.*;
 
 import org.springframework.http.ProblemDetail;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
@@ -85,8 +87,9 @@ public class SpendingEventView implements ErrorAware {
     private BigDecimal amountRcy;
 
     @Nullable
+    @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-04-03")
-    private java.time.LocalDate spendDate;
+    private LocalDate spendDate;
 
     @Nullable
     @Schema(example = "sha256:abc123...")
