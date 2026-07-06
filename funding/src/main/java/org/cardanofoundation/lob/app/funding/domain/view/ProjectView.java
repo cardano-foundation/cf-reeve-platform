@@ -43,6 +43,11 @@ public class ProjectView implements ErrorAware {
     @Schema(example = "USD", description = "Null for sub-projects.")
     private String currency;
 
+    /** Calculated (not stored): total spent across this project's milestones and sub-projects. */
+    @Nullable
+    @Schema(example = "12000.00", description = "Spent = allocated SPENDING amounts minus REFUND amounts.")
+    private BigDecimal spentAmount;
+
     /** Null for root projects; set for sub-projects (SHA256 id of the parent). */
     @Nullable
     @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa")

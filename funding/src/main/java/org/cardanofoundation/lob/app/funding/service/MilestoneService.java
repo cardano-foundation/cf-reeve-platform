@@ -19,6 +19,7 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
@@ -256,6 +257,8 @@ public class MilestoneService {
                 .milestoneAmount(milestone.getMilestoneAmount())
                 .currency(milestone.getCurrency())
                 .milestoneDate(milestone.getMilestoneDate())
+                .spentAmount(allocationRepository.spentAmountByMilestoneId(
+                        milestone.getId(), EventType.SPENDING, EventType.REFUND))
                 .build();
     }
 

@@ -84,6 +84,35 @@ public class SpendingEventMetadataSerialiser {
             metadataMap.put("funding_entity", event.getFundingEntity());
         }
 
+        // Spend detail — SPENDING events only.
+        if (event.getAmountRcy() != null) {
+            metadataMap.put("amount_rcy", BigDecimals.normaliseString(event.getAmountRcy()));
+        }
+        if (event.getAmountFcy() != null) {
+            metadataMap.put("amount_fcy", BigDecimals.normaliseString(event.getAmountFcy()));
+        }
+        if (event.getVendor() != null) {
+            metadataMap.put("vendor", event.getVendor());
+        }
+        if (event.getCategory() != null) {
+            metadataMap.put("spending_category", event.getCategory());
+        }
+        if (event.getFxRate() != null) {
+            metadataMap.put("fx_rate", BigDecimals.normaliseString(event.getFxRate()));
+        }
+        if (event.getDocumentHash() != null) {
+            metadataMap.put("hash", event.getDocumentHash());
+        }
+        if (event.getNotes() != null) {
+            metadataMap.put("notes", event.getNotes());
+        }
+        if (event.getSpendDate() != null) {
+            metadataMap.put("date", event.getSpendDate().toString());
+        }
+        if (event.getSpendCurrency() != null) {
+            metadataMap.put("currency", serialiseCurrency(event.getSpendCurrencyId(), event.getSpendCurrency()));
+        }
+
         val allocationList = MetadataBuilder.createList();
         for (val allocation : event.getProjectAllocations()) {
             allocationList.add(serialise(allocation));
@@ -122,35 +151,6 @@ public class SpendingEventMetadataSerialiser {
         }
         if (milestone.getAllocatedAmount() != null) {
             metadataMap.put("allocated_amount", BigDecimals.normaliseString(milestone.getAllocatedAmount()));
-        }
-
-        // Spend detail — SPENDING events only.
-        if (milestone.getAmountRcy() != null) {
-            metadataMap.put("amount_rcy", BigDecimals.normaliseString(milestone.getAmountRcy()));
-        }
-        if (milestone.getAmountFcy() != null) {
-            metadataMap.put("amount_fcy", BigDecimals.normaliseString(milestone.getAmountFcy()));
-        }
-        if (milestone.getVendor() != null) {
-            metadataMap.put("vendor", milestone.getVendor());
-        }
-        if (milestone.getCategory() != null) {
-            metadataMap.put("spending_category", milestone.getCategory());
-        }
-        if (milestone.getFxRate() != null) {
-            metadataMap.put("fx_rate", BigDecimals.normaliseString(milestone.getFxRate()));
-        }
-        if (milestone.getDocumentHash() != null) {
-            metadataMap.put("hash", milestone.getDocumentHash());
-        }
-        if (milestone.getNotes() != null) {
-            metadataMap.put("notes", milestone.getNotes());
-        }
-        if (milestone.getSpendDate() != null) {
-            metadataMap.put("date", milestone.getSpendDate().toString());
-        }
-        if (milestone.getCurrency() != null) {
-            metadataMap.put("currency", serialiseCurrency(milestone.getCurrencyId(), milestone.getCurrency()));
         }
 
         return metadataMap;

@@ -58,6 +58,44 @@ public class SpendingEventView implements ErrorAware {
     @Schema(example = "Cardano Foundation")
     private String fundingEntity;
 
+    // --- Spend detail: SPENDING events only ---
+
+    @Nullable
+    @Schema(example = "Personnel")
+    private String category;
+
+    @Nullable
+    @Schema(example = "Vendor AB")
+    private String vendor;
+
+    @Nullable
+    @Schema(example = "100000.00")
+    private BigDecimal amountFcy;
+
+    @Nullable
+    @Schema(example = "EUR", description = "Foreign currency of the spend.")
+    private String spendCurrency;
+
+    @Nullable
+    @Schema(example = "1.176470")
+    private BigDecimal fxRate;
+
+    @Nullable
+    @Schema(example = "85000.00")
+    private BigDecimal amountRcy;
+
+    @Nullable
+    @Schema(example = "2025-04-03")
+    private java.time.LocalDate spendDate;
+
+    @Nullable
+    @Schema(example = "sha256:abc123...")
+    private String hash;
+
+    @Nullable
+    @Schema(example = "Invoice #INV-2025-001")
+    private String notes;
+
     /** One entry per project this event is allocated to. */
     private List<EventProjectAllocationView> projectAllocations;
 

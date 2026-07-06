@@ -43,6 +43,11 @@ public class MilestoneView implements ErrorAware {
     @Schema(example = "2025-06-30")
     private LocalDate milestoneDate;
 
+    /** Calculated (not stored): sum of SPENDING allocations minus REFUND allocations for this milestone. */
+    @Nullable
+    @Schema(example = "12000.00", description = "Spent = allocated SPENDING amounts minus REFUND amounts.")
+    private BigDecimal spentAmount;
+
     @Builder.Default
     @Schema(description = "Problem detail describing the failure; absent on success")
     private Optional<ProblemDetail> error = Optional.empty();

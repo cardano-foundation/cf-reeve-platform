@@ -38,6 +38,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateReque
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -280,6 +281,88 @@ class ProjectServiceTest {
         ProjectView result = projectService.createWithMilestones(request);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+    }
+
+    // --- createWithMilestones: create directly under an existing parent ---
+
+    @Test
+    void create_asSubProject_success_attachesToParentWithSubId() {
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+        when(milestoneService.hasMilestones("parent1")).thenReturn(false);
+        when(projectRepository.existsById(any())).thenReturn(false);
+        when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("WP-1").projectTitle("Work Package 1")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD").parentProjectId("parent1")
+                .build());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getParentProjectId()).isEqualTo("parent1");
+        assertThat(result.getProjectId()).isEqualTo(ProjectEntity.subId("parent1", "WP-1"));
+    }
+
+    @Test
+    void create_asSubProject_returns404_whenParentNotFound() {
+        when(projectRepository.findById("missing")).thenReturn(Optional.empty());
+
+        ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("WP-1").projectTitle("WP")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD").parentProjectId("missing")
+                .build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PARENT_PROJECT_NOT_FOUND);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_asSubProject_returns400_whenParentHasMilestones() {
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+        when(milestoneService.hasMilestones("parent1")).thenReturn(true);
+
+        ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("WP-1").projectTitle("WP")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD").parentProjectId("parent1")
+                .build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_asSubProject_returns400_whenAmountExceedsParent() {
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+        when(milestoneService.hasMilestones("parent1")).thenReturn(false);
+
+        ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("WP-1").projectTitle("WP")
+                .totalAmount(new BigDecimal("250000.00")).currency("USD").parentProjectId("parent1")
+                .build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    // --- calculated spentAmount aggregation ---
+
+    @Test
+    void toView_aggregatesSpentAmountFromMilestones() {
+        ProjectEntity project = projectEntity(); // p1, no sub-projects (lenient empty)
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").build();
+        MilestoneView milestoneView = MilestoneView.builder().milestoneId("m1")
+                .spentAmount(new BigDecimal("12000.00")).build();
+        when(milestoneService.findByProjectId("p1")).thenReturn(List.of(milestone));
+        when(milestoneService.toView(milestone)).thenReturn(milestoneView);
+
+        ProjectView result = projectService.toView(project);
+
+        assertThat(result.getSpentAmount()).isEqualByComparingTo("12000.00");
     }
 
     private ProjectTreeNodeRequest node(String extId, BigDecimal total,

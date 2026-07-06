@@ -163,11 +163,14 @@ public class SpendingEventService {
             return Either.left(problem);
         }
 
+        Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
+        if (spendProblem.isPresent()) return Either.left(spendProblem.get());
+
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
 
         recalculateTotalAmount(event);
-        Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
+        Optional<ProblemDetail> totalProblem = validateEventTotals(event);
         if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
@@ -190,6 +193,10 @@ public class SpendingEventService {
         event.setFundingHash(request.getFundingHash());
         event.setFundingEntity(request.getFundingEntity());
         event.setCurrency(request.getCurrency());
+        applySpendDetail(event, request);
+
+        Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
+        if (spendProblem.isPresent()) return Either.left(spendProblem.get());
 
         event.getMilestoneAllocations().clear();
         fundingEventRepository.flush();
@@ -198,9 +205,34 @@ public class SpendingEventService {
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
 
         recalculateTotalAmount(event);
-        Optional<ProblemDetail> totalProblem = FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
+        Optional<ProblemDetail> totalProblem = validateEventTotals(event);
         if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         return Either.right(fundingEventRepository.saveAndFlush(event));
+    }
+
+    private static void applySpendDetail(FundingEventEntity event, SpendingEventCreateRequest request) {
+        event.setCategory(request.getCategory());
+        event.setVendor(request.getVendor());
+        event.setAmountFcy(request.getAmountFcy());
+        event.setAmountRcy(request.getAmountRcy());
+        event.setSpendCurrency(request.getSpendCurrency());
+        event.setFxRate(request.getFxRate());
+        event.setSpendDate(request.getSpendDate());
+        event.setHash(request.getHash());
+        event.setNotes(request.getNotes());
+    }
+
+    private static Optional<ProblemDetail> validateEventSpendDetail(FundingEventEntity event) {
+        return FundingValidations.spendDetail(event.getEventType(),
+                event.getCategory(), event.getVendor(), event.getAmountFcy(), event.getSpendCurrency(),
+                event.getFxRate(), event.getAmountRcy(), event.getSpendDate(), event.getHash(), event.getNotes());
+    }
+
+    private static Optional<ProblemDetail> validateEventTotals(FundingEventEntity event) {
+        Optional<ProblemDetail> cover = FundingValidations.spendCoversAllocations(
+                event.getEventType(), event.getTotalAmount(), event.getAmountRcy());
+        if (cover.isPresent()) return cover;
+        return FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
     }
 
     @Transactional
@@ -255,6 +287,15 @@ public class SpendingEventService {
                 .ledgerDispatchStatus(event.getLedgerDispatchStatus())
                 .fundingHash(event.getFundingHash())
                 .fundingEntity(event.getFundingEntity())
+                .category(event.getCategory())
+                .vendor(event.getVendor())
+                .amountFcy(event.getAmountFcy())
+                .spendCurrency(event.getSpendCurrency())
+                .fxRate(event.getFxRate())
+                .amountRcy(event.getAmountRcy())
+                .spendDate(event.getSpendDate())
+                .hash(event.getHash())
+                .notes(event.getNotes())
                 .projectAllocations(projViews)
                 .build();
     }
@@ -274,6 +315,15 @@ public class SpendingEventService {
                 .fundingEntity(event.getFundingEntity())
                 .amount(event.getTotalAmount())
                 .currency(toCurrency(event.getCurrency()))
+                .category(event.getCategory())
+                .vendor(event.getVendor())
+                .amountFcy(event.getAmountFcy())
+                .spendCurrency(event.getSpendCurrency() != null ? toCurrency(event.getSpendCurrency()) : null)
+                .fxRate(event.getFxRate())
+                .amountRcy(event.getAmountRcy())
+                .spendDate(event.getSpendDate())
+                .documentHash(event.getHash())
+                .notes(event.getNotes())
                 .projectAllocations(projAllocations)
                 .build();
     }
@@ -320,13 +370,6 @@ public class SpendingEventService {
                         milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
                 if (allocationProblem.isPresent()) return Either.left(allocationProblem.get());
 
-                Optional<ProblemDetail> spendProblem = FundingValidations.spendDetail(
-                        event.getEventType(), milestoneReq.getAllocatedAmount(),
-                        milestoneReq.getCategory(), milestoneReq.getVendor(), milestoneReq.getAmountFcy(),
-                        milestoneReq.getCurrency(), milestoneReq.getFxRate(), milestoneReq.getAmountRcy(),
-                        milestoneReq.getSpendDate(), milestoneReq.getHash(), milestoneReq.getNotes());
-                if (spendProblem.isPresent()) return Either.left(spendProblem.get());
-
                 if (milestoneReq.getAllocatedAmount() != null) {
                     projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
                 }
@@ -337,15 +380,6 @@ public class SpendingEventService {
                         EventMilestoneAllocationEntity.builder()
                                 .id(id)
                                 .allocatedAmount(milestoneReq.getAllocatedAmount())
-                                .category(milestoneReq.getCategory())
-                                .vendor(milestoneReq.getVendor())
-                                .amountFcy(milestoneReq.getAmountFcy())
-                                .currency(milestoneReq.getCurrency())
-                                .fxRate(milestoneReq.getFxRate())
-                                .amountRcy(milestoneReq.getAmountRcy())
-                                .spendDate(milestoneReq.getSpendDate())
-                                .hash(milestoneReq.getHash())
-                                .notes(milestoneReq.getNotes())
                                 .build());
             }
 
@@ -571,15 +605,6 @@ public class SpendingEventService {
                 .allocatedAmount(alloc.getAllocatedAmount())
                 .currency(milestone != null ? milestone.getCurrency() : null)
                 .milestoneDate(milestone != null ? milestone.getMilestoneDate() : null)
-                .category(alloc.getCategory())
-                .vendor(alloc.getVendor())
-                .amountFcy(alloc.getAmountFcy())
-                .spendCurrency(alloc.getCurrency())
-                .fxRate(alloc.getFxRate())
-                .amountRcy(alloc.getAmountRcy())
-                .spendDate(alloc.getSpendDate())
-                .hash(alloc.getHash())
-                .notes(alloc.getNotes())
                 .build();
     }
 
@@ -592,15 +617,6 @@ public class SpendingEventService {
                 .allocatedAmount(alloc.getAllocatedAmount())
                 .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
                 .milestoneDate(milestone != null ? milestone.getMilestoneDate() : null)
-                .category(alloc.getCategory())
-                .vendor(alloc.getVendor())
-                .amountFcy(alloc.getAmountFcy())
-                .spendCurrency(alloc.getCurrency() != null ? toCurrency(alloc.getCurrency()) : null)
-                .fxRate(alloc.getFxRate())
-                .amountRcy(alloc.getAmountRcy())
-                .spendDate(alloc.getSpendDate())
-                .documentHash(alloc.getHash())
-                .notes(alloc.getNotes())
                 .build();
     }
 
@@ -619,6 +635,15 @@ public class SpendingEventService {
                 .fundingHash(request.getFundingHash())
                 .fundingEntity(request.getFundingEntity())
                 .currency(request.getCurrency())
+                .category(request.getCategory())
+                .vendor(request.getVendor())
+                .amountFcy(request.getAmountFcy())
+                .amountRcy(request.getAmountRcy())
+                .spendCurrency(request.getSpendCurrency())
+                .fxRate(request.getFxRate())
+                .spendDate(request.getSpendDate())
+                .hash(request.getHash())
+                .notes(request.getNotes())
                 .build();
     }
 

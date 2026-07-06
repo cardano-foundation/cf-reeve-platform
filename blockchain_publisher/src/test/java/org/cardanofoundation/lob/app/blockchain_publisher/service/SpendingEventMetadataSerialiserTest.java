@@ -53,22 +53,12 @@ class SpendingEventMetadataSerialiserTest {
         return organisation;
     }
 
-    /** A SPENDING milestone allocation: allocated amount + full spend detail on the same line. */
+    /** A milestone allocation: allocated amount only (spend detail lives on the event). */
     private EventProjectAllocationEntity spendingProjectAllocation() {
         EventMilestoneAllocationEntity milestone = EventMilestoneAllocationEntity.builder()
                 .milestoneId("ms1")
                 .milestoneTitle("Milestone AB")
                 .allocatedAmount(new BigDecimal("85.00"))
-                .category("Personnel")
-                .vendor("Vendor AB")
-                .amountFcy(new BigDecimal("100.00"))
-                .amountRcy(new BigDecimal("85.00"))
-                .currency("EUR")
-                .currencyId("ISO_4217:EUR")
-                .fxRate(new BigDecimal("0.85"))
-                .spendDate(LocalDate.of(2025, 4, 3))
-                .documentHash("doc-hash-1")
-                .notes("Invoice #1")
                 .build();
 
         return EventProjectAllocationEntity.builder()
@@ -87,6 +77,17 @@ class SpendingEventMetadataSerialiserTest {
         event.setFundingTx("ftx1");
         event.setCurrency("USD");
         event.setCurrencyId("ISO_4217:USD");
+        // Spend detail — event level.
+        event.setCategory("Personnel");
+        event.setVendor("Vendor AB");
+        event.setAmountFcy(new BigDecimal("100.00"));
+        event.setAmountRcy(new BigDecimal("85.00"));
+        event.setSpendCurrency("EUR");
+        event.setSpendCurrencyId("ISO_4217:EUR");
+        event.setFxRate(new BigDecimal("0.85"));
+        event.setSpendDate(LocalDate.of(2025, 4, 3));
+        event.setDocumentHash("doc-hash-1");
+        event.setNotes("Invoice #1");
         event.setOrganisation(organisation());
         event.setProjectAllocations(List.of(spendingProjectAllocation()));
         return event;
@@ -116,16 +117,28 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(eventMap.get("funding_tx")).isEqualTo("ftx1");
         assertThat(eventMap.get("funding_id")).isEqualTo("fund1");
 
-        // Spend detail lives on the milestone now — there is no top-level "item" array.
+        // Spend detail lives on the event now — there is no top-level "item" array.
         assertThat(eventMap.get("item")).isNull();
     }
 
     @Test
-    void testSerialiseSpendingEvent_milestoneCarriesSpendDetail() {
+    void testSerialiseSpendingEvent_eventCarriesSpendDetail() {
         MetadataMap result = serialiseSpendingEvent();
         CBORMetadataList dataList = (CBORMetadataList) result.get("data");
         MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
 
+        // Spend detail is on the event.
+        assertThat(eventMap.get("amount_rcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("85.00")));
+        assertThat(eventMap.get("amount_fcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("100.00")));
+        assertThat(eventMap.get("vendor")).isEqualTo("Vendor AB");
+        assertThat(eventMap.get("spending_category")).isEqualTo("Personnel");
+        assertThat(eventMap.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("0.85")));
+        assertThat(eventMap.get("hash")).isEqualTo("doc-hash-1");
+        assertThat(eventMap.get("notes")).isEqualTo("Invoice #1");
+        assertThat(eventMap.get("date")).isEqualTo("2025-04-03");
+        assertThat(((MetadataMap) eventMap.get("currency")).get("cust_code")).isEqualTo("EUR");
+
+        // The milestone carries only id/title/allocated_amount.
         CBORMetadataList allocationList = (CBORMetadataList) eventMap.get("allocation");
         MetadataMap allocationMap = (MetadataMap) allocationList.getValueAt(0);
         assertThat(allocationMap.get("project_id")).isEqualTo("ProjectID1");
@@ -136,15 +149,8 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(m.get("milestone_id")).isEqualTo("ms1");
         assertThat(m.get("milestone_title")).isEqualTo("Milestone AB");
         assertThat(m.get("allocated_amount")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("85.00")));
-        assertThat(m.get("amount_rcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("85.00")));
-        assertThat(m.get("amount_fcy")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("100.00")));
-        assertThat(m.get("vendor")).isEqualTo("Vendor AB");
-        assertThat(m.get("spending_category")).isEqualTo("Personnel");
-        assertThat(m.get("fx_rate")).isEqualTo(BigDecimals.normaliseString(new BigDecimal("0.85")));
-        assertThat(m.get("hash")).isEqualTo("doc-hash-1");
-        assertThat(m.get("notes")).isEqualTo("Invoice #1");
-        assertThat(m.get("date")).isEqualTo("2025-04-03");
-        assertThat(((MetadataMap) m.get("currency")).get("cust_code")).isEqualTo("EUR");
+        assertThat(m.get("amount_rcy")).isNull();
+        assertThat(m.get("vendor")).isNull();
     }
 
     private SpendingEventEntity fundingEvent() {

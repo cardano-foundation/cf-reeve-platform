@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.EventMilestoneAllocationEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
 public interface EventMilestoneAllocationRepository extends JpaRepository<EventMilestoneAllocationEntity, EventMilestoneAllocationEntity.Id> {
 
@@ -35,5 +36,20 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             WHERE a.id.milestoneId = :milestoneId
             """)
     BigDecimal sumAllocatedByMilestoneId(@Param("milestoneId") String milestoneId);
+
+    /** Spent amount for a milestone: SPENDING allocations minus REFUND allocations (FUNDING ignored). */
+    @Query("""
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN a.event.eventType = :spending THEN a.allocatedAmount
+                    WHEN a.event.eventType = :refund THEN -a.allocatedAmount
+                    ELSE 0
+                END), 0)
+            FROM funding.EventMilestoneAllocationEntity a
+            WHERE a.id.milestoneId = :milestoneId
+            """)
+    BigDecimal spentAmountByMilestoneId(@Param("milestoneId") String milestoneId,
+                                        @Param("spending") EventType spending,
+                                        @Param("refund") EventType refund);
 
 }

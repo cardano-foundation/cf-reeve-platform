@@ -26,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
@@ -227,6 +228,17 @@ class MilestoneServiceTest {
         assertThat(view.getMilestoneAmount()).isEqualByComparingTo("50000.00");
         assertThat(view.getCurrency()).isEqualTo("USD");
         assertThat(view.getMilestoneDate()).isEqualTo(LocalDate.of(2025, 6, 30));
+    }
+
+    @Test
+    void toView_setsCalculatedSpentAmount() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING, EventType.REFUND))
+                .thenReturn(new BigDecimal("12000.00"));
+
+        MilestoneView view = milestoneService.toView(milestone);
+
+        assertThat(view.getSpentAmount()).isEqualByComparingTo("12000.00");
     }
 
     // -------------------------------------------------------------------------

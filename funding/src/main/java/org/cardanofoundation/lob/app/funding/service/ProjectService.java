@@ -105,12 +105,30 @@ public class ProjectService {
         if (xor.isPresent()) {
             return ProjectView.error(xor.get());
         }
-        if (projectRepository.existsByOrganisationIdAndExternalProjectId(request.getOrganisationId(), request.getExternalProjectId())) {
+
+        // When a parentProjectId is supplied, create the project as a sub-project of that (existing) parent.
+        ProjectEntity parent = null;
+        if (request.getParentProjectId() != null) {
+            Either<ProblemDetail, ProjectEntity> parentResult = resolveParentForNewSubProject(request);
+            if (parentResult.isLeft()) {
+                return ProjectView.error(parentResult.getLeft());
+            }
+            parent = parentResult.get();
+        }
+
+        String projectId = parent != null
+                ? ProjectEntity.subId(parent.getId(), request.getExternalProjectId())
+                : ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId());
+        boolean exists = parent != null
+                ? projectRepository.existsById(projectId)
+                : projectRepository.existsByOrganisationIdAndExternalProjectId(request.getOrganisationId(), request.getExternalProjectId());
+        if (exists) {
             return ProjectView.error(Problems.conflict(
                     "Project already exists for externalProjectId: " + request.getExternalProjectId(),
                     ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
         }
-        ProjectEntity projectEntity = projectRepository.saveAndFlush(toEntity(request));
+
+        ProjectEntity projectEntity = projectRepository.saveAndFlush(toEntity(request, projectId, parent));
         Optional<ProblemDetail> childrenProblem = createNodeChildren(
                 projectEntity, request.getMilestones(), request.getSubProjects(), request.getOrganisationId());
         if (childrenProblem.isPresent()) {
@@ -121,6 +139,37 @@ public class ProjectService {
             return ProjectView.error(childrenProblem.get());
         }
         return toView(projectEntity);
+    }
+
+    /**
+     * Resolves and validates the parent for a project being created as a sub-project: the parent must
+     * exist, belong to the same organisation, be allowed to hold sub-projects (no milestones of its own),
+     * and the new sub-project's amount must fit within the parent's budget.
+     */
+    private Either<ProblemDetail, ProjectEntity> resolveParentForNewSubProject(ProjectWithMilestonesCreateRequest request) {
+        Optional<ProjectEntity> parentM = projectRepository.findById(request.getParentProjectId());
+        if (parentM.isEmpty()) {
+            return Either.left(Problems.notFound(
+                    "Parent project not found: " + request.getParentProjectId(), ErrorTitleConstants.PARENT_PROJECT_NOT_FOUND));
+        }
+        ProjectEntity parent = parentM.get();
+        if (!parent.getOrganisationId().equals(request.getOrganisationId())) {
+            return Either.left(Problems.badRequest(
+                    "Parent project %s belongs to a different organisation".formatted(request.getParentProjectId()),
+                    ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH));
+        }
+        Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneService.hasMilestones(parent.getId()));
+        if (structure.isPresent()) {
+            return Either.left(structure.get());
+        }
+        BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
+                projectRepository.findByParentProjectId(parent.getId()), null);
+        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(
+                request.getTotalAmount(), parent, otherSubProjectsTotal);
+        if (subAmount.isPresent()) {
+            return Either.left(subAmount.get());
+        }
+        return Either.right(parent);
     }
 
     /**
@@ -324,6 +373,10 @@ public class ProjectService {
 
         String parentProjectId = project.getParentProject() != null ? project.getParentProject().getId() : null;
 
+        // Calculated (not stored): the project's spend rolls up its milestones' and sub-projects' spend.
+        BigDecimal spentAmount = sumSpent(milestoneViews.stream().map(MilestoneView::getSpentAmount))
+                .add(sumSpent(subProjectViews.stream().map(ProjectView::getSpentAmount)));
+
         return ProjectView.builder()
                 .projectId(project.getId())
                 .organisationId(project.getOrganisationId())
@@ -336,8 +389,13 @@ public class ProjectService {
                 .createdAt(project.getCreatedAt())
                 .milestones(milestoneViews)
                 .subProjects(subProjectViews)
+                .spentAmount(spentAmount)
                 .events(includeEvents ? loadEvents(project.getId()) : null)
                 .build();
+    }
+
+    private static BigDecimal sumSpent(java.util.stream.Stream<BigDecimal> amounts) {
+        return amounts.filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** All events allocated to the given project's milestones, as views. */
@@ -349,15 +407,16 @@ public class ProjectService {
                 .toList();
     }
 
-    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request) {
+    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request, String projectId, ProjectEntity parent) {
         return ProjectEntity.builder()
-                .id(ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId()))
+                .id(projectId)
                 .organisationId(request.getOrganisationId())
                 .fundingId(request.getFundingId())
                 .externalProjectId(request.getExternalProjectId())
                 .projectTitle(request.getProjectTitle())
                 .totalAmount(request.getTotalAmount())
                 .currency(request.getCurrency())
+                .parentProject(parent)
                 .build();
     }
 
