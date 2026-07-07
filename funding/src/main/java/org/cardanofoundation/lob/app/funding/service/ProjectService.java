@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,11 +41,10 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @Transactional(readOnly = true)
 public class ProjectService {
 
-    private static final String PROJECT_NOT_FOUND_DETAIL = "Project not found: ";
-
     private final FundingProjectRepository projectRepository;
     private final MilestoneService milestoneService;
     private final SpendingEventService spendingEventService;
+    private final ProjectStructureService projectStructureService;
     private final EventMilestoneAllocationRepository allocationRepository;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
@@ -61,8 +59,7 @@ public class ProjectService {
             return PagedResponse.error(Problems.unauthorized());
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
-            return PagedResponse.error(Problems.of(HttpStatus.BAD_REQUEST,
-                    "Organisation with id: %s not found".formatted(organisationId), "ORGANISATION_NOT_FOUND"));
+            return PagedResponse.error(Problems.organisationNotFound(organisationId));
         }
         return PagedResponse.of(projectRepository.findByOrganisationId(organisationId, pageable), this::toView);
     }
@@ -70,7 +67,7 @@ public class ProjectService {
     public ProjectView getProject(String projectId) {
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
         if (projectM.isEmpty()) {
-            return ProjectView.error(projectNotFound(projectId));
+            return ProjectView.error(Problems.projectNotFound(projectId));
         }
         if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
             return ProjectView.error(Problems.unauthorized());
@@ -82,7 +79,7 @@ public class ProjectService {
     public PagedResponse<ProjectView> listSubProjects(String parentProjectId, Pageable pageable) {
         Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
         if (parentM.isEmpty()) {
-            return PagedResponse.error(projectNotFound(parentProjectId));
+            return PagedResponse.error(Problems.projectNotFound(parentProjectId));
         }
         if (!keycloakSecurityHelper.canUserAccessOrg(parentM.get().getOrganisationId())) {
             return PagedResponse.error(Problems.unauthorized());
@@ -97,40 +94,26 @@ public class ProjectService {
      */
     @Transactional
     public ProjectView createWithMilestones(ProjectWithMilestonesCreateRequest request) {
-        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
-        if (amountProblem.isPresent()) {
-            return ProjectView.error(amountProblem.get());
-        }
-        Optional<ProblemDetail> xor = requireMilestonesXorSubProjects(request.getMilestones(), request.getSubProjects());
+        Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
+                !request.getMilestones().isEmpty(), !request.getSubProjects().isEmpty());
         if (xor.isPresent()) {
             return ProjectView.error(xor.get());
         }
 
-        // When a parentProjectId is supplied, create the project as a sub-project of that (existing) parent.
-        ProjectEntity parent = null;
-        if (request.getParentProjectId() != null) {
-            Either<ProblemDetail, ProjectEntity> parentResult = resolveParentForNewSubProject(request);
-            if (parentResult.isLeft()) {
-                return ProjectView.error(parentResult.getLeft());
-            }
-            parent = parentResult.get();
+        // When a parentProjectId is supplied, create the project as a sub-project of that (existing)
+        // parent — through the same shared creation path the event-allocation flow uses.
+        Either<ProblemDetail, ProjectEntity> created = request.getParentProjectId() != null
+                ? resolveParent(request).flatMap(parent -> projectStructureService.createSubProject(
+                        parent, request.getExternalProjectId(), request.getProjectTitle(),
+                        request.getFundingId(), request.getTotalAmount(), request.getCurrency()))
+                : createRootProject(request);
+        if (created.isLeft()) {
+            return ProjectView.error(created.getLeft());
         }
 
-        String projectId = parent != null
-                ? ProjectEntity.subId(parent.getId(), request.getExternalProjectId())
-                : ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId());
-        boolean exists = parent != null
-                ? projectRepository.existsById(projectId)
-                : projectRepository.existsByOrganisationIdAndExternalProjectId(request.getOrganisationId(), request.getExternalProjectId());
-        if (exists) {
-            return ProjectView.error(Problems.conflict(
-                    "Project already exists for externalProjectId: " + request.getExternalProjectId(),
-                    ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
-        }
-
-        ProjectEntity projectEntity = projectRepository.saveAndFlush(toEntity(request, projectId, parent));
+        ProjectEntity projectEntity = created.get();
         Optional<ProblemDetail> childrenProblem = createNodeChildren(
-                projectEntity, request.getMilestones(), request.getSubProjects(), request.getOrganisationId());
+                projectEntity, request.getMilestones(), request.getSubProjects());
         if (childrenProblem.isPresent()) {
             // Keep creation atomic: roll the whole tree back on any failure.
             if (TransactionSynchronizationManager.isActualTransactionActive()) {
@@ -141,12 +124,28 @@ public class ProjectService {
         return toView(projectEntity);
     }
 
-    /**
-     * Resolves and validates the parent for a project being created as a sub-project: the parent must
-     * exist, belong to the same organisation, be allowed to hold sub-projects (no milestones of its own),
-     * and the new sub-project's amount must fit within the parent's budget.
-     */
-    private Either<ProblemDetail, ProjectEntity> resolveParentForNewSubProject(ProjectWithMilestonesCreateRequest request) {
+    private Either<ProblemDetail, ProjectEntity> createRootProject(ProjectWithMilestonesCreateRequest request) {
+        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
+        if (amountProblem.isPresent()) {
+            return Either.left(amountProblem.get());
+        }
+        if (projectRepository.existsByOrganisationIdAndExternalProjectId(
+                request.getOrganisationId(), request.getExternalProjectId())) {
+            return Either.left(Problems.conflict(
+                    "Project already exists for externalProjectId: " + request.getExternalProjectId(),
+                    ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
+        }
+        Optional<ProblemDetail> fundingIdProblem = projectStructureService.fundingIdAvailable(
+                request.getOrganisationId(), request.getFundingId());
+        if (fundingIdProblem.isPresent()) {
+            return Either.left(fundingIdProblem.get());
+        }
+        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId());
+        return Either.right(projectRepository.saveAndFlush(toEntity(request, projectId)));
+    }
+
+    /** The parent for a project created as a sub-project: must exist and belong to the same organisation. */
+    private Either<ProblemDetail, ProjectEntity> resolveParent(ProjectWithMilestonesCreateRequest request) {
         Optional<ProjectEntity> parentM = projectRepository.findById(request.getParentProjectId());
         if (parentM.isEmpty()) {
             return Either.left(Problems.notFound(
@@ -158,17 +157,6 @@ public class ProjectService {
                     "Parent project %s belongs to a different organisation".formatted(request.getParentProjectId()),
                     ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH));
         }
-        Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneService.hasMilestones(parent.getId()));
-        if (structure.isPresent()) {
-            return Either.left(structure.get());
-        }
-        BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
-                projectRepository.findByParentProjectId(parent.getId()), null);
-        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(
-                request.getTotalAmount(), parent, otherSubProjectsTotal);
-        if (subAmount.isPresent()) {
-            return Either.left(subAmount.get());
-        }
         return Either.right(parent);
     }
 
@@ -177,7 +165,7 @@ public class ProjectService {
      * Returns the first validation failure, or empty when the whole subtree was created.
      */
     private Optional<ProblemDetail> createNodeChildren(ProjectEntity project,
-            List<MilestoneCreateRequest> milestones, List<ProjectTreeNodeRequest> subProjects, String organisationId) {
+            List<MilestoneCreateRequest> milestones, List<ProjectTreeNodeRequest> subProjects) {
 
         for (MilestoneCreateRequest milestoneRequest : milestones) {
             Either<ProblemDetail, MilestoneEntity> result = milestoneService.create(project.getId(), milestoneRequest);
@@ -186,59 +174,24 @@ public class ProjectService {
             }
         }
 
-        BigDecimal siblingsTotal = BigDecimal.ZERO;
         for (ProjectTreeNodeRequest node : subProjects) {
-            Optional<ProblemDetail> nodeXor = requireMilestonesXorSubProjects(node.getMilestones(), node.getSubProjects());
+            Optional<ProblemDetail> nodeXor = FundingValidations.milestonesXorSubProjects(
+                    !node.getMilestones().isEmpty(), !node.getSubProjects().isEmpty());
             if (nodeXor.isPresent()) {
                 return nodeXor;
             }
-            Optional<ProblemDetail> amount = FundingValidations.projectAmount(node.getTotalAmount());
-            if (amount.isPresent()) {
-                return amount;
-            }
-            Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(node.getTotalAmount(), project, siblingsTotal);
-            if (subAmount.isPresent()) {
-                return subAmount;
-            }
-
-            String subProjectId = ProjectEntity.subId(project.getId(), node.getExternalProjectId());
-            if (projectRepository.existsById(subProjectId)) {
-                return Optional.of(Problems.conflict(
-                        "Sub-project already exists: " + node.getExternalProjectId(),
-                        ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
-            }
-
-            ProjectEntity subProject = projectRepository.saveAndFlush(ProjectEntity.builder()
-                    .id(subProjectId)
-                    .organisationId(organisationId)
-                    .fundingId(node.getFundingId())
-                    .externalProjectId(node.getExternalProjectId())
-                    .projectTitle(node.getProjectTitle())
-                    .totalAmount(node.getTotalAmount())
-                    .currency(node.getCurrency())
-                    .parentProject(project)
-                    .build());
-
-            if (node.getTotalAmount() != null) {
-                siblingsTotal = siblingsTotal.add(node.getTotalAmount());
+            Either<ProblemDetail, ProjectEntity> subProject = projectStructureService.createSubProject(
+                    project, node.getExternalProjectId(), node.getProjectTitle(),
+                    node.getFundingId(), node.getTotalAmount(), node.getCurrency());
+            if (subProject.isLeft()) {
+                return Optional.of(subProject.getLeft());
             }
 
             Optional<ProblemDetail> childProblem = createNodeChildren(
-                    subProject, node.getMilestones(), node.getSubProjects(), organisationId);
+                    subProject.get(), node.getMilestones(), node.getSubProjects());
             if (childProblem.isPresent()) {
                 return childProblem;
             }
-        }
-        return Optional.empty();
-    }
-
-    /** A project node holds milestones or sub-projects, never both. */
-    private Optional<ProblemDetail> requireMilestonesXorSubProjects(
-            List<MilestoneCreateRequest> milestones, List<ProjectTreeNodeRequest> subProjects) {
-        if (!milestones.isEmpty() && !subProjects.isEmpty()) {
-            return Optional.of(Problems.badRequest(
-                    "A project has either milestones or sub-projects, not both",
-                    ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES));
         }
         return Optional.empty();
     }
@@ -247,7 +200,7 @@ public class ProjectService {
     public ProjectView updateProject(String projectId, ProjectUpdateRequest request) {
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
         if (projectM.isEmpty()) {
-            return ProjectView.error(projectNotFound(projectId));
+            return ProjectView.error(Problems.projectNotFound(projectId));
         }
         ProjectEntity project = projectM.get();
         if (!keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())) {
@@ -262,8 +215,33 @@ public class ProjectService {
         if (amountProblem.isPresent()) {
             return ProjectView.error(amountProblem.get());
         }
+
+        // The budget the project ends up with — parent-fit and child-coverage checks validate this value.
+        BigDecimal effectiveTotal = request.getTotalAmount() != null ? request.getTotalAmount() : project.getTotalAmount();
+
+        if (request.getTotalAmount() != null) {
+            // Shrinking the budget must not leave already-planned children uncovered.
+            Optional<ProblemDetail> coverage = FundingValidations.projectTotalCoversChildren(
+                    effectiveTotal,
+                    FundingValidations.sumMilestoneAmounts(milestoneService.findByProjectId(projectId), null),
+                    FundingValidations.sumProjectTotals(projectRepository.findByParentProjectId(projectId), null));
+            if (coverage.isPresent()) {
+                return ProjectView.error(coverage.get());
+            }
+            // A sub-project's new budget must still fit its (unchanged) parent.
+            if (request.getParentProjectId() == null && project.getParentProject() != null) {
+                ProjectEntity parent = project.getParentProject();
+                BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
+                        projectRepository.findByParentProjectId(parent.getId()), project.getId());
+                Optional<ProblemDetail> fit = FundingValidations.subProjectAmount(effectiveTotal, parent, otherSubProjectsTotal);
+                if (fit.isPresent()) {
+                    return ProjectView.error(fit.get());
+                }
+            }
+        }
+
         if (request.getParentProjectId() != null) {
-            Optional<ProblemDetail> parentProblem = assignParent(project, request.getParentProjectId());
+            Optional<ProblemDetail> parentProblem = assignParent(project, request.getParentProjectId(), effectiveTotal);
             if (parentProblem.isPresent()) {
                 return ProjectView.error(parentProblem.get());
             }
@@ -277,9 +255,10 @@ public class ProjectService {
     /**
      * Attaches {@code project} under {@code parentProjectId} as a sub-project. The parent must exist,
      * belong to the same organisation, and assigning it must not introduce a cycle (i.e. the parent
-     * may not be the project itself or one of its descendants).
+     * may not be the project itself or one of its descendants). {@code effectiveTotal} is the budget
+     * the project ends up with (an updated amount from the same request wins over the stored one).
      */
-    private Optional<ProblemDetail> assignParent(ProjectEntity project, String parentProjectId) {
+    private Optional<ProblemDetail> assignParent(ProjectEntity project, String parentProjectId, BigDecimal effectiveTotal) {
         Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
         if (parentM.isEmpty()) {
             return Optional.of(Problems.notFound(
@@ -303,7 +282,7 @@ public class ProjectService {
         BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                 projectRepository.findByParentProjectId(parent.getId()), project.getId());
         Optional<ProblemDetail> amountProblem = FundingValidations.subProjectAmount(
-                project.getTotalAmount(), parent, otherSubProjectsTotal);
+                effectiveTotal, parent, otherSubProjectsTotal);
         if (amountProblem.isPresent()) {
             return amountProblem;
         }
@@ -331,7 +310,7 @@ public class ProjectService {
     public Optional<ProblemDetail> deleteProject(String projectId) {
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
         if (projectM.isEmpty()) {
-            return Optional.of(projectNotFound(projectId));
+            return Optional.of(Problems.projectNotFound(projectId));
         }
         if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
             return Optional.of(Problems.unauthorized());
@@ -407,7 +386,7 @@ public class ProjectService {
                 .toList();
     }
 
-    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request, String projectId, ProjectEntity parent) {
+    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request, String projectId) {
         return ProjectEntity.builder()
                 .id(projectId)
                 .organisationId(request.getOrganisationId())
@@ -416,12 +395,7 @@ public class ProjectService {
                 .projectTitle(request.getProjectTitle())
                 .totalAmount(request.getTotalAmount())
                 .currency(request.getCurrency())
-                .parentProject(parent)
                 .build();
-    }
-
-    private static ProblemDetail projectNotFound(String projectId) {
-        return Problems.notFound(PROJECT_NOT_FOUND_DETAIL + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
 }

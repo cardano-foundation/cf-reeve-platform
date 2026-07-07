@@ -34,7 +34,7 @@ public class EventSubProjectAllocationRequest {
     private String projectTitle;
 
     @Nullable
-    @Schema(example = "GRANT-2025-001")
+    @Schema(example = "GRANT-2025-001-SUB1", description = "Optional funding reference of the sub-project. Unique per organisation — no two projects may share it.")
     private String fundingId;
 
     @Nullable

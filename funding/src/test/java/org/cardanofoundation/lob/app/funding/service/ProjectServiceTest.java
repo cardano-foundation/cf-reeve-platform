@@ -22,7 +22,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -67,13 +66,17 @@ class ProjectServiceTest {
     @Mock
     private FundingCascadeDeleteService cascadeDeleteService;
 
-    @InjectMocks
     private ProjectService projectService;
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);
 
     @BeforeEach
     void allowOrgAndEmptyChildren() {
+        // Real structure service over the mocked repo/milestone service, so sub-project creation
+        // rules are exercised for real while everything else stays stubbed.
+        projectService = new ProjectService(projectRepository, milestoneService, spendingEventService,
+                new ProjectStructureService(projectRepository, milestoneService),
+                allocationRepository, keycloakSecurityHelper, organisationPublicApi, cascadeDeleteService);
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
         lenient().when(milestoneService.findByProjectId(any())).thenReturn(List.of());
         lenient().when(projectRepository.findByParentProjectId(any(String.class))).thenReturn(List.of());
@@ -175,6 +178,18 @@ class ProjectServiceTest {
         ProjectView result = projectService.createWithMilestones(request);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_conflict_whenFundingIdAlreadyUsed() {
+        ProjectWithMilestonesCreateRequest request = createRequest(); // fundingId GRANT-2025-001
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectRepository.existsByOrganisationIdAndFundingId("org1", "GRANT-2025-001")).thenReturn(true);
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FUNDING_ID_ALREADY_USED);
         verify(projectRepository, never()).saveAndFlush(any());
     }
 
@@ -646,6 +661,55 @@ class ProjectServiceTest {
                 ProjectUpdateRequest.builder().totalAmount(new BigDecimal("-1")).build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_INVALID);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenNewTotalBelowMilestonesTotal() {
+        // Milestones already claim 150000; shrinking the project to 100000 would leave them uncovered.
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneService.findByProjectId("p1")).thenReturn(List.of(
+                MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("150000.00")).build()));
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenNewTotalBelowSubProjectsTotal() {
+        // Sub-projects already claim 150000; the parent cannot shrink below that.
+        ProjectEntity subProject = ProjectEntity.builder().id("sub1").organisationId("org1")
+                .totalAmount(new BigDecimal("150000.00")).build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(subProject));
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returns400_whenSubProjectNewTotalExceedsItsParent() {
+        // p1 is a sub-project of parent1 (total 200000); growing p1 to 250000 no longer fits.
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
+        ProjectEntity project = ProjectEntity.builder().id("p1").organisationId("org1").externalProjectId("PROJ-AB")
+                .projectTitle("Child").totalAmount(new BigDecimal("100000.00")).currency("USD")
+                .parentProject(parent).build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdAndEventStatus("p1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("250000.00")).build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
         verify(projectRepository, never()).saveAndFlush(any());
     }
 

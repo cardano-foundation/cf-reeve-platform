@@ -28,6 +28,25 @@ public final class Problems {
     }
 
     public static ProblemDetail unauthorized() {
-        return of(HttpStatus.UNAUTHORIZED, "User does not have access to this organisation", "UNAUTHORIZED");
+        return of(HttpStatus.UNAUTHORIZED, "User does not have access to this organisation", ErrorTitleConstants.UNAUTHORIZED);
+    }
+
+    // --- Shared not-found factories, so every service reports the same title and message shape ---
+
+    public static ProblemDetail projectNotFound(String projectId) {
+        return notFound("Project not found: %s".formatted(projectId), ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    public static ProblemDetail milestoneNotFound(String milestoneId) {
+        return notFound("Milestone not found: %s".formatted(milestoneId), ErrorTitleConstants.MILESTONE_NOT_FOUND);
+    }
+
+    public static ProblemDetail eventNotFound(String eventId) {
+        return notFound("Event not found: %s".formatted(eventId), ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+    }
+
+    public static ProblemDetail organisationNotFound(String organisationId) {
+        return badRequest("Organisation with id: %s not found".formatted(organisationId),
+                ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
 }

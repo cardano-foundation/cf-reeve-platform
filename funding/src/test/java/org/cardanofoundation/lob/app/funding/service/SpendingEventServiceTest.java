@@ -18,10 +18,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -34,6 +34,8 @@ import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishVie
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.*;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,9 +51,26 @@ class SpendingEventServiceTest {
     private EventMilestoneAllocationRepository milestoneAllocationRepository;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private OrganisationPublicApiIF organisationPublicApi;
+    @Mock
+    private FundingCascadeDeleteService cascadeDeleteService;
 
-    @InjectMocks
     private SpendingEventService spendingEventService;
+
+    /**
+     * The collaborating services are real instances over the mocked repositories, so the tests
+     * exercise the full resolve-or-create logic while stubbing only at the repository level.
+     */
+    @BeforeEach
+    void wireService() {
+        MilestoneService milestoneService = new MilestoneService(
+                milestoneRepository, projectRepository, milestoneAllocationRepository, keycloakSecurityHelper, cascadeDeleteService);
+        ProjectStructureService projectStructureService = new ProjectStructureService(projectRepository, milestoneService);
+        spendingEventService = new SpendingEventService(fundingEventRepository, projectRepository,
+                milestoneAllocationRepository, milestoneService, projectStructureService,
+                keycloakSecurityHelper, organisationPublicApi);
+    }
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);
     private static final LocalDate FUTURE_DATE = LocalDate.now().plusYears(1);
@@ -386,12 +405,15 @@ class SpendingEventServiceTest {
     @Test
     void create_createsSubProjectTreeWithBudget_onTheFly() {
         ProjectEntity root = projectEntity(); // id "p1", total 200000
-        when(projectRepository.existsById(any())).thenReturn(true);
-        when(projectRepository.findById(any())).thenReturn(Optional.of(root)).thenReturn(Optional.empty());
+        String rootId = ProjectEntity.id("org1", "PROJ-AB");
+        String subId = ProjectEntity.subId("p1", "WP-1");
+        when(projectRepository.existsById(rootId)).thenReturn(true);
+        when(projectRepository.findById(rootId)).thenReturn(Optional.of(root));
+        when(projectRepository.findById(subId)).thenReturn(Optional.empty());
         when(milestoneRepository.existsByProjectId("p1")).thenReturn(false);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
-        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(ProjectEntity.subId("p1", "WP-1"), "MS-1"))
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(subId, "MS-1"))
                 .thenReturn(Optional.of(milestoneEntityWithAmount("m1", new BigDecimal("50000.00"))));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -415,8 +437,10 @@ class SpendingEventServiceTest {
     @Test
     void create_returnsLeft_whenNewSubProjectAmountExceedsParent() {
         ProjectEntity root = projectEntity(); // total 200000
-        when(projectRepository.existsById(any())).thenReturn(true);
-        when(projectRepository.findById(any())).thenReturn(Optional.of(root)).thenReturn(Optional.empty());
+        String rootId = ProjectEntity.id("org1", "PROJ-AB");
+        when(projectRepository.existsById(rootId)).thenReturn(true);
+        when(projectRepository.findById(rootId)).thenReturn(Optional.of(root));
+        when(projectRepository.findById(ProjectEntity.subId("p1", "WP-1"))).thenReturn(Optional.empty());
         when(milestoneRepository.existsByProjectId("p1")).thenReturn(false);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
 
@@ -465,6 +489,49 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenNewProjectFundingIdAlreadyUsed() {
+        // The new project's fundingId is already claimed by another project of the organisation
+        // (DB constraint uq_funding_project_org_funding_id) — clean 409 instead of a 500.
+        when(projectRepository.existsById(any())).thenReturn(false);
+        when(projectRepository.existsByOrganisationIdAndFundingId("org1", "GRANT-2025-001")).thenReturn(true);
+
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-NEW").projectTitle("New Project").fundingId("GRANT-2025-001")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD")
+                .milestones(List.of(fundingMilestone("MS-1", ALLOCATED)))
+                .build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FUNDING_ID_ALREADY_USED);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenNewSubProjectFundingIdAlreadyUsed() {
+        ProjectEntity root = projectEntity(); // id "p1"
+        String rootId = ProjectEntity.id("org1", "PROJ-AB");
+        when(projectRepository.existsById(rootId)).thenReturn(true);
+        when(projectRepository.findById(rootId)).thenReturn(Optional.of(root));
+        when(projectRepository.findById(ProjectEntity.subId("p1", "WP-1"))).thenReturn(Optional.empty());
+        when(milestoneRepository.existsByProjectId("p1")).thenReturn(false);
+        when(projectRepository.existsByOrganisationIdAndFundingId("org1", "GRANT-2025-001-SUB")).thenReturn(true);
+
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-AB")
+                .subProjects(List.of(EventSubProjectAllocationRequest.builder()
+                        .externalProjectId("WP-1").projectTitle("WP").fundingId("GRANT-2025-001-SUB")
+                        .totalAmount(new BigDecimal("100000.00")).currency("USD")
+                        .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
+                .build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FUNDING_ID_ALREADY_USED);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_returnsLeft_whenReferencedSubProjectNotFound() {
         // Root exists; sub-project referenced by id only (no projectTitle) but does not exist under the parent.
         ProjectEntity root = projectEntity();
@@ -506,6 +573,32 @@ class SpendingEventServiceTest {
                 fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
 
         assertThat(result.isRight()).isTrue();
+    }
+
+    @Test
+    void update_returnsLeft_whenOrganisationMismatch() {
+        // The body claims a different organisation than the event's — must not re-target its projects.
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.FUNDING, EventStatus.DRAFT)));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setOrganisationId("other-org");
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_MISMATCH);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsLeft_whenEventTypeChanged() {
+        // The stored event is SPENDING; the update body claims FUNDING — the type is immutable.
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
+                fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_TYPE_IMMUTABLE);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -603,6 +696,32 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void listEvents_returnsError_whenOrganisationNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
+                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
+    }
+
+    @Test
+    void listEvents_returnsPage_whenOrganisationExists() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT))));
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
+                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getContent()).hasSize(1);
+    }
+
+    @Test
     void listEventsByProject_returns404_whenProjectNotFound() {
         when(projectRepository.findById("p1")).thenReturn(Optional.empty());
 
@@ -644,12 +763,27 @@ class SpendingEventServiceTest {
     @Test
     void createEvent_returnsErrorView_whenCreateFails() {
         SpendingEventView result = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
-                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
+                .fundingEntity("Cardano Foundation").currency("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder().externalProjectId(null)
                         .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
                 .build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo("PROJECT_FIELDS_REQUIRED");
+    }
+
+    @Test
+    void create_returnsLeft_whenFundingEventMissingFundingEntity() {
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB").milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FUNDING_ENTITY_REQUIRED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -756,7 +890,8 @@ class SpendingEventServiceTest {
 
     private SpendingEventCreateRequest fundingRequest(EventProjectAllocationRequest allocation) {
         return SpendingEventCreateRequest.builder()
-                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
+                .fundingEntity("Cardano Foundation").currency("USD")
                 .allocations(List.of(allocation)).build();
     }
 

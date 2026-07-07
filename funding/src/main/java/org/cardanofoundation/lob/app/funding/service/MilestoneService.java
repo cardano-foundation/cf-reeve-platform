@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,8 +37,6 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @Transactional(readOnly = true)
 public class MilestoneService {
 
-    private static final String PROJECT_NOT_FOUND_DETAIL = "Project not found: ";
-
     private final MilestoneRepository milestoneRepository;
     private final FundingProjectRepository projectRepository;
     private final EventMilestoneAllocationRepository allocationRepository;
@@ -67,7 +64,7 @@ public class MilestoneService {
         }
         return milestoneRepository.findByIdAndProjectId(milestoneId, projectId)
                 .map(this::toView)
-                .orElseGet(() -> MilestoneView.error(milestoneNotFound(milestoneId)));
+                .orElseGet(() -> MilestoneView.error(Problems.milestoneNotFound(milestoneId)));
     }
 
     @Transactional
@@ -86,7 +83,7 @@ public class MilestoneService {
             return MilestoneView.error(denied.get());
         }
         if (milestoneRepository.findByIdAndProjectId(milestoneId, projectId).isEmpty()) {
-            return MilestoneView.error(milestoneNotFound(milestoneId));
+            return MilestoneView.error(Problems.milestoneNotFound(milestoneId));
         }
         return update(milestoneId, request).fold(MilestoneView::error, this::toView);
     }
@@ -99,7 +96,7 @@ public class MilestoneService {
         }
         Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
         if (milestoneM.isEmpty()) {
-            return Optional.of(milestoneNotFound(milestoneId));
+            return Optional.of(Problems.milestoneNotFound(milestoneId));
         }
         // Cascade: fails when the milestone is linked to a published event; otherwise the referencing
         // draft-event allocations are cleaned up and the milestone is removed.
@@ -109,16 +106,12 @@ public class MilestoneService {
     private Optional<ProblemDetail> authorizeProject(String projectId) {
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
         if (projectM.isEmpty()) {
-            return Optional.of(Problems.notFound(PROJECT_NOT_FOUND_DETAIL + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
+            return Optional.of(Problems.projectNotFound(projectId));
         }
         if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
             return Optional.of(Problems.unauthorized());
         }
         return Optional.empty();
-    }
-
-    private static ProblemDetail milestoneNotFound(String milestoneId) {
-        return Problems.notFound("Milestone not found: " + milestoneId, ErrorTitleConstants.MILESTONE_NOT_FOUND);
     }
 
     public Optional<MilestoneEntity> findById(String milestoneId) {
@@ -145,41 +138,71 @@ public class MilestoneService {
 
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
-        if (request.getMilestoneTitle() == null || request.getMilestoneAmount() == null
-                || request.getCurrency() == null || request.getMilestoneDate() == null) {
+        if (missingCreationFields(request)) {
             log.warn("Missing required fields for milestone creation in project: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                    "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone");
-            problem.setTitle("MILESTONE_FIELDS_REQUIRED");
-            return Either.left(problem);
+            return Either.left(milestoneFieldsRequired());
         }
 
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
-
         if (projectM.isEmpty()) {
             log.warn("Project not found for id: {}", projectId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Project not found for id: %s".formatted(projectId));
-            problem.setTitle("PROJECT_NOT_FOUND");
-            return Either.left(problem);
+            return Either.left(Problems.projectNotFound(projectId));
         }
         ProjectEntity project = projectM.orElseThrow();
 
-        Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(projectRepository.existsByParentProjectId(projectId));
-        if (structure.isPresent()) {
-            return Either.left(structure.get());
+        MilestoneEntity entity = toEntity(request, project);
+        if (milestoneRepository.findById(entity.getId()).isPresent()) {
+            log.warn("Milestone already exists for id: {}", entity.getId());
+            return Either.left(Problems.conflict(
+                    "Milestone already exists for id: %s".formatted(entity.getId()),
+                    ErrorTitleConstants.MILESTONE_ALREADY_EXISTS));
+        }
+        return validateAndSave(project, entity, request);
+    }
+
+    /**
+     * Resolves the milestone referenced by the request within {@code project}, or creates it when
+     * the creation fields are supplied — the shared semantics of the event-allocation flow. A request
+     * carrying only an id (no creation fields) references an existing milestone and fails as
+     * not-found when none exists; a matching already-existing milestone is returned as is.
+     */
+    @Transactional
+    public Either<ProblemDetail, MilestoneEntity> resolveOrCreate(ProjectEntity project, MilestoneCreateRequest request) {
+        if (request.getExternalMilestoneId() != null) {
+            Optional<MilestoneEntity> existing = milestoneRepository
+                    .findByProjectIdAndExternalMilestoneId(project.getId(), request.getExternalMilestoneId());
+            if (existing.isPresent()) {
+                return Either.right(existing.get());
+            }
+            if (missingCreationFields(request)) {
+                // Id supplied but no milestone exists and creation fields are incomplete → referencing a
+                // milestone that does not exist.
+                log.warn("Milestone not found: {} in project: {}", request.getExternalMilestoneId(), project.getId());
+                return Either.left(Problems.milestoneNotFound(request.getExternalMilestoneId()));
+            }
+        } else if (missingCreationFields(request)) {
+            return Either.left(milestoneFieldsRequired());
         }
 
         MilestoneEntity entity = toEntity(request, project);
-        Optional<MilestoneEntity> milestoneExists = milestoneRepository.findById(entity.getId());
-        if(milestoneExists.isPresent()) {
-            log.warn("Milestone already exists for id: {}", entity.getId());
-            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Milestone already exists for id: %s".formatted(entity.getId()));
-            problemDetail.setTitle("MILESTONE_ALREADY_EXISTS");
-            return Either.left(problemDetail);
+        // An anonymous milestone resolves by its content id — an identical one already present is reused.
+        Optional<MilestoneEntity> existing = milestoneRepository.findById(entity.getId());
+        if (existing.isPresent()) {
+            return Either.right(existing.get());
         }
+        return validateAndSave(project, entity, request);
+    }
 
+    /** Shared creation core: structure rule, budget validations, persist. */
+    private Either<ProblemDetail, MilestoneEntity> validateAndSave(ProjectEntity project,
+            MilestoneEntity entity, MilestoneCreateRequest request) {
+        Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(
+                projectRepository.existsByParentProjectId(project.getId()));
+        if (structure.isPresent()) {
+            return Either.left(structure.get());
+        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
-                milestoneRepository.findByProjectId(projectId), null);
+                milestoneRepository.findByProjectId(project.getId()), null);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
                 request.getMilestoneAmount(), request.getMilestoneDate(), project, otherMilestonesTotal);
         if (validation.isPresent()) {
@@ -188,25 +211,33 @@ public class MilestoneService {
         return Either.right(milestoneRepository.saveAndFlush(entity));
     }
 
+    private static boolean missingCreationFields(MilestoneCreateRequest request) {
+        return request.getMilestoneTitle() == null || request.getMilestoneAmount() == null
+                || request.getCurrency() == null || request.getMilestoneDate() == null;
+    }
+
+    private static ProblemDetail milestoneFieldsRequired() {
+        return Problems.badRequest(
+                "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone",
+                ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED);
+    }
+
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> update(String milestoneId, MilestoneUpdateRequest request) {
         Optional<MilestoneEntity> milestoneM = milestoneRepository.findById(milestoneId);
 
         if (milestoneM.isEmpty()) {
             log.warn("Milestone not found for id: {}", milestoneId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found for id: %s".formatted(milestoneId));
-            problem.setTitle("MILESTONE_NOT_FOUND");
-            return Either.left(problem);
+            return Either.left(Problems.milestoneNotFound(milestoneId));
         }
 
         MilestoneEntity milestone = milestoneM.orElseThrow();
 
         if (allocationRepository.existsByMilestoneIdAndEventStatus(milestoneId, EventStatus.PUBLISHED)) {
             log.warn("Cannot update milestone linked to a published event: {}", milestoneId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                    "Cannot update milestone linked to a published event: %s".formatted(milestoneId));
-            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
-            return Either.left(problem);
+            return Either.left(Problems.conflict(
+                    "Cannot update milestone linked to a published event: %s".formatted(milestoneId),
+                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
 
         // Validate only the supplied fields against the milestone's project; cumulative budget

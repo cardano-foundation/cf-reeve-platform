@@ -28,7 +28,7 @@ public class EventProjectAllocationRequest {
     // --- New project: supply the fields below when creating a new project ---
 
     @Nullable
-    @Schema(example = "GRANT-2025-001")
+    @Schema(example = "GRANT-2025-001-AB", description = "Optional funding reference of the project. Unique per organisation — no two projects may share it.")
     private String fundingId;
 
     @Nullable

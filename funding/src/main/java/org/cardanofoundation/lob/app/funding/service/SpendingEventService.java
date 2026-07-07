@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +30,7 @@ import org.cardanofoundation.lob.app.funding.repository.*;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
@@ -39,14 +39,13 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @Transactional(readOnly = true)
 public class SpendingEventService {
 
-    private static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
-    private static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
-
     private final FundingEventRepository fundingEventRepository;
     private final FundingProjectRepository projectRepository;
-    private final MilestoneRepository milestoneRepository;
     private final EventMilestoneAllocationRepository milestoneAllocationRepository;
+    private final MilestoneService milestoneService;
+    private final ProjectStructureService projectStructureService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final OrganisationPublicApiIF organisationPublicApi;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail)
@@ -56,6 +55,9 @@ public class SpendingEventService {
             Optional<EventType> eventType, Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
+        }
+        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
+            return PagedResponse.error(Problems.organisationNotFound(organisationId));
         }
         return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, status, eventType, pageable), this::toView);
     }
@@ -75,7 +77,7 @@ public class SpendingEventService {
     public SpendingEventView getEvent(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
         if (eventM.isEmpty()) {
-            return SpendingEventView.error(eventNotFound(eventId));
+            return SpendingEventView.error(Problems.eventNotFound(eventId));
         }
         if (!keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
             return SpendingEventView.error(Problems.unauthorized());
@@ -137,10 +139,6 @@ public class SpendingEventService {
         return Optional.empty();
     }
 
-    private static ProblemDetail eventNotFound(String eventId) {
-        return Problems.notFound("Event not found: " + eventId, ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
-    }
-
     public Optional<FundingEventEntity> findById(String eventId) {
         return fundingEventRepository.findById(eventId);
     }
@@ -172,11 +170,52 @@ public class SpendingEventService {
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
         FundingEventEntity event = toEntity(request);
-        if(fundingEventRepository.existsById(event.getId())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event already exists: %s".formatted(event.getId()));
-            problem.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS);
-            return Either.left(problem);
+        if (fundingEventRepository.existsById(event.getId())) {
+            return Either.left(Problems.conflict("Event already exists: %s".formatted(event.getId()),
+                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS));
         }
+        return validateAndPersist(event, request);
+    }
+
+    @Transactional
+    public Either<ProblemDetail, FundingEventEntity> update(String eventId, SpendingEventCreateRequest request) {
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
+        if (eventOrError.isLeft()) return eventOrError;
+
+        FundingEventEntity event = eventOrError.get();
+
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update a published event: %s");
+        if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
+        // The event's identity — organisation and type — is fixed at creation; the update payload
+        // must not silently target another organisation's projects or change the event's semantics.
+        if (!event.getOrganisationId().equals(request.getOrganisationId())) {
+            return Either.left(Problems.badRequest(
+                    "organisationId %s does not match the event's organisation".formatted(request.getOrganisationId()),
+                    ErrorTitleConstants.ORGANISATION_MISMATCH));
+        }
+        if (event.getEventType() != request.getEventType()) {
+            return Either.left(Problems.badRequest(
+                    "eventType cannot be changed on update (event is %s)".formatted(event.getEventType()),
+                    ErrorTitleConstants.EVENT_TYPE_IMMUTABLE));
+        }
+
+        event.setFundingId(request.getFundingId());
+        event.setFundingHash(request.getFundingHash());
+        event.setFundingEntity(request.getFundingEntity());
+        event.setCurrency(request.getCurrency());
+        applySpendDetail(event, request);
+
+        event.getMilestoneAllocations().clear();
+        fundingEventRepository.flush();
+
+        return validateAndPersist(event, request);
+    }
+
+    /** Validation pipeline shared by create and update: spend detail, allocations, event totals. */
+    private Either<ProblemDetail, FundingEventEntity> validateAndPersist(FundingEventEntity event, SpendingEventCreateRequest request) {
+        Optional<ProblemDetail> entityProblem = FundingValidations.fundingEntity(event.getEventType(), event.getFundingEntity());
+        if (entityProblem.isPresent()) return Either.left(entityProblem.get());
 
         Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
         if (spendProblem.isPresent()) return Either.left(spendProblem.get());
@@ -190,39 +229,14 @@ public class SpendingEventService {
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
 
-    @Transactional
-    public Either<ProblemDetail, FundingEventEntity> update(String eventId, SpendingEventCreateRequest request) {
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
-        if (eventOrError.isLeft()) return eventOrError;
-
-        FundingEventEntity event = eventOrError.get();
-
+    /** Published events are immutable — returns a conflict built from {@code messageTemplate} otherwise empty. */
+    private static Optional<ProblemDetail> requireDraft(FundingEventEntity event, String messageTemplate) {
         if (event.getStatus() == EventStatus.PUBLISHED) {
-            log.warn("Cannot update published event: {}", eventId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cannot update a published event: %s".formatted(eventId));
-            problem.setTitle(SPENDING_EVENT_ALREADY_PUBLISHED);
-            return Either.left(problem);
+            String message = messageTemplate.formatted(event.getId());
+            log.warn(message);
+            return Optional.of(Problems.conflict(message, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
-
-        event.setFundingId(request.getFundingId());
-        event.setFundingHash(request.getFundingHash());
-        event.setFundingEntity(request.getFundingEntity());
-        event.setCurrency(request.getCurrency());
-        applySpendDetail(event, request);
-
-        Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
-        if (spendProblem.isPresent()) return Either.left(spendProblem.get());
-
-        event.getMilestoneAllocations().clear();
-        fundingEventRepository.flush();
-
-        Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
-        if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
-
-        recalculateTotalAmount(event);
-        Optional<ProblemDetail> totalProblem = validateEventTotals(event);
-        if (totalProblem.isPresent()) return Either.left(totalProblem.get());
-        return Either.right(fundingEventRepository.saveAndFlush(event));
+        return Optional.empty();
     }
 
     private static void applySpendDetail(FundingEventEntity event, SpendingEventCreateRequest request) {
@@ -256,12 +270,9 @@ public class SpendingEventService {
         if (eventOrError.isLeft()) return eventOrError;
 
         FundingEventEntity event = eventOrError.get();
-        if (event.getStatus() == EventStatus.PUBLISHED) {
-            log.warn("Event already published: {}", eventId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Event is already published: %s".formatted(eventId));
-            problem.setTitle(SPENDING_EVENT_ALREADY_PUBLISHED);
-            return Either.left(problem);
-        }
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Event is already published: %s");
+        if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);
         return Either.right(fundingEventRepository.saveAndFlush(event));
@@ -273,12 +284,9 @@ public class SpendingEventService {
         if (eventOrError.isLeft()) return Either.left(eventOrError.getLeft());
 
         FundingEventEntity event = eventOrError.get();
-        if (event.getStatus() == EventStatus.PUBLISHED) {
-            log.warn("Cannot delete published event: {}", eventId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Cannot delete a published event: %s".formatted(eventId));
-            problem.setTitle(SPENDING_EVENT_ALREADY_PUBLISHED);
-            return Either.left(problem);
-        }
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot delete a published event: %s");
+        if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
         fundingEventRepository.delete(event);
         return Either.right(null);
     }
@@ -351,9 +359,7 @@ public class SpendingEventService {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
         if (eventM.isEmpty()) {
             log.warn("Event not found: {}", eventId);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Event not found: %s".formatted(eventId));
-            problem.setTitle("SPENDING_EVENT_NOT_FOUND");
-            return Either.left(problem);
+            return Either.left(Problems.eventNotFound(eventId));
         }
         return Either.right(eventM.get());
     }
@@ -400,10 +406,10 @@ public class SpendingEventService {
             List<EventMilestoneAllocationRequest> milestones, List<EventSubProjectAllocationRequest> subProjects,
             BudgetAccumulator budget) {
 
-        if (!milestones.isEmpty() && !subProjects.isEmpty()) {
-            return Optional.of(Problems.badRequest(
-                    "A project has either milestones or sub-projects, not both",
-                    ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES));
+        Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
+                !milestones.isEmpty(), !subProjects.isEmpty());
+        if (xor.isPresent()) {
+            return xor;
         }
 
         if (!milestones.isEmpty()) {
@@ -416,7 +422,7 @@ public class SpendingEventService {
 
             BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
             for (EventMilestoneAllocationRequest milestoneReq : milestones) {
-                Either<ProblemDetail, MilestoneEntity> milestoneResult = resolveOrCreateMilestone(milestoneReq.getMilestone(), project);
+                Either<ProblemDetail, MilestoneEntity> milestoneResult = milestoneService.resolveOrCreate(project, milestoneReq.getMilestone());
                 if (milestoneResult.isLeft()) return Optional.of(milestoneResult.getLeft());
 
                 MilestoneEntity milestone = milestoneResult.get();
@@ -465,9 +471,8 @@ public class SpendingEventService {
 
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateRootProject(EventProjectAllocationRequest req, String organisationId) {
         if (req.getExternalProjectId() == null) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "externalProjectId is required");
-            problem.setTitle(PROJECT_FIELDS_REQUIRED);
-            return Either.left(problem);
+            return Either.left(Problems.badRequest("externalProjectId is required",
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
         String projectId = ProjectEntity.id(organisationId, req.getExternalProjectId());
@@ -486,14 +491,17 @@ public class SpendingEventService {
 
         // A root that directly carries milestones needs a budget; one that only holds sub-projects may omit it.
         if (req.getSubProjects().isEmpty() && (req.getTotalAmount() == null || req.getCurrency() == null)) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "totalAmount and currency are required when creating a new root project");
-            problem.setTitle(PROJECT_FIELDS_REQUIRED);
-            return Either.left(problem);
+            return Either.left(Problems.badRequest("totalAmount and currency are required when creating a new root project",
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
         Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(req.getTotalAmount());
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
+        }
+        Optional<ProblemDetail> fundingIdProblem = projectStructureService.fundingIdAvailable(organisationId, req.getFundingId());
+        if (fundingIdProblem.isPresent()) {
+            return Either.left(fundingIdProblem.get());
         }
 
         ProjectEntity newProject = ProjectEntity.builder()
@@ -524,95 +532,9 @@ public class SpendingEventService {
                     ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
 
-        Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneRepository.existsByProjectId(parent.getId()));
-        if (structure.isPresent()) {
-            return Either.left(structure.get());
-        }
-
-        // When a budget is supplied, validate it the same way the create-project endpoint does:
-        // it must be positive and fit within the parent's total (individually and cumulatively).
-        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(subReq.getTotalAmount());
-        if (amountProblem.isPresent()) {
-            return Either.left(amountProblem.get());
-        }
-        BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
-                projectRepository.findByParentProjectId(parent.getId()), null);
-        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(
-                subReq.getTotalAmount(), parent, otherSubProjectsTotal);
-        if (subAmount.isPresent()) {
-            return Either.left(subAmount.get());
-        }
-
-        ProjectEntity subProject = ProjectEntity.builder()
-                .id(subProjectUid)
-                .organisationId(parent.getOrganisationId())
-                .fundingId(subReq.getFundingId())
-                .externalProjectId(subReq.getExternalProjectId())
-                .projectTitle(subReq.getProjectTitle())
-                .totalAmount(subReq.getTotalAmount())
-                .currency(subReq.getCurrency())
-                .parentProject(parent)
-                .build();
-        return Either.right(projectRepository.saveAndFlush(subProject));
-    }
-
-    private Either<ProblemDetail, MilestoneEntity> resolveOrCreateMilestone(MilestoneCreateRequest req, ProjectEntity project) {
-        if (req.getExternalMilestoneId() != null) {
-            Optional<MilestoneEntity> existing = milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), req.getExternalMilestoneId());
-            if (existing.isPresent()) {
-                return Either.right(existing.get());
-            }
-            if (req.getMilestoneTitle() == null || req.getMilestoneAmount() == null
-                    || req.getCurrency() == null || req.getMilestoneDate() == null) {
-                // Id supplied but no milestone exists and creation fields are incomplete → referencing a
-                // milestone that does not exist.
-                log.warn("Milestone not found: {} in project: {}", req.getExternalMilestoneId(), project.getId());
-                return Either.left(Problems.notFound(
-                        "Milestone not found: %s".formatted(req.getExternalMilestoneId()),
-                        ErrorTitleConstants.MILESTONE_NOT_FOUND));
-            }
-        } else if (req.getMilestoneTitle() == null || req.getMilestoneAmount() == null
-                || req.getCurrency() == null || req.getMilestoneDate() == null) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                    "milestoneTitle, milestoneAmount, currency, milestoneDate are required when creating a new milestone");
-            problem.setTitle("MILESTONE_FIELDS_REQUIRED");
-            return Either.left(problem);
-        }
-
-        Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(projectRepository.existsByParentProjectId(project.getId()));
-        if (structure.isPresent()) {
-            return Either.left(structure.get());
-        }
-
-        BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
-                milestoneRepository.findByProjectId(project.getId()), null);
-        Optional<ProblemDetail> validation = FundingValidations.milestone(
-                req.getMilestoneAmount(), req.getMilestoneDate(), project, otherMilestonesTotal);
-        if (validation.isPresent()) {
-            return Either.left(validation.get());
-        }
-
-        MilestoneEntity newMilestone = MilestoneEntity.builder()
-                .id(milestoneId(project.getId(), req))
-                .externalMilestoneId(req.getExternalMilestoneId())
-                .milestoneTitle(req.getMilestoneTitle())
-                .milestoneAmount(req.getMilestoneAmount())
-                .currency(req.getCurrency())
-                .milestoneDate(req.getMilestoneDate())
-                .project(project)
-                .build();
-        return Either.right(milestoneRepository.saveAndFlush(newMilestone));
-    }
-
-    /**
-     * Deterministic milestone id: the natural key {@code (projectId, externalMilestoneId)} when a
-     * user-defined id is supplied, otherwise a content hash for an anonymous milestone.
-     */
-    private static String milestoneId(String projectId, MilestoneCreateRequest req) {
-        return req.getExternalMilestoneId() != null
-                ? MilestoneEntity.id(projectId, req.getExternalMilestoneId())
-                : MilestoneEntity.contentId(projectId, req.getMilestoneTitle(), req.getMilestoneAmount(),
-                        req.getCurrency(), req.getMilestoneDate());
+        // Same shared creation path (structure + budget rules) as the create-project endpoint.
+        return projectStructureService.createSubProject(parent, subReq.getExternalProjectId(),
+                subReq.getProjectTitle(), subReq.getFundingId(), subReq.getTotalAmount(), subReq.getCurrency());
     }
 
     /** The event total is the sum of its milestone allocations (all event types). */
@@ -624,25 +546,28 @@ public class SpendingEventService {
         event.setTotalAmount(total);
     }
 
-    /** Groups flat milestone allocations by their project, preserving insertion order. */
-    private Map<ProjectEntity, List<EventMilestoneAllocationEntity>> groupByProject(String eventId) {
+    /** An event allocation with its milestone resolved once — the milestone is never null. */
+    private record AllocatedMilestone(EventMilestoneAllocationEntity allocation, MilestoneEntity milestone) {
+    }
+
+    /** Loads the event's allocations, resolves each milestone once, groups by project (insertion order). */
+    private Map<ProjectEntity, List<AllocatedMilestone>> allocationsByProject(String eventId) {
         return milestoneAllocationRepository.findById_EventId(eventId).stream()
-                .filter(a -> {
-                    MilestoneEntity m = milestoneRepository.findById(a.getId().getMilestoneId()).orElse(null);
-                    return m != null && m.getProject() != null;
-                })
+                .map(alloc -> new AllocatedMilestone(alloc,
+                        milestoneService.findById(alloc.getId().getMilestoneId()).orElse(null)))
+                .filter(am -> am.milestone() != null && am.milestone().getProject() != null)
                 .collect(Collectors.groupingBy(
-                        a -> milestoneRepository.findById(a.getId().getMilestoneId()).orElseThrow().getProject(),
+                        am -> am.milestone().getProject(),
                         LinkedHashMap::new,
                         Collectors.toList()));
     }
 
     private List<EventProjectAllocationView> buildProjectAllocationViews(String eventId) {
-        return groupByProject(eventId).entrySet().stream()
+        return allocationsByProject(eventId).entrySet().stream()
                 .map(entry -> {
                     ProjectEntity project = entry.getKey();
                     List<EventMilestoneAllocationView> mViews = entry.getValue().stream()
-                            .map(this::toMilestoneAllocationView)
+                            .map(SpendingEventService::toMilestoneAllocationView)
                             .toList();
                     return EventProjectAllocationView.builder()
                             .projectId(project.getId())
@@ -656,11 +581,11 @@ public class SpendingEventService {
     }
 
     private List<SpendingEventPublishView.ProjectAllocation> buildPublishProjectAllocations(String eventId) {
-        return groupByProject(eventId).entrySet().stream()
+        return allocationsByProject(eventId).entrySet().stream()
                 .map(entry -> {
                     ProjectEntity project = entry.getKey();
                     List<SpendingEventPublishView.Milestone> milestones = entry.getValue().stream()
-                            .map(this::toPublishMilestone)
+                            .map(SpendingEventService::toPublishMilestone)
                             .toList();
                     // When the allocation targets a sub-project, publish the root project's id/title and
                     // surface the sub-project's title separately; otherwise the project itself is the root.
@@ -676,29 +601,27 @@ public class SpendingEventService {
                 .toList();
     }
 
-    private EventMilestoneAllocationView toMilestoneAllocationView(EventMilestoneAllocationEntity alloc) {
-        MilestoneEntity milestone = milestoneRepository.findById(alloc.getId().getMilestoneId()).orElse(null);
+    private static EventMilestoneAllocationView toMilestoneAllocationView(AllocatedMilestone am) {
         return EventMilestoneAllocationView.builder()
-                .eventId(alloc.getId().getEventId())
-                .milestoneId(alloc.getId().getMilestoneId())
-                .externalMilestoneId(milestone != null ? milestone.getExternalMilestoneId() : null)
-                .milestoneTitle(milestone != null ? milestone.getMilestoneTitle() : null)
-                .milestoneAmount(milestone != null ? milestone.getMilestoneAmount() : null)
-                .allocatedAmount(alloc.getAllocatedAmount())
-                .currency(milestone != null ? milestone.getCurrency() : null)
-                .milestoneDate(milestone != null ? milestone.getMilestoneDate() : null)
+                .eventId(am.allocation().getId().getEventId())
+                .milestoneId(am.allocation().getId().getMilestoneId())
+                .externalMilestoneId(am.milestone().getExternalMilestoneId())
+                .milestoneTitle(am.milestone().getMilestoneTitle())
+                .milestoneAmount(am.milestone().getMilestoneAmount())
+                .allocatedAmount(am.allocation().getAllocatedAmount())
+                .currency(am.milestone().getCurrency())
+                .milestoneDate(am.milestone().getMilestoneDate())
                 .build();
     }
 
-    private SpendingEventPublishView.Milestone toPublishMilestone(EventMilestoneAllocationEntity alloc) {
-        MilestoneEntity milestone = milestoneRepository.findById(alloc.getId().getMilestoneId()).orElse(null);
+    private static SpendingEventPublishView.Milestone toPublishMilestone(AllocatedMilestone am) {
         return SpendingEventPublishView.Milestone.builder()
-                .milestoneId(alloc.getId().getMilestoneId())
-                .milestoneTitle(milestone != null ? milestone.getMilestoneTitle() : null)
-                .milestoneAmount(milestone != null ? milestone.getMilestoneAmount() : null)
-                .allocatedAmount(alloc.getAllocatedAmount())
-                .currency(milestone != null ? toCurrency(milestone.getCurrency()) : null)
-                .milestoneDate(milestone != null ? milestone.getMilestoneDate() : null)
+                .milestoneId(am.allocation().getId().getMilestoneId())
+                .milestoneTitle(am.milestone().getMilestoneTitle())
+                .milestoneAmount(am.milestone().getMilestoneAmount())
+                .allocatedAmount(am.allocation().getAllocatedAmount())
+                .currency(toCurrency(am.milestone().getCurrency()))
+                .milestoneDate(am.milestone().getMilestoneDate())
                 .build();
     }
 

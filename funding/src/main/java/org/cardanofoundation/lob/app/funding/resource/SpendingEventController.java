@@ -109,9 +109,10 @@ public class SpendingEventController {
     @Operation(
             summary = "Create a new event with project and milestone allocations",
             description = "Creates an event (FUNDING, SPENDING or REFUND) and resolves or creates the referenced " +
-                    "projects and milestones in a single request. Supply `externalProjectId` (user-defined project ID) to " +
-                    "reference an existing project or create a new one. Supply `externalMilestoneId` (user-defined milestone ID) " +
-                    "to reference an existing milestone, or omit it to create a new one.",
+                    "projects, sub-projects and milestones in a single atomic request. Supplying only an id " +
+                    "(`externalProjectId` / `externalMilestoneId`) references an existing entity and fails with 404 " +
+                    "when it does not exist; supplying the creation fields (title, amounts, ...) creates it on the fly. " +
+                    "`fundingEntity` is required for FUNDING events; the spend detail fields are required for SPENDING events.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(
@@ -143,14 +144,13 @@ public class SpendingEventController {
                                                                 "milestoneTitle": "Milestone 1",
                                                                 "milestoneAmount": "100000.00",
                                                                 "currency": "USD",
-                                                                "milestoneDate": "2025-12-31"
+                                                                "milestoneDate": "2026-12-31"
                                                               },
                                                               "allocatedAmount": "100000.00"
                                                             }
                                                           ]
                                                         }
-                                                      ],
-                                                      "items": []
+                                                      ]
                                                     }"""
                                     ),
                                     @ExampleObject(
@@ -174,8 +174,7 @@ public class SpendingEventController {
                                                             }
                                                           ]
                                                         }
-                                                      ],
-                                                      "items": []
+                                                      ]
                                                     }"""
                                     ),
                                     @ExampleObject(
@@ -187,6 +186,14 @@ public class SpendingEventController {
                                                       "eventType": "SPENDING",
                                                       "fundingId": "GRANT-2025-001",
                                                       "currency": "USD",
+                                                      "category": "Infrastructure",
+                                                      "vendor": "Cloud Co.",
+                                                      "amountFcy": "2500.00",
+                                                      "spendCurrency": "USD",
+                                                      "fxRate": "1.00",
+                                                      "amountRcy": "2500.00",
+                                                      "spendDate": "2026-05-01",
+                                                      "notes": "Monthly hosting",
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-CD",
@@ -201,34 +208,33 @@ public class SpendingEventController {
                                                                 "milestoneTitle": "Milestone 1",
                                                                 "milestoneAmount": "50000.00",
                                                                 "currency": "USD",
-                                                                "milestoneDate": "2025-09-30"
-                                                              }
+                                                                "milestoneDate": "2026-09-30"
+                                                              },
+                                                              "allocatedAmount": "2500.00"
                                                             }
                                                           ]
-                                                        }
-                                                      ],
-                                                      "items": [
-                                                        {
-                                                          "category": "Infrastructure",
-                                                          "vendor": "Cloud Co.",
-                                                          "amountFcy": "2500.00",
-                                                          "currency": "USD",
-                                                          "fxRate": "1.00",
-                                                          "amountRcy": "2500.00",
-                                                          "spendDate": "2025-05-01"
                                                         }
                                                       ]
                                                     }"""
                                     ),
                                     @ExampleObject(
-                                            name = "SPENDING – all features (subproject + multi-milestone + items)",
-                                            summary = "SPENDING with sub-project WP-1, three milestones, and three spend items",
+                                            name = "SPENDING – sub-project tree + multi-milestone",
+                                            summary = "SPENDING creating sub-project WP-1 with three milestones on-the-fly",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "SPENDING",
                                                       "fundingId": "GRANT-2025-001",
                                                       "currency": "USD",
+                                                      "category": "Personnel",
+                                                      "vendor": "Contractor A",
+                                                      "amountFcy": "200000.00",
+                                                      "spendCurrency": "USD",
+                                                      "fxRate": "1.00",
+                                                      "amountRcy": "200000.00",
+                                                      "spendDate": "2026-04-01",
+                                                      "hash": "sha256:aabbcc112233",
+                                                      "notes": "Invoice #INV-2026-101",
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-GH",
@@ -236,76 +242,46 @@ public class SpendingEventController {
                                                           "projectTitle": "Project GH",
                                                           "totalAmount": "300000.00",
                                                           "currency": "USD",
-                                                          "subProject": {
-                                                            "subProjectId": "WP-1",
-                                                            "projectTitle": "Work Package 1"
-                                                          },
-                                                          "milestones": [
+                                                          "subProjects": [
                                                             {
-                                                              "milestone": {
-                                                                "externalMilestoneId": "MS-001",
-                                                                "milestoneTitle": "Deliverable 1 – Design",
-                                                                "milestoneAmount": "50000.00",
-                                                                "currency": "USD",
-                                                                "milestoneDate": "2025-06-30"
-                                                              },
-                                                              "allocatedAmount": "50000.00"
-                                                            },
-                                                            {
-                                                              "milestone": {
-                                                                "externalMilestoneId": "MS-002",
-                                                                "milestoneTitle": "Deliverable 2 – Implementation",
-                                                                "milestoneAmount": "100000.00",
-                                                                "currency": "USD",
-                                                                "milestoneDate": "2025-09-30"
-                                                              },
-                                                              "allocatedAmount": "100000.00"
-                                                            },
-                                                            {
-                                                              "milestone": {
-                                                                "externalMilestoneId": "MS-003",
-                                                                "milestoneTitle": "Deliverable 3 – Audit & Closeout",
-                                                                "milestoneAmount": "50000.00",
-                                                                "currency": "USD",
-                                                                "milestoneDate": "2025-12-31"
-                                                              },
-                                                              "allocatedAmount": "50000.00"
+                                                              "externalProjectId": "WP-1",
+                                                              "projectTitle": "Work Package 1",
+                                                              "totalAmount": "200000.00",
+                                                              "currency": "USD",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": {
+                                                                    "externalMilestoneId": "MS-001",
+                                                                    "milestoneTitle": "Deliverable 1 – Design",
+                                                                    "milestoneAmount": "50000.00",
+                                                                    "currency": "USD",
+                                                                    "milestoneDate": "2026-06-30"
+                                                                  },
+                                                                  "allocatedAmount": "50000.00"
+                                                                },
+                                                                {
+                                                                  "milestone": {
+                                                                    "externalMilestoneId": "MS-002",
+                                                                    "milestoneTitle": "Deliverable 2 – Implementation",
+                                                                    "milestoneAmount": "100000.00",
+                                                                    "currency": "USD",
+                                                                    "milestoneDate": "2026-09-30"
+                                                                  },
+                                                                  "allocatedAmount": "100000.00"
+                                                                },
+                                                                {
+                                                                  "milestone": {
+                                                                    "externalMilestoneId": "MS-003",
+                                                                    "milestoneTitle": "Deliverable 3 – Audit & Closeout",
+                                                                    "milestoneAmount": "50000.00",
+                                                                    "currency": "USD",
+                                                                    "milestoneDate": "2026-12-31"
+                                                                  },
+                                                                  "allocatedAmount": "50000.00"
+                                                                }
+                                                              ]
                                                             }
                                                           ]
-                                                        }
-                                                      ],
-                                                      "items": [
-                                                        {
-                                                          "category": "Personnel",
-                                                          "vendor": "Contractor A",
-                                                          "amountFcy": "12000.00",
-                                                          "currency": "USD",
-                                                          "fxRate": "1.00",
-                                                          "amountRcy": "12000.00",
-                                                          "spendDate": "2025-04-01",
-                                                          "hash": "sha256:aabbcc112233",
-                                                          "notes": "Invoice #INV-2025-101"
-                                                        },
-                                                        {
-                                                          "category": "Infrastructure",
-                                                          "vendor": "Cloud Co.",
-                                                          "amountFcy": "3500.00",
-                                                          "currency": "USD",
-                                                          "fxRate": "1.00",
-                                                          "amountRcy": "3500.00",
-                                                          "spendDate": "2025-04-15",
-                                                          "notes": "Monthly hosting – April 2025"
-                                                        },
-                                                        {
-                                                          "category": "Travel",
-                                                          "vendor": "Airline XYZ",
-                                                          "amountFcy": "1800.00",
-                                                          "currency": "EUR",
-                                                          "fxRate": "1.08",
-                                                          "amountRcy": "1944.00",
-                                                          "spendDate": "2025-05-10",
-                                                          "hash": "sha256:ddeeff445566",
-                                                          "notes": "Conference travel – receipt attached"
                                                         }
                                                       ]
                                                     }"""
@@ -334,14 +310,13 @@ public class SpendingEventController {
                                                                 "milestoneTitle": "Final Milestone",
                                                                 "milestoneAmount": "80000.00",
                                                                 "currency": "USD",
-                                                                "milestoneDate": "2026-03-31"
+                                                                "milestoneDate": "2026-12-31"
                                                               },
                                                               "allocatedAmount": "5000.00"
                                                             }
                                                           ]
                                                         }
-                                                      ],
-                                                      "items": []
+                                                      ]
                                                     }"""
                                     )
                             }
@@ -392,15 +367,14 @@ public class SpendingEventController {
                                                             }
                                                           ]
                                                         }
-                                                      ],
-                                                      "items": []
+                                                      ]
                                                     }"""
                                     )
                             }
                     )
             ),
             responses = {
-                    @ApiResponse(responseCode = "201", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                    @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = SpendingEventView.class))}),
                     @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = ProblemDetail.class))}),
@@ -439,7 +413,7 @@ public class SpendingEventController {
             @ApiResponse(responseCode = "409", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
-    @DeleteMapping(value = "/events/{eventId}")
+    @DeleteMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId) {
         return Responses.respondDelete(spendingEventService.deleteEvent(eventId));
