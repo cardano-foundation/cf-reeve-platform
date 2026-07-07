@@ -371,75 +371,96 @@ public class SpendingEventService {
         // Combined budgets the event books against — a SPENDING event's spend (amountRcy) may not exceed
         // the summed milestone budgets nor the summed project budgets. A null budget anywhere lifts that
         // bound (it cannot be meaningfully enforced).
-        BigDecimal summedMilestoneBudget = BigDecimal.ZERO;
-        boolean milestoneBudgetKnown = true;
-        BigDecimal summedProjectBudget = BigDecimal.ZERO;
-        boolean projectBudgetKnown = true;
+        BudgetAccumulator budget = new BudgetAccumulator();
 
         for (EventProjectAllocationRequest req : allocationRequests) {
-            Either<ProblemDetail, ProjectEntity> projectResult = resolveOrCreateProject(req, organisationId);
-            if (projectResult.isLeft()) return Either.left(projectResult.getLeft());
+            Either<ProblemDetail, ProjectEntity> rootResult = resolveOrCreateRootProject(req, organisationId);
+            if (rootResult.isLeft()) return Either.left(rootResult.getLeft());
 
-            ProjectEntity project = projectResult.get();
-            BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
-
-            if (project.getTotalAmount() != null) {
-                summedProjectBudget = summedProjectBudget.add(project.getTotalAmount());
-            } else {
-                projectBudgetKnown = false;
-            }
-
-            for (EventMilestoneAllocationRequest milestoneReq : req.getMilestones()) {
-                Either<ProblemDetail, MilestoneEntity> milestoneResult = resolveOrCreateMilestone(milestoneReq.getMilestone(), project);
-                if (milestoneResult.isLeft()) return Either.left(milestoneResult.getLeft());
-
-                MilestoneEntity milestone = milestoneResult.get();
-
-                Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
-                        milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
-                if (allocationProblem.isPresent()) return Either.left(allocationProblem.get());
-
-                if (milestoneReq.getAllocatedAmount() != null) {
-                    projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
-                }
-                if (milestone.getMilestoneAmount() != null) {
-                    summedMilestoneBudget = summedMilestoneBudget.add(milestone.getMilestoneAmount());
-                } else {
-                    milestoneBudgetKnown = false;
-                }
-
-                EventMilestoneAllocationEntity.Id id = new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId());
-
-                event.getMilestoneAllocations().add(
-                        EventMilestoneAllocationEntity.builder()
-                                .id(id)
-                                .allocatedAmount(milestoneReq.getAllocatedAmount())
-                                .build());
-            }
-
-            Optional<ProblemDetail> totalProblem = FundingValidations.allocationTotal(projectAllocatedTotal, project);
-            if (totalProblem.isPresent()) return Either.left(totalProblem.get());
+            Optional<ProblemDetail> nodeProblem = populateNode(
+                    event, rootResult.get(), req.getMilestones(), req.getSubProjects(), budget);
+            if (nodeProblem.isPresent()) return Either.left(nodeProblem.get());
         }
 
         Optional<ProblemDetail> capProblem = FundingValidations.eventAmountWithinBudget(
                 event.getEventType(), event.getAmountRcy(),
-                milestoneBudgetKnown ? summedMilestoneBudget : null,
-                projectBudgetKnown ? summedProjectBudget : null);
+                budget.milestoneKnown ? budget.milestoneBudget : null,
+                budget.projectKnown ? budget.projectBudget : null);
         if (capProblem.isPresent()) return Either.left(capProblem.get());
 
         return Either.right(null);
     }
 
-    private Either<ProblemDetail, ProjectEntity> resolveOrCreateProject(EventProjectAllocationRequest req, String organisationId) {
-        Either<ProblemDetail, ProjectEntity> rootResult = resolveOrCreateRootProject(req, organisationId);
-        if (rootResult.isLeft()) return rootResult;
+    /**
+     * Recursively attaches an allocation node to the event, mirroring the create-project endpoint's tree:
+     * a node resolves/creates <em>either</em> its milestones (each carrying an allocated amount)
+     * <em>or</em> its sub-projects (never both). Budgets are accumulated for the event-amount cap.
+     */
+    private Optional<ProblemDetail> populateNode(FundingEventEntity event, ProjectEntity project,
+            List<EventMilestoneAllocationRequest> milestones, List<EventSubProjectAllocationRequest> subProjects,
+            BudgetAccumulator budget) {
 
-        ProjectEntity rootProject = rootResult.get();
-
-        if (req.getSubProject() == null) {
-            return Either.right(rootProject);
+        if (!milestones.isEmpty() && !subProjects.isEmpty()) {
+            return Optional.of(Problems.badRequest(
+                    "A project has either milestones or sub-projects, not both",
+                    ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES));
         }
-        return resolveOrCreateSubProject(req.getSubProject(), rootProject);
+
+        if (!milestones.isEmpty()) {
+            // A node carrying allocations is a target project — its budget bounds the event amount.
+            if (project.getTotalAmount() != null) {
+                budget.projectBudget = budget.projectBudget.add(project.getTotalAmount());
+            } else {
+                budget.projectKnown = false;
+            }
+
+            BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
+            for (EventMilestoneAllocationRequest milestoneReq : milestones) {
+                Either<ProblemDetail, MilestoneEntity> milestoneResult = resolveOrCreateMilestone(milestoneReq.getMilestone(), project);
+                if (milestoneResult.isLeft()) return Optional.of(milestoneResult.getLeft());
+
+                MilestoneEntity milestone = milestoneResult.get();
+
+                Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
+                        milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
+                if (allocationProblem.isPresent()) return allocationProblem;
+
+                if (milestoneReq.getAllocatedAmount() != null) {
+                    projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
+                }
+                if (milestone.getMilestoneAmount() != null) {
+                    budget.milestoneBudget = budget.milestoneBudget.add(milestone.getMilestoneAmount());
+                } else {
+                    budget.milestoneKnown = false;
+                }
+
+                event.getMilestoneAllocations().add(EventMilestoneAllocationEntity.builder()
+                        .id(new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId()))
+                        .allocatedAmount(milestoneReq.getAllocatedAmount())
+                        .build());
+            }
+
+            Optional<ProblemDetail> totalProblem = FundingValidations.allocationTotal(projectAllocatedTotal, project);
+            if (totalProblem.isPresent()) return totalProblem;
+        }
+
+        for (EventSubProjectAllocationRequest subNode : subProjects) {
+            Either<ProblemDetail, ProjectEntity> subResult = resolveOrCreateSubProjectNode(subNode, project);
+            if (subResult.isLeft()) return Optional.of(subResult.getLeft());
+
+            Optional<ProblemDetail> childProblem = populateNode(
+                    event, subResult.get(), subNode.getMilestones(), subNode.getSubProjects(), budget);
+            if (childProblem.isPresent()) return childProblem;
+        }
+        return Optional.empty();
+    }
+
+    /** Mutable holder for the event-amount cap budgets accumulated while walking the allocation tree. */
+    private static final class BudgetAccumulator {
+        private BigDecimal milestoneBudget = BigDecimal.ZERO;
+        private boolean milestoneKnown = true;
+        private BigDecimal projectBudget = BigDecimal.ZERO;
+        private boolean projectKnown = true;
     }
 
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateRootProject(EventProjectAllocationRequest req, String organisationId) {
@@ -454,13 +475,17 @@ public class SpendingEventService {
             return Either.right(projectRepository.findById(projectId).orElseThrow());
         }
 
+        // Id supplied but no project exists for it. With no creation fields, the caller is referencing
+        // an existing project — fail as not-found. Supplying projectTitle (and budget) creates it instead.
         if (req.getProjectTitle() == null) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "projectTitle is required when creating a new project");
-            problem.setTitle(PROJECT_FIELDS_REQUIRED);
-            return Either.left(problem);
+            return Either.left(Problems.notFound(
+                    "Project not found: %s. Supply projectTitle (and totalAmount/currency) to create it."
+                            .formatted(req.getExternalProjectId()),
+                    ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
 
-        if (req.getSubProject() == null && (req.getTotalAmount() == null || req.getCurrency() == null)) {
+        // A root that directly carries milestones needs a budget; one that only holds sub-projects may omit it.
+        if (req.getSubProjects().isEmpty() && (req.getTotalAmount() == null || req.getCurrency() == null)) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "totalAmount and currency are required when creating a new root project");
             problem.setTitle(PROJECT_FIELDS_REQUIRED);
             return Either.left(problem);
@@ -483,17 +508,20 @@ public class SpendingEventService {
         return Either.right(projectRepository.saveAndFlush(newProject));
     }
 
-    private Either<ProblemDetail, ProjectEntity> resolveOrCreateSubProject(SubProjectRequest subReq, ProjectEntity parent) {
-        if (subReq.getSubProjectId() == null) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "subProjectId is required for sub-project resolution");
-            problem.setTitle(PROJECT_FIELDS_REQUIRED);
-            return Either.left(problem);
-        }
-
-        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getSubProjectId());
+    private Either<ProblemDetail, ProjectEntity> resolveOrCreateSubProjectNode(EventSubProjectAllocationRequest subReq, ProjectEntity parent) {
+        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getExternalProjectId());
         Optional<ProjectEntity> existing = projectRepository.findById(subProjectUid);
         if (existing.isPresent()) {
             return Either.right(existing.get());
+        }
+
+        // Id supplied but no sub-project exists for it under this parent. With no creation fields, the
+        // caller is referencing an existing sub-project — fail as not-found. Supplying projectTitle creates it.
+        if (subReq.getProjectTitle() == null) {
+            return Either.left(Problems.notFound(
+                    "Sub-project not found: %s. Supply projectTitle to create it."
+                            .formatted(subReq.getExternalProjectId()),
+                    ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
 
         Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneRepository.existsByProjectId(parent.getId()));
@@ -501,17 +529,28 @@ public class SpendingEventService {
             return Either.left(structure.get());
         }
 
-        if (subReq.getProjectTitle() == null) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "projectTitle is required when creating a new sub-project");
-            problem.setTitle(PROJECT_FIELDS_REQUIRED);
-            return Either.left(problem);
+        // When a budget is supplied, validate it the same way the create-project endpoint does:
+        // it must be positive and fit within the parent's total (individually and cumulatively).
+        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(subReq.getTotalAmount());
+        if (amountProblem.isPresent()) {
+            return Either.left(amountProblem.get());
+        }
+        BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
+                projectRepository.findByParentProjectId(parent.getId()), null);
+        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(
+                subReq.getTotalAmount(), parent, otherSubProjectsTotal);
+        if (subAmount.isPresent()) {
+            return Either.left(subAmount.get());
         }
 
         ProjectEntity subProject = ProjectEntity.builder()
                 .id(subProjectUid)
                 .organisationId(parent.getOrganisationId())
-                .externalProjectId(subReq.getSubProjectId())
+                .fundingId(subReq.getFundingId())
+                .externalProjectId(subReq.getExternalProjectId())
                 .projectTitle(subReq.getProjectTitle())
+                .totalAmount(subReq.getTotalAmount())
+                .currency(subReq.getCurrency())
                 .parentProject(parent)
                 .build();
         return Either.right(projectRepository.saveAndFlush(subProject));
@@ -525,10 +564,12 @@ public class SpendingEventService {
             }
             if (req.getMilestoneTitle() == null || req.getMilestoneAmount() == null
                     || req.getCurrency() == null || req.getMilestoneDate() == null) {
+                // Id supplied but no milestone exists and creation fields are incomplete → referencing a
+                // milestone that does not exist.
                 log.warn("Milestone not found: {} in project: {}", req.getExternalMilestoneId(), project.getId());
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Milestone not found: %s".formatted(req.getExternalMilestoneId()));
-                problem.setTitle("MILESTONE_NOT_FOUND");
-                return Either.left(problem);
+                return Either.left(Problems.notFound(
+                        "Milestone not found: %s".formatted(req.getExternalMilestoneId()),
+                        ErrorTitleConstants.MILESTONE_NOT_FOUND));
             }
         } else if (req.getMilestoneTitle() == null || req.getMilestoneAmount() == null
                 || req.getCurrency() == null || req.getMilestoneDate() == null) {
