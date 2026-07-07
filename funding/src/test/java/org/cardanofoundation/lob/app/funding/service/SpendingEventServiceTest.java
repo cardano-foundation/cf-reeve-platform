@@ -115,21 +115,19 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_spendingEvent_success_setsSpendDetailOnAllocation() {
+    void create_spendingEvent_success_setsSpendDetailOnEvent() {
         stubExistingProjectAndMilestone("MS-1");
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
-                spendingRequest(spendingMilestone("MS-1")));
+                spendingRequest(fundingMilestone("MS-1", ALLOCATED)));
 
         assertThat(result.isRight()).isTrue();
-        verify(fundingEventRepository).saveAndFlush(argThat(e -> {
-            EventMilestoneAllocationEntity alloc = e.getMilestoneAllocations().get(0);
-            return e.getTotalAmount().compareTo(ALLOCATED) == 0
-                    && alloc.getAmountFcy().compareTo(AMOUNT_FCY) == 0
-                    && alloc.getAmountRcy().compareTo(AMOUNT_RCY) == 0
-                    && "Vendor AB".equals(alloc.getVendor());
-        }));
+        verify(fundingEventRepository).saveAndFlush(argThat(e ->
+                e.getTotalAmount().compareTo(ALLOCATED) == 0
+                        && e.getAmountFcy().compareTo(AMOUNT_FCY) == 0
+                        && e.getAmountRcy().compareTo(AMOUNT_RCY) == 0
+                        && "Vendor AB".equals(e.getVendor())));
     }
 
     @Test
@@ -213,52 +211,84 @@ class SpendingEventServiceTest {
 
     @Test
     void create_returnsLeft_whenSpendFieldsOnNonSpendingEvent() {
-        stubExistingProjectAndMilestone("MS-1");
+        // FUNDING event carrying event-level spend detail — rejected before allocations are touched.
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountFcy(AMOUNT_FCY);
 
-        // FUNDING event with spend fields present
-        EventMilestoneAllocationRequest ms = fundingMilestone("MS-1", ALLOCATED);
-        ms.setAmountFcy(AMOUNT_FCY);
-        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(fundingRequest(ms));
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED);
     }
 
     @Test
     void create_returnsLeft_whenSpendingEventMissingSpendFields() {
-        stubExistingProjectAndMilestone("MS-1");
+        // SPENDING event with allocations but no amountFcy/amountRcy/fxRate/spendDate on the event.
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB").milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
+                .build();
 
-        // SPENDING event but no amountFcy/amountRcy/fxRate/spendDate
-        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
-                spendingRequest(fundingMilestone("MS-1", ALLOCATED)));
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
     }
 
     @Test
     void create_returnsLeft_whenFxRateDoesNotMatch() {
-        stubExistingProjectAndMilestone("MS-1");
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setFxRate(new BigDecimal("3")); // 50000 * 3 = 150000 != amountFcy 100000
 
-        EventMilestoneAllocationRequest ms = spendingMilestone("MS-1");
-        ms.setFxRate(new BigDecimal("3")); // 50000 * 3 = 150000 != amountFcy 100000
-        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(spendingRequest(ms));
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FX_RATE_MISMATCH);
     }
 
     @Test
-    void create_returnsLeft_whenAllocatedExceedsAmountRcy() {
+    void create_returnsLeft_whenAllocatedTotalExceedsAmountRcy() {
         stubExistingProjectAndMilestone("MS-1");
 
-        EventMilestoneAllocationRequest ms = spendingMilestone("MS-1");
-        ms.setAllocatedAmount(new BigDecimal("50001.00")); // > amountRcy 50000 (still <= milestone 50000? no)
-        ms.setAmountRcy(new BigDecimal("50000.00"));
-        // keep allocated <= milestone by bumping milestone check: milestone amount is 50000, so use 50000.50
-        ms.setAllocatedAmount(new BigDecimal("50000.00")); // == milestone; make amountRcy smaller to trip the spend check
-        ms.setAmountRcy(new BigDecimal("40000.00"));
-        ms.setFxRate(new BigDecimal("2.5")); // 40000 * 2.5 = 100000 = amountFcy
-        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(spendingRequest(ms));
+        // allocated total (50000) exceeds the event's spend amountRcy (40000); fx stays consistent (40000 * 2.5 = 100000)
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountRcy(new BigDecimal("40000.00"));
+        request.setFxRate(new BigDecimal("2.5"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND);
+    }
+
+    @Test
+    void create_returnsLeft_whenAmountRcyExceedsMilestoneBudget() {
+        stubExistingProjectAndMilestone("MS-1"); // milestone budget 50000, project 200000
+
+        // amountRcy (60000) exceeds the summed milestone budget (50000); fx stays consistent (60000 * 2 = 120000)
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountRcy(new BigDecimal("60000.00"));
+        request.setAmountFcy(new BigDecimal("120000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES);
+    }
+
+    @Test
+    void create_returnsLeft_whenAmountRcyExceedsProjectBudget() {
+        // Milestone with no budget -> milestone cap is lifted, project total (200000) still bounds the spend.
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = milestoneEntityWithAmount("m1", null);
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+
+        // amountRcy (250000) exceeds the project total (200000); fx stays consistent (250000 * 2 = 500000)
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountRcy(new BigDecimal("250000.00"));
+        request.setAmountFcy(new BigDecimal("500000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT);
     }
 
     @Test
@@ -417,8 +447,8 @@ class SpendingEventServiceTest {
     // --- toView / toPublishView ---
 
     @Test
-    void toView_mapsScalarsAndAllocationSpendDetail() {
-        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+    void toView_mapsScalarsAndEventSpendDetail() {
+        FundingEventEntity event = spendingEventEntity();
         MilestoneEntity milestone = milestoneEntity("m1");
         EventMilestoneAllocationEntity alloc = spendingAllocation("e1", "m1");
         when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
@@ -427,16 +457,18 @@ class SpendingEventServiceTest {
         SpendingEventView view = spendingEventService.toView(event);
 
         assertThat(view.getEventId()).isEqualTo("e1");
+        assertThat(view.getAmountFcy()).isEqualByComparingTo(AMOUNT_FCY);
+        assertThat(view.getSpendCurrency()).isEqualTo("EUR");
+        assertThat(view.getVendor()).isEqualTo("Vendor AB");
         assertThat(view.getProjectAllocations()).hasSize(1);
         var mv = view.getProjectAllocations().get(0).getMilestoneAllocations().get(0);
         assertThat(mv.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
-        assertThat(mv.getAmountFcy()).isEqualByComparingTo(AMOUNT_FCY);
-        assertThat(mv.getVendor()).isEqualTo("Vendor AB");
     }
 
     @Test
-    void toPublishView_mapsScalarsAndSpendDetail() {
-        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.PUBLISHED);
+    void toPublishView_mapsScalarsAndEventSpendDetail() {
+        FundingEventEntity event = spendingEventEntity();
+        event.setStatus(EventStatus.PUBLISHED);
         event.setCreatedAt(LocalDateTime.of(2025, 6, 15, 10, 0));
         event.setTotalAmount(new BigDecimal("300.00"));
         MilestoneEntity milestone = milestoneEntity("m1");
@@ -449,12 +481,12 @@ class SpendingEventServiceTest {
         assertThat(view.getEventId()).isEqualTo("e1");
         assertThat(view.getDate()).isEqualTo(LocalDate.of(2025, 6, 15));
         assertThat(view.getCurrency().getCustCode()).isEqualTo("USD");
+        assertThat(view.getAmountFcy()).isEqualByComparingTo(AMOUNT_FCY);
+        assertThat(view.getSpendCurrency().getCustCode()).isEqualTo("EUR");
+        assertThat(view.getVendor()).isEqualTo("Vendor AB");
         assertThat(view.getProjectAllocations()).hasSize(1);
         SpendingEventPublishView.Milestone m = view.getProjectAllocations().get(0).getMilestones().get(0);
         assertThat(m.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
-        assertThat(m.getAmountFcy()).isEqualByComparingTo(AMOUNT_FCY);
-        assertThat(m.getSpendCurrency().getCustCode()).isEqualTo("EUR");
-        assertThat(m.getVendor()).isEqualTo("Vendor AB");
     }
 
     // --- view-returning API + org access ---
@@ -511,7 +543,7 @@ class SpendingEventServiceTest {
     @Test
     void createEvent_returnsErrorView_whenCreateFails() {
         SpendingEventView result = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
-                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder().externalProjectId(null)
                         .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
                 .build());
@@ -590,28 +622,30 @@ class SpendingEventServiceTest {
                 .currency("USD").milestoneDate(FUTURE_DATE).project(projectEntity()).build();
     }
 
+    /** A SPENDING event entity carrying its single (consistent) spend record. */
+    private FundingEventEntity spendingEventEntity() {
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        event.setCategory("Personnel");
+        event.setVendor("Vendor AB");
+        event.setAmountFcy(AMOUNT_FCY);
+        event.setAmountRcy(AMOUNT_RCY);
+        event.setSpendCurrency("EUR");
+        event.setFxRate(FX_RATE);
+        event.setSpendDate(LocalDate.of(2025, 4, 3));
+        return event;
+    }
+
     private EventMilestoneAllocationEntity spendingAllocation(String eventId, String milestoneId) {
         return EventMilestoneAllocationEntity.builder()
                 .id(new EventMilestoneAllocationEntity.Id(eventId, milestoneId))
-                .allocatedAmount(ALLOCATED).category("Personnel").vendor("Vendor AB")
-                .amountFcy(AMOUNT_FCY).amountRcy(AMOUNT_RCY).currency("EUR").fxRate(FX_RATE)
-                .spendDate(LocalDate.of(2025, 4, 3)).build();
+                .allocatedAmount(ALLOCATED).build();
     }
 
-    /** A milestone allocation for a FUNDING/REFUND event: allocatedAmount only, no spend detail. */
+    /** A milestone allocation: allocatedAmount only (spend detail lives on the event). */
     private EventMilestoneAllocationRequest fundingMilestone(String externalMilestoneId, BigDecimal allocated) {
         return EventMilestoneAllocationRequest.builder()
                 .milestone(MilestoneCreateRequest.builder().externalMilestoneId(externalMilestoneId).build())
                 .allocatedAmount(allocated).build();
-    }
-
-    /** A milestone allocation for a SPENDING event: allocatedAmount + consistent spend detail. */
-    private EventMilestoneAllocationRequest spendingMilestone(String externalMilestoneId) {
-        return EventMilestoneAllocationRequest.builder()
-                .milestone(MilestoneCreateRequest.builder().externalMilestoneId(externalMilestoneId).build())
-                .allocatedAmount(ALLOCATED)
-                .category("Personnel").vendor("Vendor AB").amountFcy(AMOUNT_FCY).currency("EUR")
-                .fxRate(FX_RATE).amountRcy(AMOUNT_RCY).spendDate(LocalDate.of(2025, 4, 3)).build();
     }
 
     private SpendingEventCreateRequest fundingRequest(EventMilestoneAllocationRequest milestone) {
@@ -625,9 +659,12 @@ class SpendingEventServiceTest {
                 .allocations(List.of(allocation)).build();
     }
 
+    /** A SPENDING event request with event-level spend detail (consistent: 100000 = 50000 * 2). */
     private SpendingEventCreateRequest spendingRequest(EventMilestoneAllocationRequest milestone) {
         return SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .category("Personnel").vendor("Vendor AB").amountFcy(AMOUNT_FCY).spendCurrency("EUR")
+                .fxRate(FX_RATE).amountRcy(AMOUNT_RCY).spendDate(LocalDate.of(2025, 4, 3))
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .externalProjectId("PROJ-AB").milestones(List.of(milestone)).build()))
                 .build();

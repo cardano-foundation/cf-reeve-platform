@@ -90,27 +90,36 @@ class SpendingEventConverterTest {
     }
 
     @Test
-    void convertsSpendDetailOntoMilestoneWithBacklink() {
+    void convertsSpendDetailOntoEventWithMilestoneBacklink() {
         stubOrganisation();
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
                 .milestoneId("ms-uid-1").milestoneTitle("Milestone AB")
                 .milestoneAmount(new BigDecimal("60.00")).allocatedAmount(new BigDecimal("50.00"))
                 .currency(usd()).milestoneDate(LocalDate.of(2025, 6, 30))
-                // spend detail
-                .category("Personnel").vendor("Vendor AB").amountFcy(new BigDecimal("100.00"))
-                .spendCurrency(eur()).fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
-                .spendDate(LocalDate.of(2025, 4, 3)).documentHash("hash-1").notes("note")
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
                 .date(LocalDate.of(2026, 6, 9)).fundingId("fund-1")
                 .amount(new BigDecimal("50.00")).currency(usd())
+                // spend detail — event level
+                .category("Personnel").vendor("Vendor AB").amountFcy(new BigDecimal("100.00"))
+                .spendCurrency(eur()).fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
+                .spendDate(LocalDate.of(2025, 4, 3)).documentHash("hash-1").notes("note")
                 .projectAllocations(List.of(allocation("proj-1", "Project One", "Sub One", List.of(milestone))))
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
+
+        assertEquals("Personnel", entity.getCategory());
+        assertEquals("Vendor AB", entity.getVendor());
+        assertEquals(new BigDecimal("100.00"), entity.getAmountFcy());
+        assertEquals(new BigDecimal("85.00"), entity.getAmountRcy());
+        assertEquals("EUR", entity.getSpendCurrency());
+        assertEquals("ISO_4217:EUR", entity.getSpendCurrencyId());
+        assertEquals(new BigDecimal("0.85"), entity.getFxRate());
+        assertEquals("hash-1", entity.getDocumentHash());
 
         assertEquals(1, entity.getProjectAllocations().size());
         EventProjectAllocationEntity allocationEntity = entity.getProjectAllocations().get(0);
@@ -123,19 +132,11 @@ class SpendingEventConverterTest {
         assertEquals("ms-uid-1", ms.getMilestoneId());
         assertEquals("Milestone AB", ms.getMilestoneTitle());
         assertEquals(new BigDecimal("50.00"), ms.getAllocatedAmount());
-        assertEquals("Personnel", ms.getCategory());
-        assertEquals("Vendor AB", ms.getVendor());
-        assertEquals(new BigDecimal("100.00"), ms.getAmountFcy());
-        assertEquals(new BigDecimal("85.00"), ms.getAmountRcy());
-        assertEquals("EUR", ms.getCurrency());
-        assertEquals("ISO_4217:EUR", ms.getCurrencyId());
-        assertEquals(new BigDecimal("0.85"), ms.getFxRate());
-        assertEquals("hash-1", ms.getDocumentHash());
         assertEquals(allocationEntity, ms.getAllocation());
     }
 
     @Test
-    void fundingMilestone_hasNoSpendDetail() {
+    void fundingEvent_hasNoSpendDetail() {
         stubOrganisation();
 
         SpendingEventPublishView.Milestone milestone = SpendingEventPublishView.Milestone.builder()
@@ -153,10 +154,10 @@ class SpendingEventConverterTest {
 
         EventMilestoneAllocationEntity ms = entity.getProjectAllocations().get(0).getMilestones().get(0);
         assertEquals(new BigDecimal("100.00"), ms.getAllocatedAmount());
-        assertThat(ms.getCategory()).isNull();
-        assertThat(ms.getVendor()).isNull();
-        assertThat(ms.getAmountFcy()).isNull();
-        assertThat(ms.getFxRate()).isNull();
+        assertThat(entity.getCategory()).isNull();
+        assertThat(entity.getVendor()).isNull();
+        assertThat(entity.getAmountFcy()).isNull();
+        assertThat(entity.getFxRate()).isNull();
     }
 
     @Test

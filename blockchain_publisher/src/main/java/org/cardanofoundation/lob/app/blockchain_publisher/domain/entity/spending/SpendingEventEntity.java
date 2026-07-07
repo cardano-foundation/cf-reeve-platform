@@ -93,6 +93,48 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     @Column(name = "currency_id")
     private String currencyId;
 
+    // --- Spend detail: the event's single spend record. SPENDING events only. ---
+
+    @Nullable
+    @Column(name = "category")
+    private String category;
+
+    @Nullable
+    @Column(name = "vendor")
+    private String vendor;
+
+    @Nullable
+    @Column(name = "amount_fcy")
+    private BigDecimal amountFcy;
+
+    @Nullable
+    @Column(name = "amount_rcy")
+    private BigDecimal amountRcy;
+
+    @Nullable
+    @Column(name = "spend_currency")
+    private String spendCurrency;
+
+    @Nullable
+    @Column(name = "spend_currency_id")
+    private String spendCurrencyId;
+
+    @Nullable
+    @Column(name = "fx_rate")
+    private BigDecimal fxRate;
+
+    @Nullable
+    @Column(name = "spend_date")
+    private java.time.LocalDate spendDate;
+
+    @Nullable
+    @Column(name = "document_hash")
+    private String documentHash;
+
+    @Nullable
+    @Column(name = "notes")
+    private String notes;
+
     /** Project allocations — one per project this event targets, each with its milestones. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)

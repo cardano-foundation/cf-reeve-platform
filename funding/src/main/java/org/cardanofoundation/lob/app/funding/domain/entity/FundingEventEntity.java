@@ -4,6 +4,7 @@ import static jakarta.persistence.EnumType.STRING;
 import static jakarta.persistence.TemporalType.TIMESTAMP;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,10 +99,48 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "currency", nullable = false)
     private String currency;
 
-    /**
-     * Milestone allocations for this event — one per (event, milestone) pair. For SPENDING events each
-     * allocation also carries the spend detail (amount, vendor, fx, ...).
-     */
+    // --- Spend detail: the event's single spend record. Populated for SPENDING events only. ---
+
+    @Nullable
+    @Column(name = "category")
+    private String category;
+
+    @Nullable
+    @Column(name = "vendor")
+    private String vendor;
+
+    /** Foreign-currency amount spent ({@code amountFcy = amountRcy * fxRate}). */
+    @Nullable
+    @Column(name = "amount_fcy")
+    private BigDecimal amountFcy;
+
+    /** Reporting-currency amount spent. */
+    @Nullable
+    @Column(name = "amount_rcy")
+    private BigDecimal amountRcy;
+
+    /** Foreign currency of the spend (e.g. EUR); {@link #currency} is the reporting currency. */
+    @Nullable
+    @Column(name = "spend_currency")
+    private String spendCurrency;
+
+    @Nullable
+    @Column(name = "fx_rate")
+    private BigDecimal fxRate;
+
+    @Nullable
+    @Column(name = "spend_date")
+    private LocalDate spendDate;
+
+    @Nullable
+    @Column(name = "spend_hash")
+    private String hash;
+
+    @Nullable
+    @Column(name = "notes")
+    private String notes;
+
+    /** Milestone allocations for this event — one per (event, milestone) pair, carrying only the allocated amount. */
     @Builder.Default
     @OneToMany(mappedBy = "event", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<EventMilestoneAllocationEntity> milestoneAllocations = new ArrayList<>();

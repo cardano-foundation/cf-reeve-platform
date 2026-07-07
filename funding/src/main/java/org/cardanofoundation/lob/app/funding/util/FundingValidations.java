@@ -119,12 +119,11 @@ public final class FundingValidations {
      */
     public static Optional<ProblemDetail> spendDetail(
             EventType eventType,
-            BigDecimal allocatedAmount,
             String category, String vendor,
-            BigDecimal amountFcy, String currency, BigDecimal fxRate, BigDecimal amountRcy,
+            BigDecimal amountFcy, String spendCurrency, BigDecimal fxRate, BigDecimal amountRcy,
             LocalDate spendDate, String hash, String notes) {
 
-        boolean anySpendField = category != null || vendor != null || amountFcy != null || currency != null
+        boolean anySpendField = category != null || vendor != null || amountFcy != null || spendCurrency != null
                 || fxRate != null || amountRcy != null || spendDate != null || hash != null || notes != null;
 
         if (eventType != EventType.SPENDING) {
@@ -147,10 +146,42 @@ public final class FundingValidations {
                     "fxRate %s does not convert amountRcy %s to amountFcy %s".formatted(fxRate, amountRcy, amountFcy),
                     ErrorTitleConstants.FX_RATE_MISMATCH));
         }
-        if (allocatedAmount != null && allocatedAmount.compareTo(amountRcy) > 0) {
+        return Optional.empty();
+    }
+
+    /**
+     * A SPENDING event's allocations may not sum to more than the event's reporting-currency spend
+     * ({@code amountRcy}) — you can't allocate more than was actually spent.
+     */
+    public static Optional<ProblemDetail> spendCoversAllocations(EventType eventType, BigDecimal totalAllocated, BigDecimal amountRcy) {
+        if (eventType == EventType.SPENDING && amountRcy != null && totalAllocated != null
+                && totalAllocated.compareTo(amountRcy) > 0) {
             return Optional.of(Problems.badRequest(
-                    "allocatedAmount %s exceeds the line's reporting amount (amountRcy) %s".formatted(allocatedAmount, amountRcy),
+                    "Allocated total %s exceeds the event's spent amount (amountRcy) %s".formatted(totalAllocated, amountRcy),
                     ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * A SPENDING event's spend ({@code amountRcy}) may not exceed the combined budget of the milestones
+     * it is booked against, nor the combined budget of the projects it is assigned to. A null budget
+     * (passed as {@code null}) lifts that bound — it cannot be meaningfully enforced.
+     */
+    public static Optional<ProblemDetail> eventAmountWithinBudget(EventType eventType, BigDecimal amountRcy,
+            BigDecimal summedMilestoneBudget, BigDecimal summedProjectBudget) {
+        if (eventType != EventType.SPENDING || amountRcy == null) {
+            return Optional.empty();
+        }
+        if (summedMilestoneBudget != null && amountRcy.compareTo(summedMilestoneBudget) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Event amount %s exceeds the total milestone budget %s".formatted(amountRcy, summedMilestoneBudget),
+                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES));
+        }
+        if (summedProjectBudget != null && amountRcy.compareTo(summedProjectBudget) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Event amount %s exceeds the total project budget %s".formatted(amountRcy, summedProjectBudget),
+                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT));
         }
         return Optional.empty();
     }

@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
@@ -64,47 +63,4 @@ public class EventMilestoneAllocationEntity {
     @Nullable
     @Column(name = "allocated_amount")
     private BigDecimal allocatedAmount;
-
-    // --- Spend detail: SPENDING events only ---
-
-    @Nullable
-    @Column(name = "category")
-    private String category;
-
-    @Nullable
-    @Column(name = "vendor")
-    private String vendor;
-
-    @Nullable
-    @Column(name = "amount_fcy")
-    private BigDecimal amountFcy;
-
-    /** Reporting-currency amount actually spent on this line ({@code amountFcy = amountRcy * fxRate}). */
-    @Nullable
-    @Column(name = "amount_rcy")
-    private BigDecimal amountRcy;
-
-    @Nullable
-    @Column(name = "currency")
-    private String currency;
-
-    @Nullable
-    @Column(name = "currency_id")
-    private String currencyId;
-
-    @Nullable
-    @Column(name = "fx_rate")
-    private BigDecimal fxRate;
-
-    @Nullable
-    @Column(name = "spend_date")
-    private LocalDate spendDate;
-
-    @Nullable
-    @Column(name = "document_hash")
-    private String documentHash;
-
-    @Nullable
-    @Column(name = "notes")
-    private String notes;
 }

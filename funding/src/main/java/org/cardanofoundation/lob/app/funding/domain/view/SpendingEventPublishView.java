@@ -36,7 +36,27 @@ public class SpendingEventPublishView {
     private BigDecimal amount;
     private Currency currency;
 
-    /** One entry per project this event is allocated to; SPENDING detail lives on each milestone. */
+    // --- Spend detail: the event's single spend record. SPENDING events only. ---
+    @Nullable
+    private String category;
+    @Nullable
+    private String vendor;
+    @Nullable
+    private BigDecimal amountFcy;
+    @Nullable
+    private Currency spendCurrency;
+    @Nullable
+    private BigDecimal fxRate;
+    @Nullable
+    private BigDecimal amountRcy;
+    @Nullable
+    private LocalDate spendDate;
+    @Nullable
+    private String documentHash;
+    @Nullable
+    private String notes;
+
+    /** One entry per project this event is allocated to. */
     private List<ProjectAllocation> projectAllocations;
 
     // -------------------------------------------------------------------------
@@ -72,26 +92,6 @@ public class SpendingEventPublishView {
         private BigDecimal allocatedAmount;
         private Currency currency;
         private LocalDate milestoneDate;
-
-        // --- Spend detail: SPENDING events only ---
-        @Nullable
-        private String category;
-        @Nullable
-        private String vendor;
-        @Nullable
-        private BigDecimal amountFcy;
-        @Nullable
-        private Currency spendCurrency;
-        @Nullable
-        private BigDecimal fxRate;
-        @Nullable
-        private BigDecimal amountRcy;
-        @Nullable
-        private LocalDate spendDate;
-        @Nullable
-        private String documentHash;
-        @Nullable
-        private String notes;
     }
 
     @Getter

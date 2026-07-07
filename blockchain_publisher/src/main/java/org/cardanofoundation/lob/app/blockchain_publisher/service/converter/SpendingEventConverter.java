@@ -47,6 +47,18 @@ public class SpendingEventConverter {
         entity.setCurrency(custCode(view.getCurrency()));
         entity.setCurrencyId(currencyId(view.getCurrency()));
 
+        // Spend detail lives on the event now (SPENDING events only).
+        entity.setCategory(view.getCategory());
+        entity.setVendor(view.getVendor());
+        entity.setAmountFcy(view.getAmountFcy());
+        entity.setAmountRcy(view.getAmountRcy());
+        entity.setSpendCurrency(custCode(view.getSpendCurrency()));
+        entity.setSpendCurrencyId(currencyId(view.getSpendCurrency()));
+        entity.setFxRate(view.getFxRate());
+        entity.setSpendDate(view.getSpendDate());
+        entity.setDocumentHash(view.getDocumentHash());
+        entity.setNotes(view.getNotes());
+
         entity.setOrganisation(resolveOrganisation(organisationId));
         entity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
                 .publishStatus(BlockchainPublishStatus.STORED)
@@ -81,16 +93,6 @@ public class SpendingEventConverter {
                         .milestoneId(milestone.getMilestoneId())
                         .milestoneTitle(milestone.getMilestoneTitle())
                         .allocatedAmount(milestone.getAllocatedAmount())
-                        .category(milestone.getCategory())
-                        .vendor(milestone.getVendor())
-                        .amountFcy(milestone.getAmountFcy())
-                        .amountRcy(milestone.getAmountRcy())
-                        .currency(custCode(milestone.getSpendCurrency()))
-                        .currencyId(currencyId(milestone.getSpendCurrency()))
-                        .fxRate(milestone.getFxRate())
-                        .spendDate(milestone.getSpendDate())
-                        .documentHash(milestone.getDocumentHash())
-                        .notes(milestone.getNotes())
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));
     }

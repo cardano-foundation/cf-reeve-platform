@@ -43,6 +43,12 @@ public class ProjectWithMilestonesCreateRequest extends BaseRequest {
     @Schema(example = "USD")
     private String currency;
 
+    /** When set, the project is created as a sub-project of this (existing) parent. Null creates a root project. */
+    @Nullable
+    @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
+            description = "Optional id of an existing parent project. When set, the new project is created as its sub-project.")
+    private String parentProjectId;
+
     @Builder.Default
     @Valid
     @Schema(description = "Milestones to create together with the project. Mutually exclusive with subProjects.")
