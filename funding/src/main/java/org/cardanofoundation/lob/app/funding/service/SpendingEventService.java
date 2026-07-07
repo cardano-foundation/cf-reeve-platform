@@ -258,9 +258,9 @@ public class SpendingEventService {
     }
 
     private static Optional<ProblemDetail> validateEventTotals(FundingEventEntity event) {
-        Optional<ProblemDetail> cover = FundingValidations.spendCoversAllocations(
+        Optional<ProblemDetail> allocated = FundingValidations.spendFullyAllocated(
                 event.getEventType(), event.getTotalAmount(), event.getAmountRcy());
-        if (cover.isPresent()) return cover;
+        if (allocated.isPresent()) return allocated;
         return FundingValidations.eventTotal(event.getEventType(), event.getTotalAmount());
     }
 

@@ -225,21 +225,28 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendCoversAllocations_rejected_whenAllocatedTotalExceedsAmountRcy() {
-        assertThat(title(FundingValidations.spendCoversAllocations(
+    void spendFullyAllocated_rejected_whenAllocatedTotalExceedsAmountRcy() {
+        assertThat(title(FundingValidations.spendFullyAllocated(
                 EventType.SPENDING, new BigDecimal("60000"), new BigDecimal("50000"))))
                 .isEqualTo(ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND);
     }
 
     @Test
-    void spendCoversAllocations_allowed_whenWithinSpend() {
-        assertThat(FundingValidations.spendCoversAllocations(
-                EventType.SPENDING, new BigDecimal("50000"), new BigDecimal("50000"))).isEmpty();
+    void spendFullyAllocated_rejected_whenAllocatedTotalBelowAmountRcy() {
+        assertThat(title(FundingValidations.spendFullyAllocated(
+                EventType.SPENDING, new BigDecimal("40000"), new BigDecimal("50000"))))
+                .isEqualTo(ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED);
     }
 
     @Test
-    void spendCoversAllocations_ignoredForNonSpending() {
-        assertThat(FundingValidations.spendCoversAllocations(
+    void spendFullyAllocated_allowed_whenAllocatedTotalMatchesSpend() {
+        assertThat(FundingValidations.spendFullyAllocated(
+                EventType.SPENDING, new BigDecimal("50000"), new BigDecimal("50000.00"))).isEmpty();
+    }
+
+    @Test
+    void spendFullyAllocated_ignoredForNonSpending() {
+        assertThat(FundingValidations.spendFullyAllocated(
                 EventType.FUNDING, new BigDecimal("999999"), null)).isEmpty();
     }
 

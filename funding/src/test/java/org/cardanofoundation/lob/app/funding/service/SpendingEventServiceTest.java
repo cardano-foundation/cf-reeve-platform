@@ -278,6 +278,19 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenSpendNotFullyAllocated() {
+        stubExistingProjectAndMilestone("MS-1");
+
+        // Only 30000 of the 50000 spend (amountRcy) is allocated — a SPENDING event must be fully allocated.
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", new BigDecimal("30000.00")));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_returnsLeft_whenAmountRcyExceedsMilestoneBudget() {
         stubExistingProjectAndMilestone("MS-1"); // milestone budget 50000, project 200000
 

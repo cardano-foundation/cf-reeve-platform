@@ -150,15 +150,24 @@ public final class FundingValidations {
     }
 
     /**
-     * A SPENDING event's allocations may not sum to more than the event's reporting-currency spend
-     * ({@code amountRcy}) — you can't allocate more than was actually spent.
+     * A SPENDING event's spend ({@code amountRcy}) must be fully allocated: the milestone allocations
+     * must sum to exactly the spent amount — no more (you can't allocate what wasn't spent) and no
+     * less (every spent unit must be booked against a milestone).
      */
-    public static Optional<ProblemDetail> spendCoversAllocations(EventType eventType, BigDecimal totalAllocated, BigDecimal amountRcy) {
-        if (eventType == EventType.SPENDING && amountRcy != null && totalAllocated != null
-                && totalAllocated.compareTo(amountRcy) > 0) {
+    public static Optional<ProblemDetail> spendFullyAllocated(EventType eventType, BigDecimal totalAllocated, BigDecimal amountRcy) {
+        if (eventType != EventType.SPENDING || amountRcy == null || totalAllocated == null) {
+            return Optional.empty();
+        }
+        if (totalAllocated.compareTo(amountRcy) > 0) {
             return Optional.of(Problems.badRequest(
                     "Allocated total %s exceeds the event's spent amount (amountRcy) %s".formatted(totalAllocated, amountRcy),
                     ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND));
+        }
+        if (totalAllocated.compareTo(amountRcy) < 0) {
+            return Optional.of(Problems.badRequest(
+                    "Allocated total %s does not fully allocate the event's spent amount (amountRcy) %s"
+                            .formatted(totalAllocated, amountRcy),
+                    ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED));
         }
         return Optional.empty();
     }

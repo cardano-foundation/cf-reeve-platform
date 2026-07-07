@@ -30,6 +30,7 @@ public final class ErrorTitleConstants {
     public static final String ALLOCATION_AMOUNT_REQUIRED = "ALLOCATION_AMOUNT_REQUIRED";
     public static final String ALLOCATION_EXCEEDS_MILESTONE = "ALLOCATION_EXCEEDS_MILESTONE";
     public static final String ALLOCATION_EXCEEDS_SPEND = "ALLOCATION_EXCEEDS_SPEND";
+    public static final String SPEND_NOT_FULLY_ALLOCATED = "SPEND_NOT_FULLY_ALLOCATED";
     public static final String ALLOCATION_TOTAL_EXCEEDS_PROJECT = "ALLOCATION_TOTAL_EXCEEDS_PROJECT";
     public static final String SPEND_FIELDS_NOT_ALLOWED = "SPEND_FIELDS_NOT_ALLOWED";
     public static final String SPEND_FIELDS_REQUIRED = "SPEND_FIELDS_REQUIRED";
