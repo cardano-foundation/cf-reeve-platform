@@ -30,15 +30,14 @@ public class AddressUtxoFilterPlugin implements FilterPlugin<AddressUtxo> {
         this.addresses = addresses == null ? Set.of() : Set.copyOf(addresses);
         log.info("AddressUtxoFilterPlugin created: {} address(es){}",
                 this.addresses.size(),
-                this.addresses.isEmpty() ? " (filter DISABLED; all unspent UTXOs will pass through)" : "");
+                this.addresses.isEmpty() ? " (no allow-list; all unspent UTXOs will be dropped)" : "");
     }
 
     @Override
     public Collection<AddressUtxo> filter(Collection<AddressUtxo> items) {
         if (addresses.isEmpty()) {
-            // No allow-list configured: keep everything (mirrors an unset ADDRESSES array).
-            // If you'd rather drop everything in that case, return List.of() here.
-            return items;
+            // No allow-list configured: keep nothing.
+            return List.of();
         }
         if (items == null || items.isEmpty()) {
             return items instanceof List ? items : new ArrayList<>();

@@ -38,13 +38,13 @@ class AddressUtxoFilterPluginTest {
     }
 
     @Test
-    void emptyAllowListPassesEverythingThrough() {
+    void emptyAllowListKeepsNothing() {
         var filter = plugin(Set.of());
         var input = List.of(utxo(ADDR_A), utxo(ADDR_OTHER));
 
         var result = filter.filter(input);
 
-        assertThat(result).isSameAs(input); // returns the original collection untouched
+        assertThat(result).isEmpty(); // no allow-list configured: keep nothing
     }
 
     @Test
