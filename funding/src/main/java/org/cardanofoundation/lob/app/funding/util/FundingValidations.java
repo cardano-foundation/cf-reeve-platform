@@ -163,6 +163,29 @@ public final class FundingValidations {
         return Optional.empty();
     }
 
+    /**
+     * A SPENDING event's spend ({@code amountRcy}) may not exceed the combined budget of the milestones
+     * it is booked against, nor the combined budget of the projects it is assigned to. A null budget
+     * (passed as {@code null}) lifts that bound — it cannot be meaningfully enforced.
+     */
+    public static Optional<ProblemDetail> eventAmountWithinBudget(EventType eventType, BigDecimal amountRcy,
+            BigDecimal summedMilestoneBudget, BigDecimal summedProjectBudget) {
+        if (eventType != EventType.SPENDING || amountRcy == null) {
+            return Optional.empty();
+        }
+        if (summedMilestoneBudget != null && amountRcy.compareTo(summedMilestoneBudget) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Event amount %s exceeds the total milestone budget %s".formatted(amountRcy, summedMilestoneBudget),
+                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES));
+        }
+        if (summedProjectBudget != null && amountRcy.compareTo(summedProjectBudget) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Event amount %s exceeds the total project budget %s".formatted(amountRcy, summedProjectBudget),
+                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT));
+        }
+        return Optional.empty();
+    }
+
     /** The sum of an event's allocations to a single project may not exceed that project's total. */
     public static Optional<ProblemDetail> allocationTotal(BigDecimal projectAllocatedTotal, ProjectEntity project) {
         if (project.getTotalAmount() != null && projectAllocatedTotal.compareTo(project.getTotalAmount()) > 0) {

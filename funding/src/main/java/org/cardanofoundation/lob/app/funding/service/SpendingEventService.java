@@ -17,6 +17,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import io.vavr.control.Either;
 
@@ -83,7 +85,7 @@ public class SpendingEventService {
 
     @Transactional
     public SpendingEventView createEvent(SpendingEventCreateRequest request) {
-        return create(request).fold(SpendingEventView::error, this::toView);
+        return create(request).fold(this::rollbackAndError, this::toView);
     }
 
     @Transactional
@@ -92,7 +94,20 @@ public class SpendingEventService {
         if (denied.isPresent()) {
             return SpendingEventView.error(denied.get());
         }
-        return update(eventId, request).fold(SpendingEventView::error, this::toView);
+        return update(eventId, request).fold(this::rollbackAndError, this::toView);
+    }
+
+    /**
+     * Builds an error view and marks the (owning) transaction rollback-only, so that any project or
+     * milestone auto-created while resolving the event's allocations is not left behind when a later
+     * validation fails. Rolling back from the owner is a <em>local</em> rollback — it does not raise
+     * {@code UnexpectedRollbackException}.
+     */
+    private SpendingEventView rollbackAndError(ProblemDetail problem) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        }
+        return SpendingEventView.error(problem);
     }
 
     @Transactional
@@ -353,12 +368,26 @@ public class SpendingEventService {
             List<EventProjectAllocationRequest> allocationRequests,
             String organisationId) {
 
+        // Combined budgets the event books against — a SPENDING event's spend (amountRcy) may not exceed
+        // the summed milestone budgets nor the summed project budgets. A null budget anywhere lifts that
+        // bound (it cannot be meaningfully enforced).
+        BigDecimal summedMilestoneBudget = BigDecimal.ZERO;
+        boolean milestoneBudgetKnown = true;
+        BigDecimal summedProjectBudget = BigDecimal.ZERO;
+        boolean projectBudgetKnown = true;
+
         for (EventProjectAllocationRequest req : allocationRequests) {
             Either<ProblemDetail, ProjectEntity> projectResult = resolveOrCreateProject(req, organisationId);
             if (projectResult.isLeft()) return Either.left(projectResult.getLeft());
 
             ProjectEntity project = projectResult.get();
             BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
+
+            if (project.getTotalAmount() != null) {
+                summedProjectBudget = summedProjectBudget.add(project.getTotalAmount());
+            } else {
+                projectBudgetKnown = false;
+            }
 
             for (EventMilestoneAllocationRequest milestoneReq : req.getMilestones()) {
                 Either<ProblemDetail, MilestoneEntity> milestoneResult = resolveOrCreateMilestone(milestoneReq.getMilestone(), project);
@@ -373,6 +402,11 @@ public class SpendingEventService {
                 if (milestoneReq.getAllocatedAmount() != null) {
                     projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
                 }
+                if (milestone.getMilestoneAmount() != null) {
+                    summedMilestoneBudget = summedMilestoneBudget.add(milestone.getMilestoneAmount());
+                } else {
+                    milestoneBudgetKnown = false;
+                }
 
                 EventMilestoneAllocationEntity.Id id = new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId());
 
@@ -386,6 +420,13 @@ public class SpendingEventService {
             Optional<ProblemDetail> totalProblem = FundingValidations.allocationTotal(projectAllocatedTotal, project);
             if (totalProblem.isPresent()) return Either.left(totalProblem.get());
         }
+
+        Optional<ProblemDetail> capProblem = FundingValidations.eventAmountWithinBudget(
+                event.getEventType(), event.getAmountRcy(),
+                milestoneBudgetKnown ? summedMilestoneBudget : null,
+                projectBudgetKnown ? summedProjectBudget : null);
+        if (capProblem.isPresent()) return Either.left(capProblem.get());
+
         return Either.right(null);
     }
 

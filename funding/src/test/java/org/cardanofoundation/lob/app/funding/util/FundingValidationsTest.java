@@ -243,6 +243,35 @@ class FundingValidationsTest {
                 EventType.FUNDING, new BigDecimal("999999"), null)).isEmpty();
     }
 
+    // --- eventAmountWithinBudget(eventType, amountRcy, summedMilestoneBudget, summedProjectBudget) ---
+
+    @Test
+    void eventAmountWithinBudget_rejected_whenAmountExceedsMilestoneBudget() {
+        assertThat(title(FundingValidations.eventAmountWithinBudget(
+                EventType.SPENDING, new BigDecimal("60000"), new BigDecimal("50000"), new BigDecimal("200000"))))
+                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES);
+    }
+
+    @Test
+    void eventAmountWithinBudget_rejected_whenAmountExceedsProjectBudget() {
+        // milestone budget unknown (null) -> only the project bound applies
+        assertThat(title(FundingValidations.eventAmountWithinBudget(
+                EventType.SPENDING, new BigDecimal("250000"), null, new BigDecimal("200000"))))
+                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT);
+    }
+
+    @Test
+    void eventAmountWithinBudget_allowed_whenWithinBothBudgets() {
+        assertThat(FundingValidations.eventAmountWithinBudget(
+                EventType.SPENDING, new BigDecimal("50000"), new BigDecimal("50000"), new BigDecimal("200000"))).isEmpty();
+    }
+
+    @Test
+    void eventAmountWithinBudget_ignoredForNonSpending() {
+        assertThat(FundingValidations.eventAmountWithinBudget(
+                EventType.FUNDING, new BigDecimal("999999"), new BigDecimal("1"), new BigDecimal("1"))).isEmpty();
+    }
+
     // --- allocationTotal(sum, project) ---
 
     @Test

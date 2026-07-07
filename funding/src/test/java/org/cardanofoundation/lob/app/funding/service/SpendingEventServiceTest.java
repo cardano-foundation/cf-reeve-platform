@@ -259,6 +259,39 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenAmountRcyExceedsMilestoneBudget() {
+        stubExistingProjectAndMilestone("MS-1"); // milestone budget 50000, project 200000
+
+        // amountRcy (60000) exceeds the summed milestone budget (50000); fx stays consistent (60000 * 2 = 120000)
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountRcy(new BigDecimal("60000.00"));
+        request.setAmountFcy(new BigDecimal("120000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES);
+    }
+
+    @Test
+    void create_returnsLeft_whenAmountRcyExceedsProjectBudget() {
+        // Milestone with no budget -> milestone cap is lifted, project total (200000) still bounds the spend.
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = milestoneEntityWithAmount("m1", null);
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId(project.getId(), "MS-1")).thenReturn(Optional.of(milestone));
+
+        // amountRcy (250000) exceeds the project total (200000); fx stays consistent (250000 * 2 = 500000)
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountRcy(new BigDecimal("250000.00"));
+        request.setAmountFcy(new BigDecimal("500000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT);
+    }
+
+    @Test
     void create_returnsLeft_whenEventHasNoAllocations() {
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
