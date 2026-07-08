@@ -21,7 +21,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Orga
 import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
 /**
- * Serialises a batch of {@link SpendingEventEntity} into the {@code EVENT_BUNDLE} (label 1447) Cardano
+ * Serialises a batch of {@link SpendingEventEntity} into the {@code FUNDING} (label 1447) Cardano
  * metadata record, following {@code spending_event_blockchain_transaction_metadata-schema.json}.
  *
  * <p>The produced map is the <em>content</em> of the {@code 1447} object ({@code org}/{@code metadata}/
@@ -52,7 +52,7 @@ public class SpendingEventMetadataSerialiser {
         val eventList = MetadataBuilder.createList();
         events.forEach(event -> eventList.add(serialise(event)));
 
-        globalMetadataMap.put("type", "EVENT_BUNDLE");
+        globalMetadataMap.put("type", "FUNDING");
         globalMetadataMap.put("data", eventList);
 
         return globalMetadataMap;
@@ -122,6 +122,12 @@ public class SpendingEventMetadataSerialiser {
         return metadataMap;
     }
 
+    /**
+     * An allocation is published in one of two unambiguous shapes: a direct allocation carries its
+     * {@code milestones} at the project level; an allocation to a sub-project nests the sub-project's
+     * own id/title/milestones under {@code sub_project} while {@code project_id}/{@code project_title}
+     * keep identifying the root project.
+     */
     private static MetadataMap serialise(EventProjectAllocationEntity allocation) {
         val metadataMap = MetadataBuilder.createMap();
 
@@ -129,15 +135,23 @@ public class SpendingEventMetadataSerialiser {
         if (allocation.getProjectTitle() != null) {
             metadataMap.put("project_title", allocation.getProjectTitle());
         }
-        if (allocation.getSubProjectTitle() != null) {
-            metadataMap.put("sub_project_title", allocation.getSubProjectTitle());
-        }
 
         val milestoneList = MetadataBuilder.createList();
         for (val milestone : allocation.getMilestones()) {
             milestoneList.add(serialise(milestone));
         }
-        metadataMap.put("milestones", milestoneList);
+
+        if (allocation.getSubProjectId() != null) {
+            val subProjectMap = MetadataBuilder.createMap();
+            subProjectMap.put("sub_project_id", allocation.getSubProjectId());
+            if (allocation.getSubProjectTitle() != null) {
+                subProjectMap.put("sub_project_title", allocation.getSubProjectTitle());
+            }
+            subProjectMap.put("milestones", milestoneList);
+            metadataMap.put("sub_project", subProjectMap);
+        } else {
+            metadataMap.put("milestones", milestoneList);
+        }
 
         return metadataMap;
     }

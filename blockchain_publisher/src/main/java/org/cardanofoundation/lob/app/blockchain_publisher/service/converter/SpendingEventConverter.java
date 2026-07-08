@@ -73,13 +73,18 @@ public class SpendingEventConverter {
         if (allocations == null) return new ArrayList<>();
         return allocations.stream()
                 .map(allocation -> {
+                    // A direct allocation carries its milestones at the project level; a sub-project
+                    // allocation nests them (with the sub-project's id/title) under subProject.
+                    SpendingEventPublishView.SubProject subProject = allocation.getSubProject();
                     EventProjectAllocationEntity entity = EventProjectAllocationEntity.builder()
                             .event(event)
                             .projectId(allocation.getExternalProjectId())
                             .projectTitle(allocation.getProjectTitle())
-                            .subProjectTitle(allocation.getSubProjectTitle())
+                            .subProjectId(subProject != null ? subProject.getSubProjectId() : null)
+                            .subProjectTitle(subProject != null ? subProject.getSubProjectTitle() : null)
                             .build();
-                    entity.setMilestones(convertMilestones(entity, allocation.getMilestones()));
+                    entity.setMilestones(convertMilestones(entity,
+                            subProject != null ? subProject.getMilestones() : allocation.getMilestones()));
                     return entity;
                 })
                 .collect(Collectors.toCollection(ArrayList::new));

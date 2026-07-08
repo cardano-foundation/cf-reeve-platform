@@ -32,9 +32,10 @@ import org.hibernate.envers.Audited;
 
 /**
  * One project allocation of a {@link SpendingEventEntity}. Mirrors a single entry of the on-chain
- * {@code allocation[]} array: the (root) project this event targets plus its milestones. When the
- * allocation targets a sub-project, {@link #projectId}/{@link #projectTitle} carry the root project
- * and {@link #subProjectTitle} the sub-project's own title.
+ * {@code allocation[]} array: {@link #projectId}/{@link #projectTitle} always carry the root project.
+ * For a direct allocation the milestones belong to that project; when the allocation targets a
+ * sub-project, {@link #subProjectId}/{@link #subProjectTitle} identify it and the milestones are
+ * serialised nested under the {@code sub_project} object instead.
  */
 @Getter
 @Setter
@@ -63,6 +64,11 @@ public class EventProjectAllocationEntity {
     @Nullable
     @Column(name = "project_title")
     private String projectTitle;
+
+    /** Set only when the allocation targets a sub-project; the sub-project's user-defined id. */
+    @Nullable
+    @Column(name = "sub_project_id")
+    private String subProjectId;
 
     /** Set only when the allocation targets a sub-project; the sub-project's own title. */
     @Nullable

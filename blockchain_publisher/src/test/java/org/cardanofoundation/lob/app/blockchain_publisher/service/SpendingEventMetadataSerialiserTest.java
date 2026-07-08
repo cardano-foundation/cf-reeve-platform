@@ -53,7 +53,7 @@ class SpendingEventMetadataSerialiserTest {
         return organisation;
     }
 
-    /** A milestone allocation: allocated amount only (spend detail lives on the event). */
+    /** A sub-project allocation: the milestones are published nested inside the sub_project object. */
     private EventProjectAllocationEntity spendingProjectAllocation() {
         EventMilestoneAllocationEntity milestone = EventMilestoneAllocationEntity.builder()
                 .milestoneId("ms1")
@@ -64,6 +64,7 @@ class SpendingEventMetadataSerialiserTest {
         return EventProjectAllocationEntity.builder()
                 .projectId("ProjectID1")
                 .projectTitle("ProjectTitle")
+                .subProjectId("SubProjectID1")
                 .subProjectTitle("SubProjectTitle")
                 .milestones(List.of(milestone))
                 .build();
@@ -106,7 +107,7 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(metadata.get("timestamp")).isEqualTo("2023-06-01T10:15:30Z");
         assertThat(metadata.get("version")).isEqualTo(VERSION);
 
-        assertThat(result.get("type")).isEqualTo("EVENT_BUNDLE");
+        assertThat(result.get("type")).isEqualTo("FUNDING");
         assertThat(((MetadataMap) result.get("org")).get("currency_id")).isEqualTo("ISO_4217:CHF");
 
         CBORMetadataList dataList = (CBORMetadataList) result.get("data");
@@ -138,13 +139,19 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(eventMap.get("date")).isEqualTo("2025-04-03");
         assertThat(((MetadataMap) eventMap.get("currency")).get("cust_code")).isEqualTo("EUR");
 
-        // The milestone carries only id/title/allocated_amount.
+        // Sub-project allocation: project_id/project_title carry the root; the sub-project's own
+        // id/title/milestones are nested under sub_project, and there are no project-level milestones.
         CBORMetadataList allocationList = (CBORMetadataList) eventMap.get("allocation");
         MetadataMap allocationMap = (MetadataMap) allocationList.getValueAt(0);
         assertThat(allocationMap.get("project_id")).isEqualTo("ProjectID1");
-        assertThat(allocationMap.get("sub_project_title")).isEqualTo("SubProjectTitle");
+        assertThat(allocationMap.get("project_title")).isEqualTo("ProjectTitle");
+        assertThat(allocationMap.get("milestones")).isNull();
 
-        CBORMetadataList milestoneList = (CBORMetadataList) allocationMap.get("milestones");
+        MetadataMap subProjectMap = (MetadataMap) allocationMap.get("sub_project");
+        assertThat(subProjectMap.get("sub_project_id")).isEqualTo("SubProjectID1");
+        assertThat(subProjectMap.get("sub_project_title")).isEqualTo("SubProjectTitle");
+
+        CBORMetadataList milestoneList = (CBORMetadataList) subProjectMap.get("milestones");
         MetadataMap m = (MetadataMap) milestoneList.getValueAt(0);
         assertThat(m.get("milestone_id")).isEqualTo("ms1");
         assertThat(m.get("milestone_title")).isEqualTo("Milestone AB");
@@ -185,9 +192,10 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(eventMap.get("funding_entity")).isEqualTo("FundingEntity");
         assertThat(eventMap.get("item")).isNull();
 
+        // Direct allocation: no sub_project object, milestones at the project level.
         CBORMetadataList allocationList = (CBORMetadataList) eventMap.get("allocation");
         MetadataMap allocationMap = (MetadataMap) allocationList.getValueAt(0);
-        assertThat(allocationMap.get("sub_project_title")).isNull();
+        assertThat(allocationMap.get("sub_project")).isNull();
 
         CBORMetadataList milestoneList = (CBORMetadataList) allocationMap.get("milestones");
         MetadataMap m = (MetadataMap) milestoneList.getValueAt(0);

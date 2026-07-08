@@ -12,8 +12,8 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
 /**
  * Communication object published by the funding module to the blockchain publisher. Carries exactly
- * the fields needed to build a schema-valid {@code EVENT_BUNDLE} Cardano metadata record, including
- * multi-project allocations, structured currency objects, milestones and spend items.
+ * the fields needed to build a schema-valid {@code FUNDING} Cardano metadata record, including
+ * multi-project allocations, structured currency objects, milestones and the event's spend detail.
  */
 @Getter
 @Builder
@@ -61,18 +61,44 @@ public class SpendingEventPublishView {
 
     // -------------------------------------------------------------------------
 
+    /**
+     * One project this event is allocated to. Exactly one of two shapes, so it is unambiguous where
+     * the money is booked:
+     * <ul>
+     *   <li>direct allocation — {@code externalProjectId}/{@code projectTitle} plus {@code milestones};</li>
+     *   <li>sub-project allocation — {@code externalProjectId}/{@code projectTitle} carry the root
+     *       project, and {@code subProject} carries the actually-allocated sub-project with
+     *       <em>its</em> id, title and milestones ({@code milestones} is null at this level).</li>
+     * </ul>
+     */
     @Getter
     @Setter
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     public static class ProjectAllocation {
-        /** User-defined id of the root project (the parent when this allocation targets a sub-project). */
+        /** User-defined id of the root project (the top-level ancestor for sub-project allocations). */
         private String externalProjectId;
         /** Title of the root project. */
         @Nullable
         private String projectTitle;
-        /** Set only when the allocation targets a sub-project; carries the sub-project's own title. */
+        /** The allocated sub-project — set only when the allocation targets one; then {@code milestones} is null. */
+        @Nullable
+        private SubProject subProject;
+        /** Milestones of a direct project allocation; null when the allocation targets a sub-project. */
+        @Nullable
+        private List<Milestone> milestones;
+    }
+
+    /** The sub-project an allocation targets, carrying its own id, title and milestone allocations. */
+    @Getter
+    @Setter
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class SubProject {
+        /** User-defined id of the sub-project. */
+        private String subProjectId;
         @Nullable
         private String subProjectTitle;
         private List<Milestone> milestones;
