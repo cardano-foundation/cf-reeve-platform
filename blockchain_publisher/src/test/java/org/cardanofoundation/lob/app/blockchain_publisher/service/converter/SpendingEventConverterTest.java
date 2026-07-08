@@ -49,12 +49,24 @@ class SpendingEventConverterTest {
         return SpendingEventPublishView.Currency.builder().id("ISO_4217:EUR").custCode("EUR").build();
     }
 
+    /** A direct project allocation — milestones at the project level, no sub-project. */
     private SpendingEventPublishView.ProjectAllocation allocation(String projectId, String projectTitle,
-                                                                  String subProjectTitle,
                                                                   List<SpendingEventPublishView.Milestone> milestones) {
         return SpendingEventPublishView.ProjectAllocation.builder()
-                .externalProjectId(projectId).projectTitle(projectTitle).subProjectTitle(subProjectTitle)
+                .externalProjectId(projectId).projectTitle(projectTitle)
                 .milestones(milestones).build();
+    }
+
+    /** A sub-project allocation — the milestones travel nested inside the sub-project object. */
+    private SpendingEventPublishView.ProjectAllocation subProjectAllocation(String projectId, String projectTitle,
+                                                                            String subProjectId, String subProjectTitle,
+                                                                            List<SpendingEventPublishView.Milestone> milestones) {
+        return SpendingEventPublishView.ProjectAllocation.builder()
+                .externalProjectId(projectId).projectTitle(projectTitle)
+                .subProject(SpendingEventPublishView.SubProject.builder()
+                        .subProjectId(subProjectId).subProjectTitle(subProjectTitle)
+                        .milestones(milestones).build())
+                .build();
     }
 
     @Test
@@ -71,7 +83,7 @@ class SpendingEventConverterTest {
                 .fundingEntity("Funding Entity")
                 .amount(new BigDecimal("123.45"))
                 .currency(usd())
-                .projectAllocations(List.of(allocation("proj-1", "Project One", null, List.of())))
+                .projectAllocations(List.of(allocation("proj-1", "Project One", List.of())))
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -107,7 +119,7 @@ class SpendingEventConverterTest {
                 .category("Personnel").vendor("Vendor AB").amountFcy(new BigDecimal("100.00"))
                 .spendCurrency(eur()).fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
                 .spendDate(LocalDate.of(2025, 4, 3)).documentHash("hash-1").notes("note")
-                .projectAllocations(List.of(allocation("proj-1", "Project One", "Sub One", List.of(milestone))))
+                .projectAllocations(List.of(subProjectAllocation("proj-1", "Project One", "sub-1", "Sub One", List.of(milestone))))
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -124,6 +136,7 @@ class SpendingEventConverterTest {
         assertEquals(1, entity.getProjectAllocations().size());
         EventProjectAllocationEntity allocationEntity = entity.getProjectAllocations().get(0);
         assertEquals("proj-1", allocationEntity.getProjectId());
+        assertEquals("sub-1", allocationEntity.getSubProjectId());
         assertEquals("Sub One", allocationEntity.getSubProjectTitle());
         assertEquals(entity, allocationEntity.getEvent());
 
@@ -147,7 +160,7 @@ class SpendingEventConverterTest {
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.FUNDING)
                 .currency(usd()).amount(new BigDecimal("100.00"))
-                .projectAllocations(List.of(allocation("proj-1", "Project One", null, List.of(milestone))))
+                .projectAllocations(List.of(allocation("proj-1", "Project One", List.of(milestone))))
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
@@ -168,8 +181,8 @@ class SpendingEventConverterTest {
                 .eventId("event-1").organisationId("org1").eventType(EventType.FUNDING)
                 .currency(usd()).amount(BigDecimal.ONE)
                 .projectAllocations(List.of(
-                        allocation("proj-1", "Project One", null, List.of()),
-                        allocation("proj-2", "Project Two", null, List.of())))
+                        allocation("proj-1", "Project One", List.of()),
+                        allocation("proj-2", "Project Two", List.of())))
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);

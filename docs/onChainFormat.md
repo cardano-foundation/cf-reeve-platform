@@ -33,7 +33,7 @@ All metadata entries under label 1447 follow this base structure, containing org
       "timestamp": "string",                       // ISO-8601 timestamp
       "version": "string"                          // Metadata format version (e.g., "1.1")
     },
-    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS", "REPORT" or "EVENT_BUNDLE"
+    "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS", "REPORT" or "FUNDING"
     "data": {}                   // Type-specific data structure
   }
 }
@@ -55,7 +55,7 @@ Reeve currently supports three metadata types:
 
 - **`INDIVIDUAL_TRANSACTIONS`**: Individual accounting transactions of the organization
 - **`REPORT`**: Custom financial reports (balance sheets, income statements, etc.)
-- **`EVENT_BUNDLE`**: Grant-lifecycle events (funding, spending, refunds) and organization-defined custom events
+- **`FUNDING`**: Grant-lifecycle events (funding, spending, refunds) and organization-defined custom events
 
 ## Type: Individual Transactions
 
@@ -229,11 +229,11 @@ Required fields:
 }
 ```
 
-## Type: Event Bundle
+## Type: Funding
 
-The `EVENT_BUNDLE` type anchors **grant-lifecycle events** — the funding, spending, and refund activity tied to a grant or project — as well as organization-defined **custom events**. It is used by the funding module to make the flow of grant money publicly verifiable on-chain.
+The `FUNDING` type anchors **grant-lifecycle events** — the funding, spending, and refund activity tied to a grant or project — as well as organization-defined **custom events**. It is used by the funding module to make the flow of grant money publicly verifiable on-chain.
 
-A bundle groups one or more events belonging to a single organization. The `data` field supports two storage modes:
+A record groups one or more events belonging to a single organization. The `data` field supports two storage modes:
 
 - **Inline**: `data` is an array of event objects, embedded directly in the transaction metadata.
 - **IPFS-anchored**: `data` is a manifest object that references an off-chain document (stored on IPFS) via its CID. Used when the bundle is too large to fit comfortably in transaction metadata.
@@ -241,7 +241,7 @@ A bundle groups one or more events belonging to a single organization. The `data
 ```json
 {
   <General structure>,
-  "type": "EVENT_BUNDLE",
+  "type": "FUNDING",
   "data": [ /* array of event objects (inline) */ ]
 }
 ```
@@ -258,9 +258,19 @@ Grant-lifecycle events (`FUNDING`, `SPENDING`, `REFUND`) carry:
 | `type` | string | Yes | Event type — `FUNDING`, `SPENDING`, or `REFUND` |
 | `funding_tx` | string | No | Reference to the funding transaction |
 | `funding_id` | string | Yes | Identifier of the funding source |
-| `funding_entity` | string | No | Name of the entity providing the funding (`FUNDING` events only) |
-| `allocation` | array | Yes | One entry per project this event targets, each with its milestones (see below) |
-| `item` | array | Conditional | Line items; **required** for `SPENDING`, optional for `FUNDING`/`REFUND` |
+| `funding_entity` | string | Conditional | Name of the entity providing the funding; **required** for `FUNDING` events |
+| `amount_rcy` | string | Conditional | Spent amount in the organization's reporting currency; `SPENDING` only (see spend detail below) |
+| `amount_fcy` | string | Conditional | Spent amount in the spend (foreign) currency; `SPENDING` only |
+| `vendor` | string | No | Vendor/payee; `SPENDING` only |
+| `spending_category` | string | No | Expense category; `SPENDING` only |
+| `fx_rate` | string | Conditional | FX rate such that `amount_fcy = amount_rcy * fx_rate`; `SPENDING` only (see [FX Rate](#fx-rate)) |
+| `hash` | string | No | Hash of the supporting document; `SPENDING` only |
+| `notes` | string | No | Free-text notes; `SPENDING` only |
+| `date` | string | Conditional | Spend date in ISO 8601 format (YYYY-MM-DD); `SPENDING` only |
+| `currency` | object | No | Spend currency with `id` (ISO format) and `cust_code`; `SPENDING` only |
+| `allocation` | array | Yes | One entry per project this event targets (see below) |
+
+The spend fields (`amount_rcy`, `amount_fcy`, `vendor`, `spending_category`, `fx_rate`, `hash`, `notes`, `date`, `currency`) form the event's **single spend record** and are present for `SPENDING` events only. A `SPENDING` event's spend is fully allocated: its milestone `allocated_amount`s sum to exactly `amount_rcy`.
 
 Custom (organization-defined) events carry only the common fields:
 
@@ -270,53 +280,48 @@ Custom (organization-defined) events carry only the common fields:
 | `type` | string | Yes | A custom organization-defined value (not `FUNDING`/`SPENDING`/`REFUND`) |
 | `date` | string | Yes | Event date in ISO 8601 format (YYYY-MM-DD) |
 
-> Grant-lifecycle events no longer carry an event-level `date`, `amount`, or `currency`: dates and amounts live on the individual `milestones`/`item` entries, and the organization's reporting currency is declared once in the top-level `org` block.
-
 ### Event Types
 
 | Type | Description |
 |------|-------------|
 | `FUNDING` | Funds allocated to a grant, split across one or more projects and their milestones |
-| `SPENDING` | Expenditure against a grant, listed as line `item`s |
+| `SPENDING` | Expenditure against a grant, carrying the spend record at the event level |
 | `REFUND` | Funds returned/reversed for a grant |
 | *custom* | Any organization-defined type (not one of the reserved values above); only the common fields are mandated and the body is free-form |
 
 ### Allocation Array
 
-`allocation` is an array with one entry per project the event targets. Each entry nests the milestones of that project. When an allocation targets a **sub-project**, `project_id`/`project_title` carry the **root** project and `sub_project_title` carries the sub-project's own title.
+`allocation` is an array with one entry per project the event targets. `project_id`/`project_title` always identify the **root** project as is. Each entry takes exactly one of two shapes, so it is unambiguous where the money is booked:
+
+- **Direct allocation** — the event targets the project itself: the entry carries `milestones` at the project level.
+- **Sub-project allocation** — the event targets a sub-project: the entry carries a `sub_project` object holding the sub-project's own id, title and milestones (and no project-level `milestones`).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `project_id` | string | Yes | User-defined id of the (root) project |
-| `project_title` | string | Yes | Title of the (root) project |
-| `sub_project_title` | string | No | Sub-project title; present only when the allocation targets a sub-project |
-| `milestones` | array | Yes | Milestones of this project targeted by the event (see below) |
+| `project_id` | string | Yes | User-defined id of the root project |
+| `project_title` | string | Yes | Title of the root project |
+| `milestones` | array | Conditional | Milestones of a direct allocation; mutually exclusive with `sub_project` |
+| `sub_project` | object | Conditional | The allocated sub-project (see below); mutually exclusive with `milestones` |
+
+### Sub-Project Object
+
+Present only when the allocation targets a sub-project; carries the sub-project's own identity and milestones:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sub_project_id` | string | Yes | User-defined id of the sub-project |
+| `sub_project_title` | string | No | Title of the sub-project |
+| `milestones` | array | Yes | Milestones of the sub-project targeted by the event |
 
 ### Milestone Object
 
-Each entry of an allocation's `milestones` array references a milestone of that project:
+Each entry of a `milestones` array references a milestone and the amount the event books against it:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `milestone_id` | string | Yes | Identifier of the milestone |
 | `milestone_title` | string | Yes | Human-readable milestone title |
-| `amount_rcy` | string | Yes | Milestone amount in the organization's reporting currency |
-
-### Item Object
-
-Both `SPENDING` and `FUNDING`/`REFUND` events can carry an `item` array. `SPENDING` items carry the full field set; `FUNDING`/`REFUND` items are lighter, carrying only `amount_rcy`, `date`, and `currency`.
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `amount_rcy` | string | Yes | Amount in the organization's reporting currency |
-| `amount_fcy` | string | No | Amount in the item's (foreign) currency (`SPENDING` only) |
-| `vendor` | string | No | Vendor/payee (`SPENDING` only) |
-| `spending_category` | string | No | Expense category (`SPENDING` only) |
-| `fx_rate` | string | No | FX rate to the reporting currency, as a decimal string (`SPENDING` only; see [FX Rate](#fx-rate)) |
-| `hash` | string | No | Hash of the supporting document |
-| `notes` | string | No | Free-text notes |
-| `date` | string | Yes | Item date in ISO 8601 format (YYYY-MM-DD) |
-| `currency` | object | Yes | Currency with `id` (ISO format) and `cust_code` |
+| `allocated_amount` | string | No | Amount this event allocates to the milestone, in the organization's reporting currency |
 
 ### IPFS-Anchored Storage
 
@@ -332,7 +337,7 @@ When a bundle is stored off-chain, `data` is a manifest pointing to the IPFS doc
 
 The referenced off-chain document carries `org_id`, `currency_id`, `version`, `date`, and the `events` array.
 
-### Example: Event Bundle (Spending)
+### Example: Funding record (Spending allocated to a sub-project)
 
 ```json
 {
@@ -349,40 +354,39 @@ The referenced off-chain document carries `org_id`, `currency_id`, `version`, `d
       "timestamp": "2025-06-01T10:15:30Z",
       "version": "1.0"
     },
-    "type": "EVENT_BUNDLE",
+    "type": "FUNDING",
     "data": [
       {
         "id": "event1",
         "type": "SPENDING",
         "funding_tx": "ftx1",
         "funding_id": "fund1",
+        "amount_rcy": "85",
+        "amount_fcy": "100",
+        "vendor": "Vendor AB",
+        "spending_category": "Personnel",
+        "fx_rate": "0.85",
+        "hash": "doc-hash-1",
+        "notes": "Invoice #1",
+        "date": "2025-04-03",
+        "currency": {
+          "id": "ISO_4217:EUR",
+          "cust_code": "EUR"
+        },
         "allocation": [
           {
             "project_id": "ProjectID1",
             "project_title": "ProjectTitle",
-            "sub_project_title": "SubProjectTitle",
-            "milestones": [
-              {
-                "milestone_id": "ms1",
-                "milestone_title": "Milestone AB",
-                "amount_rcy": "100"
-              }
-            ]
-          }
-        ],
-        "item": [
-          {
-            "amount_rcy": "85",
-            "amount_fcy": "100",
-            "vendor": "Vendor AB",
-            "spending_category": "Personnel",
-            "fx_rate": "0.85",
-            "hash": "doc-hash-1",
-            "notes": "Invoice #1",
-            "date": "2025-04-03",
-            "currency": {
-              "id": "ISO_4217:USD",
-              "cust_code": "USD"
+            "sub_project": {
+              "sub_project_id": "SubProjectID1",
+              "sub_project_title": "SubProjectTitle",
+              "milestones": [
+                {
+                  "milestone_id": "ms1",
+                  "milestone_title": "Milestone AB",
+                  "allocated_amount": "85"
+                }
+              ]
             }
           }
         ]
@@ -392,12 +396,12 @@ The referenced off-chain document carries `org_id`, `currency_id`, `version`, `d
 }
 ```
 
-### Example: Event Bundle (Funding with Milestones)
+### Example: Funding record (Funding allocated directly to a project)
 
 ```json
 {
   <General structure>,
-  "type": "EVENT_BUNDLE",
+  "type": "FUNDING",
   "data": [
     {
       "id": "event2",
@@ -413,19 +417,9 @@ The referenced off-chain document carries `org_id`, `currency_id`, `version`, `d
             {
               "milestone_id": "ms1",
               "milestone_title": "Milestone AB",
-              "amount_rcy": "100"
+              "allocated_amount": "100"
             }
           ]
-        }
-      ],
-      "item": [
-        {
-          "amount_rcy": "100",
-          "date": "2026-06-11",
-          "currency": {
-            "id": "ISO_4217:USD",
-            "cust_code": "USD"
-          }
         }
       ]
     }

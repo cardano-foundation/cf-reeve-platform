@@ -39,11 +39,15 @@ class SpendingEventsPublishCommandSerdeTest {
                 .allocatedAmount(new BigDecimal("85.00"))
                 .build();
 
+        // Sub-project allocation: the milestones travel nested inside the sub-project object.
         SpendingEventPublishView.ProjectAllocation allocation = SpendingEventPublishView.ProjectAllocation.builder()
                 .externalProjectId("PROJ-AB")
                 .projectTitle("Project One")
-                .subProjectTitle("Sub Project One")
-                .milestones(List.of(milestone))
+                .subProject(SpendingEventPublishView.SubProject.builder()
+                        .subProjectId("SUB-1")
+                        .subProjectTitle("Sub Project One")
+                        .milestones(List.of(milestone))
+                        .build())
                 .build();
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
@@ -78,14 +82,17 @@ class SpendingEventsPublishCommandSerdeTest {
         SpendingEventPublishView resultView = result.getSpendingEvents().iterator().next();
         assertThat(resultView.getEventId()).isEqualTo("event-1");
         assertThat(resultView.getEventType()).isEqualTo(EventType.SPENDING);
-        assertThat(resultView.getProjectAllocations().get(0).getSubProjectTitle()).isEqualTo("Sub Project One");
+        SpendingEventPublishView.SubProject resultSub = resultView.getProjectAllocations().get(0).getSubProject();
+        assertThat(resultSub.getSubProjectId()).isEqualTo("SUB-1");
+        assertThat(resultSub.getSubProjectTitle()).isEqualTo("Sub Project One");
+        assertThat(resultView.getProjectAllocations().get(0).getMilestones()).isNull();
         assertThat(resultView.getAmountFcy()).isEqualByComparingTo("100.00");
         assertThat(resultView.getAmountRcy()).isEqualByComparingTo("85.00");
         assertThat(resultView.getSpendDate()).isEqualTo(LocalDate.of(2025, 4, 3));
         assertThat(resultView.getSpendCurrency().getCustCode()).isEqualTo("EUR");
         assertThat(resultView.getVendor()).isEqualTo("Vendor AB");
 
-        SpendingEventPublishView.Milestone resultMs = resultView.getProjectAllocations().get(0).getMilestones().get(0);
+        SpendingEventPublishView.Milestone resultMs = resultSub.getMilestones().get(0);
         assertThat(resultMs.getMilestoneId()).isEqualTo("ms-uid-1");
         assertThat(resultMs.getAllocatedAmount()).isEqualByComparingTo("85.00");
     }

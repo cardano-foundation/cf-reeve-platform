@@ -692,8 +692,46 @@ class SpendingEventServiceTest {
         assertThat(view.getSpendCurrency().getCustCode()).isEqualTo("EUR");
         assertThat(view.getVendor()).isEqualTo("Vendor AB");
         assertThat(view.getProjectAllocations()).hasSize(1);
-        SpendingEventPublishView.Milestone m = view.getProjectAllocations().get(0).getMilestones().get(0);
+        // Direct allocation (project has no parent): milestones at the project level, no sub-project.
+        SpendingEventPublishView.ProjectAllocation allocation = view.getProjectAllocations().get(0);
+        assertThat(allocation.getSubProject()).isNull();
+        SpendingEventPublishView.Milestone m = allocation.getMilestones().get(0);
         assertThat(m.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
+    }
+
+    @Test
+    void toPublishView_nestsSubProjectAllocation_underRootProject() {
+        FundingEventEntity event = spendingEventEntity();
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 15, 10, 0));
+        event.setTotalAmount(new BigDecimal("300.00"));
+
+        // The allocated milestone belongs to a sub-project of PROJ-AB.
+        ProjectEntity root = projectEntity(); // PROJ-AB / "Project AB"
+        ProjectEntity subProject = ProjectEntity.builder().id("sub1").organisationId("org1")
+                .externalProjectId("SUB-1").projectTitle("Sub Project One")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD")
+                .parentProject(root).build();
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").milestoneTitle("Milestone AB")
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD").milestoneDate(FUTURE_DATE)
+                .project(subProject).build();
+        EventMilestoneAllocationEntity alloc = spendingAllocation("e1", "m1");
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        SpendingEventPublishView.ProjectAllocation allocation = view.getProjectAllocations().get(0);
+        // The root project is published as is ...
+        assertThat(allocation.getExternalProjectId()).isEqualTo("PROJ-AB");
+        assertThat(allocation.getProjectTitle()).isEqualTo("Project AB");
+        // ... with no milestones at the project level ...
+        assertThat(allocation.getMilestones()).isNull();
+        // ... and the sub-project carries its own id, title and the milestone allocations.
+        SpendingEventPublishView.SubProject sub = allocation.getSubProject();
+        assertThat(sub.getSubProjectId()).isEqualTo("SUB-1");
+        assertThat(sub.getSubProjectTitle()).isEqualTo("Sub Project One");
+        assertThat(sub.getMilestones()).hasSize(1);
+        assertThat(sub.getMilestones().get(0).getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
     }
 
     // --- view-returning API + org access ---

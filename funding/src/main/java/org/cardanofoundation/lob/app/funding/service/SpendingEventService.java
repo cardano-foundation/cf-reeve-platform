@@ -587,18 +587,34 @@ public class SpendingEventService {
                     List<SpendingEventPublishView.Milestone> milestones = entry.getValue().stream()
                             .map(SpendingEventService::toPublishMilestone)
                             .toList();
-                    // When the allocation targets a sub-project, publish the root project's id/title and
-                    // surface the sub-project's title separately; otherwise the project itself is the root.
+                    // Publish the root project's id/title as is. A direct allocation carries its
+                    // milestones at the project level; an allocation to a sub-project nests the
+                    // sub-project's own id/title/milestones so it is unambiguous where the money went.
                     boolean isSubProject = project.getParentProject() != null;
-                    ProjectEntity root = isSubProject ? project.getParentProject() : project;
+                    ProjectEntity root = rootOf(project);
                     return SpendingEventPublishView.ProjectAllocation.builder()
                             .externalProjectId(root.getExternalProjectId())
                             .projectTitle(root.getProjectTitle())
-                            .subProjectTitle(isSubProject ? project.getProjectTitle() : null)
-                            .milestones(milestones)
+                            .subProject(isSubProject
+                                    ? SpendingEventPublishView.SubProject.builder()
+                                            .subProjectId(project.getExternalProjectId())
+                                            .subProjectTitle(project.getProjectTitle())
+                                            .milestones(milestones)
+                                            .build()
+                                    : null)
+                            .milestones(isSubProject ? null : milestones)
                             .build();
                 })
                 .toList();
+    }
+
+    /** The top-level ancestor of a project — the project itself when it has no parent. */
+    private static ProjectEntity rootOf(ProjectEntity project) {
+        ProjectEntity cursor = project;
+        while (cursor.getParentProject() != null) {
+            cursor = cursor.getParentProject();
+        }
+        return cursor;
     }
 
     private static EventMilestoneAllocationView toMilestoneAllocationView(AllocatedMilestone am) {
