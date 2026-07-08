@@ -28,7 +28,7 @@ public class EventProjectAllocationRequest {
     // --- New project: supply the fields below when creating a new project ---
 
     @Nullable
-    @Schema(example = "GRANT-2025-001")
+    @Schema(example = "GRANT-2025-001-AB", description = "Optional funding reference of the project. Unique per organisation — no two projects may share it.")
     private String fundingId;
 
     @Nullable
@@ -44,20 +44,19 @@ public class EventProjectAllocationRequest {
     private String currency;
 
     /**
-     * Optional sub-project under the resolved/created root project.
-     * When set, milestones are attached to the sub-project and the allocation targets the sub-project.
-     * When null, the allocation targets the root project directly.
-     */
-    @Nullable
-    private SubProjectRequest subProject;
-
-    /**
-     * Milestones to allocate to within this project. Optional — an allocation may carry no milestones
-     * (e.g. a SPENDING event whose amount comes from line items). FUNDING/REFUND events must still
-     * allocate a positive amount overall (see the event-total validation).
+     * Milestone allocations against this (root) project — mutually exclusive with {@code subProjects}.
+     * Optional — an allocation may instead push everything into sub-projects.
      */
     @Builder.Default
     @Valid
     private List<EventMilestoneAllocationRequest> milestones = new ArrayList<>();
+
+    /**
+     * Sub-project tree under this root — the same recursive shape as the create-project endpoint,
+     * with each milestone carrying an {@code allocatedAmount}. Mutually exclusive with {@code milestones}.
+     */
+    @Builder.Default
+    @Valid
+    private List<EventSubProjectAllocationRequest> subProjects = new ArrayList<>();
 
 }

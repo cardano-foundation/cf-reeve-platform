@@ -24,7 +24,7 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 public class ProjectWithMilestonesCreateRequest extends BaseRequest {
 
     @Nullable
-    @Schema(example = "GRANT-2025-001", description = "Optional funding reference.")
+    @Schema(example = "GRANT-2025-001", description = "Optional funding reference. Unique per organisation — no two projects may share it.")
     private String fundingId;
 
     @NotBlank

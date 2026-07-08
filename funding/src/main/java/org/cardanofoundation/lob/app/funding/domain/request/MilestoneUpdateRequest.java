@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import jakarta.annotation.Nullable;
-import jakarta.validation.constraints.NotBlank;
 
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -29,7 +28,6 @@ public class MilestoneUpdateRequest {
     private BigDecimal milestoneAmount;
 
     @Nullable
-    @NotBlank
     @Schema(example = "USD")
     private String currency;
 

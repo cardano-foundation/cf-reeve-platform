@@ -6,14 +6,18 @@ public final class ErrorTitleConstants {
 
     public static final String PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND";
     public static final String PROJECT_ALREADY_EXISTS = "PROJECT_ALREADY_EXISTS";
+    public static final String PROJECT_FUNDING_ID_ALREADY_USED = "PROJECT_FUNDING_ID_ALREADY_USED";
     public static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
     public static final String PROJECT_AMOUNT_INVALID = "PROJECT_AMOUNT_INVALID";
+    public static final String PROJECT_AMOUNT_BELOW_MILESTONES = "PROJECT_AMOUNT_BELOW_MILESTONES";
+    public static final String PROJECT_AMOUNT_BELOW_SUBPROJECTS = "PROJECT_AMOUNT_BELOW_SUBPROJECTS";
     public static final String PARENT_PROJECT_NOT_FOUND = "PARENT_PROJECT_NOT_FOUND";
     public static final String PARENT_PROJECT_ORG_MISMATCH = "PARENT_PROJECT_ORG_MISMATCH";
     public static final String PROJECT_CIRCULAR_DEPENDENCY = "PROJECT_CIRCULAR_DEPENDENCY";
     public static final String SUBPROJECT_AMOUNT_EXCEEDS_PARENT = "SUBPROJECT_AMOUNT_EXCEEDS_PARENT";
     public static final String SUBPROJECT_TOTAL_EXCEEDS_PARENT = "SUBPROJECT_TOTAL_EXCEEDS_PARENT";
     public static final String MILESTONE_NOT_FOUND = "MILESTONE_NOT_FOUND";
+    public static final String MILESTONE_ALREADY_EXISTS = "MILESTONE_ALREADY_EXISTS";
     public static final String MILESTONE_FIELDS_REQUIRED = "MILESTONE_FIELDS_REQUIRED";
     public static final String MILESTONE_DATE_IN_PAST = "MILESTONE_DATE_IN_PAST";
     public static final String MILESTONE_AMOUNT_INVALID = "MILESTONE_AMOUNT_INVALID";
@@ -26,6 +30,7 @@ public final class ErrorTitleConstants {
     public static final String ALLOCATION_AMOUNT_REQUIRED = "ALLOCATION_AMOUNT_REQUIRED";
     public static final String ALLOCATION_EXCEEDS_MILESTONE = "ALLOCATION_EXCEEDS_MILESTONE";
     public static final String ALLOCATION_EXCEEDS_SPEND = "ALLOCATION_EXCEEDS_SPEND";
+    public static final String SPEND_NOT_FULLY_ALLOCATED = "SPEND_NOT_FULLY_ALLOCATED";
     public static final String ALLOCATION_TOTAL_EXCEEDS_PROJECT = "ALLOCATION_TOTAL_EXCEEDS_PROJECT";
     public static final String SPEND_FIELDS_NOT_ALLOWED = "SPEND_FIELDS_NOT_ALLOWED";
     public static final String SPEND_FIELDS_REQUIRED = "SPEND_FIELDS_REQUIRED";
@@ -37,5 +42,10 @@ public final class ErrorTitleConstants {
     public static final String SPENDING_EVENT_NOT_FOUND = "SPENDING_EVENT_NOT_FOUND";
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
     public static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
+    public static final String EVENT_TYPE_IMMUTABLE = "EVENT_TYPE_IMMUTABLE";
+    public static final String FUNDING_ENTITY_REQUIRED = "FUNDING_ENTITY_REQUIRED";
+    public static final String ORGANISATION_NOT_FOUND = "ORGANISATION_NOT_FOUND";
+    public static final String ORGANISATION_MISMATCH = "ORGANISATION_MISMATCH";
+    public static final String UNAUTHORIZED = "UNAUTHORIZED";
 
 }

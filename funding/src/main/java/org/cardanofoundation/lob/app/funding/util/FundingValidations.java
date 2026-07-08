@@ -150,15 +150,24 @@ public final class FundingValidations {
     }
 
     /**
-     * A SPENDING event's allocations may not sum to more than the event's reporting-currency spend
-     * ({@code amountRcy}) — you can't allocate more than was actually spent.
+     * A SPENDING event's spend ({@code amountRcy}) must be fully allocated: the milestone allocations
+     * must sum to exactly the spent amount — no more (you can't allocate what wasn't spent) and no
+     * less (every spent unit must be booked against a milestone).
      */
-    public static Optional<ProblemDetail> spendCoversAllocations(EventType eventType, BigDecimal totalAllocated, BigDecimal amountRcy) {
-        if (eventType == EventType.SPENDING && amountRcy != null && totalAllocated != null
-                && totalAllocated.compareTo(amountRcy) > 0) {
+    public static Optional<ProblemDetail> spendFullyAllocated(EventType eventType, BigDecimal totalAllocated, BigDecimal amountRcy) {
+        if (eventType != EventType.SPENDING || amountRcy == null || totalAllocated == null) {
+            return Optional.empty();
+        }
+        if (totalAllocated.compareTo(amountRcy) > 0) {
             return Optional.of(Problems.badRequest(
                     "Allocated total %s exceeds the event's spent amount (amountRcy) %s".formatted(totalAllocated, amountRcy),
                     ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND));
+        }
+        if (totalAllocated.compareTo(amountRcy) < 0) {
+            return Optional.of(Problems.badRequest(
+                    "Allocated total %s does not fully allocate the event's spent amount (amountRcy) %s"
+                            .formatted(totalAllocated, amountRcy),
+                    ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED));
         }
         return Optional.empty();
     }
@@ -231,6 +240,19 @@ public final class FundingValidations {
     }
 
     /**
+     * A project node in a request holds either milestones or sub-projects, never both. Applied to
+     * every node of a create-project or event-allocation tree.
+     */
+    public static Optional<ProblemDetail> milestonesXorSubProjects(boolean hasMilestones, boolean hasSubProjects) {
+        if (hasMilestones && hasSubProjects) {
+            return Optional.of(Problems.badRequest(
+                    "A project has either milestones or sub-projects, not both",
+                    ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * A project node holds either milestones or sub-projects, never both. Rejects adding a milestone
      * to a project that already has sub-projects.
      */
@@ -252,6 +274,39 @@ public final class FundingValidations {
             return Optional.of(Problems.badRequest(
                     "Cannot add a sub-project to a project that has milestones; a project has either milestones or sub-projects, not both",
                     ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * When a project's total budget is changed, it must still cover what has already been planned
+     * under it: the summed amounts of its milestones and the summed totals of its sub-projects.
+     * Skipped when no new total is supplied.
+     */
+    public static Optional<ProblemDetail> projectTotalCoversChildren(BigDecimal newTotal,
+            BigDecimal milestonesTotal, BigDecimal subProjectsTotal) {
+        if (newTotal == null) {
+            return Optional.empty();
+        }
+        if (milestonesTotal != null && newTotal.compareTo(milestonesTotal) < 0) {
+            return Optional.of(Problems.badRequest(
+                    "Project total %s is below the summed milestone amounts %s".formatted(newTotal, milestonesTotal),
+                    ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES));
+        }
+        if (subProjectsTotal != null && newTotal.compareTo(subProjectsTotal) < 0) {
+            return Optional.of(Problems.badRequest(
+                    "Project total %s is below the summed sub-project totals %s".formatted(newTotal, subProjectsTotal),
+                    ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS));
+        }
+        return Optional.empty();
+    }
+
+    /** FUNDING events record who provided the funds — {@code fundingEntity} is required for them. */
+    public static Optional<ProblemDetail> fundingEntity(EventType eventType, String fundingEntity) {
+        if (eventType == EventType.FUNDING && (fundingEntity == null || fundingEntity.isBlank())) {
+            return Optional.of(Problems.badRequest(
+                    "fundingEntity is required for FUNDING events",
+                    ErrorTitleConstants.FUNDING_ENTITY_REQUIRED));
         }
         return Optional.empty();
     }

@@ -32,7 +32,7 @@ public class ProjectTreeNodeRequest {
     private String projectTitle;
 
     @Nullable
-    @Schema(example = "GRANT-2025-001")
+    @Schema(example = "GRANT-2025-001-WP1", description = "Optional funding reference. Unique per organisation — no two projects may share it.")
     private String fundingId;
 
     @Nullable
