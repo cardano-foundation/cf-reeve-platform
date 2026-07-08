@@ -19,7 +19,6 @@ public final class ErrorTitleConstants {
     public static final String MILESTONE_NOT_FOUND = "MILESTONE_NOT_FOUND";
     public static final String MILESTONE_ALREADY_EXISTS = "MILESTONE_ALREADY_EXISTS";
     public static final String MILESTONE_FIELDS_REQUIRED = "MILESTONE_FIELDS_REQUIRED";
-    public static final String MILESTONE_DATE_IN_PAST = "MILESTONE_DATE_IN_PAST";
     public static final String MILESTONE_AMOUNT_INVALID = "MILESTONE_AMOUNT_INVALID";
     public static final String MILESTONE_AMOUNT_EXCEEDS_PROJECT = "MILESTONE_AMOUNT_EXCEEDS_PROJECT";
     public static final String MILESTONE_AMOUNT_BELOW_ALLOCATED = "MILESTONE_AMOUNT_BELOW_ALLOCATED";

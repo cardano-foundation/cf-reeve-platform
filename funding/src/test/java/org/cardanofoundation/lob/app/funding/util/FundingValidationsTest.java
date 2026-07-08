@@ -18,9 +18,6 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 
 class FundingValidationsTest {
 
-    private static final LocalDate FUTURE = LocalDate.now().plusYears(1);
-    private static final LocalDate PAST = LocalDate.now().minusDays(1);
-
     private ProjectEntity project(BigDecimal total) {
         return ProjectEntity.builder().id("p1").organisationId("org1").totalAmount(total).currency("USD").build();
     }
@@ -33,63 +30,49 @@ class FundingValidationsTest {
         return p.orElseThrow().getTitle();
     }
 
-    // --- milestone(amount, date, project, otherTotal) ---
+    // --- milestone(amount, project, otherTotal) ---
 
     @Test
     void milestone_valid_returnsEmpty() {
-        assertThat(FundingValidations.milestone(new BigDecimal("50000"), FUTURE, project(new BigDecimal("200000")), BigDecimal.ZERO))
+        assertThat(FundingValidations.milestone(new BigDecimal("50000"), project(new BigDecimal("200000")), BigDecimal.ZERO))
                 .isEmpty();
-    }
-
-    @Test
-    void milestone_today_isAllowed() {
-        assertThat(FundingValidations.milestone(new BigDecimal("50000"), LocalDate.now(), project(new BigDecimal("200000")), BigDecimal.ZERO))
-                .isEmpty();
-    }
-
-    @Test
-    void milestone_dateInPast_isRejected() {
-        Optional<ProblemDetail> result = FundingValidations.milestone(new BigDecimal("50000"), PAST, project(new BigDecimal("200000")), BigDecimal.ZERO);
-
-        assertThat(title(result)).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
-        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
     @Test
     void milestone_zeroAmount_isRejected() {
-        assertThat(title(FundingValidations.milestone(BigDecimal.ZERO, FUTURE, project(new BigDecimal("200000")), BigDecimal.ZERO)))
+        assertThat(title(FundingValidations.milestone(BigDecimal.ZERO, project(new BigDecimal("200000")), BigDecimal.ZERO)))
                 .isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_INVALID);
     }
 
     @Test
     void milestone_negativeAmount_isRejected() {
-        assertThat(title(FundingValidations.milestone(new BigDecimal("-1"), FUTURE, project(new BigDecimal("200000")), BigDecimal.ZERO)))
+        assertThat(title(FundingValidations.milestone(new BigDecimal("-1"), project(new BigDecimal("200000")), BigDecimal.ZERO)))
                 .isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_INVALID);
     }
 
     @Test
     void milestone_amountExceedsProject_isRejected() {
-        assertThat(title(FundingValidations.milestone(new BigDecimal("250000"), FUTURE, project(new BigDecimal("200000")), BigDecimal.ZERO)))
+        assertThat(title(FundingValidations.milestone(new BigDecimal("250000"), project(new BigDecimal("200000")), BigDecimal.ZERO)))
                 .isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_EXCEEDS_PROJECT);
     }
 
     @Test
     void milestone_cumulativeExceedsProject_isRejected() {
         // each milestone (50000) is within the project total, but the running sum exceeds it
-        assertThat(title(FundingValidations.milestone(new BigDecimal("50000"), FUTURE, project(new BigDecimal("200000")), new BigDecimal("180000"))))
+        assertThat(title(FundingValidations.milestone(new BigDecimal("50000"), project(new BigDecimal("200000")), new BigDecimal("180000"))))
                 .isEqualTo(ErrorTitleConstants.MILESTONE_TOTAL_EXCEEDS_PROJECT);
     }
 
     @Test
     void milestone_amountChecksSkipped_whenProjectHasNoBudget() {
-        // sub-projects carry a null totalAmount → amount/cumulative checks don't apply, date still does
-        assertThat(FundingValidations.milestone(new BigDecimal("999999"), FUTURE, project(null), new BigDecimal("999999")))
+        // sub-projects carry a null totalAmount → amount/cumulative checks don't apply
+        assertThat(FundingValidations.milestone(new BigDecimal("999999"), project(null), new BigDecimal("999999")))
                 .isEmpty();
     }
 
     @Test
-    void milestone_nullAmountAndDate_returnsEmpty() {
-        assertThat(FundingValidations.milestone(null, null, project(new BigDecimal("200000")), BigDecimal.ZERO)).isEmpty();
+    void milestone_nullAmount_returnsEmpty() {
+        assertThat(FundingValidations.milestone(null, project(new BigDecimal("200000")), BigDecimal.ZERO)).isEmpty();
     }
 
     // --- milestoneCoversAllocations(newAmount, totalAllocated) ---

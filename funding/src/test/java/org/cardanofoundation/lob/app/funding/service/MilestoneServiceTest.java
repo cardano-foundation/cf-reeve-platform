@@ -419,8 +419,10 @@ class MilestoneServiceTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void create_returnsLeft_whenMilestoneDateInPast() {
+    void create_acceptsMilestoneDateInPast() {
+        // Historic data may be recorded — past milestone dates are allowed.
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         MilestoneCreateRequest request = MilestoneCreateRequest.builder()
                 .milestoneTitle("MS").milestoneAmount(new BigDecimal("50000.00")).currency("USD")
@@ -428,8 +430,8 @@ class MilestoneServiceTest {
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
-        verify(milestoneRepository, never()).saveAndFlush(any());
+        assertThat(result.isRight()).isTrue();
+        verify(milestoneRepository).saveAndFlush(any());
     }
 
     @Test
@@ -494,17 +496,20 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void update_returnsLeft_whenDateInPast() {
+    void update_acceptsDateInPast() {
+        // Historic data may be recorded — past milestone dates are allowed.
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
-        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneDate(LocalDate.now().minusDays(1)).build();
+        LocalDate pastDate = LocalDate.now().minusDays(1);
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneDate(pastDate).build();
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
-        verify(milestoneRepository, never()).saveAndFlush(any());
+        assertThat(result.isRight()).isTrue();
+        assertThat(milestone.getMilestoneDate()).isEqualTo(pastDate);
     }
 
     @Test

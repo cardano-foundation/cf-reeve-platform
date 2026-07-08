@@ -204,7 +204,7 @@ public class MilestoneService {
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), null);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
-                request.getMilestoneAmount(), request.getMilestoneDate(), project, otherMilestonesTotal);
+                request.getMilestoneAmount(), project, otherMilestonesTotal);
         if (validation.isPresent()) {
             return Either.left(validation.get());
         }
@@ -246,7 +246,7 @@ public class MilestoneService {
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), milestoneId);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
-                request.getMilestoneAmount(), request.getMilestoneDate(), project, otherMilestonesTotal);
+                request.getMilestoneAmount(), project, otherMilestonesTotal);
         if (validation.isPresent()) {
             return Either.left(validation.get());
         }

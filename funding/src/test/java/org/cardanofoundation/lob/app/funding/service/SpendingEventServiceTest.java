@@ -356,10 +356,13 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_returnsLeft_whenNewMilestoneDateInPast() {
+    void create_acceptsNewMilestoneWithDateInPast() {
+        // Historic data may be recorded — past milestone dates are allowed.
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
         when(milestoneRepository.findByProjectIdAndExternalMilestoneId(any(), eq("MS-NEW"))).thenReturn(Optional.empty());
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
                 .externalProjectId("PROJ-AB")
@@ -372,7 +375,8 @@ class SpendingEventServiceTest {
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_DATE_IN_PAST);
+        assertThat(result.isRight()).isTrue();
+        verify(milestoneRepository).saveAndFlush(any());
     }
 
     @Test

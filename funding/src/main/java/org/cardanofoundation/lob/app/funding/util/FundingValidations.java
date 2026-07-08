@@ -24,19 +24,14 @@ public final class FundingValidations {
     }
 
     /**
-     * Validates a milestone's amount and date against its project. {@code amount} and {@code date}
-     * are the effective values (a null value is left unchecked, so this also serves partial updates).
+     * Validates a milestone's amount against its project. {@code amount} is the effective value
+     * (a null value is left unchecked, so this also serves partial updates).
      * {@code otherMilestonesTotal} is the summed amount of the project's <em>other</em> milestones
      * (excluding the one being created/updated) and drives the cumulative-budget check. Amount checks
      * are skipped for projects without a budget (sub-projects, whose {@code totalAmount} is null).
      */
-    public static Optional<ProblemDetail> milestone(BigDecimal amount, LocalDate date,
+    public static Optional<ProblemDetail> milestone(BigDecimal amount,
             ProjectEntity project, BigDecimal otherMilestonesTotal) {
-        if (date != null && date.isBefore(LocalDate.now())) {
-            return Optional.of(Problems.badRequest(
-                    "Milestone date must not be in the past: %s".formatted(date),
-                    ErrorTitleConstants.MILESTONE_DATE_IN_PAST));
-        }
         if (amount != null && amount.signum() <= 0) {
             return Optional.of(Problems.badRequest(
                     "Milestone amount must be greater than zero",
