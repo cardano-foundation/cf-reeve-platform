@@ -1,0 +1,16 @@
+# UTXO address-balance monitoring: only unspent UTXOs whose ownerAddr is in this allow-list are kept and
+# written to address_utxo. Comma- or whitespace-separated. Empty = no filtering (all unspent UTXOs are
+# written), which is the safe bring-up default. Override via env LOB_UTXO_FILTER_ADDRESSES.
+lob.utxo.filter.addresses: ${LOB_UTXO_FILTER_ADDRESSES:}
+
+store:
+  plugins:
+    enabled: true
+    exit-on-error: true
+    filters:
+      utxo.unspent.save:
+        # Java implementation: see JavaPluginFactory + AddressUtxoFilterPlugin. Bound through the yaci-store
+        # PluginFactory SPI (lang='java' selects JavaPluginFactory, which dispatches on the plugin name).
+        - name: filter-address-utxos
+          lang: java
+

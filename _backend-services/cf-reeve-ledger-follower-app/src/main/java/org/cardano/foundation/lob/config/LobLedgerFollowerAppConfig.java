@@ -3,7 +3,7 @@ package org.cardano.foundation.lob.config;
 import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.yaci.store.api.blocks.service.BlockService;
 import com.bloxbean.cardano.yaci.store.api.transaction.service.TransactionService;
-import com.bloxbean.cardano.yaci.store.core.service.EraService;
+import com.bloxbean.cardano.yaci.store.core.service.ChainTipService;
 import org.cardano.foundation.lob.domain.CardanoNetwork;
 import org.cardano.foundation.lob.service.*;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,9 +20,9 @@ public class LobLedgerFollowerAppConfig {
     public BlockchainDataChainTipService blockchainDataChainTipService(CardanoNetwork network,
                                                                        BlockService blockService,
                                                                        ChainSyncService chainSyncService,
-                                                                       EraService eraService,
+                                                                       ChainTipService chainTipService,
                                                                        CacheManager cacheManager) {
-        return new YaciChainTipService(blockService, chainSyncService, eraService, network, cacheManager);
+        return new YaciChainTipService(blockService, chainSyncService, chainTipService, network, cacheManager);
     }
 
     @Bean

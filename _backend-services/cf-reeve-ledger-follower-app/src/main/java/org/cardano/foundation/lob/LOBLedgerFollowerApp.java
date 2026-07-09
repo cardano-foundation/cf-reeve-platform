@@ -32,7 +32,9 @@ import static org.springframework.aot.hint.ExecutableMode.INVOKE;
 		"org.cardano.foundation.lob.service",
 		"org.cardano.foundation.lob.resource",
 		"org.cardano.foundation.lob.health",
-		"org.cardano.foundation.lob.config"
+		"org.cardano.foundation.lob.config",
+		"org.cardano.foundation.lob.plugin",
+		"org.cardano.foundation.lob.metrics"
 })
 @EnableTransactionManagement
 @EnableScheduling
