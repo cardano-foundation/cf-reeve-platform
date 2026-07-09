@@ -184,6 +184,33 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void create_returnsConflict_whenTitleExistsInProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
+        when(milestoneRepository.existsByProjectIdAndMilestoneTitle("p1", "Milestone AB")).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", createRequest());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsConflict_whenTitleExistsInProject() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot("p1", "Existing", "m1")).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("Existing").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void update_skipsNullFields() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));

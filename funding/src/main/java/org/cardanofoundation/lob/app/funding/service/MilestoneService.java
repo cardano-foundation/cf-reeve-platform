@@ -201,6 +201,11 @@ public class MilestoneService {
         if (structure.isPresent()) {
             return Either.left(structure.get());
         }
+        if (milestoneRepository.existsByProjectIdAndMilestoneTitle(project.getId(), entity.getMilestoneTitle())) {
+            return Either.left(Problems.conflict(
+                    "Milestone title already exists in this project: " + entity.getMilestoneTitle(),
+                    ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
+        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), null);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
@@ -243,6 +248,14 @@ public class MilestoneService {
         // Validate only the supplied fields against the milestone's project; cumulative budget
         // excludes this milestone's current amount so an unchanged amount can't trip the check.
         ProjectEntity project = milestone.getProject();
+
+        if (request.getMilestoneTitle() != null && milestoneRepository
+                .existsByProjectIdAndMilestoneTitleAndIdNot(project.getId(), request.getMilestoneTitle(), milestoneId)) {
+            log.warn("Milestone title already exists in project {}: {}", project.getId(), request.getMilestoneTitle());
+            return Either.left(Problems.conflict(
+                    "Milestone title already exists in this project: " + request.getMilestoneTitle(),
+                    ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
+        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), milestoneId);
         Optional<ProblemDetail> validation = FundingValidations.milestone(

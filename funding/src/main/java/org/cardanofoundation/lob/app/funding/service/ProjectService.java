@@ -135,6 +135,12 @@ public class ProjectService {
                     "Project already exists for externalProjectId: " + request.getExternalProjectId(),
                     ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
         }
+        if (projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(
+                request.getOrganisationId(), request.getProjectTitle())) {
+            return Either.left(Problems.conflict(
+                    "Project title already exists in this organisation: " + request.getProjectTitle(),
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
         Optional<ProblemDetail> fundingIdProblem = projectStructureService.fundingIdAvailable(
                 request.getOrganisationId(), request.getFundingId());
         if (fundingIdProblem.isPresent()) {
@@ -206,7 +212,9 @@ public class ProjectService {
         if (!keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())) {
             return ProjectView.error(Problems.unauthorized());
         }
-        if (allocationRepository.existsByMilestoneProjectIdAndEventStatus(projectId, EventStatus.PUBLISHED)) {
+        // Locked when the project or any descendant sub-project owns a milestone tied to a published event.
+        if (allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
+                ProjectTreeSupport.subtreeProjectIds(projectRepository, projectId), EventStatus.PUBLISHED)) {
             return ProjectView.error(Problems.conflict(
                     "Cannot update project linked to a published event: %s".formatted(projectId),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
@@ -246,7 +254,14 @@ public class ProjectService {
                 return ProjectView.error(parentProblem.get());
             }
         }
-        if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
+        if (request.getProjectTitle() != null) {
+            // Uniqueness is checked against the final parent scope (an unchanged title excludes self).
+            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, request.getProjectTitle());
+            if (titleConflict.isPresent()) {
+                return ProjectView.error(titleConflict.get());
+            }
+            project.setProjectTitle(request.getProjectTitle());
+        }
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
         if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
         return toView(projectRepository.saveAndFlush(project));
@@ -287,6 +302,24 @@ public class ProjectService {
             return amountProblem;
         }
         project.setParentProject(parent);
+        return Optional.empty();
+    }
+
+    /**
+     * A project title must be unique within its scope: root projects per organisation, sub-projects
+     * within their parent. The check excludes the project itself so an unchanged title never conflicts.
+     */
+    private Optional<ProblemDetail> projectTitleConflict(ProjectEntity project, String title) {
+        boolean exists = project.getParentProject() == null
+                ? projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(
+                        project.getOrganisationId(), title, project.getId())
+                : projectRepository.existsByParentProjectIdAndProjectTitleAndIdNot(
+                        project.getParentProject().getId(), title, project.getId());
+        if (exists) {
+            return Optional.of(Problems.conflict(
+                    "Project title already exists in this scope: " + title,
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
         return Optional.empty();
     }
 

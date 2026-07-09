@@ -29,6 +29,16 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             """)
     boolean existsByMilestoneIdInAndEventStatus(@Param("milestoneIds") Collection<String> milestoneIds, @Param("status") EventStatus status);
 
+    /**
+     * Whether any milestone owned by one of the given projects is allocated by an event in the given
+     * status. Used to lock a project when it (or a descendant sub-project) is tied to a published event.
+     */
+    @Query("""
+            SELECT COUNT(a) > 0 FROM funding.EventMilestoneAllocationEntity a
+            WHERE a.milestone.project.id IN :projectIds AND a.event.status = :status
+            """)
+    boolean existsByMilestoneProjectIdInAndEventStatus(@Param("projectIds") Collection<String> projectIds, @Param("status") EventStatus status);
+
     /** Total amount allocated to a milestone across all events (null allocations ignored, no rows → 0). */
     @Query("""
             SELECT COALESCE(SUM(a.allocatedAmount), 0)

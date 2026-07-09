@@ -61,6 +61,12 @@ public class ProjectStructureService {
                     ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
         }
 
+        if (projectRepository.existsByParentProjectIdAndProjectTitle(parent.getId(), projectTitle)) {
+            return Either.left(Problems.conflict(
+                    "Sub-project title already exists under this parent: " + projectTitle,
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
+
         Optional<ProblemDetail> fundingIdProblem = fundingIdAvailable(parent.getOrganisationId(), fundingId);
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());

@@ -172,6 +172,28 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenNewRootProjectTitleAlreadyExists() {
+        // Auto-creating a root project via the allocation flow must honour root-title uniqueness.
+        when(projectRepository.existsById(any())).thenReturn(false);
+        when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull("org1", "New Project"))
+                .thenReturn(true);
+
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-NEW").projectTitle("New Project").fundingId("GRANT-2025-001")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD")
+                .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                        .milestone(MilestoneCreateRequest.builder().milestoneTitle("New MS")
+                                .milestoneAmount(new BigDecimal("60000.00")).currency("USD").milestoneDate(FUTURE_DATE).build())
+                        .allocatedAmount(ALLOCATED).build()))
+                .build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_returnsLeft_whenEventAlreadyExists() {
         when(fundingEventRepository.existsById(any())).thenReturn(true);
 
