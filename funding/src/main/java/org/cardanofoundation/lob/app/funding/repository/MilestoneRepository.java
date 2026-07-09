@@ -22,6 +22,11 @@ public interface MilestoneRepository extends JpaRepository<MilestoneEntity, Stri
 
     Optional<MilestoneEntity> findByProjectIdAndExternalMilestoneId(String projectId, String externalMilestoneId);
 
+    // Milestone titles are unique within their project.
+    boolean existsByProjectIdAndMilestoneTitle(String projectId, String milestoneTitle);
+
+    boolean existsByProjectIdAndMilestoneTitleAndIdNot(String projectId, String milestoneTitle, String id);
+
     /** Resolves a milestone only when it actually belongs to the given project (ownership check). */
     Optional<MilestoneEntity> findByIdAndProjectId(String id, String projectId);
 

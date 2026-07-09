@@ -6,6 +6,7 @@ public final class ErrorTitleConstants {
 
     public static final String PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND";
     public static final String PROJECT_ALREADY_EXISTS = "PROJECT_ALREADY_EXISTS";
+    public static final String PROJECT_TITLE_ALREADY_EXISTS = "PROJECT_TITLE_ALREADY_EXISTS";
     public static final String PROJECT_FUNDING_ID_ALREADY_USED = "PROJECT_FUNDING_ID_ALREADY_USED";
     public static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
     public static final String PROJECT_AMOUNT_INVALID = "PROJECT_AMOUNT_INVALID";
@@ -18,6 +19,7 @@ public final class ErrorTitleConstants {
     public static final String SUBPROJECT_TOTAL_EXCEEDS_PARENT = "SUBPROJECT_TOTAL_EXCEEDS_PARENT";
     public static final String MILESTONE_NOT_FOUND = "MILESTONE_NOT_FOUND";
     public static final String MILESTONE_ALREADY_EXISTS = "MILESTONE_ALREADY_EXISTS";
+    public static final String MILESTONE_TITLE_ALREADY_EXISTS = "MILESTONE_TITLE_ALREADY_EXISTS";
     public static final String MILESTONE_FIELDS_REQUIRED = "MILESTONE_FIELDS_REQUIRED";
     public static final String MILESTONE_AMOUNT_INVALID = "MILESTONE_AMOUNT_INVALID";
     public static final String MILESTONE_AMOUNT_EXCEEDS_PROJECT = "MILESTONE_AMOUNT_EXCEEDS_PROJECT";

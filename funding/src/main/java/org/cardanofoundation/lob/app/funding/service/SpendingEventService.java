@@ -499,6 +499,12 @@ public class SpendingEventService {
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
         }
+        // Root titles are unique per organisation — return a clean 409 rather than a DB-integrity 500.
+        if (projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, req.getProjectTitle())) {
+            return Either.left(Problems.conflict(
+                    "Project title already exists in this organisation: " + req.getProjectTitle(),
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
 
         ProjectEntity newProject = ProjectEntity.builder()
                 .id(projectId)

@@ -18,6 +18,15 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
 
     boolean existsByOrganisationIdAndFundingId(String organisationId, String fundingId);
 
+    // Title uniqueness: root titles are unique per organisation, sub-project titles within their parent.
+    boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(String organisationId, String projectTitle);
+
+    boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(String organisationId, String projectTitle, String id);
+
+    boolean existsByParentProjectIdAndProjectTitle(String parentProjectId, String projectTitle);
+
+    boolean existsByParentProjectIdAndProjectTitleAndIdNot(String parentProjectId, String projectTitle, String id);
+
     List<ProjectEntity> findByParentProjectId(String parentProjectId);
 
     Page<ProjectEntity> findByParentProjectId(String parentProjectId, Pageable pageable);
