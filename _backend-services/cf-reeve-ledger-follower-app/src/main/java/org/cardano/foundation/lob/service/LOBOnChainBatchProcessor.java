@@ -2,7 +2,6 @@ package org.cardano.foundation.lob.service;
 
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadata;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataMap;
-import com.bloxbean.cardano.yaci.store.events.BlockEvent;
 import com.bloxbean.cardano.yaci.store.metadata.domain.TxMetadataEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,12 +56,6 @@ public class LOBOnChainBatchProcessor {
                 }
             }
         }
-    }
-
-    public void utxoEvent(BlockEvent event) {
-        // WIP (address-balance monitoring): the previous incomplete statement
-        //   event.getBlock().getTransactionWitness
-        // was non-compiling; left as a no-op stub so the yaci-store 2.0.2 upgrade builds.
     }
 
 }
