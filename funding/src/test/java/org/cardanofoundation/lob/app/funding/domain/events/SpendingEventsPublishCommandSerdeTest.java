@@ -54,7 +54,7 @@ class SpendingEventsPublishCommandSerdeTest {
                 .eventId("event-1")
                 .organisationId("org-1")
                 .eventType(EventType.SPENDING)
-                .date(LocalDate.of(2025, 4, 30))
+                .eventDate(LocalDate.of(2025, 4, 3))
                 .fundingId("fund-1")
                 .fundingHash("ftx-1")
                 .amount(new BigDecimal("85.00"))
@@ -65,7 +65,6 @@ class SpendingEventsPublishCommandSerdeTest {
                 .spendCurrency(eur)
                 .fxRate(new BigDecimal("0.85"))
                 .amountRcy(new BigDecimal("85.00"))
-                .spendDate(LocalDate.of(2025, 4, 3))
                 .documentHash("doc-hash-1")
                 .notes("Invoice #1")
                 .projectAllocations(List.of(allocation))
@@ -88,7 +87,7 @@ class SpendingEventsPublishCommandSerdeTest {
         assertThat(resultView.getProjectAllocations().get(0).getMilestones()).isNull();
         assertThat(resultView.getAmountFcy()).isEqualByComparingTo("100.00");
         assertThat(resultView.getAmountRcy()).isEqualByComparingTo("85.00");
-        assertThat(resultView.getSpendDate()).isEqualTo(LocalDate.of(2025, 4, 3));
+        assertThat(resultView.getEventDate()).isEqualTo(LocalDate.of(2025, 4, 3));
         assertThat(resultView.getSpendCurrency().getCustCode()).isEqualTo("EUR");
         assertThat(resultView.getVendor()).isEqualTo("Vendor AB");
 
@@ -121,7 +120,7 @@ class SpendingEventsPublishCommandSerdeTest {
                 .eventId("event-2")
                 .organisationId("org-1")
                 .eventType(EventType.FUNDING)
-                .date(LocalDate.of(2025, 1, 15))
+                .eventDate(LocalDate.of(2025, 1, 15))
                 .fundingId("fund-1")
                 .amount(new BigDecimal("50.00"))
                 .currency(usd)

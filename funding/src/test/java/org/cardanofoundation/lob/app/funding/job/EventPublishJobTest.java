@@ -91,7 +91,7 @@ class EventPublishJobTest {
 
         SpendingEventPublishView publishView = SpendingEventPublishView.builder()
                 .eventId("e1").organisationId("org1").eventType(EventType.SPENDING)
-                .date(LocalDate.now()).fundingId("GRANT-001")
+                .eventDate(LocalDate.now()).fundingId("GRANT-001")
                 .amount(BigDecimal.ZERO).projectAllocations(List.of()).build();
 
         when(fundingEventRepository.findAllToBePublished("org1")).thenReturn(Set.of(event));
@@ -163,7 +163,7 @@ class EventPublishJobTest {
     private SpendingEventPublishView buildPublishView(String eventId) {
         return SpendingEventPublishView.builder()
                 .eventId(eventId).organisationId("org1").eventType(EventType.SPENDING)
-                .date(LocalDate.now()).fundingId("GRANT-001")
+                .eventDate(LocalDate.now()).fundingId("GRANT-001")
                 .amount(BigDecimal.ZERO).projectAllocations(List.of()).build();
     }
 

@@ -25,7 +25,9 @@ public class SpendingEventPublishView {
     private String eventId;
     private String organisationId;
     private EventType eventType;
-    private LocalDate date;
+    /** Event date; applies to all event types. For a SPENDING event this is the spend date. */
+    @Nullable
+    private LocalDate eventDate;
 
     private String fundingId;
     @Nullable
@@ -49,8 +51,6 @@ public class SpendingEventPublishView {
     private BigDecimal fxRate;
     @Nullable
     private BigDecimal amountRcy;
-    @Nullable
-    private LocalDate spendDate;
     @Nullable
     private String documentHash;
     @Nullable

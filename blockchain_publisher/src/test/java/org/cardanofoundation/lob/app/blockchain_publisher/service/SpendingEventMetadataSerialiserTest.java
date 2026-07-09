@@ -78,6 +78,7 @@ class SpendingEventMetadataSerialiserTest {
         event.setFundingTx("ftx1");
         event.setCurrency("USD");
         event.setCurrencyId("ISO_4217:USD");
+        event.setEventDate(LocalDate.of(2025, 4, 3));
         // Spend detail — event level.
         event.setCategory("Personnel");
         event.setVendor("Vendor AB");
@@ -86,7 +87,6 @@ class SpendingEventMetadataSerialiserTest {
         event.setSpendCurrency("EUR");
         event.setSpendCurrencyId("ISO_4217:EUR");
         event.setFxRate(new BigDecimal("0.85"));
-        event.setSpendDate(LocalDate.of(2025, 4, 3));
         event.setDocumentHash("doc-hash-1");
         event.setNotes("Invoice #1");
         event.setOrganisation(organisation());
@@ -177,6 +177,7 @@ class SpendingEventMetadataSerialiserTest {
         event.setFundingEntity("FundingEntity");
         event.setCurrency("USD");
         event.setCurrencyId("ISO_4217:USD");
+        event.setEventDate(LocalDate.of(2025, 1, 15));
         event.setOrganisation(organisation());
         event.setProjectAllocations(List.of(allocation));
         return event;
@@ -190,6 +191,8 @@ class SpendingEventMetadataSerialiserTest {
 
         assertThat(eventMap.get("type")).isEqualTo("FUNDING");
         assertThat(eventMap.get("funding_entity")).isEqualTo("FundingEntity");
+        // The event date is now serialised for every event type, not just SPENDING.
+        assertThat(eventMap.get("date")).isEqualTo("2025-01-15");
         assertThat(eventMap.get("item")).isNull();
 
         // Direct allocation: no sub_project object, milestones at the project level.

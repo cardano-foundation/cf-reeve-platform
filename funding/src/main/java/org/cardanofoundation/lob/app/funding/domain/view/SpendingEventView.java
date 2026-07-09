@@ -60,6 +60,11 @@ public class SpendingEventView implements ErrorAware {
     @Schema(example = "Cardano Foundation")
     private String fundingEntity;
 
+    @Nullable
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    @Schema(example = "2025-04-03", description = "Event date; applies to all event types.")
+    private LocalDate eventDate;
+
     // --- Spend detail: SPENDING events only ---
 
     @Nullable
@@ -85,11 +90,6 @@ public class SpendingEventView implements ErrorAware {
     @Nullable
     @Schema(example = "85000.00")
     private BigDecimal amountRcy;
-
-    @Nullable
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    @Schema(example = "2025-04-03")
-    private LocalDate spendDate;
 
     @Nullable
     @Schema(example = "sha256:abc123...")

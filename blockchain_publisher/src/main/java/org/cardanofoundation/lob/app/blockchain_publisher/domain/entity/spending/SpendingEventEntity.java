@@ -124,10 +124,6 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     private BigDecimal fxRate;
 
     @Nullable
-    @Column(name = "spend_date")
-    private java.time.LocalDate spendDate;
-
-    @Nullable
     @Column(name = "document_hash")
     private String documentHash;
 

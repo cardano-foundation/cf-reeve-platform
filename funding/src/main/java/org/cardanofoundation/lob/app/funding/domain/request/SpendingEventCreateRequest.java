@@ -52,6 +52,11 @@ public class SpendingEventCreateRequest extends BaseRequest {
     @Schema(example = "USD", description = "Reporting currency of the event.")
     private String currency;
 
+    @Nullable
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    @Schema(example = "2025-04-03", description = "Event date. Applies to all event types (FUNDING, SPENDING, REFUND). For a SPENDING event this is the spend date.")
+    private LocalDate eventDate;
+
     // --- Spend detail: SPENDING events only (omitted for FUNDING/REFUND) ---
 
     @Nullable
@@ -77,11 +82,6 @@ public class SpendingEventCreateRequest extends BaseRequest {
     @Nullable
     @Schema(example = "85000.00", description = "Reporting-currency amount spent. SPENDING events only.")
     private BigDecimal amountRcy;
-
-    @Nullable
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    @Schema(example = "2025-04-03", description = "SPENDING events only.")
-    private LocalDate spendDate;
 
     @Nullable
     @Schema(example = "sha256:abc123...", description = "SPENDING events only.")

@@ -77,7 +77,7 @@ class SpendingEventConverterTest {
                 .eventId("event-1")
                 .organisationId("org1")
                 .eventType(EventType.FUNDING)
-                .date(LocalDate.of(2026, 6, 9))
+                .eventDate(LocalDate.of(2026, 6, 9))
                 .fundingId("fund-1")
                 .fundingHash("ftx-1")
                 .fundingEntity("Funding Entity")
@@ -113,12 +113,12 @@ class SpendingEventConverterTest {
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
-                .date(LocalDate.of(2026, 6, 9)).fundingId("fund-1")
+                .eventDate(LocalDate.of(2026, 6, 9)).fundingId("fund-1")
                 .amount(new BigDecimal("50.00")).currency(usd())
                 // spend detail — event level
                 .category("Personnel").vendor("Vendor AB").amountFcy(new BigDecimal("100.00"))
                 .spendCurrency(eur()).fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
-                .spendDate(LocalDate.of(2025, 4, 3)).documentHash("hash-1").notes("note")
+                .documentHash("hash-1").notes("note")
                 .projectAllocations(List.of(subProjectAllocation("proj-1", "Project One", "sub-1", "Sub One", List.of(milestone))))
                 .build();
 

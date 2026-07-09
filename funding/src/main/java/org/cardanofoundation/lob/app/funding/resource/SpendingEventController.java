@@ -130,6 +130,7 @@ public class SpendingEventController {
                                                       "fundingHash": "2736ff28abc1234567890abcdef",
                                                       "fundingEntity": "Cardano Foundation",
                                                       "currency": "USD",
+                                                      "eventDate": "2026-01-15",
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-AB",
@@ -192,7 +193,7 @@ public class SpendingEventController {
                                                       "spendCurrency": "USD",
                                                       "fxRate": "1.00",
                                                       "amountRcy": "2500.00",
-                                                      "spendDate": "2026-05-01",
+                                                      "eventDate": "2026-05-01",
                                                       "notes": "Monthly hosting",
                                                       "allocations": [
                                                         {
@@ -232,7 +233,7 @@ public class SpendingEventController {
                                                       "spendCurrency": "USD",
                                                       "fxRate": "1.00",
                                                       "amountRcy": "200000.00",
-                                                      "spendDate": "2026-04-01",
+                                                      "eventDate": "2026-04-01",
                                                       "hash": "sha256:aabbcc112233",
                                                       "notes": "Invoice #INV-2026-101",
                                                       "allocations": [
@@ -296,6 +297,7 @@ public class SpendingEventController {
                                                       "fundingId": "GRANT-2025-001",
                                                       "fundingHash": "refund-tx-hash-abc123",
                                                       "currency": "USD",
+                                                      "eventDate": "2026-06-01",
                                                       "allocations": [
                                                         {
                                                           "fundingId": "GRANT-2025-001-EF",

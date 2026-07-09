@@ -84,6 +84,11 @@ public class SpendingEventMetadataSerialiser {
             metadataMap.put("funding_entity", event.getFundingEntity());
         }
 
+        // Event date — applies to all event types (FUNDING, SPENDING, REFUND), when present.
+        if (event.getEventDate() != null) {
+            metadataMap.put("date", event.getEventDate().toString());
+        }
+
         // Spend detail — SPENDING events only.
         if (event.getAmountRcy() != null) {
             metadataMap.put("amount_rcy", BigDecimals.normaliseString(event.getAmountRcy()));
@@ -105,9 +110,6 @@ public class SpendingEventMetadataSerialiser {
         }
         if (event.getNotes() != null) {
             metadataMap.put("notes", event.getNotes());
-        }
-        if (event.getSpendDate() != null) {
-            metadataMap.put("date", event.getSpendDate().toString());
         }
         if (event.getSpendCurrency() != null) {
             metadataMap.put("currency", serialiseCurrency(event.getSpendCurrencyId(), event.getSpendCurrency()));
