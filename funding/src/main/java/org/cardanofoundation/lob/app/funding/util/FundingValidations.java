@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
@@ -110,16 +109,17 @@ public final class FundingValidations {
      * Validates the spend detail on a milestone allocation. Spend fields are only permitted for
      * SPENDING events; for SPENDING they are required and must be internally consistent
      * ({@code amountFcy = amountRcy * fxRate}) with the allocated amount not exceeding the
-     * reporting-currency spend ({@code amountRcy}).
+     * reporting-currency spend ({@code amountRcy}). The event date is a general field (all event
+     * types) and is validated separately, not here.
      */
     public static Optional<ProblemDetail> spendDetail(
             EventType eventType,
             String category, String vendor,
             BigDecimal amountFcy, String spendCurrency, BigDecimal fxRate, BigDecimal amountRcy,
-            LocalDate spendDate, String hash, String notes) {
+            String hash, String notes) {
 
         boolean anySpendField = category != null || vendor != null || amountFcy != null || spendCurrency != null
-                || fxRate != null || amountRcy != null || spendDate != null || hash != null || notes != null;
+                || fxRate != null || amountRcy != null || hash != null || notes != null;
 
         if (eventType != EventType.SPENDING) {
             if (anySpendField) {
@@ -131,9 +131,9 @@ public final class FundingValidations {
         }
 
         // SPENDING: the amount fields are required to record the spend.
-        if (amountFcy == null || amountRcy == null || fxRate == null || spendDate == null) {
+        if (amountFcy == null || amountRcy == null || fxRate == null) {
             return Optional.of(Problems.badRequest(
-                    "amountFcy, amountRcy, fxRate and spendDate are required for SPENDING events",
+                    "amountFcy, amountRcy and fxRate are required for SPENDING events",
                     ErrorTitleConstants.SPEND_FIELDS_REQUIRED));
         }
         if (amountRcy.multiply(fxRate).subtract(amountFcy).abs().compareTo(FX_TOLERANCE) > 0) {

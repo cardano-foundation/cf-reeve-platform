@@ -241,7 +241,7 @@ class SpendingEventServiceTest {
 
     @Test
     void create_returnsLeft_whenSpendingEventMissingSpendFields() {
-        // SPENDING event with allocations but no amountFcy/amountRcy/fxRate/spendDate on the event.
+        // SPENDING event with allocations but no amountFcy/amountRcy/fxRate on the event.
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder()
@@ -690,7 +690,7 @@ class SpendingEventServiceTest {
         SpendingEventPublishView view = spendingEventService.toPublishView(event);
 
         assertThat(view.getEventId()).isEqualTo("e1");
-        assertThat(view.getDate()).isEqualTo(LocalDate.of(2025, 6, 15));
+        assertThat(view.getEventDate()).isEqualTo(LocalDate.of(2025, 4, 3));
         assertThat(view.getCurrency().getCustCode()).isEqualTo("USD");
         assertThat(view.getAmountFcy()).isEqualByComparingTo(AMOUNT_FCY);
         assertThat(view.getSpendCurrency().getCustCode()).isEqualTo("EUR");
@@ -921,7 +921,7 @@ class SpendingEventServiceTest {
         event.setAmountRcy(AMOUNT_RCY);
         event.setSpendCurrency("EUR");
         event.setFxRate(FX_RATE);
-        event.setSpendDate(LocalDate.of(2025, 4, 3));
+        event.setEventDate(LocalDate.of(2025, 4, 3));
         return event;
     }
 
@@ -955,7 +955,7 @@ class SpendingEventServiceTest {
         return SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
                 .category("Personnel").vendor("Vendor AB").amountFcy(AMOUNT_FCY).spendCurrency("EUR")
-                .fxRate(FX_RATE).amountRcy(AMOUNT_RCY).spendDate(LocalDate.of(2025, 4, 3))
+                .fxRate(FX_RATE).amountRcy(AMOUNT_RCY).eventDate(LocalDate.of(2025, 4, 3))
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .externalProjectId("PROJ-AB").milestones(List.of(milestone)).build()))
                 .build();

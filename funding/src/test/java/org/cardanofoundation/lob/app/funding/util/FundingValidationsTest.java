@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.funding.util;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -167,25 +166,25 @@ class FundingValidationsTest {
                 .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
     }
 
-    // --- spendDetail(eventType, category, vendor, amountFcy, spendCurrency, fxRate, amountRcy, spendDate, hash, notes) ---
+    // --- spendDetail(eventType, category, vendor, amountFcy, spendCurrency, fxRate, amountRcy, hash, notes) ---
 
     @Test
     void spendDetail_rejected_whenSpendFieldsOnNonSpendingEvent() {
         assertThat(title(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, new BigDecimal("100000"), null, null, null, null, null, null)))
+                null, null, new BigDecimal("100000"), null, null, null, null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED);
     }
 
     @Test
     void spendDetail_allowed_whenNonSpendingEventHasNoSpendFields() {
         assertThat(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, null, null, null, null, null, null, null)).isEmpty();
+                null, null, null, null, null, null, null, null)).isEmpty();
     }
 
     @Test
     void spendDetail_required_forSpendingEvent() {
         assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
-                "Personnel", "Vendor", null, "EUR", null, null, null, null, null)))
+                "Personnel", "Vendor", null, "EUR", null, null, null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
     }
 
@@ -194,7 +193,7 @@ class FundingValidationsTest {
         // amountFcy (100000) != amountRcy (50000) * fxRate (3)
         assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
                 "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("3"),
-                new BigDecimal("50000"), LocalDate.now(), null, null)))
+                new BigDecimal("50000"), null, null)))
                 .isEqualTo(ErrorTitleConstants.FX_RATE_MISMATCH);
     }
 
@@ -203,7 +202,7 @@ class FundingValidationsTest {
         // amountFcy (100000) == amountRcy (50000) * fxRate (2)
         assertThat(FundingValidations.spendDetail(EventType.SPENDING,
                 "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2"),
-                new BigDecimal("50000"), LocalDate.now(), null, null)).isEmpty();
+                new BigDecimal("50000"), null, null)).isEmpty();
     }
 
     @Test

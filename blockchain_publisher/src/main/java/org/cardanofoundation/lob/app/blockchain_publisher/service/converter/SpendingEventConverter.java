@@ -37,7 +37,7 @@ public class SpendingEventConverter {
         SpendingEventEntity entity = new SpendingEventEntity();
         entity.setEventId(view.getEventId());
         entity.setEventType(view.getEventType());
-        entity.setEventDate(view.getDate());
+        entity.setEventDate(view.getEventDate());
 
         entity.setFundingId(view.getFundingId());
         entity.setFundingTx(view.getFundingHash());
@@ -55,7 +55,6 @@ public class SpendingEventConverter {
         entity.setSpendCurrency(custCode(view.getSpendCurrency()));
         entity.setSpendCurrencyId(currencyId(view.getSpendCurrency()));
         entity.setFxRate(view.getFxRate());
-        entity.setSpendDate(view.getSpendDate());
         entity.setDocumentHash(view.getDocumentHash());
         entity.setNotes(view.getNotes());
 

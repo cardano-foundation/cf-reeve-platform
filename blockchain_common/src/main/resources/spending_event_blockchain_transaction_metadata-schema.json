@@ -113,7 +113,7 @@
     },
     "grantEvent": {
       "type": "object",
-      "description": "The spend fields (amounts, vendor, category, fx_rate, date, currency) are the event's single spend record, present for SPENDING events only.",
+      "description": "A grant-lifecycle event (FUNDING, SPENDING or REFUND). The optional 'date' is the event date and applies to every event type. The spend fields (amounts, vendor, category, fx_rate, currency) are the event's single spend record, present for SPENDING events only.",
       "required": ["id", "type", "funding_id", "allocation"],
       "additionalProperties": false,
       "properties": {
@@ -122,6 +122,7 @@
         "funding_tx": { "type": "string" },
         "funding_id": { "type": "string", "minLength": 1 },
         "funding_entity": { "type": "string", "minLength": 1 },
+        "date": { "$ref": "#/$defs/isoDate", "description": "Event date (ISO 8601, YYYY-MM-DD). Optional; applies to all event types." },
         "amount_rcy": { "$ref": "#/$defs/decimalString" },
         "amount_fcy": { "$ref": "#/$defs/decimalString" },
         "vendor": { "type": "string", "minLength": 1 },
@@ -129,7 +130,6 @@
         "fx_rate": { "$ref": "#/$defs/decimalString" },
         "hash": { "type": "string" },
         "notes": { "type": "string" },
-        "date": { "$ref": "#/$defs/isoDate" },
         "currency": { "$ref": "#/$defs/currency" },
         "allocation": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/projectAllocation" } }
       }

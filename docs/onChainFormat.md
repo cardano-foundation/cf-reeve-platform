@@ -259,6 +259,7 @@ Grant-lifecycle events (`FUNDING`, `SPENDING`, `REFUND`) carry:
 | `funding_tx` | string | No | Reference to the funding transaction |
 | `funding_id` | string | Yes | Identifier of the funding source |
 | `funding_entity` | string | Conditional | Name of the entity providing the funding; **required** for `FUNDING` events |
+| `date` | string | No | Event date in ISO 8601 format (YYYY-MM-DD); applies to **all** event types. For a `SPENDING` event this is the spend date. |
 | `amount_rcy` | string | Conditional | Spent amount in the organization's reporting currency; `SPENDING` only (see spend detail below) |
 | `amount_fcy` | string | Conditional | Spent amount in the spend (foreign) currency; `SPENDING` only |
 | `vendor` | string | No | Vendor/payee; `SPENDING` only |
@@ -266,11 +267,10 @@ Grant-lifecycle events (`FUNDING`, `SPENDING`, `REFUND`) carry:
 | `fx_rate` | string | Conditional | FX rate such that `amount_fcy = amount_rcy * fx_rate`; `SPENDING` only (see [FX Rate](#fx-rate)) |
 | `hash` | string | No | Hash of the supporting document; `SPENDING` only |
 | `notes` | string | No | Free-text notes; `SPENDING` only |
-| `date` | string | Conditional | Spend date in ISO 8601 format (YYYY-MM-DD); `SPENDING` only |
 | `currency` | object | No | Spend currency with `id` (ISO format) and `cust_code`; `SPENDING` only |
 | `allocation` | array | Yes | One entry per project this event targets (see below) |
 
-The spend fields (`amount_rcy`, `amount_fcy`, `vendor`, `spending_category`, `fx_rate`, `hash`, `notes`, `date`, `currency`) form the event's **single spend record** and are present for `SPENDING` events only. A `SPENDING` event's spend is fully allocated: its milestone `allocated_amount`s sum to exactly `amount_rcy`.
+`date` is the event date and is optional for every event type. The spend fields (`amount_rcy`, `amount_fcy`, `vendor`, `spending_category`, `fx_rate`, `hash`, `notes`, `currency`) form the event's **single spend record** and are present for `SPENDING` events only. A `SPENDING` event's spend is fully allocated: its milestone `allocated_amount`s sum to exactly `amount_rcy`.
 
 Custom (organization-defined) events carry only the common fields:
 

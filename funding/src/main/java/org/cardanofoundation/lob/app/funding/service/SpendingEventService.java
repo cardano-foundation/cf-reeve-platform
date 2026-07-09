@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -204,6 +203,7 @@ public class SpendingEventService {
         event.setFundingHash(request.getFundingHash());
         event.setFundingEntity(request.getFundingEntity());
         event.setCurrency(request.getCurrency());
+        event.setEventDate(request.getEventDate());
         applySpendDetail(event, request);
 
         event.getMilestoneAllocations().clear();
@@ -246,7 +246,6 @@ public class SpendingEventService {
         event.setAmountRcy(request.getAmountRcy());
         event.setSpendCurrency(request.getSpendCurrency());
         event.setFxRate(request.getFxRate());
-        event.setSpendDate(request.getSpendDate());
         event.setHash(request.getHash());
         event.setNotes(request.getNotes());
     }
@@ -254,7 +253,7 @@ public class SpendingEventService {
     private static Optional<ProblemDetail> validateEventSpendDetail(FundingEventEntity event) {
         return FundingValidations.spendDetail(event.getEventType(),
                 event.getCategory(), event.getVendor(), event.getAmountFcy(), event.getSpendCurrency(),
-                event.getFxRate(), event.getAmountRcy(), event.getSpendDate(), event.getHash(), event.getNotes());
+                event.getFxRate(), event.getAmountRcy(), event.getHash(), event.getNotes());
     }
 
     private static Optional<ProblemDetail> validateEventTotals(FundingEventEntity event) {
@@ -310,13 +309,13 @@ public class SpendingEventService {
                 .ledgerDispatchStatus(event.getLedgerDispatchStatus())
                 .fundingHash(event.getFundingHash())
                 .fundingEntity(event.getFundingEntity())
+                .eventDate(event.getEventDate())
                 .category(event.getCategory())
                 .vendor(event.getVendor())
                 .amountFcy(event.getAmountFcy())
                 .spendCurrency(event.getSpendCurrency())
                 .fxRate(event.getFxRate())
                 .amountRcy(event.getAmountRcy())
-                .spendDate(event.getSpendDate())
                 .hash(event.getHash())
                 .notes(event.getNotes())
                 .projectAllocations(projViews)
@@ -324,15 +323,13 @@ public class SpendingEventService {
     }
 
     public SpendingEventPublishView toPublishView(FundingEventEntity event) {
-        LocalDate date = event.getCreatedAt().toLocalDate();
-
         List<SpendingEventPublishView.ProjectAllocation> projAllocations = buildPublishProjectAllocations(event.getId());
 
         return SpendingEventPublishView.builder()
                 .eventId(event.getId())
                 .organisationId(event.getOrganisationId())
                 .eventType(event.getEventType())
-                .date(date)
+                .eventDate(event.getEventDate())
                 .fundingId(event.getFundingId())
                 .fundingHash(event.getFundingHash())
                 .fundingEntity(event.getFundingEntity())
@@ -344,7 +341,6 @@ public class SpendingEventService {
                 .spendCurrency(event.getSpendCurrency() != null ? toCurrency(event.getSpendCurrency()) : null)
                 .fxRate(event.getFxRate())
                 .amountRcy(event.getAmountRcy())
-                .spendDate(event.getSpendDate())
                 .documentHash(event.getHash())
                 .notes(event.getNotes())
                 .projectAllocations(projAllocations)
@@ -656,13 +652,13 @@ public class SpendingEventService {
                 .fundingHash(request.getFundingHash())
                 .fundingEntity(request.getFundingEntity())
                 .currency(request.getCurrency())
+                .eventDate(request.getEventDate())
                 .category(request.getCategory())
                 .vendor(request.getVendor())
                 .amountFcy(request.getAmountFcy())
                 .amountRcy(request.getAmountRcy())
                 .spendCurrency(request.getSpendCurrency())
                 .fxRate(request.getFxRate())
-                .spendDate(request.getSpendDate())
                 .hash(request.getHash())
                 .notes(request.getNotes())
                 .build();

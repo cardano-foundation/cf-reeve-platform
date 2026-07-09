@@ -99,6 +99,11 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "currency", nullable = false)
     private String currency;
 
+    /** Event date. Applies to all event types; for a SPENDING event this is the spend date. */
+    @Nullable
+    @Column(name = "event_date")
+    private LocalDate eventDate;
+
     // --- Spend detail: the event's single spend record. Populated for SPENDING events only. ---
 
     @Nullable
@@ -127,10 +132,6 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Nullable
     @Column(name = "fx_rate")
     private BigDecimal fxRate;
-
-    @Nullable
-    @Column(name = "spend_date")
-    private LocalDate spendDate;
 
     @Nullable
     @Column(name = "spend_hash")
