@@ -1,12 +1,8 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -218,7 +214,7 @@ public class ProjectService {
         }
         // Locked when the project or any descendant sub-project owns a milestone tied to a published event.
         if (allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
-                collectSubtreeProjectIds(projectId), EventStatus.PUBLISHED)) {
+                ProjectTreeSupport.subtreeProjectIds(projectRepository, projectId), EventStatus.PUBLISHED)) {
             return ProjectView.error(Problems.conflict(
                     "Cannot update project linked to a published event: %s".formatted(projectId),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
@@ -325,23 +321,6 @@ public class ProjectService {
                     ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
         }
         return Optional.empty();
-    }
-
-    /** The project plus every descendant sub-project, resolved by walking the parent links downward. */
-    private Set<String> collectSubtreeProjectIds(String rootId) {
-        Set<String> ids = new LinkedHashSet<>();
-        Deque<String> stack = new ArrayDeque<>();
-        stack.push(rootId);
-        while (!stack.isEmpty()) {
-            String id = stack.pop();
-            if (!ids.add(id)) {
-                continue;
-            }
-            for (ProjectEntity child : projectRepository.findByParentProjectId(id)) {
-                stack.push(child.getId());
-            }
-        }
-        return ids;
     }
 
     /**

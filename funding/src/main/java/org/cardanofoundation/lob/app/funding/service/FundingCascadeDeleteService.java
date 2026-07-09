@@ -1,8 +1,6 @@
 package org.cardanofoundation.lob.app.funding.service;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -51,7 +49,7 @@ public class FundingCascadeDeleteService {
      */
     @Transactional
     public Optional<ProblemDetail> deleteProjectSubtree(ProjectEntity project) {
-        Set<String> subtreeProjectIds = collectSubtreeProjectIds(project.getId());
+        Set<String> subtreeProjectIds = ProjectTreeSupport.subtreeProjectIds(projectRepository, project.getId());
         Set<String> milestoneIds = milestoneRepository.findByProjectIdIn(subtreeProjectIds).stream()
                 .map(MilestoneEntity::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -79,23 +77,6 @@ public class FundingCascadeDeleteService {
         }
         milestoneRepository.delete(milestone);
         return Optional.empty();
-    }
-
-    /** The project plus every descendant sub-project, resolved by walking the parent links downward. */
-    private Set<String> collectSubtreeProjectIds(String rootId) {
-        Set<String> ids = new LinkedHashSet<>();
-        Deque<String> stack = new ArrayDeque<>();
-        stack.push(rootId);
-        while (!stack.isEmpty()) {
-            String id = stack.pop();
-            if (!ids.add(id)) {
-                continue;
-            }
-            for (ProjectEntity child : projectRepository.findByParentProjectId(id)) {
-                stack.push(child.getId());
-            }
-        }
-        return ids;
     }
 
     /**
