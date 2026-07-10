@@ -474,6 +474,31 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenSiblingSubProjectsShareTitleUnderSameParent() {
+        // QA repro: one parent with two sub-projects of the same title in a single event create.
+        ProjectEntity root = projectEntity(); // "p1" / PROJ-AB
+        String rootId = ProjectEntity.id("org1", "PROJ-AB");
+        when(projectRepository.existsById(rootId)).thenReturn(true);
+        when(projectRepository.findById(rootId)).thenReturn(Optional.of(root));
+
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-AB")
+                .subProjects(List.of(
+                        EventSubProjectAllocationRequest.builder().externalProjectId("WP-1").projectTitle("Shared Package")
+                                .totalAmount(new BigDecimal("50000.00")).currency("USD")
+                                .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build(),
+                        EventSubProjectAllocationRequest.builder().externalProjectId("WP-2").projectTitle("Shared Package")
+                                .totalAmount(new BigDecimal("50000.00")).currency("USD")
+                                .milestones(List.of(fundingMilestone("MS-2", ALLOCATED))).build()))
+                .build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_returnsLeft_whenNewSubProjectAmountExceedsParent() {
         ProjectEntity root = projectEntity(); // total 200000
         String rootId = ProjectEntity.id("org1", "PROJ-AB");
