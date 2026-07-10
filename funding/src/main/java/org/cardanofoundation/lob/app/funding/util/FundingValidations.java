@@ -2,8 +2,11 @@ package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.http.ProblemDetail;
 
@@ -20,6 +23,21 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 public final class FundingValidations {
 
     private FundingValidations() {
+    }
+
+    /**
+     * Returns the first value that occurs more than once (case-sensitive), ignoring nulls. Used to
+     * reject duplicate sibling titles inside a single create request up front — before any entity is
+     * persisted — so same-request duplicates can't slip past a per-row database check.
+     */
+    public static Optional<String> firstDuplicate(List<String> values) {
+        Set<String> seen = new HashSet<>();
+        for (String value : values) {
+            if (value != null && !seen.add(value)) {
+                return Optional.of(value);
+            }
+        }
+        return Optional.empty();
     }
 
     /**

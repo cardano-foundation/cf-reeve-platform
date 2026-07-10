@@ -313,6 +313,30 @@ class ProjectServiceTest {
     }
 
     @Test
+    void createTree_returns409_whenSiblingSubProjectsShareTitle() {
+        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
+        when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of())
+                .subProjects(List.of(
+                        ProjectTreeNodeRequest.builder().externalProjectId("WP-1").projectTitle("Shared Package")
+                                .totalAmount(new BigDecimal("50000.00")).currency("USD")
+                                .milestones(List.of(milestoneReq())).subProjects(List.of()).build(),
+                        ProjectTreeNodeRequest.builder().externalProjectId("WP-2").projectTitle("Shared Package")
+                                .totalAmount(new BigDecimal("50000.00")).currency("USD")
+                                .milestones(List.of(milestoneReq())).subProjects(List.of()).build()))
+                .build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+        verify(projectRepository, times(1)).saveAndFlush(any()); // only the root, before the sibling clash
+    }
+
+    @Test
     void createTree_returns400_whenSubProjectTotalExceedsParent() {
         when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
@@ -552,6 +576,24 @@ class ProjectServiceTest {
 
         assertThat(result.getError()).isEmpty();
         assertThat(project.getParentProject()).isEqualTo(parent);
+    }
+
+    @Test
+    void update_conflict_whenReparentedUnderParentWithSameTitledSubProject() {
+        // Moving p1 ("Project AB") under parent1 collides with an existing sub-project of the same title.
+        ProjectEntity project = projectEntity(); // p1, title "Project AB"
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
+                .externalProjectId("PROJ-PARENT").projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+        when(projectRepository.existsByParentProjectIdAndProjectTitleAndIdNot("parent1", "Project AB", "p1")).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test

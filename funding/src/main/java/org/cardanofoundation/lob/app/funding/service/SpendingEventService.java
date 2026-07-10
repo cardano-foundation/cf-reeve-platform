@@ -446,6 +446,16 @@ public class SpendingEventService {
             if (totalProblem.isPresent()) return totalProblem;
         }
 
+        // Sub-project titles are unique within their parent — reject duplicate titles among the sibling
+        // nodes of this request up front (a per-row DB check alone can miss same-request siblings).
+        Optional<String> duplicateSubTitle = FundingValidations.firstDuplicate(
+                subProjects.stream().map(EventSubProjectAllocationRequest::getProjectTitle).toList());
+        if (duplicateSubTitle.isPresent()) {
+            return Optional.of(Problems.conflict(
+                    "Duplicate sub-project title under the same parent: " + duplicateSubTitle.get(),
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
+
         for (EventSubProjectAllocationRequest subNode : subProjects) {
             Either<ProblemDetail, ProjectEntity> subResult = resolveOrCreateSubProjectNode(subNode, project);
             if (subResult.isLeft()) return Optional.of(subResult.getLeft());

@@ -180,6 +180,16 @@ public class ProjectService {
             }
         }
 
+        // Sub-project titles are unique within their parent — reject duplicate titles among the sibling
+        // nodes of this request up front (a per-row DB check alone can miss same-request siblings).
+        Optional<String> duplicateSubTitle = FundingValidations.firstDuplicate(
+                subProjects.stream().map(ProjectTreeNodeRequest::getProjectTitle).toList());
+        if (duplicateSubTitle.isPresent()) {
+            return Optional.of(Problems.conflict(
+                    "Duplicate sub-project title under the same parent: " + duplicateSubTitle.get(),
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
+
         for (ProjectTreeNodeRequest node : subProjects) {
             Optional<ProblemDetail> nodeXor = FundingValidations.milestonesXorSubProjects(
                     !node.getMilestones().isEmpty(), !node.getSubProjects().isEmpty());
@@ -254,14 +264,16 @@ public class ProjectService {
                 return ProjectView.error(parentProblem.get());
             }
         }
-        if (request.getProjectTitle() != null) {
-            // Uniqueness is checked against the final parent scope (an unchanged title excludes self).
-            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, request.getProjectTitle());
+        // The title must stay unique in the final scope — re-check when the title changes OR the project
+        // is re-parented (a move can collide with a same-named sibling under the new parent).
+        if (request.getProjectTitle() != null || request.getParentProjectId() != null) {
+            String effectiveTitle = request.getProjectTitle() != null ? request.getProjectTitle() : project.getProjectTitle();
+            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, effectiveTitle);
             if (titleConflict.isPresent()) {
                 return ProjectView.error(titleConflict.get());
             }
-            project.setProjectTitle(request.getProjectTitle());
         }
+        if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
         if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
         return toView(projectRepository.saveAndFlush(project));

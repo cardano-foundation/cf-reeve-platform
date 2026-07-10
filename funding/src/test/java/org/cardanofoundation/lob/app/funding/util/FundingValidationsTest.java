@@ -372,4 +372,14 @@ class FundingValidationsTest {
         assertThat(FundingValidations.sumMilestoneAmounts(List.of(m1, m2, m3), "m1")).isEqualByComparingTo("200");
         assertThat(FundingValidations.sumMilestoneAmounts(List.of(m1, m2, m3), null)).isEqualByComparingTo("300");
     }
+
+    // --- firstDuplicate(values) ---
+
+    @Test
+    void firstDuplicate_findsFirstRepeatAndIgnoresNulls() {
+        assertThat(FundingValidations.firstDuplicate(List.of("A", "B", "A"))).contains("A");
+        assertThat(FundingValidations.firstDuplicate(List.of("A", "B", "C"))).isEmpty();
+        // Nulls are ignored — two nulls are not a duplicate.
+        assertThat(FundingValidations.firstDuplicate(java.util.Arrays.asList("A", null, null))).isEmpty();
+    }
 }
