@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
@@ -238,6 +239,10 @@ public class TransactionReconcilationService {
                     attachedTx.getId(), attachedTx.getInternalTransactionNumber(), attachedTxHash, detachedTxHash);
 
             ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash) ? ReconcilationCode.OK : ReconcilationCode.NOK;
+            // Validation with financials amounts when the obejects are not identical.
+            if (sourceReconcilationStatus == ReconcilationCode.NOK) {
+                sourceReconcilationStatus = areTransactionsFinanciallyEqual(attachedTx, detachedTx) ? ReconcilationCode.OK : ReconcilationCode.NOK;
+            }
 
             if (sourceReconcilationStatus == ReconcilationCode.NOK) {
                 String jsonDiff = erpDiffCalculator.computeDiff(attachedTx, detachedTx);
@@ -298,6 +303,33 @@ public class TransactionReconcilationService {
         return attachedTx.getItems().stream()
                 .map(TransactionItemEntity::getAmountLcy)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static boolean areTransactionsFinanciallyEqual(TransactionEntity attachedTx, TransactionEntity detachedTx) {
+        BigDecimal attachedCreditSum = attachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.CREDIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal attachedDebitSum = attachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.DEBIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal detachedCreditSum = detachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.CREDIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal detachedDebitSum = detachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.DEBIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        boolean creditsEqual = attachedCreditSum.compareTo(detachedCreditSum) == 0;
+        boolean debitsEqual = attachedDebitSum.compareTo(detachedDebitSum) == 0;
+
+        return creditsEqual && debitsEqual;
     }
 
     private static ReconcilationCode getSinkReconcilationStatus(TransactionEntity attachedTx, Map<String, Boolean> isOnChainMap) {

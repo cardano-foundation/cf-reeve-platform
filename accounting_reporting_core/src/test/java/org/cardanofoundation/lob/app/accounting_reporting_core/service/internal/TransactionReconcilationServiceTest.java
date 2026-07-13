@@ -832,7 +832,9 @@ class TransactionReconcilationServiceTest {
         attachedTx.setInternalTransactionNumber("internal1");
         attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         attachedTx.setOrganisation(organisation);
-        attachedTx.setItems(Set.of());
+        val attachedItemFinancial = okItem("item-attached", BigDecimal.TEN);
+        attachedItemFinancial.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItemFinancial));
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
 
@@ -841,7 +843,10 @@ class TransactionReconcilationServiceTest {
         detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER"); // causes hash mismatch
         detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         detachedTx.setOrganisation(organisation);
-        detachedTx.setItems(Set.of());
+        // amount differs from attachedTx → financially unequal too, so status stays NOK
+        val detachedItemFinancial = okItem("item-detached", BigDecimal.valueOf(20));
+        detachedItemFinancial.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItemFinancial));
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
 
@@ -1084,17 +1089,22 @@ class TransactionReconcilationServiceTest {
         attachedTx.setExtractorType(ExtractorType.CSV.name());
         attachedTx.setLedgerDispatchStatus(LedgerDispatchStatus.FINALIZED);
         attachedTx.setOrganisation(organisation);
-        attachedTx.setItems(Set.of());
+        val attachedItemFinancial = okItem("item-attached", BigDecimal.TEN);
+        attachedItemFinancial.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItemFinancial));
         attachedTx.setTransactionType(TransactionType.Journal);
         attachedTx.setEntryDate(fromDate);
 
-        // detachedTx has a different internal number → hashes differ → source = NOK
+        // detachedTx has a different internal number and amount → hashes differ and
+        // financials differ too → source = NOK
         val detachedTx = new TransactionEntity();
         detachedTx.setId("tx1");
         detachedTx.setInternalTransactionNumber("internal1-MODIFIED");
         detachedTx.setExtractorType(ExtractorType.CSV.name());
         detachedTx.setOrganisation(organisation);
-        detachedTx.setItems(Set.of());
+        val detachedItemFinancial = okItem("item-detached", BigDecimal.valueOf(20));
+        detachedItemFinancial.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItemFinancial));
         detachedTx.setTransactionType(TransactionType.Journal);
         detachedTx.setEntryDate(fromDate);
 
@@ -1288,7 +1298,9 @@ class TransactionReconcilationServiceTest {
         attachedTx.setInternalTransactionNumber("internal1");
         attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         attachedTx.setOrganisation(organisation);
-        attachedTx.setItems(Set.of());
+        val attachedItemFinancial = okItem("item-attached", BigDecimal.TEN);
+        attachedItemFinancial.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItemFinancial));
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
         attachedTx.setLedgerDispatchApproved(true); // dispatch-approved → mismatch code
@@ -1298,7 +1310,10 @@ class TransactionReconcilationServiceTest {
         detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER"); // causes hash mismatch
         detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         detachedTx.setOrganisation(organisation);
-        detachedTx.setItems(Set.of());
+        // amount differs from attachedTx → financially unequal too, so status stays NOK
+        val detachedItemFinancial = okItem("item-detached", BigDecimal.valueOf(20));
+        detachedItemFinancial.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItemFinancial));
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
 
@@ -1338,7 +1353,9 @@ class TransactionReconcilationServiceTest {
         attachedTx.setInternalTransactionNumber("internal1");
         attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         attachedTx.setOrganisation(organisation);
-        attachedTx.setItems(Set.of());
+        val attachedItemFinancial = okItem("item-attached", BigDecimal.TEN);
+        attachedItemFinancial.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItemFinancial));
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
         attachedTx.setLedgerDispatchApproved(false);
@@ -1348,7 +1365,10 @@ class TransactionReconcilationServiceTest {
         detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER");
         detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         detachedTx.setOrganisation(organisation);
-        detachedTx.setItems(Set.of());
+        // amount differs from attachedTx → financially unequal too, so status stays NOK
+        val detachedItemFinancial = okItem("item-detached", BigDecimal.valueOf(20));
+        detachedItemFinancial.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItemFinancial));
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
 
@@ -1391,18 +1411,23 @@ class TransactionReconcilationServiceTest {
         attachedTx.setInternalTransactionNumber("internal1");
         attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         attachedTx.setOrganisation(organisation);
-        attachedTx.setItems(Set.of());
+        val attachedItemFinancial = okItem("item-attached", BigDecimal.TEN);
+        attachedItemFinancial.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItemFinancial));
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
         attachedTx.setLedgerDispatchApproved(false);
 
-        // Different internal number → hash mismatch → source=NOK → SOURCE_RECONCILATION_FAIL added
+        // Different internal number and amount → hash mismatch and financial mismatch →
+        // source=NOK → SOURCE_RECONCILATION_FAIL added
         val detachedTx = new TransactionEntity();
         detachedTx.setId("tx1");
         detachedTx.setInternalTransactionNumber("DIFFERENT-INTERNAL"); // causes hash mismatch
         detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         detachedTx.setOrganisation(organisation);
-        detachedTx.setItems(Set.of());
+        val detachedItemFinancial = okItem("item-detached", BigDecimal.valueOf(20));
+        detachedItemFinancial.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItemFinancial));
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
 
@@ -1506,18 +1531,22 @@ class TransactionReconcilationServiceTest {
         attachedTx.setInternalTransactionNumber("internal1");
         attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         attachedTx.setOrganisation(organisation);
-        attachedTx.setItems(Set.of());
+        val attachedItemFinancial = okItem("item-attached", BigDecimal.TEN);
+        attachedItemFinancial.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItemFinancial));
         attachedTx.setTransactionType(TransactionType.VendorPayment);
         attachedTx.setEntryDate(fromDate);
         attachedTx.setLedgerDispatchApproved(false);
 
-        // Different internal number → hash mismatch → source=NOK
+        // Different internal number and amount → hash mismatch and financial mismatch → source=NOK
         val detachedTx = new TransactionEntity();
         detachedTx.setId("tx1");
         detachedTx.setInternalTransactionNumber("DIFFERENT-INTERNAL");
         detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
         detachedTx.setOrganisation(organisation);
-        detachedTx.setItems(Set.of());
+        val detachedItemFinancial = okItem("item-detached", BigDecimal.valueOf(20));
+        detachedItemFinancial.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItemFinancial));
         detachedTx.setTransactionType(TransactionType.VendorPayment);
         detachedTx.setEntryDate(fromDate);
 
@@ -1612,6 +1641,17 @@ class TransactionReconcilationServiceTest {
         item.setAmountFcy(amount);
         item.setAmountLcy(amount);
         item.setOperationType(OperationType.DEBIT);
+        item.setStatus(TxItemValidationStatus.OK);
+        return item;
+    }
+
+    private static TransactionItemEntity creditItem(String id, BigDecimal amount) {
+        val item = new TransactionItemEntity();
+        item.setId(id);
+        item.setFxRate(BigDecimal.ONE);
+        item.setAmountFcy(amount);
+        item.setAmountLcy(amount);
+        item.setOperationType(OperationType.CREDIT);
         item.setStatus(TxItemValidationStatus.OK);
         return item;
     }
@@ -2076,5 +2116,235 @@ class TransactionReconcilationServiceTest {
         // Non-exclusion violation → normal flow → no existing sink → NOK
         assertThat(attachedTx.getReconcilation()).isPresent();
         assertThat(attachedTx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
+    }
+
+    // ============== areTransactionsFinanciallyEqual fallback tests ==============
+    // New behaviour: when the ERP-source hash differs, the transactions are re-checked by
+    // comparing summed CREDIT and DEBIT amountLcy. If those sums match, the mismatch is
+    // considered a non-financial (e.g. metadata/ID) diff and source is treated as OK.
+
+    @Test
+    void testReconcileChunk_hashMismatch_financiallyEqualDebitSums_shouldSetSourceOkAndSkipDiff() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+        val attachedItem = okItem("item-attached", BigDecimal.TEN);
+        attachedItem.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItem));
+
+        // Different internal number → hash mismatch, but same DEBIT sum (10) → financially equal
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+        val detachedItem = okItem("item-detached", BigDecimal.TEN);
+        detachedItem.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItem));
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+        assertThat(reconcilationEntity.getViolations()).noneMatch(
+                v -> v.getRejectionCode() == ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL
+        );
+        // No diff should be computed since financial fallback already resolved the mismatch as OK
+        verify(erpDiffCalculator, never()).computeDiff(any(), any());
+    }
+
+    @Test
+    void testReconcileChunk_hashMismatch_creditSumsDiffer_shouldRemainNok() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+        val attachedItem = creditItem("item-attached", BigDecimal.valueOf(100));
+        attachedItem.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedItem));
+
+        // Different internal number → hash mismatch, and CREDIT sums differ (100 vs 50) → financially unequal
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+        val detachedItem = creditItem("item-detached", BigDecimal.valueOf(50));
+        detachedItem.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedItem));
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+        when(erpDiffCalculator.computeDiff(any(), any())).thenReturn("{}");
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.NOK);
+        assertThat(reconcilationEntity.getViolations()).hasSize(1);
+        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
+                .isEqualTo(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
+        verify(erpDiffCalculator).computeDiff(any(), any());
+    }
+
+    @Test
+    void testReconcileChunk_hashMismatch_debitSumsDiffer_creditSumsEqual_shouldRemainNok() {
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+        val attachedDebit = okItem("item-attached-debit", BigDecimal.TEN);
+        attachedDebit.setTransaction(attachedTx);
+        val attachedCredit = creditItem("item-attached-credit", BigDecimal.valueOf(5));
+        attachedCredit.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedDebit, attachedCredit));
+
+        // CREDIT sums match (5 == 5) but DEBIT sums differ (10 vs 20) → financially unequal
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+        val detachedDebit = okItem("item-detached-debit", BigDecimal.valueOf(20));
+        detachedDebit.setTransaction(detachedTx);
+        val detachedCredit = creditItem("item-detached-credit", BigDecimal.valueOf(5));
+        detachedCredit.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedDebit, detachedCredit));
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+        when(erpDiffCalculator.computeDiff(any(), any())).thenReturn("{}");
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.NOK);
+        assertThat(reconcilationEntity.getViolations()).hasSize(1);
+        assertThat(reconcilationEntity.getViolations().iterator().next().getRejectionCode())
+                .isEqualTo(ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL);
+    }
+
+    @Test
+    void testReconcileChunk_hashMismatch_creditAndDebitSumsBothEqualAcrossMultipleItems_shouldSetSourceOk() {
+        // Financial equality is sum-based, not item-by-item: attachedTx has a single DEBIT item
+        // while detachedTx splits the same total across two DEBIT items with different IDs.
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setTransactionType(TransactionType.VendorPayment);
+        attachedTx.setEntryDate(fromDate);
+        val attachedDebit = okItem("item-attached-debit", BigDecimal.TEN);
+        attachedDebit.setTransaction(attachedTx);
+        val attachedCredit = creditItem("item-attached-credit", BigDecimal.valueOf(5));
+        attachedCredit.setTransaction(attachedTx);
+        attachedTx.setItems(Set.of(attachedDebit, attachedCredit));
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("DIFFERENT-NUMBER"); // causes hash mismatch
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setTransactionType(TransactionType.VendorPayment);
+        detachedTx.setEntryDate(fromDate);
+        val detachedDebit1 = okItem("item-detached-debit-1", BigDecimal.valueOf(4));
+        detachedDebit1.setTransaction(detachedTx);
+        val detachedDebit2 = okItem("item-detached-debit-2", BigDecimal.valueOf(6));
+        detachedDebit2.setTransaction(detachedTx);
+        val detachedCredit = creditItem("item-detached-credit", BigDecimal.valueOf(5));
+        detachedCredit.setTransaction(detachedTx);
+        detachedTx.setItems(Set.of(detachedDebit1, detachedDebit2, detachedCredit));
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1")))
+                .thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet()))
+                .thenReturn(Either.right(Map.of("tx1", true)));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSource()).contains(ReconcilationCode.OK);
+        assertThat(reconcilationEntity.getViolations()).noneMatch(
+                v -> v.getRejectionCode() == ReconcilationRejectionCode.SOURCE_RECONCILATION_FAIL
+        );
+        verify(erpDiffCalculator, never()).computeDiff(any(), any());
     }
 }
