@@ -24,9 +24,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.document_vault.domain.request.ImportCardRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
+import org.cardanofoundation.lob.app.document_vault.domain.request.ResolveRecipientsRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
 import org.cardanofoundation.lob.app.document_vault.service.CardImportService;
+import org.cardanofoundation.lob.app.document_vault.service.RecipientResolutionService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultKeyService;
 
 @RestController
@@ -41,6 +43,7 @@ public class VaultKeyController {
 
     private final VaultKeyService keyService;
     private final CardImportService cardImportService;
+    private final RecipientResolutionService recipientResolutionService;
 
     @Operation(description = "Register a new X25519 public key for the current account")
     @PostMapping(value = "/keys", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
@@ -71,5 +74,12 @@ public class VaultKeyController {
     @PreAuthorize(ALL_ROLES)
     public ResponseEntity<Object> importCard(@Valid @RequestBody ImportCardRequest request) {
         return Responses.respond(cardImportService.importCard(request), HttpStatus.OK);
+    }
+
+    @Operation(description = "Resolve recipient account ids into the validated, deduped public-key set to encrypt to (sender auto-included)")
+    @PostMapping(value = "/recipients/resolve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize(ALL_ROLES)
+    public ResponseEntity<Object> resolveRecipients(@Valid @RequestBody ResolveRecipientsRequest request) {
+        return Responses.respond(recipientResolutionService.resolve(request), HttpStatus.OK);
     }
 }
