@@ -18,6 +18,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -146,6 +147,18 @@ class VaultPublishIntegrationTest {
         // republish rejected, delete locked
         assertTrue(documentService.publish(documentId).isLeft());
         assertTrue(documentService.delete(documentId).isPresent());
+
+        // commit for real before simulating the publisher's status-back: handleLedgerUpdatedEvent
+        // now runs in its own REQUIRES_NEW transaction (Codex adversarial-review finding 2 of round
+        // 2 — it must never join/see an in-flight caller transaction), which means it opens a
+        // genuinely separate DB connection. That connection can only see the document row above if
+        // it has actually been committed — exactly as in production, where the vault's publish()
+        // transaction has long since committed by the time blockchain_publisher's ledger update
+        // ever arrives. Without this commit, the update below would silently no-op (findById on the
+        // separate connection would see nothing yet).
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+        TestTransaction.start();
 
         // simulate the publisher's status-back (handler called synchronously)
         ledgerUpdateHandler.handleLedgerUpdatedEvent(LedgerUpdatedEvent.builder()

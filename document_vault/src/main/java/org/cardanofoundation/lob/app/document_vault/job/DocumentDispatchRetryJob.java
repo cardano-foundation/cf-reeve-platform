@@ -5,7 +5,11 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +46,14 @@ import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService
  * lob.document_vault.enabled=true} (see {@code DocumentVaultModuleConfig}), the same as {@code
  * DocumentRetentionJob} — and, like that job, inert unless the consuming application also enables
  * Spring scheduling ({@code @EnableScheduling}).
+ *
+ * <p><b>Bounded sweep (Codex adversarial-review finding 2 of round 2):</b> a naive "load every stuck
+ * document" query materializes every match's ciphertext in one go, which grows unbounded against a
+ * large backlog. Each tick instead pages at most {@code lob.document_vault.dispatch.batch-size}
+ * (default 50) documents, ordered by {@code publishedAt} ascending (oldest first, stable across
+ * ticks). This does not need to be exhaustive per tick: {@code DocumentEntityRepositoryGateway
+ * #storeOnlyNew} dedups re-emissions downstream by documentId, so a bounded sweep simply spreads a
+ * large backlog across successive runs rather than risking one tick doing unbounded work.
  */
 @Component
 @RequiredArgsConstructor
@@ -51,13 +63,17 @@ public class DocumentDispatchRetryJob {
     private final VaultDocumentRepository documentRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    @Value("${lob.document_vault.dispatch.batch-size:50}")
+    private int batchSize = 50;
+
     @Scheduled(
             fixedDelayString = "${lob.document_vault.dispatch.fixed_delay:PT1M}",
             initialDelayString = "${lob.document_vault.dispatch.initial_delay:PT10S}")
     @Transactional(readOnly = true)
     public void reemitStuckPublishes() {
+        Pageable page = PageRequest.of(0, batchSize, Sort.by(Sort.Direction.ASC, "publishedAt"));
         List<VaultDocumentEntity> stuck = documentRepository.findByStatusAndLedgerDispatchStatus(
-                VaultDocumentStatus.PUBLISHED, LedgerDispatchStatus.MARK_DISPATCH);
+                VaultDocumentStatus.PUBLISHED, LedgerDispatchStatus.MARK_DISPATCH, page);
         if (stuck.isEmpty()) {
             return;
         }

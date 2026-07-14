@@ -12,6 +12,10 @@ import java.util.Base64;
 import java.util.List;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -69,7 +73,7 @@ class DocumentDispatchRetryJobTest {
         VaultDocumentEntity doc1 = stuckDoc("doc1", "org1", new byte[] {1, 2, 3});
         VaultDocumentEntity doc2 = stuckDoc("doc2", "org2", new byte[] {4, 5, 6});
         when(documentRepository.findByStatusAndLedgerDispatchStatus(
-                VaultDocumentStatus.PUBLISHED, LedgerDispatchStatus.MARK_DISPATCH))
+                eq(VaultDocumentStatus.PUBLISHED), eq(LedgerDispatchStatus.MARK_DISPATCH), any(Pageable.class)))
                 .thenReturn(List.of(doc1, doc2));
 
         job.reemitStuckPublishes();
@@ -96,11 +100,27 @@ class DocumentDispatchRetryJobTest {
     @Test
     void emptyResultEmitsNothing() {
         when(documentRepository.findByStatusAndLedgerDispatchStatus(
-                eq(VaultDocumentStatus.PUBLISHED), eq(LedgerDispatchStatus.MARK_DISPATCH)))
+                eq(VaultDocumentStatus.PUBLISHED), eq(LedgerDispatchStatus.MARK_DISPATCH), any(Pageable.class)))
                 .thenReturn(List.of());
 
         job.reemitStuckPublishes();
 
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void sweepIsBoundedByTheConfiguredBatchSizeOrderedByPublishedAtAscending() {
+        ReflectionTestUtils.setField(job, "batchSize", 7);
+        when(documentRepository.findByStatusAndLedgerDispatchStatus(
+                eq(VaultDocumentStatus.PUBLISHED), eq(LedgerDispatchStatus.MARK_DISPATCH), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        job.reemitStuckPublishes();
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(documentRepository).findByStatusAndLedgerDispatchStatus(
+                eq(VaultDocumentStatus.PUBLISHED), eq(LedgerDispatchStatus.MARK_DISPATCH), pageableCaptor.capture());
+
+        assertEquals(PageRequest.of(0, 7, Sort.by(Sort.Direction.ASC, "publishedAt")), pageableCaptor.getValue());
     }
 }

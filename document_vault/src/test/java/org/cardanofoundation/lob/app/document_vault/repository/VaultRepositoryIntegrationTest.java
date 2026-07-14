@@ -323,7 +323,7 @@ class VaultRepositoryIntegrationTest {
         em.clear();
 
         List<VaultDocumentEntity> stuckDocs = documentRepository.findByStatusAndLedgerDispatchStatus(
-                VaultDocumentStatus.PUBLISHED, LedgerDispatchStatus.MARK_DISPATCH);
+                VaultDocumentStatus.PUBLISHED, LedgerDispatchStatus.MARK_DISPATCH, Pageable.unpaged());
 
         assertEquals(1, stuckDocs.size());
         assertEquals("doc-stuck", stuckDocs.get(0).getId());

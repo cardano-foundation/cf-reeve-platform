@@ -70,9 +70,15 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
      * command for each match on a schedule. Re-emitting for a document that is legitimately still
      * mid-flight (the first command has not landed yet) is safe and a no-op downstream — see
      * {@code DocumentEntityRepositoryGateway#storeOnlyNew}, which dedups by documentId.
+     *
+     * <p>Bounded by {@code pageable} (Codex adversarial-review finding 2 of round 2): an unbounded
+     * sweep would materialize every stuck document's ciphertext in one go against a large backlog.
+     * {@code DocumentDispatchRetryJob} passes a fixed-size, {@code publishedAt}-ascending page so a
+     * backlog is drained oldest-first across ticks instead of all at once.
      */
     List<VaultDocumentEntity> findByStatusAndLedgerDispatchStatus(VaultDocumentStatus status,
-                                                                    LedgerDispatchStatus ledgerDispatchStatus);
+                                                                    LedgerDispatchStatus ledgerDispatchStatus,
+                                                                    Pageable pageable);
 
     /**
      * Org-wide listing with optional filters (all nullable) — direction is a String ('SENT'/'RECEIVED')
