@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Document Schema",
+  "description": "Validates the structure (shape) of a label-1447 metadata transaction of type DOCUMENT. The metadata/org sections mirror API3MetadataSerialiser byte-for-byte (see DocumentMetadataSerialiser), so their coverage matches api3_lob_blockchain_transaction_metadata_schema.json. The data section is the PII-free manifest body (spec B5 #3): exactly the six fields below, nothing else.",
+  "definitions": {
+    "countryCodePattern": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "currencyIdPattern": {
+      "type": "string",
+      "pattern": "^ISO_4217:[A-Z]{3}$|^ISO_24165:[A-Z0-9]+(:[A-Z0-9]+)?$"
+    },
+    "timestampPattern": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "hexHash64Pattern": {
+      "description": "Lowercase 64-char hex SHA-256 digest, e.g. content_hash / plaintext_hash.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ipfsCidPattern": {
+      "type": "string",
+      "pattern": "^(bafy[0-9a-z]+|baf[0-9a-z]+|Qm[1-9A-HJ-NP-Za-km-z]{44})$"
+    }
+  },
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "creation_slot": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "version": {
+          "type": "string"
+        },
+        "timestamp": {
+          "$ref": "#/definitions/timestampPattern"
+        }
+      },
+      "required": ["creation_slot", "version", "timestamp"]
+    },
+    "org": {
+      "type": "object",
+      "properties": {
+        "country_code": {
+          "$ref": "#/definitions/countryCodePattern"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tax_id_number": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "currency_id": {
+          "$ref": "#/definitions/currencyIdPattern"
+        }
+      },
+      "required": ["country_code", "name", "tax_id_number", "id", "currency_id"]
+    },
+    "type": {
+      "type": "string",
+      "enum": ["DOCUMENT"]
+    },
+    "data": {
+      "type": "object",
+      "description": "PII-free 1447 DOCUMENT manifest body (spec B5 #3): exactly these six fields, nothing else.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ipfs_cid": {
+          "$ref": "#/definitions/ipfsCidPattern"
+        },
+        "content_hash": {
+          "$ref": "#/definitions/hexHash64Pattern"
+        },
+        "plaintext_hash": {
+          "$ref": "#/definitions/hexHash64Pattern"
+        },
+        "envelope_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "slot_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["id", "ipfs_cid", "content_hash", "plaintext_hash", "envelope_version", "slot_count"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["metadata", "org", "type", "data"]
+}

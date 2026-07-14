@@ -137,6 +137,7 @@ public class TransactionSubmissionConfig {
                                                                       DocumentIpfsSerialiser documentIpfsSerialiser,
                                                                       DocumentMetadataSerialiser documentMetadataSerialiser,
                                                                       BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+                                                                      @Qualifier("documentJsonSchemaMetadataChecker") MetadataChecker metadataChecker,
                                                                       Account organiserAccount,
                                                                       Optional<IpfsPublisher> ipfsPublisher,
                                                                       @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
@@ -146,10 +147,7 @@ public class TransactionSubmissionConfig {
                 documentIpfsSerialiser,
                 documentMetadataSerialiser,
                 blockchainReaderPublicApi,
-                // documents have a fixed, code-controlled envelope shape (no per-deployment schema evolution);
-                // PII-freedom and format are enforced by NoPiiOnDocumentPublishPathArchTest and
-                // DocumentPublishArtifactsPiiCanaryTest instead of a JSON schema
-                new MetadataChecker.Noop(),
+                metadataChecker,
                 organiserAccount,
                 ipfsPublisher,
                 metadataLabel,

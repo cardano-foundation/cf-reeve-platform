@@ -13,11 +13,18 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.core.io.ClassPathResource;
+
+import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
+import com.bloxbean.cardano.client.metadata.helper.MetadataToJsonNoSchemaConverter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.JsonSchemaMetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -106,5 +113,55 @@ class DocumentMetadataSerialiserTest {
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1", CREATION_SLOT));
+    }
+
+    /**
+     * End-to-end guard that the serialiser output and the JSON schema agree: serialise a manifest exactly as
+     * {@link DocumentL1TransactionCreator} does (CBOR -> JSON) and validate it against
+     * {@code document_lob_blockchain_transaction_metadata_schema.json} with the production checker. Mirrors
+     * {@code SpendingEventMetadataSerialiserTest#serialisedBundleValidatesAgainstSchema}.
+     */
+    @Test
+    void serialisedManifestValidatesAgainstSchema() throws Exception {
+        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(organisationFixture()));
+
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(),
+                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT);
+
+        byte[] bytes = CborSerializationUtil.serialize(metadataMap.getMap());
+        String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
+
+        JsonSchemaMetadataChecker checker = new JsonSchemaMetadataChecker(new ObjectMapper());
+        checker.setMetadataSchemaResource(new ClassPathResource("document_lob_blockchain_transaction_metadata_schema.json"));
+        checker.setEnableChecker(true);
+
+        assertThat(checker.checkTransactionMetadata(json)).isTrue();
+    }
+
+    /**
+     * Defense-in-depth: a manifest whose {@code data} section gains an extra field (e.g. an accidental PII leak)
+     * must fail schema validation, since the schema declares exactly the six normative keys with
+     * {@code additionalProperties: false}.
+     */
+    @Test
+    void manifestWithExtraDataFieldFailsSchemaValidation() throws Exception {
+        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(organisationFixture()));
+
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(),
+                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT);
+
+        byte[] bytes = CborSerializationUtil.serialize(metadataMap.getMap());
+        String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode root = (ObjectNode) objectMapper.readTree(json);
+        ((ObjectNode) root.get("data")).put("unexpected_field", "should-not-be-here");
+        String tamperedJson = objectMapper.writeValueAsString(root);
+
+        JsonSchemaMetadataChecker checker = new JsonSchemaMetadataChecker(objectMapper);
+        checker.setMetadataSchemaResource(new ClassPathResource("document_lob_blockchain_transaction_metadata_schema.json"));
+        checker.setEnableChecker(true);
+
+        assertThat(checker.checkTransactionMetadata(tamperedJson)).isFalse();
     }
 }

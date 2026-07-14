@@ -54,4 +54,16 @@ public class BlockchainCommonConfig {
         return checker;
     }
 
+    @Bean
+    //@Qualifier("documentJsonSchemaMetadataChecker")
+    public MetadataChecker documentJsonSchemaMetadataChecker(ObjectMapper objectMapper,
+                                                              @Value("classpath:document_lob_blockchain_transaction_metadata_schema.json") Resource metadataSchemaResource
+                                                              ) {
+        val checker = new JsonSchemaMetadataChecker(objectMapper);
+        checker.setMetadataSchemaResource(metadataSchemaResource);
+        checker.setEnableChecker(enableChecker);
+
+        return checker;
+    }
+
 }
