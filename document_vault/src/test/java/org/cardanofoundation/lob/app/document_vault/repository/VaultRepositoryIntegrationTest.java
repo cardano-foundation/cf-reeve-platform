@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import jakarta.persistence.EntityManager;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
@@ -43,6 +45,8 @@ class VaultRepositoryIntegrationTest {
     private WrappedRecordRepository recordRepository;
     @Autowired
     private VaultDocumentRepository documentRepository;
+    @Autowired
+    private EntityManager em;
 
     private VaultKeyEntity key(String id, String accountId, String publicKey, String org) {
         VaultKeyEntity key = new VaultKeyEntity();
@@ -87,6 +91,11 @@ class VaultRepositoryIntegrationTest {
         record.setRecord(blob);
         record.setVersion(1);
         recordRepository.save(record);
+
+        // force a genuine DB round-trip: without this, findById below would return the
+        // same in-memory instance from the first-level cache instead of hitting PostgreSQL
+        em.flush();
+        em.clear();
 
         WrappedRecordEntity reloaded = recordRepository.findById(new WrappedRecordId("acc1", "cred-1")).orElseThrow();
         assertEquals(blob, reloaded.getRecord());
@@ -133,6 +142,11 @@ class VaultRepositoryIntegrationTest {
         doc2.setCreatedByName("Recipient Name");
         doc2.setSlots(List.of(new DocumentSlot("k1", "back at you", HEX64, HEX96)));
         documentRepository.save(doc2);
+
+        // force a genuine DB round-trip: without this, findById below would return the
+        // same in-memory instance from the first-level cache instead of hitting PostgreSQL
+        em.flush();
+        em.clear();
 
         VaultDocumentEntity reloaded = documentRepository.findById("doc1").orElseThrow();
         assertArrayEquals(new byte[] {1, 2, 3}, reloaded.getCiphertext());
