@@ -24,7 +24,7 @@ import org.cardanofoundation.lob.app.document_vault.config.TestContainerConfig;
 @SpringBootTest
 @ContextConfiguration(classes = DocumentVaultContextIntegrationTest.TestConfig.class)
 @ActiveProfiles("test")
-class DocumentVaultContextIntegrationTest {
+public class DocumentVaultContextIntegrationTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
