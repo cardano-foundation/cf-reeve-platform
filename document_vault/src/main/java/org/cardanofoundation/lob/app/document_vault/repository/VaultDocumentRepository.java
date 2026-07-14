@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -40,8 +41,24 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
      * Blueprint B3 retention: hard-deletes envelopes matching {@code status} created before
      * {@code cutoff}. Callers must pass {@link VaultDocumentStatus#DRAFT} only — PUBLISHED
      * envelopes are locked forever regardless of age (settled product decision).
+     *
+     * <p>Single bulk JPQL delete rather than a Spring Data derived delete — the derived form
+     * SELECTs every matching row into the persistence context and removes them one-by-one inside
+     * one long transaction, which is slow and lock-heavy against a real backlog.
+     *
+     * <p><b>Slot cleanup relies on the database, not JPA:</b> {@link VaultDocumentEntity#getSlots()}
+     * is an {@code @ElementCollection} backed by {@code document_vault_document_slot}. A bulk JPQL
+     * delete does NOT cascade to element-collection tables — Hibernate never sees the parent rows
+     * being removed, so it can't fire its usual orphan cleanup. This is safe here because the
+     * {@code document_vault_document_slot.document_id} FK is declared {@code ON DELETE CASCADE}
+     * (see V1.6_100_13__lob_service_app_document_vault_module.sql), so PostgreSQL removes the slot
+     * rows itself when the parent document row is deleted. If that FK ever loses its cascade, this
+     * bulk delete would silently orphan slot rows.
      */
-    long deleteByStatusAndCreatedAtBefore(VaultDocumentStatus status, LocalDateTime cutoff);
+    @Modifying
+    @Query("delete from document_vault.VaultDocumentEntity d where d.status = :status and d.createdAt < :cutoff")
+    long deleteByStatusAndCreatedAtBefore(@Param("status") VaultDocumentStatus status,
+                                           @Param("cutoff") LocalDateTime cutoff);
 
     /**
      * Org-wide listing with optional filters (all nullable) — direction is a String ('SENT'/'RECEIVED')

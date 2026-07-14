@@ -253,22 +253,33 @@ class VaultRepositoryIntegrationTest {
      * Pins the retention job's published lock (settled product decision) at the real
      * repository/DB level: {@code deleteByStatusAndCreatedAtBefore} must purge stale DRAFT
      * envelopes while a PUBLISHED envelope of the same age is left untouched, no matter how old.
+     *
+     * <p>Also pins the bulk-JPQL-delete/element-collection reliance: {@code deleteByStatusAndCreatedAtBefore}
+     * is now a bulk {@code delete from ...} JPQL query, which does NOT cascade to the
+     * {@code @ElementCollection} slot table via JPA. The purged draft gets a slot below so this test
+     * proves slot rows are actually gone afterwards — i.e. that the database's
+     * {@code ON DELETE CASCADE} FK (not Hibernate) is doing the cleanup.
      */
     @Test
     void deleteByStatusAndCreatedAtBeforePurgesOnlyStaleDraftDocuments() {
-        documentRepository.save(minimalDocument("doc-old-draft", VaultDocumentStatus.DRAFT));
+        keyRepository.save(key("k1", "sender", HEX64, "org1"));
+
+        VaultDocumentEntity oldDraft = minimalDocument("doc-old-draft", VaultDocumentStatus.DRAFT);
+        oldDraft.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96)));
+        documentRepository.save(oldDraft);
         documentRepository.save(minimalDocument("doc-old-published", VaultDocumentStatus.PUBLISHED));
         documentRepository.save(minimalDocument("doc-recent-draft", VaultDocumentStatus.DRAFT));
 
-        // flush so the raw JDBC backdate below (and the derived delete query's own SELECT)
-        // see committed rows rather than pending first-level-cache state
+        // flush so the raw JDBC backdate below (and the bulk delete query itself) see committed
+        // rows rather than pending first-level-cache state
         em.flush();
         LocalDateTime old = LocalDateTime.now().minusDays(40);
         jdbcTemplate.update("update document_vault_document set created_at = ? where document_id in (?, ?)",
                 old, "doc-old-draft", "doc-old-published");
         // established pattern (Task 8 review): entities created & purged within one @Transactional
         // method keep Persistable.isNew() true until @PostLoad fires on a fresh load — clear the
-        // first-level cache so the delete query reloads rows rather than acting on stale state.
+        // first-level cache so the bulk delete (which bypasses the persistence context entirely)
+        // isn't followed by stale managed entities lingering from the saves above.
         em.clear();
 
         long deleted = documentRepository.deleteByStatusAndCreatedAtBefore(
@@ -279,5 +290,12 @@ class VaultRepositoryIntegrationTest {
         // published lock extends to retention: never purged, no matter the age
         assertTrue(documentRepository.findById("doc-old-published").isPresent());
         assertTrue(documentRepository.findById("doc-recent-draft").isPresent());
+
+        // proves the DB FK cascade (not JPA) cleaned up the element-collection slot rows: the bulk
+        // JPQL delete above never touched document_vault_document_slot directly
+        Integer remainingSlots = jdbcTemplate.queryForObject(
+                "select count(*) from document_vault_document_slot where document_id = ?",
+                Integer.class, "doc-old-draft");
+        assertEquals(0, remainingSlots);
     }
 }
