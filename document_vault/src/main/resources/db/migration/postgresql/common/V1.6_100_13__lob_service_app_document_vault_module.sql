@@ -56,6 +56,11 @@ CREATE TABLE IF NOT EXISTS document_vault_document (
     created_by_name VARCHAR(255),
     published_at TIMESTAMP WITHOUT TIME ZONE,
     ledger_dispatch_status VARCHAR(32) NOT NULL DEFAULT 'NOT_DISPATCHED',
+    -- retry-fairness cursor for DocumentDispatchRetryJob's dispatch sweep: NULL = never attempted;
+    -- stamped with the sweep time when a document's publish command is (re-)emitted, so the sweep's
+    -- NULLS-FIRST ordering rotates attempted rows to the back instead of re-selecting the same
+    -- oldest rows forever and starving younger stuck documents.
+    dispatch_retry_at TIMESTAMP WITHOUT TIME ZONE,
     ledger_dispatch_error VARCHAR(1024),
     tx_hash VARCHAR(255),
     ipfs_cid VARCHAR(255),

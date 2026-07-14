@@ -102,6 +102,20 @@ public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<
     @Column(name = "ledger_dispatch_status", nullable = false)
     private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;
 
+    /**
+     * Retry-fairness cursor for {@code DocumentDispatchRetryJob}'s dispatch sweep (Codex
+     * adversarial-review finding, round 3: retry-sweep starvation). NULL until the job's sweep
+     * (re-)emits this document's publish command, at which point it is stamped with the sweep time
+     * BEFORE emission. {@code VaultDocumentRepository#findByStatusAndLedgerDispatchStatus} orders on
+     * this column ascending with NULLS FIRST ahead of {@code publishedAt}, so never-yet-attempted
+     * documents always sort first and attempted rows rotate to the back regardless of whether {@link
+     * #ledgerDispatchStatus} ever advances off {@code MARK_DISPATCH} — fairness comes from the
+     * cursor, not from status progress the job cannot observe.
+     */
+    @Nullable
+    @Column(name = "dispatch_retry_at")
+    private LocalDateTime dispatchRetryAt;
+
     @Nullable
     @Column(name = "ledger_dispatch_error", length = 1024)
     private String ledgerDispatchError;

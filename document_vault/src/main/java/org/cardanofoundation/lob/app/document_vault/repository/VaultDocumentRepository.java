@@ -73,12 +73,32 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
      *
      * <p>Bounded by {@code pageable} (Codex adversarial-review finding 2 of round 2): an unbounded
      * sweep would materialize every stuck document's ciphertext in one go against a large backlog.
-     * {@code DocumentDispatchRetryJob} passes a fixed-size, {@code publishedAt}-ascending page so a
-     * backlog is drained oldest-first across ticks instead of all at once.
+     * {@code DocumentDispatchRetryJob} passes a fixed-size page so a backlog is drained across ticks
+     * instead of all at once.
+     *
+     * <p><b>Retry-cursor ordering (Codex adversarial-review finding, round 3 — retry-sweep
+     * starvation):</b> ordered by {@code dispatchRetryAt} ascending with NULLS FIRST, then {@code
+     * publishedAt} ascending. {@code PUBLISHED}/{@code MARK_DISPATCH} is a legitimate resting state
+     * while downstream dispatch is still in progress, not just a crash symptom — a row's ledger
+     * status can sit at {@code MARK_DISPATCH} for a long time without anything being wrong. Ordering
+     * purely by {@code publishedAt} would let the same oldest rows monopolize every sweep forever,
+     * starving younger stuck documents whose in-memory handoff was actually lost. {@code
+     * DocumentDispatchRetryJob} stamps {@code dispatchRetryAt} on every row it (re-)attempts, so the
+     * NULLS-FIRST ordering always tries never-yet-attempted documents first and rotates already
+     * attempted rows to the back — fairness comes from this cursor, never from waiting on {@link
+     * VaultDocumentEntity#getLedgerDispatchStatus()} to advance.
+     *
+     * <p>Explicit JPQL {@code order by} rather than a {@link org.springframework.data.domain.Sort}
+     * folded into {@code pageable}: NULLS FIRST must apply to exactly one of the two sort keys,
+     * which a derived Spring Data query method cannot express as cleanly. The caller passes an
+     * unsorted {@code Pageable} purely for the offset/limit bound.
      */
-    List<VaultDocumentEntity> findByStatusAndLedgerDispatchStatus(VaultDocumentStatus status,
-                                                                    LedgerDispatchStatus ledgerDispatchStatus,
-                                                                    Pageable pageable);
+    @Query("select d from document_vault.VaultDocumentEntity d "
+            + "where d.status = :status and d.ledgerDispatchStatus = :ledgerDispatchStatus "
+            + "order by d.dispatchRetryAt asc nulls first, d.publishedAt asc")
+    List<VaultDocumentEntity> findByStatusAndLedgerDispatchStatus(@Param("status") VaultDocumentStatus status,
+            @Param("ledgerDispatchStatus") LedgerDispatchStatus ledgerDispatchStatus,
+            Pageable pageable);
 
     /**
      * Org-wide listing with optional filters (all nullable) — direction is a String ('SENT'/'RECEIVED')
