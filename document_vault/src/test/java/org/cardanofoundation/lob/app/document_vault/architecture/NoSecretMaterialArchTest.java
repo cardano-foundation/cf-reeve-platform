@@ -45,7 +45,8 @@ class NoSecretMaterialArchTest {
     @ArchTest
     static final ArchRule apiDtosCarryNoSecretMaterial = ArchRuleDefinition.fields()
             .that().areDeclaredInClassesThat()
-            .resideInAnyPackage("..domain.request..", "..domain.view..", "..domain.card..")
+            .resideInAnyPackage(
+                    "..domain.request..", "..domain.view..", "..domain.card..", "..domain.events..")
             .should(NOT_BE_SECRET_MATERIAL);
 
     @ArchTest
