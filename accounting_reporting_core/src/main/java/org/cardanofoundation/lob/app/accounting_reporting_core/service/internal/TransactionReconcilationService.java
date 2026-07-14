@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.service.internal
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.reconcilation.ReconcilationRejectionCode.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -342,10 +343,20 @@ public class TransactionReconcilationService {
                 .map(TransactionItemEntity::getAmountLcy)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        boolean creditsEqual = attachedCreditSum.compareTo(detachedCreditSum) == 0;
-        boolean debitsEqual = attachedDebitSum.compareTo(detachedDebitSum) == 0;
-
-        return creditsEqual && debitsEqual;
+        boolean is2024Transaction = attachedTx.getEntryDate() != null && attachedTx.getEntryDate().getYear() == 2024;
+        log.debug("\n\n\n############################################################################################################ \nis2024Transaction: {} -> {}", attachedTx.getInternalTransactionNumber(), is2024Transaction);
+        if (is2024Transaction) {
+            log.debug("\nENTRA: {} -> {}", attachedTx.getInternalTransactionNumber(), is2024Transaction);
+            // For 2024 transactions, compare without decimal precision (truncate decimals to zero)
+            boolean creditsEqual = attachedCreditSum.setScale(0, RoundingMode.DOWN).compareTo(detachedCreditSum.setScale(0, RoundingMode.DOWN)) == 0;
+            boolean debitsEqual = attachedDebitSum.setScale(0, RoundingMode.DOWN).compareTo(detachedDebitSum.setScale(0, RoundingMode.DOWN)) == 0;
+            return creditsEqual && debitsEqual;
+        } else {
+            // For other years, compare with full decimal precision
+            boolean creditsEqual = attachedCreditSum.compareTo(detachedCreditSum) == 0;
+            boolean debitsEqual = attachedDebitSum.compareTo(detachedDebitSum) == 0;
+            return creditsEqual && debitsEqual;
+        }
     }
 
     private static ReconcilationCode getSinkReconcilationStatus(TransactionEntity attachedTx, Map<String, Boolean> isOnChainMap) {
