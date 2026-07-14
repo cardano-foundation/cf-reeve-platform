@@ -4,7 +4,6 @@ import com.bloxbean.cardano.yaci.store.utxo.storage.impl.model.AddressUtxoEntity
 import com.bloxbean.cardano.yaci.store.utxo.storage.impl.model.UtxoId;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import com.bloxbean.cardano.yaci.store.utxo.storage.impl.model.TxInputEntity;
 
 import java.util.List;
 
