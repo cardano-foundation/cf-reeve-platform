@@ -427,6 +427,64 @@ The referenced off-chain document carries `org_id`, `currency_id`, `version`, `d
 }
 ```
 
+## Type: Document
+
+The `DOCUMENT` type anchors an **end-to-end-encrypted document** published by an organisation. The encrypted
+envelope itself is stored on IPFS; the on-chain record is a manifest referencing it. The operator and the
+public can verify integrity (hashes, CID) but can never read content — decryption keys exist only on the
+recipients' devices.
+
+`data` is a manifest object:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Server-assigned document identifier (UUID) |
+| `ipfs_cid` | string | Yes | IPFS CID of the encrypted envelope document |
+| `content_hash` | string | Yes | SHA-256 of the raw ciphertext bytes (hex) |
+| `plaintext_hash` | string | Yes | SHA-256 commitment over the plaintext, computed client-side (hex) |
+| `envelope_version` | integer | Yes | Envelope wire-format version |
+| `slot_count` | integer | Yes | Number of recipient slots in the referenced envelope |
+
+The referenced IPFS document carries `version`, `type` (`REEVE_ENCRYPTED_DOCUMENT`), `org_id`,
+`content_hash`, `plaintext_hash`, `payload` (`ciphertext` base64 + `nonce`), and `slots`
+(each only `ephemeral_pub` + `wrapped_dek` — deliberately no recipient identifiers).
+
+> **Note on validation**: as with `FUNDING` manifests, several rules are enforced programmatically:
+> `org_id` in the IPFS document matching the on-chain `org.id`, `content_hash` matching the decoded
+> `payload.ciphertext`, the CID matching the document bytes, and `slot_count` matching `slots.length`.
+> The format intentionally contains no personal data (no e-mail addresses, recipient names/labels, or
+> file names) — such data stays inside the Reeve deployment.
+
+### Example: Document record
+
+```json
+{
+  "1447": {
+    "org": {
+      "id": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+      "name": "Cardano Foundation",
+      "currency_id": "ISO_4217:CHF",
+      "country_code": "CH",
+      "tax_id_number": "CHE-184477354"
+    },
+    "metadata": {
+      "creation_slot": 12345,
+      "timestamp": "2026-07-14T10:15:30Z",
+      "version": "1.0"
+    },
+    "type": "DOCUMENT",
+    "data": {
+      "id": "0b0f7d1e-6f0a-4d9e-9d5e-1c2b3a4d5e6f",
+      "ipfs_cid": "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+      "content_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "plaintext_hash": "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752",
+      "envelope_version": 1,
+      "slot_count": 2
+    }
+  }
+}
+```
+
 ## Glossary
 
 This section defines key terms used throughout the on-chain metadata format.
