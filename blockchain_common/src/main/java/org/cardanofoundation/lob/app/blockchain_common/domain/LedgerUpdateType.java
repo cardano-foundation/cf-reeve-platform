@@ -9,6 +9,8 @@ public enum LedgerUpdateType {
 
     REPORT,
 
-    SPENDING_EVENT
+    SPENDING_EVENT,
+
+    DOCUMENT
 
 }
