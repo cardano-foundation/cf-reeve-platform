@@ -24,6 +24,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
@@ -32,6 +34,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -86,6 +89,13 @@ class VaultDocumentServiceTest {
         // default: issuers are trusted. Mockito's `false` would make every slot key look de-trusted
         // and fail the upload tests for a reason that has nothing to do with what they test.
         lenient().when(cardVerifier.isTrustedIssuer(any())).thenReturn(true);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        // hasAdminRole() reads SecurityContextHolder directly; a test that populates it must not
+        // let that authentication leak into the next test in this class (or another class).
+        SecurityContextHolder.clearContext();
     }
 
     /** The stale-client window: the addressbook was cached before the issuer was de-trusted. */
@@ -263,6 +273,30 @@ class VaultDocumentServiceTest {
 
         assertTrue(problem.isPresent());
         assertEquals(VaultProblems.NOT_DOCUMENT_CREATOR, problem.get().getTitle());
+    }
+
+    /**
+     * The admin bypass in {@code hasAdminRole()}: a Keycloak-authenticated caller holding
+     * {@code ROLE_<keycloak.roles.admin>} (default "admin") may delete a DRAFT they did not
+     * create. This is the previously untested branch flagged in review.
+     */
+    @Test
+    void deleteByNonCreatorWithAdminRoleSucceeds() {
+        ReflectionTestUtils.setField(service, "adminRoleName", "admin"); // matches keycloak.roles.admin default
+        TestingAuthenticationToken adminAuth = new TestingAuthenticationToken("admin-user", null, "ROLE_admin");
+        adminAuth.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(adminAuth);
+
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("org1");
+        doc.setCreatedByAccount("someone-else"); // securityHelper.getCurrentUserId() stubbed to "sender"
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+
+        Optional<ProblemDetail> problem = service.delete("doc1");
+
+        assertTrue(problem.isEmpty());
+        verify(documentRepository).delete(doc);
     }
 
     @Test
