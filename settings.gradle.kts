@@ -13,6 +13,7 @@ include (
  ":blockchain_publisher",
  ":blockchain_reader",
  ":blockchain_common",
+ ":document_vault",
  ":netsuite_altavia_erp_adapter",
  ":csv_erp_adapter",
  ":notification_gateway",
