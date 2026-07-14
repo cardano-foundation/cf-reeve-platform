@@ -21,9 +21,11 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 @AnalyzeClasses(packages = "org.cardanofoundation.lob.app.document_vault")
 class NoSecretMaterialArchTest {
 
-    /** Bare names that always denote secret material. Compared case-insensitively. */
-    private static final Set<String> FORBIDDEN_FIELD_NAMES = Set.of(
-            "dek", "kek", "plaintext", "privatekey", "prf", "prfoutput", "secret", "unwrappedkey", "contentkey");
+    /**
+     * Bare names that always denote secret material, compared case-insensitively via exact match.
+     * "dek" stays exact-match only — a substring check would flag the legitimate wrappedDek field.
+     */
+    private static final Set<String> FORBIDDEN_FIELD_NAMES = Set.of("dek");
 
     private static final ArchCondition<JavaField> NOT_BE_SECRET_MATERIAL =
             new ArchCondition<>("not be named like secret material (blueprint I5)") {
@@ -33,7 +35,11 @@ class NoSecretMaterialArchTest {
                     boolean forbidden = FORBIDDEN_FIELD_NAMES.contains(name)
                             || (name.contains("plaintext") && !name.equals("plaintexthash"))
                             || name.contains("privatekey")
-                            || name.contains("unwrapped");
+                            || name.contains("unwrapped")
+                            || name.contains("secret")
+                            || name.contains("prf")
+                            || name.contains("contentkey")
+                            || name.contains("kek");
                     if (forbidden) {
                         events.add(SimpleConditionEvent.violated(field,
                                 "Field %s.%s looks like secret material — forbidden by blueprint I5"
