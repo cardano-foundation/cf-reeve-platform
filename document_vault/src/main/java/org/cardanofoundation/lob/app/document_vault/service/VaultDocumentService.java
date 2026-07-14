@@ -177,17 +177,19 @@ public class VaultDocumentService {
     }
 
     public Either<ProblemDetail, DocumentView> publish(String documentId) {
-        IpfsAvailability ipfs = ipfsAvailability.getIfAvailable();
-        if (ipfs == null || !ipfs.isAvailable()) {
-            return Either.left(VaultProblems.serviceUnavailable(VaultProblems.DOCUMENT_PUBLISHING_UNAVAILABLE,
-                    "Document publishing requires a configured IPFS publisher; none is available in this deployment."));
-        }
-        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
+        // Row lock FIRST (findByIdForUpdate, not findById): two concurrent publish calls must not
+        // both observe DRAFT and both fire the irreversible DocumentPublishCommand. Under the
+        // class-level @Transactional, a second concurrent caller blocks here until the first commits,
+        // then reads PUBLISHED below and returns ALREADY_PUBLISHED instead of double-publishing.
+        Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId);
         if (documentM.isEmpty()) {
             return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
                     "No document %s.".formatted(documentId)));
         }
         VaultDocumentEntity document = documentM.get();
+        // Auth before capability: org membership is checked before the IPFS availability probe below,
+        // so a non-member (or someone probing a random documentId) cannot learn whether IPFS is
+        // configured in this deployment. Matches fetch()/delete()'s existing auth-first ordering.
         if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
             return Either.left(VaultProblems.forbidden(
                     "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
@@ -195,6 +197,11 @@ public class VaultDocumentService {
         if (document.getStatus() != VaultDocumentStatus.DRAFT) {
             return Either.left(VaultProblems.conflict(VaultProblems.ALREADY_PUBLISHED,
                     "Document %s is already published.".formatted(documentId)));
+        }
+        IpfsAvailability ipfs = ipfsAvailability.getIfAvailable();
+        if (ipfs == null || !ipfs.isAvailable()) {
+            return Either.left(VaultProblems.serviceUnavailable(VaultProblems.DOCUMENT_PUBLISHING_UNAVAILABLE,
+                    "Document publishing requires a configured IPFS publisher; none is available in this deployment."));
         }
 
         document.setStatus(VaultDocumentStatus.PUBLISHED);

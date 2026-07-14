@@ -433,7 +433,7 @@ class VaultDocumentServiceTest {
     @Test
     void publishLocksDocumentAndFiresPiiFreeCommand() {
         VaultDocumentEntity doc = draftDoc();
-        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
 
@@ -452,8 +452,12 @@ class VaultDocumentServiceTest {
         assertFalse(command.getValue().toString().contains("canary-recipient-label"));
     }
 
+    /** Auth-first ordering (finding 2): org access and document/status checks now run before the
+     *  IPFS capability probe, so this test must supply a document (org member, DRAFT) to reach it. */
     @Test
     void publishRejectedWhenIpfsUnavailable() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(ipfsAvailability.getIfAvailable()).thenReturn(null);
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1");
@@ -467,13 +471,28 @@ class VaultDocumentServiceTest {
     void publishRejectedWhenAlreadyPublished() {
         VaultDocumentEntity doc = draftDoc();
         doc.setStatus(VaultDocumentStatus.PUBLISHED);
-        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1");
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.ALREADY_PUBLISHED, result.getLeft().getTitle());
+    }
+
+    /** Finding 2: a non-member (or someone probing a random documentId) must not learn whether IPFS
+     *  is configured in this deployment. The org check must reject BEFORE the IPFS probe even runs. */
+    @Test
+    void publishChecksOrgAccessBeforeProbingIpfsAvailability() {
+        VaultDocumentEntity doc = draftDoc();
+        doc.setOrganisationId("org-not-mine");
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        // securityHelper.canUserAccessOrg("org-not-mine") is unstubbed -> defaults to false
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+
+        assertTrue(result.isLeft());
+        assertEquals(403, result.getLeft().getStatus());
+        verify(ipfsAvailability, never()).getIfAvailable();
     }
 
     private VaultDocumentEntity draftDoc() {

@@ -2,10 +2,14 @@ package org.cardanofoundation.lob.app.document_vault.repository;
 
 
 import java.time.LocalDateTime;
+import java.util.Optional;
+
+import jakarta.persistence.LockModeType;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -13,6 +17,17 @@ import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentE
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 
 public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEntity, String> {
+
+    /**
+     * Publish-only: takes a row-level {@code SELECT ... FOR UPDATE} so two concurrent publish calls
+     * cannot both observe {@code DRAFT} and both fire the irreversible {@code DocumentPublishCommand}.
+     * Under the class-level {@code @Transactional}, the second caller blocks until the first commits,
+     * then reads {@code PUBLISHED} and returns {@code ALREADY_PUBLISHED} instead of double-publishing.
+     * Do not use this finder for fetch/delete/list — those paths have no such race to guard against.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select d from document_vault.VaultDocumentEntity d where d.id = :documentId")
+    Optional<VaultDocumentEntity> findByIdForUpdate(@Param("documentId") String documentId);
 
     /**
      * Blueprint B3 retention: hard-deletes envelopes matching {@code status} created before
