@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Random;
 
+import jakarta.persistence.EntityManager;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -26,6 +28,9 @@ class WrappedRecordRoundTripIntegrationTest {
     @Autowired
     private WrappedRecordService service;
 
+    @Autowired
+    private EntityManager em;
+
     @Test
     void blobRoundTripsByteIdenticalThroughTheFullStack() {
         // adversarial blob: JSON-ish with unicode, base64 of random bytes, embedded quotes/backslashes
@@ -38,6 +43,11 @@ class WrappedRecordRoundTripIntegrationTest {
         request.setRecord(blob);
         request.setVersion(1);
         service.upsert("cred-rt", request);
+
+        // force a genuine DB round-trip: without this, get() below would return the
+        // same in-memory instance from the first-level cache instead of hitting PostgreSQL
+        em.flush();
+        em.clear();
 
         String reloaded = service.get("cred-rt").get().record();
         assertEquals(blob, reloaded);
