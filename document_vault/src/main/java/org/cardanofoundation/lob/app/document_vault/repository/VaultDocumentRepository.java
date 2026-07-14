@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.document_vault.repository;
 
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.persistence.LockModeType;
@@ -14,6 +15,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 
@@ -59,6 +61,18 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
     @Query("delete from document_vault.VaultDocumentEntity d where d.status = :status and d.createdAt < :cutoff")
     long deleteByStatusAndCreatedAtBefore(@Param("status") VaultDocumentStatus status,
                                            @Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * Documents whose {@code publish()} committed {@code PUBLISHED}/{@code MARK_DISPATCH} but whose
+     * {@code DocumentPublishCommand} may never have reached blockchain_publisher — a crash or async
+     * executor rejection between the vault commit and the in-memory event landing (Codex
+     * adversarial-review finding 1). Feeds {@code DocumentDispatchRetryJob}, which re-emits the
+     * command for each match on a schedule. Re-emitting for a document that is legitimately still
+     * mid-flight (the first command has not landed yet) is safe and a no-op downstream — see
+     * {@code DocumentEntityRepositoryGateway#storeOnlyNew}, which dedups by documentId.
+     */
+    List<VaultDocumentEntity> findByStatusAndLedgerDispatchStatus(VaultDocumentStatus status,
+                                                                    LedgerDispatchStatus ledgerDispatchStatus);
 
     /**
      * Org-wide listing with optional filters (all nullable) — direction is a String ('SENT'/'RECEIVED')

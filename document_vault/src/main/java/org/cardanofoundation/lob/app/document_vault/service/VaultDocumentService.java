@@ -209,19 +209,32 @@ public class VaultDocumentService {
         document.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
         VaultDocumentEntity saved = documentRepository.save(document);
 
-        eventPublisher.publishEvent(new DocumentPublishCommand(
-                saved.getOrganisationId(),
-                saved.getId(),
-                saved.getEnvelopeVersion(),
-                saved.getContentHash(),
-                saved.getPlaintextHash(),
-                saved.getPayloadNonce(),
-                Base64.getEncoder().encodeToString(saved.getCiphertext()),
-                saved.getSlots().stream()
-                        .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek()))
-                        .toList()));
+        eventPublisher.publishEvent(toPublishCommand(saved));
 
         return Either.right(toView(saved));
+    }
+
+    /**
+     * Builds the PII-free {@link DocumentPublishCommand} handed to blockchain_publisher. Extracted
+     * (Codex adversarial-review finding 1) so this exact field mapping is shared by BOTH emission
+     * sites and cannot drift apart: {@link #publish(String)} above, and {@code
+     * DocumentDispatchRetryJob}, which re-emits the same command for any document stuck in
+     * PUBLISHED/MARK_DISPATCH after a crash or async-rejection dropped the first emission.
+     * {@code public static} (rather than private) precisely so the retry job — in the sibling
+     * {@code document_vault.job} package — can call it without duplicating this block.
+     */
+    public static DocumentPublishCommand toPublishCommand(VaultDocumentEntity document) {
+        return new DocumentPublishCommand(
+                document.getOrganisationId(),
+                document.getId(),
+                document.getEnvelopeVersion(),
+                document.getContentHash(),
+                document.getPlaintextHash(),
+                document.getPayloadNonce(),
+                Base64.getEncoder().encodeToString(document.getCiphertext()),
+                document.getSlots().stream()
+                        .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek()))
+                        .toList());
     }
 
     /**

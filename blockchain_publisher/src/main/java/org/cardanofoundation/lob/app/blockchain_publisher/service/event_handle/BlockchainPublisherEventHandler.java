@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
@@ -56,7 +58,18 @@ public class BlockchainPublisherEventHandler {
         blockchainPublisherService.storeEventsForDispatchLater(spendingEventsPublishCommand);
     }
 
-    @EventListener
+    // Codex adversarial-review finding 1 (durable publish handoff):
+    // - AFTER_COMMIT, not the default BEFORE_COMMIT-ish immediate dispatch of @EventListener: storing
+    //   the publisher row is a step toward an irreversible on-chain action, so it must never act on a
+    //   vault-side DocumentPublishCommand whose transaction could still roll back. Without this, the
+    //   async listener could store the publisher row before the vault TX commits, and a vault rollback
+    //   would then leave an orphan publisher row for a document the vault never actually published.
+    // - fallbackExecution = true is REQUIRED (not incidental): DocumentDispatchRetryJob re-emits this
+    //   same command for documents stuck in PUBLISHED/MARK_DISPATCH, and it may do so outside of any
+    //   active transaction synchronization (e.g. after its own read-only transaction has already
+    //   committed). AFTER_COMMIT listeners are silently skipped with no synchronization present unless
+    //   fallbackExecution is set — without it, the retry job's re-emissions would be dropped on the floor.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @Async
     public void handleDocumentPublishCommand(DocumentPublishCommand command) {
         // do NOT log the command — it carries ciphertext; log ids only

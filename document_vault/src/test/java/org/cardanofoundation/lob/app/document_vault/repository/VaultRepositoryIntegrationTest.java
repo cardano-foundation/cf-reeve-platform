@@ -298,4 +298,34 @@ class VaultRepositoryIntegrationTest {
                 Integer.class, "doc-old-draft");
         assertEquals(0, remainingSlots);
     }
+
+    /**
+     * Codex adversarial-review finding 1: pins {@code findByStatusAndLedgerDispatchStatus} at the
+     * real-database level — it must find ONLY documents stuck in PUBLISHED/MARK_DISPATCH (the durable
+     * publish handoff's recovery sweep target), not a PUBLISHED document that has already progressed
+     * past MARK_DISPATCH, and not a DRAFT document that happens to carry MARK_DISPATCH.
+     */
+    @Test
+    void findByStatusAndLedgerDispatchStatusFindsOnlyStuckPublishes() {
+        VaultDocumentEntity stuck = minimalDocument("doc-stuck", VaultDocumentStatus.PUBLISHED);
+        stuck.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
+        documentRepository.save(stuck);
+
+        VaultDocumentEntity dispatched = minimalDocument("doc-dispatched", VaultDocumentStatus.PUBLISHED);
+        dispatched.setLedgerDispatchStatus(LedgerDispatchStatus.DISPATCHED);
+        documentRepository.save(dispatched);
+
+        VaultDocumentEntity draftMarked = minimalDocument("doc-draft", VaultDocumentStatus.DRAFT);
+        draftMarked.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
+        documentRepository.save(draftMarked);
+
+        em.flush();
+        em.clear();
+
+        List<VaultDocumentEntity> stuckDocs = documentRepository.findByStatusAndLedgerDispatchStatus(
+                VaultDocumentStatus.PUBLISHED, LedgerDispatchStatus.MARK_DISPATCH);
+
+        assertEquals(1, stuckDocs.size());
+        assertEquals("doc-stuck", stuckDocs.get(0).getId());
+    }
 }
