@@ -68,4 +68,9 @@ public final class VaultProblems {
     public static ProblemDetail serviceUnavailable(String title, String detail) {
         return of(HttpStatus.SERVICE_UNAVAILABLE, title, detail);
     }
+
+    public static ProblemDetail of403NotCreator() {
+        return of(HttpStatus.FORBIDDEN, NOT_DOCUMENT_CREATOR,
+                "Only the document creator or an admin may delete a document.");
+    }
 }

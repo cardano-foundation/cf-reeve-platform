@@ -15,11 +15,17 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
     /**
      * Org-wide listing with optional filters (all nullable) — direction is a String ('SENT'/'RECEIVED')
      * to keep the null-check portable; status is typed. Sorting/paging via Pageable.
+     *
+     * {@code :q} arrives here PRE-ESCAPED by the service layer (LIKE metacharacters {@code \\}, {@code %}
+     * and {@code _} are backslash-escaped before binding) — {@code escape '\\'} tells the LIKE operator
+     * to treat a backslash-prefixed {@code %}/{@code _} as a literal character rather than a wildcard.
+     * Without this, a fileName/description containing a literal {@code %} or {@code _} would either fail
+     * to match, or — worse — a query of just {@code %} would match every document in the organisation.
      */
     String SEARCH_WHERE = "where d.organisationId = :organisationId "
             + "and (:status is null or d.status = :status) "
-            + "and (:q is null or lower(d.fileName) like lower(concat('%', cast(:q as string), '%')) "
-            + "     or lower(d.description) like lower(concat('%', cast(:q as string), '%'))) "
+            + "and (:q is null or lower(d.fileName) like lower(concat('%', cast(:q as string), '%')) escape '\\' "
+            + "     or lower(d.description) like lower(concat('%', cast(:q as string), '%')) escape '\\') "
             + "and (:direction is null "
             + "     or (:direction = 'SENT' and d.createdByAccount = :accountId) "
             + "     or (:direction = 'RECEIVED' and exists ("

@@ -1,8 +1,12 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,6 +21,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -30,12 +36,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentSharedEvent;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
+import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentEnvelopeView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentUploadedView;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
@@ -215,5 +224,185 @@ class VaultDocumentServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(400, result.getLeft().getStatus());
+    }
+
+    @Test
+    void listRequiresMembership() {
+        when(securityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        assertTrue(service.list("org1", null, null, null, Pageable.unpaged()).isLeft());
+    }
+
+    /**
+     * Controller-mandated fix (Task 3 review): a filename/description containing a literal
+     * {@code %} or {@code _} must be searchable, and a bare {@code %} query must NOT act as a
+     * wildcard matching every document. The service escapes LIKE metacharacters before binding
+     * {@code q} into {@code VaultDocumentRepository.search} — this pins that the escaped form,
+     * not the raw user input, is what reaches the query.
+     */
+    @Test
+    void listEscapesLikeMetacharactersInFreeTextQueryBeforeSearching() {
+        when(documentRepository.search(any(), any(), any(), any(), any(), any())).thenReturn(Page.empty());
+
+        service.list("org1", null, null, "50%off_deal", Pageable.unpaged());
+
+        ArgumentCaptor<String> qCaptor = ArgumentCaptor.forClass(String.class);
+        verify(documentRepository).search(eq("org1"), any(), any(), any(), qCaptor.capture(), any());
+        assertEquals("50\\%off\\_deal", qCaptor.getValue());
+    }
+
+    @Test
+    void deleteByNonCreatorWithoutAdminRoleIsRejected() {
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("org1");
+        doc.setCreatedByAccount("someone-else");
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+
+        Optional<ProblemDetail> problem = service.delete("doc1");
+
+        assertTrue(problem.isPresent());
+        assertEquals(VaultProblems.NOT_DOCUMENT_CREATOR, problem.get().getTitle());
+    }
+
+    @Test
+    void deleteOutsideOwnOrganisationIsRejectedEvenForCreator() {
+        // Keycloak admin roles are realm-wide; membership of the document's org is checked separately
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("other-org");
+        doc.setCreatedByAccount("sender");
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(securityHelper.canUserAccessOrg("other-org")).thenReturn(false);
+
+        Optional<ProblemDetail> problem = service.delete("doc1");
+
+        assertTrue(problem.isPresent());
+        assertEquals(403, problem.get().getStatus());
+    }
+
+    @Test
+    void deleteByCreatorSucceeds() {
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("org1");
+        doc.setCreatedByAccount("sender");
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+
+        Optional<ProblemDetail> problem = service.delete("doc1");
+
+        assertTrue(problem.isEmpty());
+        verify(documentRepository).delete(doc);
+    }
+
+    @Test
+    void deleteOnPublishedDocumentIsRejectedEvenForCreator() {
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("org1");
+        doc.setCreatedByAccount("sender");
+        doc.setStatus(VaultDocumentStatus.PUBLISHED);
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+
+        Optional<ProblemDetail> problem = service.delete("doc1");
+
+        assertTrue(problem.isPresent());
+        assertEquals(VaultProblems.DOCUMENT_PUBLISHED_IMMUTABLE, problem.get().getTitle());
+    }
+
+    @Test
+    void fetchByCreatorReturnsEnvelopeWithCiphertext() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(keyRepository.findAllById(any())).thenReturn(List.of(orgKey("k-s", "sender", "org1")));
+
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+
+        assertTrue(result.isRight());
+        assertTrue(result.get().envelopeAccessible());
+        assertEquals(Base64.getEncoder().encodeToString(CIPHERTEXT), result.get().payload().ciphertext());
+        assertEquals(1, result.get().slots().size());
+        assertEquals("k-s", result.get().slots().get(0).keyId());
+        assertEquals("k-s", result.get().recipients().get(0).keyId());
+    }
+
+    @Test
+    void fetchByRecipientReturnsEnvelope() {
+        when(securityHelper.getCurrentUserId()).thenReturn("recipient");
+        VaultDocumentEntity doc = draftDoc(); // created by "sender", slot references key k-s
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(keyRepository.findAllById(any())).thenReturn(List.of(orgKey("k-s", "recipient", "org1")));
+
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+
+        assertTrue(result.isRight());
+        assertTrue(result.get().envelopeAccessible());
+        assertNotNull(result.get().payload());
+    }
+
+    /**
+     * The access change: an org member who is neither creator nor recipient still gets the detail
+     * page — the org-wide list already told them the document exists — but NEITHER the ciphertext
+     * NOR the slots. The slots carry wrapped DEKs; a draft is not public, so there is no reason to
+     * hand them to someone who cannot use them.
+     */
+    @Test
+    void fetchByOtherOrgMemberReturnsMetadataWithoutTheEnvelope() {
+        when(securityHelper.getCurrentUserId()).thenReturn("stranger");
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(keyRepository.findAllById(any())).thenReturn(List.of(orgKey("k-s", "sender", "org1")));
+
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+
+        assertTrue(result.isRight());
+        assertFalse(result.get().envelopeAccessible());
+        assertNull(result.get().payload());
+        assertNull(result.get().slots(), "wrapped DEKs must not reach a non-participant");
+        // metadata and "who can read this" stay visible — they are org-visible by design
+        assertEquals("q3-report.pdf", result.get().fileName());
+        assertEquals(1, result.get().recipients().size());
+        assertEquals("sender", result.get().recipients().get(0).accountId());
+        assertEquals("k-s", result.get().recipients().get(0).keyId());
+    }
+
+    @Test
+    void fetchOutsideOwnOrganisationIs404() {
+        VaultDocumentEntity doc = draftDoc();
+        doc.setOrganisationId("other-org");
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(securityHelper.canUserAccessOrg("other-org")).thenReturn(false);
+
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+
+        assertTrue(result.isLeft());
+        assertEquals(404, result.getLeft().getStatus());
+    }
+
+    @Test
+    void fetchUnknownDocumentIs404() {
+        when(documentRepository.findById("nope")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("nope");
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.DOCUMENT_NOT_FOUND, result.getLeft().getTitle());
+    }
+
+    private VaultDocumentEntity draftDoc() {
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("org1");
+        doc.setEnvelopeVersion(1);
+        doc.setStatus(VaultDocumentStatus.DRAFT);
+        doc.setContentHash("a".repeat(64));
+        doc.setPlaintextHash("a".repeat(64));
+        doc.setCiphertext(CIPHERTEXT);
+        doc.setPayloadNonce(HEX24);
+        doc.setFileName("q3-report.pdf");
+        doc.setSizeBytes(CIPHERTEXT.length);
+        doc.setCreatedByAccount("sender");
+        doc.setSlots(List.of(new DocumentSlot("k-s", "canary-recipient-label", HEX64, HEX96)));
+        return doc;
     }
 }

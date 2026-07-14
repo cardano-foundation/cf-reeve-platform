@@ -6,16 +6,24 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import jakarta.annotation.Nullable;
+
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,9 +32,14 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentSharedEvent;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
+import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentEnvelopeView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentUploadedView;
+import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
+import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -62,6 +75,9 @@ public class VaultDocumentService {
 
     @Value("${lob.document_vault.max-slots:64}")
     private int maxSlots;
+
+    @Value("${keycloak.roles.admin:admin}")
+    private String adminRoleName;
 
     public Either<ProblemDetail, DocumentUploadedView> upload(UploadDocumentRequest request) {
         String organisationId = request.getOrganisationId();
@@ -151,6 +167,131 @@ public class VaultDocumentService {
         eventPublisher.publishEvent(new DocumentSharedEvent(saved.getId(), organisationId, recipientAccountIds));
 
         return Either.right(new DocumentUploadedView(saved.getId(), saved.getContentHash(), saved.getCreatedAt()));
+    }
+
+    /**
+     * Org-wide listing (product decision): every org member sees ALL org documents' metadata.
+     * Optional filters: direction (relative to the caller), status, q (fileName/description substring).
+     * Envelope fetch stays restricted — metadata visibility does not grant ciphertext access.
+     */
+    @Transactional(readOnly = true)
+    public Either<ProblemDetail, PagedResponse<DocumentView>> list(String organisationId,
+                                                                   @Nullable DocumentDirection direction,
+                                                                   @Nullable VaultDocumentStatus status,
+                                                                   @Nullable String q,
+                                                                   Pageable pageable) {
+        if (!securityHelper.canUserAccessOrg(organisationId)) {
+            return Either.left(VaultProblems.forbidden(
+                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+        }
+        String accountId = securityHelper.getCurrentUserId();
+        Page<VaultDocumentEntity> page = documentRepository.search(organisationId, accountId,
+                direction == null ? null : direction.name(), status,
+                (q == null || q.isBlank()) ? null : escapeLikeMetacharacters(q), pageable);
+        return Either.right(PagedResponse.of(page, this::toView));
+    }
+
+    /**
+     * Escapes LIKE metacharacters ({@code \}, {@code %}, {@code _}) in a user-supplied free-text
+     * query before it is bound into {@link VaultDocumentRepository#search}. Without this a filename
+     * or description containing a literal {@code %} or {@code _} would match wrongly, and a bare
+     * {@code %} query would match every document in the organisation. Backslash MUST be escaped
+     * first, or a user-supplied backslash would be mistaken for our own escape prefix.
+     */
+    private static String escapeLikeMetacharacters(String q) {
+        return q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private DocumentView toView(VaultDocumentEntity document) {
+        return new DocumentView(document.getId(), document.getFileName(), document.getContentType(),
+                document.getDescription(), document.getSizeBytes(), document.getContentHash(),
+                document.getEnvelopeVersion(), document.getStatus(), document.getLedgerDispatchStatus(),
+                document.getLedgerDispatchError(), document.getTxHash(), document.getIpfsCid(),
+                document.getCreatedByName(), document.getCreatedAt());
+    }
+
+    /**
+     * Blueprint D2. Detail for any org member; ciphertext ONLY for the creator and recipients.
+     * Decryption is strictly client-side — the backend cannot decrypt, and never tries.
+     */
+    @Transactional(readOnly = true)
+    public Either<ProblemDetail, DocumentEnvelopeView> fetch(String documentId) {
+        String accountId = securityHelper.getCurrentUserId();
+        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
+        // 404 for a missing document AND for a non-member: to an outsider the two are the same thing.
+        if (documentM.isEmpty() || !securityHelper.canUserAccessOrg(documentM.get().getOrganisationId())) {
+            return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
+                    "No document %s accessible to the current account.".formatted(documentId)));
+        }
+        VaultDocumentEntity document = documentM.get();
+
+        // Resolve the slot keys once: they answer both "who can read this?" and "may I?".
+        List<String> keyIds = document.getSlots().stream().map(DocumentSlot::getKeyId).toList();
+        Map<String, VaultKeyEntity> slotKeys = keyRepository.findAllById(keyIds).stream()
+                .collect(Collectors.toMap(VaultKeyEntity::getId, key -> key));
+
+        boolean envelopeAccessible = document.getCreatedByAccount().equals(accountId)
+                || slotKeys.values().stream().anyMatch(key -> key.getAccountId().equals(accountId));
+
+        return Either.right(new DocumentEnvelopeView(
+                document.getId(), document.getOrganisationId(), document.getStatus(),
+                document.getEnvelopeVersion(), document.getFileName(), document.getContentType(),
+                document.getDescription(), document.getSizeBytes(), document.getContentHash(),
+                document.getPlaintextHash(),
+                envelopeAccessible,
+                // payload AND slots are the envelope: both go to participants only. A non-participant
+                // has no use for a wrappedDek and no business holding one — a draft is not public.
+                envelopeAccessible
+                        ? new DocumentEnvelopeView.PayloadView(
+                                Base64.getEncoder().encodeToString(document.getCiphertext()),
+                                document.getPayloadNonce())
+                        : null,
+                envelopeAccessible
+                        ? document.getSlots().stream()
+                                .map(slot -> new DocumentEnvelopeView.SlotView(slot.getKeyId(),
+                                        slot.getRecipientRef(), slot.getEphemeralPub(), slot.getWrappedDek()))
+                                .toList()
+                        : null,
+                // "who can read this?" — org-visible, and carries no key material whatsoever
+                document.getSlots().stream()
+                        .map(slot -> slotKeys.get(slot.getKeyId()))
+                        .filter(Objects::nonNull)
+                        .map(key -> new DocumentEnvelopeView.RecipientView(key.getId(), key.getAccountId(),
+                                key.getAccountName(), key.getLabel(), key.getAssurance()))
+                        .toList(),
+                document.getLedgerDispatchStatus(), document.getLedgerDispatchError(),
+                document.getTxHash(), document.getIpfsCid(),
+                document.getCreatedByName(), document.getCreatedAt()));
+    }
+
+    public Optional<ProblemDetail> delete(String documentId) {
+        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
+        if (documentM.isEmpty()) {
+            return Optional.of(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
+                    "No document %s.".formatted(documentId)));
+        }
+        VaultDocumentEntity document = documentM.get();
+        // membership first: Keycloak admin roles are realm-wide, so an out-of-org admin must not delete
+        if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
+            return Optional.of(VaultProblems.forbidden(
+                    "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
+        }
+        if (document.getStatus() != VaultDocumentStatus.DRAFT) {
+            return Optional.of(VaultProblems.conflict(VaultProblems.DOCUMENT_PUBLISHED_IMMUTABLE,
+                    "Document %s is published and can never be edited or deleted.".formatted(documentId)));
+        }
+        boolean isCreator = document.getCreatedByAccount().equals(securityHelper.getCurrentUserId());
+        if (!isCreator && !hasAdminRole()) {
+            return Optional.of(VaultProblems.of403NotCreator());
+        }
+        documentRepository.delete(document);
+        return Optional.empty();
+    }
+
+    private boolean hasAdminRole() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + adminRoleName));
     }
 
     private static String sha256Hex(byte[] bytes) {

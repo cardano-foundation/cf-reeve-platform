@@ -175,4 +175,57 @@ class VaultRepositoryIntegrationTest {
         assertEquals(1, documentRepository.search("org1", "anyone", null, VaultDocumentStatus.DRAFT, "report", Pageable.unpaged()).getTotalElements());
         assertEquals(0, documentRepository.search("org1", "anyone", null, VaultDocumentStatus.PUBLISHED, null, Pageable.unpaged()).getTotalElements());
     }
+
+    /**
+     * Controller-mandated fix (Task 3 review): pins the JPQL {@code escape '\'} contract at the
+     * real-database level. {@code q} arrives here PRE-ESCAPED (the service layer's job) — this test
+     * simulates that by passing an already-escaped literal directly to the repository.
+     */
+    @Test
+    void searchEscapesLikeMetacharactersInFreeTextQuery() {
+        keyRepository.save(key("k1", "sender", HEX64, "org1"));
+
+        VaultDocumentEntity literalDoc = new VaultDocumentEntity();
+        literalDoc.setId("doc-literal");
+        literalDoc.setOrganisationId("org1");
+        literalDoc.setEnvelopeVersion(1);
+        literalDoc.setContentHash(HEX64);
+        literalDoc.setPlaintextHash(HEX64);
+        literalDoc.setCiphertext(new byte[] {1});
+        literalDoc.setPayloadNonce("f".repeat(24));
+        literalDoc.setFileName("100%_off.pdf"); // literal percent AND underscore in the filename
+        literalDoc.setSizeBytes(1L);
+        literalDoc.setCreatedByAccount("sender");
+        literalDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96)));
+        documentRepository.save(literalDoc);
+
+        VaultDocumentEntity plainDoc = new VaultDocumentEntity();
+        plainDoc.setId("doc-plain");
+        plainDoc.setOrganisationId("org1");
+        plainDoc.setEnvelopeVersion(1);
+        plainDoc.setContentHash(HEX64);
+        plainDoc.setPlaintextHash(HEX64);
+        plainDoc.setCiphertext(new byte[] {2});
+        plainDoc.setPayloadNonce("f".repeat(24));
+        plainDoc.setFileName("plain.pdf"); // no LIKE metacharacters at all
+        plainDoc.setSizeBytes(1L);
+        plainDoc.setCreatedByAccount("sender");
+        plainDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96)));
+        documentRepository.save(plainDoc);
+
+        em.flush();
+        em.clear();
+
+        // an escaped literal substring ("100%_off", metacharacters backslash-escaped) finds
+        // exactly the one document that actually contains it — not a false-positive, not a miss
+        assertEquals(1, documentRepository.search("org1", "anyone", null, null, "100\\%\\_off", Pageable.unpaged())
+                .getTotalElements());
+        // an escaped "%" means "a literal percent sign", NOT "match anything" — it must find only
+        // the document that has one, never every row in the organisation
+        assertEquals(1, documentRepository.search("org1", "anyone", null, null, "\\%", Pageable.unpaged())
+                .getTotalElements());
+        // same for an escaped "_": literal underscore, not the single-character wildcard
+        assertEquals(1, documentRepository.search("org1", "anyone", null, null, "\\_", Pageable.unpaged())
+                .getTotalElements());
+    }
 }
