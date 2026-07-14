@@ -4,6 +4,7 @@ import com.bloxbean.cardano.yaci.store.utxo.storage.impl.model.AddressUtxoEntity
 import com.bloxbean.cardano.yaci.store.utxo.storage.impl.model.UtxoId;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import com.bloxbean.cardano.yaci.store.utxo.storage.impl.model.TxInputEntity;
 
 import java.util.List;
 
@@ -19,6 +20,7 @@ public interface AddressBalanceRepository extends JpaRepository<AddressUtxoEntit
     @Query("select e.ownerAddr as ownerAddr, coalesce(sum(e.lovelaceAmount), 0) as total "
             + "from AddressUtxoEntity e "
             + "where e.ownerAddr is not null "
+            + "and not exists (select 1 from TxInputEntity t where t.txHash = e.txHash and t.outputIndex = e.outputIndex)"
             + "group by e.ownerAddr")
     List<AddressBalance> findAddressBalances();
 }
