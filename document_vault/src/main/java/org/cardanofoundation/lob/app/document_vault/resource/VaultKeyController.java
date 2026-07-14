@@ -22,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import org.cardanofoundation.lob.app.document_vault.domain.request.ImportCardRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
+import org.cardanofoundation.lob.app.document_vault.service.CardImportService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultKeyService;
 
 @RestController
@@ -38,6 +40,7 @@ public class VaultKeyController {
             + "or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole())";
 
     private final VaultKeyService keyService;
+    private final CardImportService cardImportService;
 
     @Operation(description = "Register a new X25519 public key for the current account")
     @PostMapping(value = "/keys", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
@@ -60,5 +63,13 @@ public class VaultKeyController {
     public ResponseEntity<Object> listRecipients(@PathVariable String organisationId,
                                                  @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return Responses.respond(keyService.listRecipients(organisationId, pageable), HttpStatus.OK);
+    }
+
+    @Operation(description = "Import a signed key card: adds a recipient to the organisation's addressbook, "
+            + "or adopts an Indexer-issued key as your own. The issuer's signature is the trust anchor.")
+    @PostMapping(value = "/cards/import", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize(ALL_ROLES)
+    public ResponseEntity<Object> importCard(@Valid @RequestBody ImportCardRequest request) {
+        return Responses.respond(cardImportService.importCard(request), HttpStatus.OK);
     }
 }
