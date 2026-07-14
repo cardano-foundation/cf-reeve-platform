@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import jakarta.persistence.EntityManager;
@@ -13,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +49,8 @@ class VaultRepositoryIntegrationTest {
     private VaultDocumentRepository documentRepository;
     @Autowired
     private EntityManager em;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private VaultKeyEntity key(String id, String accountId, String publicKey, String org) {
         VaultKeyEntity key = new VaultKeyEntity();
@@ -227,5 +231,53 @@ class VaultRepositoryIntegrationTest {
         // same for an escaped "_": literal underscore, not the single-character wildcard
         assertEquals(1, documentRepository.search("org1", "anyone", null, null, "\\_", Pageable.unpaged())
                 .getTotalElements());
+    }
+
+    private VaultDocumentEntity minimalDocument(String id, VaultDocumentStatus status) {
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId(id);
+        doc.setOrganisationId("org1");
+        doc.setStatus(status);
+        doc.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        doc.setEnvelopeVersion(1);
+        doc.setContentHash(HEX64);
+        doc.setPlaintextHash(HEX64);
+        doc.setCiphertext(new byte[] {1, 2, 3});
+        doc.setPayloadNonce("f".repeat(24));
+        doc.setSizeBytes(3L);
+        doc.setCreatedByAccount("sender");
+        return doc;
+    }
+
+    /**
+     * Pins the retention job's published lock (settled product decision) at the real
+     * repository/DB level: {@code deleteByStatusAndCreatedAtBefore} must purge stale DRAFT
+     * envelopes while a PUBLISHED envelope of the same age is left untouched, no matter how old.
+     */
+    @Test
+    void deleteByStatusAndCreatedAtBeforePurgesOnlyStaleDraftDocuments() {
+        documentRepository.save(minimalDocument("doc-old-draft", VaultDocumentStatus.DRAFT));
+        documentRepository.save(minimalDocument("doc-old-published", VaultDocumentStatus.PUBLISHED));
+        documentRepository.save(minimalDocument("doc-recent-draft", VaultDocumentStatus.DRAFT));
+
+        // flush so the raw JDBC backdate below (and the derived delete query's own SELECT)
+        // see committed rows rather than pending first-level-cache state
+        em.flush();
+        LocalDateTime old = LocalDateTime.now().minusDays(40);
+        jdbcTemplate.update("update document_vault_document set created_at = ? where document_id in (?, ?)",
+                old, "doc-old-draft", "doc-old-published");
+        // established pattern (Task 8 review): entities created & purged within one @Transactional
+        // method keep Persistable.isNew() true until @PostLoad fires on a fresh load — clear the
+        // first-level cache so the delete query reloads rows rather than acting on stale state.
+        em.clear();
+
+        long deleted = documentRepository.deleteByStatusAndCreatedAtBefore(
+                VaultDocumentStatus.DRAFT, LocalDateTime.now().minusDays(30));
+
+        assertEquals(1, deleted);
+        assertTrue(documentRepository.findById("doc-old-draft").isEmpty());
+        // published lock extends to retention: never purged, no matter the age
+        assertTrue(documentRepository.findById("doc-old-published").isPresent());
+        assertTrue(documentRepository.findById("doc-recent-draft").isPresent());
     }
 }

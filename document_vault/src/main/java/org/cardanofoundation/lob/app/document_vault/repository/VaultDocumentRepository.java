@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.document_vault.repository;
 
 
+import java.time.LocalDateTime;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,6 +13,13 @@ import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentE
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 
 public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEntity, String> {
+
+    /**
+     * Blueprint B3 retention: hard-deletes envelopes matching {@code status} created before
+     * {@code cutoff}. Callers must pass {@link VaultDocumentStatus#DRAFT} only — PUBLISHED
+     * envelopes are locked forever regardless of age (settled product decision).
+     */
+    long deleteByStatusAndCreatedAtBefore(VaultDocumentStatus status, LocalDateTime cutoff);
 
     /**
      * Org-wide listing with optional filters (all nullable) — direction is a String ('SENT'/'RECEIVED')
