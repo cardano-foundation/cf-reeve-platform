@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublisherService;
+import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 
@@ -53,6 +54,15 @@ public class BlockchainPublisherEventHandler {
         log.info("Received SpendingEventsPublishCommand: {}", spendingEventsPublishCommand);
 
         blockchainPublisherService.storeEventsForDispatchLater(spendingEventsPublishCommand);
+    }
+
+    @EventListener
+    @Async
+    public void handleDocumentPublishCommand(DocumentPublishCommand command) {
+        // do NOT log the command — it carries ciphertext; log ids only
+        log.info("Received DocumentPublishCommand for organisation:{}, document:{}",
+                command.organisationId(), command.documentId());
+        blockchainPublisherService.storeDocumentForDispatchLater(command);
     }
 
 }

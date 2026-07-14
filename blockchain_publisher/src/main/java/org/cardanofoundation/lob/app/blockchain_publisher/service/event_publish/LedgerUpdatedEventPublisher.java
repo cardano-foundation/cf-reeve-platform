@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.event_publish;
 
+import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -44,6 +46,18 @@ public class LedgerUpdatedEventPublisher {
     public <E extends PublishableEntity> void send(String organisationId,
                                                    LedgerUpdateType type,
                                                    Set<E> entities) {
+        send(organisationId, type, entities, entity -> Set.of());
+    }
+
+    /**
+     * Same as {@link #send(String, LedgerUpdateType, Set)}, but lets the caller add extra receipts per entity
+     * on top of the standard {@code CARDANO_L1} one (e.g. documents also carry an {@code IPFS} receipt).
+     */
+    @Transactional
+    public <E extends PublishableEntity> void send(String organisationId,
+                                                   LedgerUpdateType type,
+                                                   Set<E> entities,
+                                                   Function<E, Set<BlockchainReceipt>> extraReceipts) {
         if (entities.isEmpty()) {
             return;
         }
@@ -52,7 +66,7 @@ public class LedgerUpdatedEventPublisher {
 
         for (val partition : Partitions.partition(entities, dispatchBatchSize)) {
             val statusUpdates = partition.asSet().stream()
-                    .map(this::toStatusUpdate)
+                    .map(entity -> toStatusUpdate(entity, extraReceipts.apply(entity)))
                     .collect(Collectors.toSet());
 
             val event = LedgerUpdatedEvent.builder()
@@ -67,7 +81,7 @@ public class LedgerUpdatedEventPublisher {
         }
     }
 
-    private LedgerStatusUpdate toStatusUpdate(PublishableEntity entity) {
+    private LedgerStatusUpdate toStatusUpdate(PublishableEntity entity, Set<BlockchainReceipt> extraReceipts) {
         val l1SubmissionData = entity.getL1SubmissionData();
 
         val ledgerDispatchStatus = blockchainPublishStatusMapper.convert(
@@ -77,11 +91,15 @@ public class LedgerUpdatedEventPublisher {
         val blockchainHash = l1SubmissionData.flatMap(L1SubmissionData::getTransactionHash).orElse(null);
         val errorReason = l1SubmissionData.flatMap(L1SubmissionData::getPublishStatusErrorReason).orElse(null);
 
+        val receipts = new HashSet<BlockchainReceipt>();
+        receipts.add(new BlockchainReceipt(BLOCKCHAIN_TYPE, blockchainHash));
+        receipts.addAll(extraReceipts);
+
         return new LedgerStatusUpdate(
                 entity.getId(),
                 ledgerDispatchStatus,
                 errorReason,
-                Set.of(new BlockchainReceipt(BLOCKCHAIN_TYPE, blockchainHash)));
+                receipts);
     }
 
 }

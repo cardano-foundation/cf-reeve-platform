@@ -19,6 +19,9 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Metada
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
@@ -126,6 +129,31 @@ public class TransactionSubmissionConfig {
                 keriEnabled,
                 keriService,
                 keriMetadataLabel
+        );
+    }
+
+    @Bean
+    public DocumentL1TransactionCreator documentL1TransactionCreator(@Qualifier("yaci_blockfrost") BackendService backendService,
+                                                                      DocumentIpfsSerialiser documentIpfsSerialiser,
+                                                                      DocumentMetadataSerialiser documentMetadataSerialiser,
+                                                                      BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+                                                                      Account organiserAccount,
+                                                                      Optional<IpfsPublisher> ipfsPublisher,
+                                                                      @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
+                                                                      @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
+    ) {
+        return new DocumentL1TransactionCreator(backendService,
+                documentIpfsSerialiser,
+                documentMetadataSerialiser,
+                blockchainReaderPublicApi,
+                // documents have a fixed, code-controlled envelope shape (no per-deployment schema evolution);
+                // PII-freedom and format are enforced by NoPiiOnDocumentPublishPathArchTest and
+                // DocumentPublishArtifactsPiiCanaryTest instead of a JSON schema
+                new MetadataChecker.Noop(),
+                organiserAccount,
+                ipfsPublisher,
+                metadataLabel,
+                debugStoreOutputTx
         );
     }
 

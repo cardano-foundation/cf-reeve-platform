@@ -6,6 +6,7 @@ dependencies {
     implementation(project(":support"))
     implementation(project(":blockchain_common"))
     implementation(project(":blockchain_reader"))
+    implementation(project(":document_vault"))
 
     implementation("com.bloxbean.cardano:cardano-client-crypto")
     implementation("com.bloxbean.cardano:cardano-client-backend-blockfrost")
@@ -17,4 +18,5 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa")
     testImplementation("org.springframework.boot:spring-boot-starter-validation")
     testImplementation(project(":organisation"))  // Explicitly include organisation for tests
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
 }
