@@ -19,11 +19,18 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentSt
 public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEntity, String> {
 
     /**
-     * Publish-only: takes a row-level {@code SELECT ... FOR UPDATE} so two concurrent publish calls
-     * cannot both observe {@code DRAFT} and both fire the irreversible {@code DocumentPublishCommand}.
-     * Under the class-level {@code @Transactional}, the second caller blocks until the first commits,
-     * then reads {@code PUBLISHED} and returns {@code ALREADY_PUBLISHED} instead of double-publishing.
-     * Do not use this finder for fetch/delete/list — those paths have no such race to guard against.
+     * Takes a row-level {@code SELECT ... FOR UPDATE}. Used by BOTH mutating paths on this
+     * aggregate — publish and delete — so they serialize against each other on the same row lock:
+     * <ul>
+     *   <li>publish: two concurrent publish calls cannot both observe {@code DRAFT} and both fire
+     *       the irreversible {@code DocumentPublishCommand}; the second blocks until the first
+     *       commits, then reads {@code PUBLISHED} and returns {@code ALREADY_PUBLISHED}.</li>
+     *   <li>delete: a concurrent delete cannot observe {@code DRAFT} while a publish is in flight
+     *       and then unconditionally delete the row after publish commits it to {@code PUBLISHED};
+     *       delete blocks until publish commits, re-reads {@code PUBLISHED}, and returns
+     *       {@code DOCUMENT_PUBLISHED_IMMUTABLE} instead.</li>
+     * </ul>
+     * fetch/list stay on the unlocked finder — they are read-only and never mutate status.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select d from document_vault.VaultDocumentEntity d where d.id = :documentId")

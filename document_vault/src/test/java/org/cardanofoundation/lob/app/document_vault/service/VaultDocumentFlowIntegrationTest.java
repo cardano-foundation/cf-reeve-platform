@@ -106,13 +106,13 @@ class VaultDocumentFlowIntegrationTest {
         upload.setSlots(List.of(slot));
         DocumentUploadedView uploaded = documentService.upload(upload).get();
 
-        // force a genuine DB round-trip: without this, a later findById() (inside fetch()/delete())
-        // would return the SAME in-memory instance created above. Its Persistable.isNew() flag is
-        // only ever cleared by @PostLoad, which fires on a real load, not on persist — so within a
-        // single transaction, Spring Data's delete() would treat the entity as "new" and silently
-        // skip issuing the DELETE (see SimpleJpaRepository.delete(T), which no-ops when isNew()).
-        // Separate HTTP requests never hit this: each gets its own EntityManager, so delete()'s
-        // findById() always performs a genuine load there.
+        // force a genuine DB round-trip: without this, a later findById()/findByIdForUpdate() (inside
+        // fetch()/delete()) would return the SAME in-memory instance created above. Its
+        // Persistable.isNew() flag is only ever cleared by @PostLoad, which fires on a real load, not
+        // on persist — so within a single transaction, Spring Data's delete() would treat the entity
+        // as "new" and silently skip issuing the DELETE (see SimpleJpaRepository.delete(T), which
+        // no-ops when isNew()). Separate HTTP requests never hit this: each gets its own
+        // EntityManager, so delete()'s findByIdForUpdate() always performs a genuine load there.
         em.flush();
         em.clear();
 

@@ -320,7 +320,13 @@ public class VaultDocumentService {
     }
 
     public Optional<ProblemDetail> delete(String documentId) {
-        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
+        // Row lock (findByIdForUpdate, not findById): delete is the second mutating path on this
+        // aggregate besides publish(), and must take the same PESSIMISTIC_WRITE lock. Without it,
+        // delete() could read DRAFT while a concurrent publish() holds the lock, then — after
+        // publish commits the row to PUBLISHED — issue its DELETE unconditionally, destroying a
+        // published document. With the lock, delete blocks until publish commits, re-reads
+        // PUBLISHED, and returns DOCUMENT_PUBLISHED_IMMUTABLE below instead.
+        Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId);
         if (documentM.isEmpty()) {
             return Optional.of(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
                     "No document %s.".formatted(documentId)));

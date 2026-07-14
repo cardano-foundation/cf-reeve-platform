@@ -274,7 +274,7 @@ class VaultDocumentServiceTest {
         doc.setId("doc1");
         doc.setOrganisationId("org1");
         doc.setCreatedByAccount("someone-else");
-        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
         Optional<ProblemDetail> problem = service.delete("doc1");
 
@@ -298,7 +298,7 @@ class VaultDocumentServiceTest {
         doc.setId("doc1");
         doc.setOrganisationId("org1");
         doc.setCreatedByAccount("someone-else"); // securityHelper.getCurrentUserId() stubbed to "sender"
-        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
         Optional<ProblemDetail> problem = service.delete("doc1");
 
@@ -313,7 +313,7 @@ class VaultDocumentServiceTest {
         doc.setId("doc1");
         doc.setOrganisationId("other-org");
         doc.setCreatedByAccount("sender");
-        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(securityHelper.canUserAccessOrg("other-org")).thenReturn(false);
 
         Optional<ProblemDetail> problem = service.delete("doc1");
@@ -328,7 +328,7 @@ class VaultDocumentServiceTest {
         doc.setId("doc1");
         doc.setOrganisationId("org1");
         doc.setCreatedByAccount("sender");
-        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
         Optional<ProblemDetail> problem = service.delete("doc1");
 
@@ -343,7 +343,7 @@ class VaultDocumentServiceTest {
         doc.setOrganisationId("org1");
         doc.setCreatedByAccount("sender");
         doc.setStatus(VaultDocumentStatus.PUBLISHED);
-        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
         Optional<ProblemDetail> problem = service.delete("doc1");
 
