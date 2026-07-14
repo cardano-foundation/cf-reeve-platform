@@ -57,7 +57,6 @@ class CardImportServiceTest {
         service = new CardImportService(keyRepository, securityHelper, organisationPublicApi, verifier);
         when(verifier.hasIssuers()).thenReturn(true);
         when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(securityHelper.getCurrentUserId()).thenReturn("sub-alice");
         when(organisationPublicApi.findByOrganisationId("org1"))
                 .thenReturn(Optional.of(new Organisation()));
         when(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey(any(), any(), any()))
@@ -142,6 +141,46 @@ class CardImportServiceTest {
         assertTrue(result.isRight());
         assertEquals("existing-key", result.get().keyId()); // same row, no duplicate
         assertEquals("bob@example.org", result.get().email()); // refreshed from the card
+    }
+
+    /**
+     * Contract §2.8.5: re-importing an existing row refreshes ONLY label/email. Provenance
+     * (origin, assurance, external, issuerId) must never move on a re-import — a PORTABLE key must
+     * never silently upgrade to PASSKEY, and a SELF_ENROLLED row must never flip to INDEXER_ISSUED,
+     * just because a signed card for the same public key came in.
+     */
+    @Test
+    void reimportingAnExistingRowRefreshesOnlyLabelAndEmailNotProvenance() {
+        VaultKeyEntity existing = new VaultKeyEntity();
+        existing.setId("existing-key");
+        existing.setAccountId("sub-bob");
+        existing.setOrganisationId("org1");
+        existing.setPublicKey(X25519_PUB);
+        existing.setAccountName("Bob M.");
+        existing.setLabel("stale label");
+        existing.setEmail("stale@example.org");
+        existing.setOrigin(KeyOrigin.SELF_ENROLLED);
+        existing.setAssurance(KeyAssurance.PASSKEY);
+        existing.setExternal(false);
+        existing.setIssuerId(null);
+        when(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey("sub-bob", "org1", X25519_PUB))
+                .thenReturn(Optional.of(existing));
+
+        Either<ProblemDetail, VaultKeyView> result =
+                service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
+
+        assertTrue(result.isRight());
+        ArgumentCaptor<VaultKeyEntity> saved = ArgumentCaptor.forClass(VaultKeyEntity.class);
+        verify(keyRepository).save(saved.capture());
+        // provenance is untouched by a re-import
+        assertEquals(KeyOrigin.SELF_ENROLLED, saved.getValue().getOrigin());
+        assertEquals(KeyAssurance.PASSKEY, saved.getValue().getAssurance());
+        assertFalse(saved.getValue().isExternal());
+        assertEquals(null, saved.getValue().getIssuerId());
+        assertEquals("Bob M.", saved.getValue().getAccountName());
+        // only label/email refresh from the card
+        assertEquals("Bob's audit key", saved.getValue().getLabel());
+        assertEquals("bob@example.org", saved.getValue().getEmail());
     }
 
     @Test

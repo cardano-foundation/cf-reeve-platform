@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
@@ -65,28 +66,36 @@ public class CardImportService {
         String holderId = card.getSubject().subjectId();
 
         // Idempotent on (account, org, publicKey) — the table's UNIQUE constraint. Re-importing a
-        // recipient is normal user behaviour; it refreshes their label/e-mail from the card.
-        VaultKeyEntity key = keyRepository
-                .findByAccountIdAndOrganisationIdAndPublicKey(holderId, organisationId,
-                        card.getKey().publicKey())
-                .orElseGet(() -> {
-                    VaultKeyEntity fresh = new VaultKeyEntity();
-                    fresh.setId(UUID.randomUUID().toString());
-                    fresh.setAccountId(holderId);
-                    fresh.setOrganisationId(organisationId);
-                    fresh.setPublicKey(card.getKey().publicKey());
-                    return fresh;
-                });
+        // recipient is normal user behaviour; it refreshes ONLY their label/e-mail from the card
+        // (contract §2.8.5). Provenance fields (origin, assurance, external, issuerId, accountName)
+        // are set once, at creation, and never overwritten by a later re-import: a PORTABLE key must
+        // never silently upgrade to PASSKEY, and a SELF_ENROLLED key must never flip to INDEXER_ISSUED,
+        // just because someone re-imported the same card.
+        Optional<VaultKeyEntity> existing = keyRepository
+                .findByAccountIdAndOrganisationIdAndPublicKey(holderId, organisationId, card.getKey().publicKey());
 
-        key.setAccountName(card.getSubject().displayName());
-        key.setEmail(card.getSubject().email());
-        key.setLabel(card.getKey().label());
-        key.setOrigin(KeyOrigin.INDEXER_ISSUED);
-        // The tier is the issuer's assertion — the backend cannot check how a key was born, and does
-        // not pretend to. It stores what was vouched for and shows it to every user who picks the key.
-        key.setAssurance(card.getKey().assurance());
-        key.setExternal(card.getSubject().subjectType() == CardSubjectType.EXTERNAL);
-        key.setIssuerId(card.getIssuer().issuerId());
+        VaultKeyEntity key;
+        if (existing.isPresent()) {
+            key = existing.get();
+            key.setLabel(card.getKey().label());
+            key.setEmail(card.getSubject().email());
+        } else {
+            key = new VaultKeyEntity();
+            key.setId(UUID.randomUUID().toString());
+            key.setAccountId(holderId);
+            key.setOrganisationId(organisationId);
+            key.setPublicKey(card.getKey().publicKey());
+            key.setAccountName(card.getSubject().displayName());
+            key.setEmail(card.getSubject().email());
+            key.setLabel(card.getKey().label());
+            key.setOrigin(KeyOrigin.INDEXER_ISSUED);
+            // The tier is the issuer's assertion — the backend cannot check how a key was born, and
+            // does not pretend to. It stores what was vouched for and shows it to every user who picks
+            // the key.
+            key.setAssurance(card.getKey().assurance());
+            key.setExternal(card.getSubject().subjectType() == CardSubjectType.EXTERNAL);
+            key.setIssuerId(card.getIssuer().issuerId());
+        }
 
         // The issuer was just checked against the allowlist, so it is trusted by definition right now.
         return Either.right(VaultKeyService.toView(keyRepository.save(key), true));

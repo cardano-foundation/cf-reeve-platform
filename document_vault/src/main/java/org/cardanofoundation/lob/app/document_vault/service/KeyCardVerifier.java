@@ -152,6 +152,9 @@ public class KeyCardVerifier {
      * Changing this list means a new card version — never an in-place edit.
      */
     static byte[] signingInput(KeyCardDto card) {
+        // CARD_TYPE is hardcoded rather than card.getType() — safe only because verify() rejects any
+        // card whose type != CARD_TYPE before this is ever called. Callers of this method must have
+        // already validated that invariant.
         List<String> fields = List.of(
                 CARD_TYPE,
                 String.valueOf(card.getV()),
