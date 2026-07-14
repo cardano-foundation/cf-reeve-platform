@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -39,16 +40,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
+import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentSharedEvent;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentEnvelopeView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentUploadedView;
+import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -75,6 +80,8 @@ class VaultDocumentServiceTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private KeyCardVerifier cardVerifier;
+    @Mock
+    private ObjectProvider<IpfsAvailability> ipfsAvailability;
 
     @InjectMocks
     private VaultDocumentService service;
@@ -421,6 +428,52 @@ class VaultDocumentServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.DOCUMENT_NOT_FOUND, result.getLeft().getTitle());
+    }
+
+    @Test
+    void publishLocksDocumentAndFiresPiiFreeCommand() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+
+        assertTrue(result.isRight());
+        assertEquals(VaultDocumentStatus.PUBLISHED, result.get().status());
+        assertEquals(LedgerDispatchStatus.MARK_DISPATCH, result.get().ledgerDispatchStatus());
+
+        ArgumentCaptor<DocumentPublishCommand> command = ArgumentCaptor.forClass(DocumentPublishCommand.class);
+        verify(eventPublisher).publishEvent(command.capture());
+        assertEquals("doc1", command.getValue().documentId());
+        assertEquals(1, command.getValue().slots().size());
+        // PII-free: the record has no email/label/filename fields at all; belt-and-braces on the serialised form
+        assertFalse(command.getValue().toString().contains("q3-report.pdf"));
+        assertFalse(command.getValue().toString().contains("canary-recipient-label"));
+    }
+
+    @Test
+    void publishRejectedWhenIpfsUnavailable() {
+        when(ipfsAvailability.getIfAvailable()).thenReturn(null);
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+
+        assertTrue(result.isLeft());
+        assertEquals(503, result.getLeft().getStatus());
+        assertEquals(VaultProblems.DOCUMENT_PUBLISHING_UNAVAILABLE, result.getLeft().getTitle());
+    }
+
+    @Test
+    void publishRejectedWhenAlreadyPublished() {
+        VaultDocumentEntity doc = draftDoc();
+        doc.setStatus(VaultDocumentStatus.PUBLISHED);
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ALREADY_PUBLISHED, result.getLeft().getTitle());
     }
 
     private VaultDocumentEntity draftDoc() {

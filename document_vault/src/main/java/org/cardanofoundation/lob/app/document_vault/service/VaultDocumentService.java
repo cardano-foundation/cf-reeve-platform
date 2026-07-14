@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.document_vault.service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
@@ -17,6 +18,7 @@ import jakarta.annotation.Nullable;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -29,11 +31,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
+import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentSharedEvent;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentEnvelopeView;
@@ -69,6 +74,8 @@ public class VaultDocumentService {
     private final ApplicationEventPublisher eventPublisher;
     /** Used at upload to reject slots wrapped to a key whose issuer has been de-trusted (§2.8.5). */
     private final KeyCardVerifier cardVerifier;
+    /** Optional: only present when blockchain_publisher is wired up with an IPFS publisher in this deployment. */
+    private final ObjectProvider<IpfsAvailability> ipfsAvailability;
 
     @Value("${lob.document_vault.max-document-bytes:10485760}")
     private long maxDocumentBytes;
@@ -167,6 +174,47 @@ public class VaultDocumentService {
         eventPublisher.publishEvent(new DocumentSharedEvent(saved.getId(), organisationId, recipientAccountIds));
 
         return Either.right(new DocumentUploadedView(saved.getId(), saved.getContentHash(), saved.getCreatedAt()));
+    }
+
+    public Either<ProblemDetail, DocumentView> publish(String documentId) {
+        IpfsAvailability ipfs = ipfsAvailability.getIfAvailable();
+        if (ipfs == null || !ipfs.isAvailable()) {
+            return Either.left(VaultProblems.serviceUnavailable(VaultProblems.DOCUMENT_PUBLISHING_UNAVAILABLE,
+                    "Document publishing requires a configured IPFS publisher; none is available in this deployment."));
+        }
+        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
+        if (documentM.isEmpty()) {
+            return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
+                    "No document %s.".formatted(documentId)));
+        }
+        VaultDocumentEntity document = documentM.get();
+        if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
+            return Either.left(VaultProblems.forbidden(
+                    "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
+        }
+        if (document.getStatus() != VaultDocumentStatus.DRAFT) {
+            return Either.left(VaultProblems.conflict(VaultProblems.ALREADY_PUBLISHED,
+                    "Document %s is already published.".formatted(documentId)));
+        }
+
+        document.setStatus(VaultDocumentStatus.PUBLISHED);
+        document.setPublishedAt(LocalDateTime.now());
+        document.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
+        VaultDocumentEntity saved = documentRepository.save(document);
+
+        eventPublisher.publishEvent(new DocumentPublishCommand(
+                saved.getOrganisationId(),
+                saved.getId(),
+                saved.getEnvelopeVersion(),
+                saved.getContentHash(),
+                saved.getPlaintextHash(),
+                saved.getPayloadNonce(),
+                Base64.getEncoder().encodeToString(saved.getCiphertext()),
+                saved.getSlots().stream()
+                        .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek()))
+                        .toList()));
+
+        return Either.right(toView(saved));
     }
 
     /**

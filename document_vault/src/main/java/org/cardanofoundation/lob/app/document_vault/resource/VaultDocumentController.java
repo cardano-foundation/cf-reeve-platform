@@ -40,6 +40,18 @@ public class VaultDocumentController {
     private static final String ALL_ROLES = "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) "
             + "or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole())";
 
+    /**
+     * Anchoring on-chain is irreversible, so it is gated more narrowly than everything else — the
+     * platform's existing separation of duties. Verified precedents: funding's `publishEvent`
+     * ("Publish an event to the blockchain") is manager-or-admin; `ReportingController.publish` and
+     * `AccountingCoreResource.approveTransactionsPublish` are manager-only. Auditor is never allowed
+     * to publish anywhere in this platform, and neither is accountant on a dispatch action.
+     *
+     * Consequence, accepted: an accountant can upload a draft but needs a manager to publish it.
+     */
+    private static final String PUBLISH_ROLES =
+            "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())";
+
     private final VaultDocumentService documentService;
 
     @Operation(description = "Upload an encrypted envelope: ciphertext plus per-recipient wrapped-DEK slots")
@@ -73,5 +85,12 @@ public class VaultDocumentController {
     @PreAuthorize(ALL_ROLES)
     public ResponseEntity<Object> delete(@PathVariable String documentId) {
         return Responses.respondDelete(documentService.delete(documentId));
+    }
+
+    @Operation(description = "Publish a draft document: encrypted envelope to IPFS, manifest to Cardano L1 (label 1447, type DOCUMENT). Requires IPFS; locks the document forever. Manager or admin only.")
+    @PostMapping(value = "/documents/{documentId}/publish", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize(PUBLISH_ROLES)
+    public ResponseEntity<Object> publish(@PathVariable String documentId) {
+        return Responses.respond(documentService.publish(documentId), HttpStatus.OK);
     }
 }
