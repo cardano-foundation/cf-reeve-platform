@@ -65,7 +65,7 @@ public class SpendingEventController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @GetMapping(value = "/projects/{projectId}/events", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<SpendingEventView>> listEventsByProject(
             @PathVariable String projectId,
             @RequestParam(required = false) Optional<EventStatus> status,
@@ -79,7 +79,7 @@ public class SpendingEventController {
                     array = @ArraySchema(schema = @Schema(implementation = String.class)))})
     })
     @GetMapping(value = "/event-types", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<String>> eventTypes() {
         return ResponseEntity.ok(Arrays.stream(EventType.values()).map(Enum::name).toList());
     }
@@ -89,7 +89,7 @@ public class SpendingEventController {
                     array = @ArraySchema(schema = @Schema(implementation = String.class)))})
     })
     @GetMapping(value = "/event-statuses", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<String>> eventStatuses() {
         return ResponseEntity.ok(Arrays.stream(EventStatus.values()).map(Enum::name).toList());
     }
@@ -101,7 +101,7 @@ public class SpendingEventController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @GetMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<SpendingEventView> getEvent(@PathVariable String eventId) {
         return Responses.respond(spendingEventService.getEvent(eventId), HttpStatus.OK);
     }

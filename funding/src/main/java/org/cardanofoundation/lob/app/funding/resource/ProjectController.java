@@ -43,7 +43,7 @@ public class ProjectController {
                     schema = @Schema(implementation = PagedResponse.class))}),
     })
     @GetMapping(value = "/projects", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<ProjectView>> listProjects(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
@@ -56,7 +56,7 @@ public class ProjectController {
                     schema = @Schema(implementation = ProjectView.class))})
     })
     @GetMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProjectView> getProject(@PathVariable String projectId) {
         return Responses.respond(projectService.getProject(projectId), HttpStatus.OK);
     }
@@ -66,7 +66,7 @@ public class ProjectController {
                     schema = @Schema(implementation = PagedResponse.class))})
     })
     @GetMapping(value = "/projects/{parentProjectId}/subprojects", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<ProjectView>> listSubProjects(
             @PathVariable String parentProjectId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
