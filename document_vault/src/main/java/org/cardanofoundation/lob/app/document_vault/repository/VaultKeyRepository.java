@@ -21,10 +21,13 @@ public interface VaultKeyRepository extends JpaRepository<VaultKeyEntity, String
     Optional<VaultKeyEntity> findByAccountIdAndOrganisationIdAndPublicKey(String accountId, String organisationId, String publicKey);
 
     /**
-     * Unpaged on purpose: the addressbook must drop keys whose issuer has been de-trusted
-     * (contract §2.8.5) BEFORE paging, or pages would come back short. One row per key per org.
+     * Unpaged: the addressbook (recipients) is paged in memory via {@code PagedResponse.ofList}.
+     * One row per key per org, so the whole org directory is cheap to load.
      */
     List<VaultKeyEntity> findByOrganisationId(String organisationId);
+
+    /** Paged variant for the org key-management listing. */
+    Page<VaultKeyEntity> findByOrganisationId(String organisationId, Pageable pageable);
 
     List<VaultKeyEntity> findByAccountIdInAndOrganisationId(Collection<String> accountIds, String organisationId);
 }

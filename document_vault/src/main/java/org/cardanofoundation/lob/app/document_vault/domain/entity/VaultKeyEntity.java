@@ -83,11 +83,6 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     @Column(name = "external", nullable = false)
     private boolean external;
 
-    /** Which card issuer vouched for this key; null for SELF_ENROLLED. */
-    @Nullable
-    @Column(name = "issuer_id", length = 64)
-    private String issuerId;
-
     @Override
     public boolean isNew() {
         return isNew;

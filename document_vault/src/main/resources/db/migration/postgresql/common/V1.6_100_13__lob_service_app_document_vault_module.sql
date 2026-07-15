@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS document_vault_key (
     origin VARCHAR(20) NOT NULL,
     assurance VARCHAR(20) NOT NULL,
     external BOOLEAN NOT NULL DEFAULT FALSE,
-    issuer_id VARCHAR(64),
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
     created_at TIMESTAMP WITHOUT TIME ZONE,

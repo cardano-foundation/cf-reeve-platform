@@ -4,19 +4,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +32,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
+import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -42,19 +50,22 @@ class VaultKeyServiceTest {
     private KeycloakSecurityHelper securityHelper;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
-    @Mock
-    private KeyCardVerifier cardVerifier;
 
-    @InjectMocks
     private VaultKeyService service;
 
     @BeforeEach
     void currentUser() {
+        service = new VaultKeyService(keyRepository, securityHelper, organisationPublicApi);
+        ReflectionTestUtils.setField(service, "adminRoleName", "admin");
         // lenient: MockitoExtension defaults to STRICT_STUBS and early-return tests never consume this stub
         lenient().when(securityHelper.getCurrentUserId()).thenReturn("acc1");
-        // without this, Mockito's default `false` would make every key look de-trusted and the
-        // addressbook would come back empty for reasons unrelated to what these tests check
-        lenient().when(cardVerifier.isTrustedIssuer(any())).thenReturn(true);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        // hasAdminRole() reads SecurityContextHolder directly; a test that populates it must not
+        // let that authentication leak into the next test in this class (or another class).
+        SecurityContextHolder.clearContext();
     }
 
     private RegisterKeyRequest request(String publicKey, String org) {
@@ -80,6 +91,7 @@ class VaultKeyServiceTest {
         assertEquals(HEX64, result.get().publicKey());
         assertEquals("alice@example.org", result.get().email());
         assertEquals("org1", result.get().organisationId());
+        assertEquals("acc1", result.get().accountId());
     }
 
     @Test
@@ -124,7 +136,7 @@ class VaultKeyServiceTest {
     @Test
     void listRecipientsExposesPagedAddressbookEntries() {
         when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(keyRepository.findByOrganisationId("org1")).thenReturn(List.of(orgKey("k1", "acc2", null)));
+        when(keyRepository.findByOrganisationId("org1")).thenReturn(List.of(orgKey("k1", "acc2")));
 
         var result = service.listRecipients("org1", Pageable.unpaged());
 
@@ -133,26 +145,87 @@ class VaultKeyServiceTest {
         assertEquals("bob@example.org", result.get().content().get(0).email());
     }
 
-    /**
-     * The containment property (contract §2.8.5): de-trust an issuer and every key it vouched for
-     * leaves the addressbook. Nobody can pick it as a recipient again.
-     */
     @Test
-    void addressbookWithholdsKeysFromADeTrustedIssuer() {
-        when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(keyRepository.findByOrganisationId("org1")).thenReturn(List.of(
-                orgKey("k1", "acc2", null),                        // self-enrolled, always trusted
-                orgKey("k-evil", "acc2", "compromised-issuer")));  // vouched for by a stolen key
-        when(cardVerifier.isTrustedIssuer("compromised-issuer")).thenReturn(false);
+    void deleteOwnKeySucceeds() {
+        VaultKeyEntity key = orgKey("key1", "acc1"); // same as securityHelper.getCurrentUserId()
+        when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
 
-        var result = service.listRecipients("org1", Pageable.unpaged());
+        Optional<ProblemDetail> problem = service.delete("key1");
 
-        assertTrue(result.isRight());
-        assertEquals(1, result.get().total());
-        assertEquals("k1", result.get().content().get(0).keyId());
+        assertTrue(problem.isEmpty());
+        verify(keyRepository).delete(key);
     }
 
-    private VaultKeyEntity orgKey(String keyId, String accountId, String issuerId) {
+    @Test
+    void deleteOthersKeyWithoutAdminIsRejected() {
+        VaultKeyEntity key = orgKey("key1", "acc2"); // not the current user
+        when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
+
+        Optional<ProblemDetail> problem = service.delete("key1");
+
+        assertTrue(problem.isPresent());
+        assertEquals(VaultProblems.NOT_KEY_OWNER, problem.get().getTitle());
+        verify(keyRepository, never()).delete(any(VaultKeyEntity.class));
+    }
+
+    /**
+     * The admin bypass in {@code hasAdminRole()}: a Keycloak-authenticated caller holding
+     * {@code ROLE_<keycloak.roles.admin>} (default "admin") may delete a key they do not own.
+     * Mirrors VaultDocumentServiceTest's deleteByNonCreatorWithAdminRoleSucceeds.
+     */
+    @Test
+    void deleteOthersKeyWithAdminSucceeds() {
+        TestingAuthenticationToken adminAuth = new TestingAuthenticationToken("admin-user", null, "ROLE_admin");
+        adminAuth.setAuthenticated(true);
+        SecurityContextHolder.getContext().setAuthentication(adminAuth);
+
+        VaultKeyEntity key = orgKey("key1", "acc2"); // not the current user ("acc1")
+        when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
+
+        Optional<ProblemDetail> problem = service.delete("key1");
+
+        assertTrue(problem.isEmpty());
+        verify(keyRepository).delete(key);
+    }
+
+    @Test
+    void deleteMissingKeyIsNotFound() {
+        when(keyRepository.findById("nope")).thenReturn(Optional.empty());
+
+        Optional<ProblemDetail> problem = service.delete("nope");
+
+        assertTrue(problem.isPresent());
+        assertEquals(VaultProblems.KEY_NOT_FOUND, problem.get().getTitle());
+    }
+
+    @Test
+    void listOrganisationKeysReturnsMappedUsers() {
+        when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        Pageable pageable = PageRequest.of(0, 20);
+        when(keyRepository.findByOrganisationId("org1", pageable))
+                .thenReturn(new PageImpl<>(List.of(orgKey("k1", "acc2"), orgKey("k2", "acc3"))));
+
+        Either<ProblemDetail, PagedResponse<VaultKeyView>> result =
+                service.listOrganisationKeys("org1", pageable);
+
+        assertTrue(result.isRight());
+        assertEquals(2, result.get().total());
+        assertEquals("acc2", result.get().content().get(0).accountId());
+        assertEquals("Bob", result.get().content().get(0).accountName());
+    }
+
+    @Test
+    void listOrganisationKeysForbiddenWhenNotMember() {
+        when(securityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        Either<ProblemDetail, PagedResponse<VaultKeyView>> result =
+                service.listOrganisationKeys("org1", PageRequest.of(0, 20));
+
+        assertTrue(result.isLeft());
+        assertEquals(403, result.getLeft().getStatus());
+    }
+
+    private VaultKeyEntity orgKey(String keyId, String accountId) {
         VaultKeyEntity key = new VaultKeyEntity();
         key.setId(keyId);
         key.setAccountId(accountId);
@@ -161,9 +234,8 @@ class VaultKeyServiceTest {
         key.setEmail("bob@example.org");
         key.setPublicKey(HEX64);
         key.setLabel("phone");
-        key.setIssuerId(issuerId);
-        key.setOrigin(issuerId == null ? KeyOrigin.SELF_ENROLLED : KeyOrigin.INDEXER_ISSUED);
-        key.setAssurance(issuerId == null ? KeyAssurance.PASSKEY : KeyAssurance.PORTABLE);
+        key.setOrigin(KeyOrigin.SELF_ENROLLED);
+        key.setAssurance(KeyAssurance.PASSKEY);
         return key;
     }
 }

@@ -17,7 +17,7 @@ public record PagedResponse<T>(List<T> content, long total, int totalPages, int 
                 page.getTotalElements(), page.getTotalPages(), page.getNumber(), page.getSize());
     }
 
-    /** Page an already-filtered list. Used where a predicate cannot live in the query (issuer trust). */
+    /** Page an in-memory list. Used by the addressbook, which loads the whole (small) org directory. */
     public static <V> PagedResponse<V> ofList(List<V> all, Pageable pageable) {
         if (pageable.isUnpaged()) {
             return new PagedResponse<>(all, all.size(), 1, 0, all.size());

@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -52,12 +53,27 @@ public class VaultKeyController {
         return Responses.respond(keyService.registerKey(request), HttpStatus.CREATED);
     }
 
+    @Operation(description = "Delete a key. The owner may delete their own; an admin may delete any.")
+    @DeleteMapping(value = "/keys/{keyId}", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize(ALL_ROLES)
+    public ResponseEntity<Object> deleteKey(@PathVariable String keyId) {
+        return Responses.respondDelete(keyService.delete(keyId));
+    }
+
     @Operation(description = "List the current account's keys across organisations (paged)")
     @GetMapping(value = "/keys/me", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize(ALL_ROLES)
     public ResponseEntity<PagedResponse<VaultKeyView>> listMyKeys(
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return ResponseEntity.ok(keyService.listMyKeys(pageable));
+    }
+
+    @Operation(description = "List every key registered in an organisation with its mapped user (member-only, paged)")
+    @GetMapping(value = "/organisations/{organisationId}/keys", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize(ALL_ROLES)
+    public ResponseEntity<Object> listOrganisationKeys(@PathVariable String organisationId,
+                                                       @PageableDefault(size = 20) Pageable pageable) {
+        return Responses.respond(keyService.listOrganisationKeys(organisationId, pageable), HttpStatus.OK);
     }
 
     @Operation(description = "Addressbook of an organisation the caller belongs to: recipients with keys and contact e-mail (paged)")
@@ -68,8 +84,8 @@ public class VaultKeyController {
         return Responses.respond(keyService.listRecipients(organisationId, pageable), HttpStatus.OK);
     }
 
-    @Operation(description = "Import a signed key card: adds a recipient to the organisation's addressbook, "
-            + "or adopts an Indexer-issued key as your own. The issuer's signature is the trust anchor.")
+    @Operation(description = "Import a permissionless key card: adds a recipient to the organisation's "
+            + "addressbook, or adopts an imported key as your own. Verify the key out-of-band before use.")
     @PostMapping(value = "/cards/import", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(ALL_ROLES)
     public ResponseEntity<Object> importCard(@Valid @RequestBody ImportCardRequest request) {

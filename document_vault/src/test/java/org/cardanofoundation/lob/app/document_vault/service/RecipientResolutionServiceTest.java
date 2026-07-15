@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.document_vault.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -39,8 +38,6 @@ class RecipientResolutionServiceTest {
     private VaultKeyRepository keyRepository;
     @Mock
     private KeycloakSecurityHelper securityHelper;
-    @Mock
-    private KeyCardVerifier cardVerifier;
 
     @InjectMocks
     private RecipientResolutionService service;
@@ -50,10 +47,6 @@ class RecipientResolutionServiceTest {
         // lenient: STRICT_STUBS would fail early-return tests that never consume these
         lenient().when(securityHelper.getCurrentUserId()).thenReturn("sender");
         lenient().when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        // Default: every issuer is trusted. Mockito would otherwise return false for this boolean and
-        // silently filter out EVERY key — the tests would fail for a reason that has nothing to do
-        // with what they are testing. The de-trust tests override this per issuer id.
-        lenient().when(cardVerifier.isTrustedIssuer(any())).thenReturn(true);
     }
 
     private VaultKeyEntity key(String id, String accountId, String publicKey) {
@@ -172,48 +165,6 @@ class RecipientResolutionServiceTest {
 
         assertTrue(result.isRight());
         assertEquals(3, result.get().size()); // a write-only document is not a feature
-    }
-
-    /**
-     * The containment test (contract §2.8.5). This is the whole answer to "a compromised issuer can
-     * seed a hostile key": drop the issuer from the config and the key it vouched for stops being a
-     * wrap target — so it never gets a slot in another document. Without this filter, resolve's
-     * include-all-of-a-recipient's-keys behaviour would hand the attacker a slot in every future
-     * document addressed to their victim.
-     */
-    @Test
-    void keysFromADeTrustedIssuerAreNotWrapTargets() {
-        VaultKeyEntity honest = key("k-r", "recipient", "a".repeat(64));
-        VaultKeyEntity hostile = key("k-evil", "recipient", "d".repeat(64));
-        hostile.setOrigin(KeyOrigin.INDEXER_ISSUED);
-        hostile.setAssurance(KeyAssurance.PORTABLE);
-        hostile.setIssuerId("compromised-issuer");
-        when(keyRepository.findByAccountIdInAndOrganisationId(anyCollection(), eq("org1")))
-                .thenReturn(List.of(honest, hostile, key("k-s", "sender", "b".repeat(64))));
-        when(cardVerifier.isTrustedIssuer("compromised-issuer")).thenReturn(false);
-
-        Either<ProblemDetail, List<RecipientKeyView>> result = service.resolve(request(List.of("recipient")));
-
-        assertTrue(result.isRight());
-        assertEquals(2, result.get().size()); // the honest recipient key + the sender's own
-        assertTrue(result.get().stream().noneMatch(view -> view.keyId().equals("k-evil")),
-                "a key vouched for by a de-trusted issuer must never become a wrap target");
-    }
-
-    /** If de-trusting leaves a recipient with no usable key, say so — never drop them silently. */
-    @Test
-    void aRecipientLeftWithOnlyDeTrustedKeysIsReportedMissing() {
-        VaultKeyEntity onlyKey = key("k-evil", "recipient", "d".repeat(64));
-        onlyKey.setOrigin(KeyOrigin.INDEXER_ISSUED);
-        onlyKey.setIssuerId("compromised-issuer");
-        when(keyRepository.findByAccountIdInAndOrganisationId(anyCollection(), eq("org1")))
-                .thenReturn(List.of(onlyKey, key("k-s", "sender", "b".repeat(64))));
-        when(cardVerifier.isTrustedIssuer("compromised-issuer")).thenReturn(false);
-
-        Either<ProblemDetail, List<RecipientKeyView>> result = service.resolve(request(List.of("recipient")));
-
-        assertTrue(result.isLeft());
-        assertEquals(VaultProblems.RECIPIENT_KEY_MISSING, result.getLeft().getTitle());
     }
 
     @Test

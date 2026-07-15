@@ -29,6 +29,8 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPubli
 @ConditionalOnProperty(prefix = "lob.blockchain_publisher.ipfs.blockfrost", value = "enabled", havingValue = "true", matchIfMissing = false)
 public class BlockfrostPublisher implements IpfsPublisher {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     @Value("${lob.blockchain_publisher.ipfs.blockfrost.url}")
     private String blockfrostUrl;
 
@@ -69,21 +71,47 @@ public class BlockfrostPublisher implements IpfsPublisher {
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             problemDetail.setTitle("Error sending request to Blockfrost IPFS");
             log.error("Error sending request to Blockfrost IPFS: {}", e.getMessage());
             return Either.left(problemDetail);
         }
-        ObjectMapper mapper = new ObjectMapper();
-        BlockfrostIpfsResponse responseObject = null;
+
+        // Blockfrost signals failure (invalid/again project_id, wrong endpoint, quota exceeded, ...) with a non-2xx
+        // status and a JSON error envelope: {"status_code":..,"error":..,"message":..}. Surface that body verbatim
+        // instead of feeding it to the success parser below, where the unknown "error" field would surface only as an
+        // opaque Jackson "Unrecognized field" message that hides the real cause.
+        int statusCode = response.statusCode();
+        if (statusCode < 200 || statusCode >= 300) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Blockfrost IPFS upload failed with HTTP %d: %s".formatted(statusCode, response.body()));
+            problemDetail.setTitle("Blockfrost IPFS upload rejected");
+            log.error("Blockfrost IPFS upload rejected (HTTP {}): {}", statusCode, response.body());
+            return Either.left(problemDetail);
+        }
+
+        BlockfrostIpfsResponse responseObject;
         try {
-            responseObject = mapper.readValue(response.body(), BlockfrostIpfsResponse.class);
+            responseObject = MAPPER.readValue(response.body(), BlockfrostIpfsResponse.class);
         } catch (JsonProcessingException e) {
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             problemDetail.setTitle("Error parsing Blockfrost IPFS response");
             log.error("Error parsing Blockfrost IPFS response: {}", e.getMessage());
             return Either.left(problemDetail);
         }
+
+        // A 2xx with no ipfs_hash must never be reported as success - that would anchor an L1 manifest with a null CID.
+        if (responseObject.getIpfsHash() == null || responseObject.getIpfsHash().isBlank()) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Blockfrost IPFS response contained no ipfs_hash: %s".formatted(response.body()));
+            problemDetail.setTitle("Blockfrost IPFS response missing ipfs_hash");
+            log.error("Blockfrost IPFS response missing ipfs_hash: {}", response.body());
+            return Either.left(problemDetail);
+        }
+
         return Either.right(responseObject.getIpfsHash());
     }
 

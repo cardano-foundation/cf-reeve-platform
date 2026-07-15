@@ -1,12 +1,16 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +35,9 @@ public class VaultKeyService {
     private final VaultKeyRepository keyRepository;
     private final KeycloakSecurityHelper securityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
-    private final KeyCardVerifier cardVerifier;
+
+    @Value("${keycloak.roles.admin:admin}")
+    private String adminRoleName;
 
     public Either<ProblemDetail, VaultKeyView> registerKey(RegisterKeyRequest request) {
         String accountId = securityHelper.getCurrentUserId();
@@ -65,29 +71,34 @@ public class VaultKeyService {
         key.setAssurance(KeyAssurance.PASSKEY);
         key.setExternal(false);
 
-        // self-enrolled: no issuer vouched for it, so nothing can de-trust it
-        return Either.right(toView(keyRepository.save(key), true));
+        return Either.right(toView(keyRepository.save(key)));
     }
 
-    /**
-     * Own keys are NOT filtered by issuer trust — a de-trusted key still appears, flagged
-     * issuerTrusted=false. You need it to decrypt documents you already received; you simply cannot
-     * encrypt anything new to it (contract §2.8.5).
-     */
     @Transactional(readOnly = true)
     public PagedResponse<VaultKeyView> listMyKeys(Pageable pageable) {
         return PagedResponse.of(keyRepository.findByAccountId(securityHelper.getCurrentUserId(), pageable),
-                key -> toView(key, cardVerifier.isTrustedIssuer(key.getIssuerId())));
+                VaultKeyService::toView);
     }
 
     /**
-     * The addressbook withholds keys whose issuer is no longer trusted (contract §2.8.5). De-trusting
-     * a compromised issuer must make every key it vouched for un-addressable immediately — that is the
-     * whole containment story, and it has to happen here, where recipients are chosen.
-     *
-     * Filtering after paging would return short pages, so the filter is applied to the org's keys and
-     * the page is built from the survivors. Directories are small (one row per key per org); if one
-     * ever is not, push the predicate into the query.
+     * Management listing: every key registered in the organisation, each with its mapped user. Any
+     * member of the organisation may read it (the caller must belong to the org). Paged in the query.
+     */
+    @Transactional(readOnly = true)
+    public Either<ProblemDetail, PagedResponse<VaultKeyView>> listOrganisationKeys(String organisationId,
+                                                                                   Pageable pageable) {
+        if (!securityHelper.canUserAccessOrg(organisationId)) {
+            return Either.left(VaultProblems.forbidden(
+                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+        }
+        return Either.right(PagedResponse.of(
+                keyRepository.findByOrganisationId(organisationId, pageable), VaultKeyService::toView));
+    }
+
+    /**
+     * The org addressbook: every key registered in the org is offerable as a recipient. Trust is the
+     * sender's out-of-band responsibility, not a server-side gate. Directories are small (one row per
+     * key per org), so the read is unpaged and the list is paged in memory.
      */
     @Transactional(readOnly = true)
     public Either<ProblemDetail, PagedResponse<RecipientKeyView>> listRecipients(String organisationId,
@@ -97,29 +108,49 @@ public class VaultKeyService {
                     "Current user is not a member of organisation %s.".formatted(organisationId)));
         }
         List<RecipientKeyView> addressable = keyRepository.findByOrganisationId(organisationId).stream()
-                .filter(key -> cardVerifier.isTrustedIssuer(key.getIssuerId()))
                 .map(VaultKeyService::toRecipientView)
                 .toList();
         return Either.right(PagedResponse.ofList(addressable, pageable));
+    }
+
+    /**
+     * Delete a key. The owner (the account the key belongs to) may delete their own; an admin may
+     * delete any. A document already wrapped to this public key stays decryptable — its ciphertext and
+     * slots are immutable and the recipient holds the private half off-device; deleting only removes
+     * the directory entry, so the key stops being offered as a future recipient.
+     */
+    public Optional<ProblemDetail> delete(String keyId) {
+        Optional<VaultKeyEntity> keyM = keyRepository.findById(keyId);
+        if (keyM.isEmpty()) {
+            return Optional.of(VaultProblems.notFound(VaultProblems.KEY_NOT_FOUND,
+                    "No key %s.".formatted(keyId)));
+        }
+        VaultKeyEntity key = keyM.get();
+        boolean isOwner = key.getAccountId().equals(securityHelper.getCurrentUserId());
+        if (!isOwner && !hasAdminRole()) {
+            return Optional.of(VaultProblems.of403NotKeyOwner());
+        }
+        keyRepository.delete(key);
+        return Optional.empty();
+    }
+
+    private boolean hasAdminRole() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + adminRoleName));
     }
 
     /** Shared with RecipientResolutionService and CardImportService — one mapping, one place. */
     static RecipientKeyView toRecipientView(VaultKeyEntity key) {
         return new RecipientKeyView(key.getAccountId(), key.getAccountName(), key.getEmail(),
                 key.getId(), key.getPublicKey(), key.getLabel(),
-                key.getAssurance(), key.getOrigin(), key.getIssuerId(), key.isExternal());
+                key.getAssurance(), key.getOrigin(), key.isExternal());
     }
 
-    /**
-     * Package-private + static so CardImportService (Task 4a) reuses the exact same mapping.
-     * The trust flag is passed in rather than looked up here: the card importer has just verified
-     * the issuer against the allowlist, so it knows the answer, and this keeps the mapping free of
-     * dependencies.
-     */
-    static VaultKeyView toView(VaultKeyEntity key, boolean issuerTrusted) {
-        return new VaultKeyView(key.getId(), key.getOrganisationId(), key.getLabel(), key.getPublicKey(),
-                key.getEmail(), key.getCredentialId(),
-                key.getAssurance(), key.getOrigin(), key.getIssuerId(), issuerTrusted,
-                key.isExternal(), key.getCreatedAt());
+    /** Package-private + static so CardImportService reuses the exact same mapping. */
+    static VaultKeyView toView(VaultKeyEntity key) {
+        return new VaultKeyView(key.getId(), key.getOrganisationId(), key.getAccountId(), key.getAccountName(),
+                key.getLabel(), key.getPublicKey(), key.getEmail(), key.getCredentialId(),
+                key.getAssurance(), key.getOrigin(), key.isExternal(), key.getCreatedAt());
     }
 }

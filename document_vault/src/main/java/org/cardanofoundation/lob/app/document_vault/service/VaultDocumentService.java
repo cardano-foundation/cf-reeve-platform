@@ -72,8 +72,6 @@ public class VaultDocumentService {
     private final KeycloakSecurityHelper securityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
     private final ApplicationEventPublisher eventPublisher;
-    /** Used at upload to reject slots wrapped to a key whose issuer has been de-trusted (§2.8.5). */
-    private final KeyCardVerifier cardVerifier;
     /** Optional: only present when blockchain_publisher is wired up with an IPFS publisher in this deployment. */
     private final ObjectProvider<IpfsAvailability> ipfsAvailability;
 
@@ -133,17 +131,6 @@ public class VaultDocumentService {
                 return Either.left(VaultProblems.unprocessable(VaultProblems.SLOT_KEY_INVALID,
                         "Slot key %s is unknown or not registered in organisation %s."
                                 .formatted(slot.getKeyId(), organisationId)));
-            }
-            // Closes the stale-client window in the issuer containment (contract §2.8.5): a client that
-            // cached the addressbook BEFORE an issuer was de-trusted would otherwise still upload a slot
-            // wrapped to a key that issuer vouched for. Resolve is not an authorization gate and a
-            // hostile client can put anything in a slot — but an HONEST client with stale state is the
-            // likely case, and it costs one condition to stop it. Re-resolve and re-encrypt.
-            if (!cardVerifier.isTrustedIssuer(key.getIssuerId())) {
-                return Either.left(VaultProblems.unprocessable(VaultProblems.SLOT_KEY_INVALID,
-                        "Slot key %s was vouched for by issuer %s, which is no longer trusted. "
-                                .formatted(slot.getKeyId(), key.getIssuerId())
-                                + "Re-resolve the recipients and encrypt again."));
             }
         }
 

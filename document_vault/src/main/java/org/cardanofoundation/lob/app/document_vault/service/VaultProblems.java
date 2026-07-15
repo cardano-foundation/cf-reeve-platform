@@ -11,6 +11,7 @@ public final class VaultProblems {
     public static final String ORGANISATION_NOT_FOUND = "ORGANISATION_NOT_FOUND";
     public static final String USER_NOT_IN_ORGANISATION = "USER_NOT_IN_ORGANISATION";
     public static final String DUPLICATE_PUBLIC_KEY = "DUPLICATE_PUBLIC_KEY";
+    public static final String NOT_KEY_OWNER = "NOT_KEY_OWNER";
     public static final String RECIPIENT_KEY_MISSING = "RECIPIENT_KEY_MISSING";
     public static final String SENDER_KEY_MISSING = "SENDER_KEY_MISSING";
     public static final String SENDER_KEY_INVALID = "SENDER_KEY_INVALID";
@@ -23,10 +24,7 @@ public final class VaultProblems {
     public static final String DOCUMENT_PUBLISHED_IMMUTABLE = "DOCUMENT_PUBLISHED_IMMUTABLE";
     public static final String ALREADY_PUBLISHED = "ALREADY_PUBLISHED";
     public static final String DOCUMENT_PUBLISHING_UNAVAILABLE = "DOCUMENT_PUBLISHING_UNAVAILABLE";
-    // Key cards (Task 4a)
-    public static final String CARD_IMPORT_UNAVAILABLE = "CARD_IMPORT_UNAVAILABLE";
-    public static final String CARD_ISSUER_UNKNOWN = "CARD_ISSUER_UNKNOWN";
-    public static final String CARD_SIGNATURE_INVALID = "CARD_SIGNATURE_INVALID";
+    // Key cards
     public static final String CARD_ORG_MISMATCH = "CARD_ORG_MISMATCH";
     public static final String CARD_CONTAINS_PRIVATE_KEY = "CARD_CONTAINS_PRIVATE_KEY";
     public static final String UNSUPPORTED_CARD_VERSION = "UNSUPPORTED_CARD_VERSION";
@@ -64,7 +62,7 @@ public final class VaultProblems {
         return of(HttpStatus.BAD_REQUEST, title, detail);
     }
 
-    /** Capability is switched off in this deployment (no IPFS → no publishing; no issuers → no cards). */
+    /** Capability is switched off in this deployment (no IPFS → no publishing). */
     public static ProblemDetail serviceUnavailable(String title, String detail) {
         return of(HttpStatus.SERVICE_UNAVAILABLE, title, detail);
     }
@@ -72,5 +70,10 @@ public final class VaultProblems {
     public static ProblemDetail of403NotCreator() {
         return of(HttpStatus.FORBIDDEN, NOT_DOCUMENT_CREATOR,
                 "Only the document creator or an admin may delete a document.");
+    }
+
+    public static ProblemDetail of403NotKeyOwner() {
+        return of(HttpStatus.FORBIDDEN, NOT_KEY_OWNER,
+                "Only the key owner or an admin may delete a key.");
     }
 }

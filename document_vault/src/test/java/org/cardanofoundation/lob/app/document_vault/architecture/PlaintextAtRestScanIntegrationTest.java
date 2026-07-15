@@ -41,14 +41,10 @@ import org.cardanofoundation.lob.app.organisation.repository.OrganisationReposit
  * Jackson, controller, service, and JPA — and the payload bytes end up in exactly one place (the
  * ciphertext column) and in no log line emitted anywhere along that path.
  *
- * An issuer must be configured here (rather than left empty, as the test profile default is),
- * otherwise the card-import endpoint short-circuits with 503 before it ever inspects the card.
- * Annotation values must be compile-time constants, so the key is written out literally rather
- * than built with "f".repeat(64) (which would not compile there).
+ * The import is permissionless (contract §2.8, amended): there is no issuer and no signature, so
+ * no issuer configuration is required for the card-import endpoint under test below.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "lob.document_vault.card.issuers=reeve-indexer-test:"
-                + "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = DocumentVaultContextIntegrationTest.TestConfig.class)
 @ActiveProfiles("test")
 class PlaintextAtRestScanIntegrationTest {
@@ -167,11 +163,6 @@ class PlaintextAtRestScanIntegrationTest {
      * The test posts the full card through the real HTTP stack (so Jackson's binding is what is
      * actually under test) and asserts the 400 AND that the private material reached no column and
      * no log line.
-     *
-     * Note the ordering this pins down: the private-key check runs before the issuer/signature
-     * checks, so a card carrying key material is rejected even when its signature is garbage. A
-     * rejection that depended on the signature being valid first would leave a hole — anyone could
-     * post an unsigned card full of private key material and have the server parse it.
      */
     @Test
     void aCardCarryingAPrivateKeyIsRejectedAndNothingIsWritten() {
@@ -194,11 +185,6 @@ class PlaintextAtRestScanIntegrationTest {
                                         "label", "Bob's audit key",
                                         "assurance", "PORTABLE",
                                         "createdAt", "2026-07-14T10:15:30Z"),
-                                "issuer", Map.of(
-                                        "issuerId", "reeve-indexer-test",
-                                        "algorithm", "Ed25519",
-                                        "publicKey", "f".repeat(64)),
-                                "signature", "a".repeat(128),
                                 // the section the client was supposed to strip
                                 "privateKey", Map.of(
                                         "algorithm", "AES-256-GCM",

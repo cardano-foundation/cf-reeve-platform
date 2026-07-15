@@ -32,7 +32,6 @@ public class RecipientResolutionService {
 
     private final VaultKeyRepository keyRepository;
     private final KeycloakSecurityHelper securityHelper;
-    private final KeyCardVerifier cardVerifier;
 
     public Either<ProblemDetail, List<RecipientKeyView>> resolve(ResolveRecipientsRequest request) {
         String organisationId = request.getOrganisationId();
@@ -45,16 +44,7 @@ public class RecipientResolutionService {
         Set<String> wanted = new HashSet<>(request.getRecipientAccountIds());
         wanted.add(senderId);
 
-        // The kill switch, applied where it matters most (contract §2.8.5): a key whose issuer has been
-        // de-trusted is not a wrap target. This is the ONE place a hostile injected key would otherwise
-        // earn a slot in every future document addressed to its subject — resolve includes ALL of a
-        // recipient's keys, so a substituted key rides along silently unless it is dropped here.
-        // A PORTABLE key from a compromised issuer must be assumed known to the attacker (that issuer
-        // minted it), so the sender's own keys are filtered too — no exception for the caller.
-        List<VaultKeyEntity> keys = keyRepository.findByAccountIdInAndOrganisationId(wanted, organisationId)
-                .stream()
-                .filter(key -> cardVerifier.isTrustedIssuer(key.getIssuerId()))
-                .toList();
+        List<VaultKeyEntity> keys = keyRepository.findByAccountIdInAndOrganisationId(wanted, organisationId);
 
         Set<String> accountsWithKeys = new HashSet<>(keys.stream().map(VaultKeyEntity::getAccountId).toList());
         List<String> missingRecipients = request.getRecipientAccountIds().stream()

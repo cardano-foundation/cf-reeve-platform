@@ -18,6 +18,5 @@ public record RecipientKeyView(String accountId,
                                String label,
                                KeyAssurance assurance,
                                KeyOrigin origin,
-                               String issuerId,
                                boolean external) {
 }

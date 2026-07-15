@@ -79,8 +79,6 @@ class VaultDocumentServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
     @Mock
-    private KeyCardVerifier cardVerifier;
-    @Mock
     private ObjectProvider<IpfsAvailability> ipfsAvailability;
 
     @InjectMocks
@@ -93,9 +91,6 @@ class VaultDocumentServiceTest {
         // lenient: STRICT_STUBS would fail early-return tests that never consume these
         lenient().when(securityHelper.getCurrentUserId()).thenReturn("sender");
         lenient().when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        // default: issuers are trusted. Mockito's `false` would make every slot key look de-trusted
-        // and fail the upload tests for a reason that has nothing to do with what they test.
-        lenient().when(cardVerifier.isTrustedIssuer(any())).thenReturn(true);
     }
 
     @AfterEach
@@ -103,23 +98,6 @@ class VaultDocumentServiceTest {
         // hasAdminRole() reads SecurityContextHolder directly; a test that populates it must not
         // let that authentication leak into the next test in this class (or another class).
         SecurityContextHolder.clearContext();
-    }
-
-    /** The stale-client window: the addressbook was cached before the issuer was de-trusted. */
-    @Test
-    void uploadRejectsASlotWrappedToAKeyFromADeTrustedIssuer() {
-        VaultKeyEntity hostile = orgKey("k-s", "sender", "org1");
-        hostile.setOrigin(KeyOrigin.INDEXER_ISSUED);
-        hostile.setIssuerId("compromised-issuer");
-        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(new Organisation()));
-        when(keyRepository.findAllById(any())).thenReturn(List.of(hostile));
-        when(cardVerifier.isTrustedIssuer("compromised-issuer")).thenReturn(false);
-
-        Either<ProblemDetail, DocumentUploadedView> result = service.upload(request());
-
-        assertTrue(result.isLeft());
-        assertEquals(VaultProblems.SLOT_KEY_INVALID, result.getLeft().getTitle());
-        verify(documentRepository, never()).save(any());
     }
 
     private VaultKeyEntity orgKey(String id, String accountId, String org) {

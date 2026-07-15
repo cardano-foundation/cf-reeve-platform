@@ -48,14 +48,7 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
      * SELECTs every matching row into the persistence context and removes them one-by-one inside
      * one long transaction, which is slow and lock-heavy against a real backlog.
      *
-     * <p><b>Slot cleanup relies on the database, not JPA:</b> {@link VaultDocumentEntity#getSlots()}
-     * is an {@code @ElementCollection} backed by {@code document_vault_document_slot}. A bulk JPQL
-     * delete does NOT cascade to element-collection tables — Hibernate never sees the parent rows
-     * being removed, so it can't fire its usual orphan cleanup. This is safe here because the
-     * {@code document_vault_document_slot.document_id} FK is declared {@code ON DELETE CASCADE}
-     * (see V1.6_100_13__lob_service_app_document_vault_module.sql), so PostgreSQL removes the slot
-     * rows itself when the parent document row is deleted. If that FK ever loses its cascade, this
-     * bulk delete would silently orphan slot rows.
+
      */
     @Modifying
     @Query("delete from document_vault.VaultDocumentEntity d where d.status = :status and d.createdAt < :cutoff")
@@ -75,18 +68,6 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
      * sweep would materialize every stuck document's ciphertext in one go against a large backlog.
      * {@code DocumentDispatchRetryJob} passes a fixed-size page so a backlog is drained across ticks
      * instead of all at once.
-     *
-     * <p><b>Retry-cursor ordering (Codex adversarial-review finding, round 3 — retry-sweep
-     * starvation):</b> ordered by {@code dispatchRetryAt} ascending with NULLS FIRST, then {@code
-     * publishedAt} ascending. {@code PUBLISHED}/{@code MARK_DISPATCH} is a legitimate resting state
-     * while downstream dispatch is still in progress, not just a crash symptom — a row's ledger
-     * status can sit at {@code MARK_DISPATCH} for a long time without anything being wrong. Ordering
-     * purely by {@code publishedAt} would let the same oldest rows monopolize every sweep forever,
-     * starving younger stuck documents whose in-memory handoff was actually lost. {@code
-     * DocumentDispatchRetryJob} stamps {@code dispatchRetryAt} on every row it (re-)attempts, so the
-     * NULLS-FIRST ordering always tries never-yet-attempted documents first and rotates already
-     * attempted rows to the back — fairness comes from this cursor, never from waiting on {@link
-     * VaultDocumentEntity#getLedgerDispatchStatus()} to advance.
      *
      * <p>Explicit JPQL {@code order by} rather than a {@link org.springframework.data.domain.Sort}
      * folded into {@code pageable}: NULLS FIRST must apply to exactly one of the two sort keys,
