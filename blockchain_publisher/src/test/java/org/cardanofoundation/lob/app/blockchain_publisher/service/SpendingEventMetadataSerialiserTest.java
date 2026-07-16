@@ -185,6 +185,24 @@ class SpendingEventMetadataSerialiserTest {
     }
 
     @Test
+    void testSerialiseSpendingEvent_currencyKeysOmitted_whenCurrenciesNull() {
+        // Both currency_rcy and currency_fcy are guarded by a null check, not just null-valued when
+        // absent — the on-chain schema forbids unknown/null-valued keys ("additionalProperties": false).
+        SpendingEventEntity event = spendingEvent();
+        event.setCurrencyRcy(null);
+        event.setCurrencyRcyId(null);
+        event.setCurrencyFcy(null);
+        event.setCurrencyFcyId(null);
+
+        MetadataMap result = serialiser.serialiseToMetadataMap(Set.of(event), 12345L);
+        CBORMetadataList dataList = (CBORMetadataList) result.get("data");
+        MetadataMap eventMap = (MetadataMap) dataList.getValueAt(0);
+
+        assertThat(eventMap.get("currency_rcy")).isNull();
+        assertThat(eventMap.get("currency_fcy")).isNull();
+    }
+
+    @Test
     void testSerialiseFundingEvent_milestoneHasAllocatedAmountOnly() {
         MetadataMap result = serialiser.serialiseToMetadataMap(Set.of(fundingEvent()), 12345L);
         CBORMetadataList dataList = (CBORMetadataList) result.get("data");
@@ -195,6 +213,10 @@ class SpendingEventMetadataSerialiserTest {
         // The event date is now serialised for every event type, not just SPENDING.
         assertThat(eventMap.get("date")).isEqualTo("2025-01-15");
         assertThat(eventMap.get("item")).isNull();
+        // FUNDING events carry no spend detail, but the reporting currency must still be published —
+        // it must not be dropped, and no spend (foreign) currency must leak onto a FUNDING event.
+        assertThat(((MetadataMap) eventMap.get("currency_rcy")).get("cust_code")).isEqualTo("USD");
+        assertThat(eventMap.get("currency_fcy")).isNull();
 
         // Direct allocation: no sub_project object, milestones at the project level.
         CBORMetadataList allocationList = (CBORMetadataList) eventMap.get("allocation");

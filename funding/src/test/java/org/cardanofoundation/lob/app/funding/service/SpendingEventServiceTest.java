@@ -276,13 +276,19 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_returnsLeft_whenFxRateDoesNotMatch() {
+    void create_succeeds_whenFxRateDoesNotMatchAmounts() {
+        // The fxRate/amountFcy/amountRcy consistency check was intentionally removed — an inconsistent
+        // fxRate (50000 * 3 = 150000 != amountFcy 100000) no longer blocks event creation.
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
         SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
-        request.setFxRate(new BigDecimal("3")); // 50000 * 3 = 150000 != amountFcy 100000
+        request.setFxRate(new BigDecimal("3"));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FX_RATE_MISMATCH);
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getFxRate()).isEqualByComparingTo("3");
     }
 
     @Test
@@ -748,6 +754,21 @@ class SpendingEventServiceTest {
         assertThat(allocation.getSubProject()).isNull();
         SpendingEventPublishView.Milestone m = allocation.getMilestones().get(0);
         assertThat(m.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
+    }
+
+    @Test
+    void toPublishView_fundingEvent_hasReportingCurrencyOnly() {
+        // FUNDING events carry no spend detail: currencyRcy (reporting) must still be published,
+        // and currencyFcy (spend currency) must stay null since there is no spend to convert.
+        FundingEventEntity event = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 15, 10, 0));
+        event.setTotalAmount(new BigDecimal("300.00"));
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getCurrencyRcy().getCustCode()).isEqualTo("USD");
+        assertThat(view.getCurrencyFcy()).isNull();
     }
 
     @Test

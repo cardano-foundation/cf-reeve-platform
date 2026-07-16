@@ -189,9 +189,29 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendDetail_rejected_whenFxRateMismatch() {
-        // FX rate consistency check has been removed - this test is no longer applicable
-        // The method now only requires the presence of the fields, not their consistency
+    void spendDetail_required_whenCurrencyRcyMissing() {
+        // amountFcy/amountRcy/fxRate/currencyFcy present, currencyRcy (the last positional arg before hash) absent
+        assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2"),
+                new BigDecimal("50000"), null, null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_required_whenCurrencyFcyMissing() {
+        assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
+                new BigDecimal("50000"), "USD", null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_allowed_whenFxRateInconsistentWithAmounts() {
+        // The fxRate/amountFcy/amountRcy consistency check was intentionally removed: the method now
+        // only requires the fields to be present, not internally consistent (100000 != 50000 * 2.5).
+        assertThat(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2.5"),
+                new BigDecimal("50000"), "USD", null, null)).isEmpty();
     }
 
     @Test

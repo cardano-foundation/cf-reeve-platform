@@ -99,6 +99,10 @@ class SpendingEventConverterTest {
         assertEquals("ISO_4217:USD", entity.getCurrencyRcyId());
         assertEquals("org1", entity.getOrganisationId());
         assertEquals(Optional.of(BlockchainPublishStatus.STORED), entity.getL1SubmissionData().flatMap(d -> d.getPublishStatus()));
+        // FUNDING events carry no spend detail: the spend (foreign) currency must stay unset —
+        // it must not be confused with, or leak from, the reporting currency above.
+        assertThat(entity.getCurrencyFcy()).isNull();
+        assertThat(entity.getCurrencyFcyId()).isNull();
     }
 
     @Test
@@ -130,6 +134,10 @@ class SpendingEventConverterTest {
         assertEquals(new BigDecimal("85.00"), entity.getAmountRcy());
         assertEquals("EUR", entity.getCurrencyFcy());
         assertEquals("ISO_4217:EUR", entity.getCurrencyFcyId());
+        // The reporting currency (currencyRcy=USD) and the spend currency (currencyFcy=EUR) are
+        // distinct fields that must both survive the conversion side by side, unmixed.
+        assertEquals("USD", entity.getCurrencyRcy());
+        assertEquals("ISO_4217:USD", entity.getCurrencyRcyId());
         assertEquals(new BigDecimal("0.85"), entity.getFxRate());
         assertEquals("hash-1", entity.getDocumentHash());
 
