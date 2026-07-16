@@ -42,7 +42,7 @@ public class MilestoneController {
                     schema = @Schema(implementation = PagedResponse.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<MilestoneView>> listMilestones(
             @PathVariable String projectId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
@@ -54,7 +54,7 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<MilestoneView> getMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId) {
