@@ -137,7 +137,8 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(eventMap.get("hash")).isEqualTo("doc-hash-1");
         assertThat(eventMap.get("notes")).isEqualTo("Invoice #1");
         assertThat(eventMap.get("date")).isEqualTo("2025-04-03");
-        assertThat(((MetadataMap) eventMap.get("currency")).get("cust_code")).isEqualTo("EUR");
+        assertThat(((MetadataMap) eventMap.get("currency")).get("cust_code")).isEqualTo("USD");
+        assertThat(((MetadataMap) eventMap.get("spend_currency")).get("cust_code")).isEqualTo("EUR");
 
         // Sub-project allocation: project_id/project_title carry the root; the sub-project's own
         // id/title/milestones are nested under sub_project, and there are no project-level milestones.

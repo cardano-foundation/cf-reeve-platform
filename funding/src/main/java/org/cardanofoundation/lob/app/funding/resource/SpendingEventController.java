@@ -120,165 +120,70 @@ public class SpendingEventController {
                             schema = @Schema(implementation = SpendingEventCreateRequest.class),
                             examples = {
                                     @ExampleObject(
-                                            name = "FUNDING – new project, new milestone",
-                                            summary = "Create project PROJ-AB and milestone MS-001 on-the-fly while allocating funding",
-                                            value = """
-                                                    {
-                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "FUNDING",
-                                                      "fundingId": "GRANT-2025-001",
-                                                      "fundingHash": "2736ff28abc1234567890abcdef",
-                                                      "fundingEntity": "Cardano Foundation",
-                                                      "currency": "USD",
-                                                      "eventDate": "2026-01-15",
-                                                      "allocations": [
-                                                        {
-                                                          "fundingId": "GRANT-2025-001-AB",
-                                                          "externalProjectId": "PROJ-AB",
-                                                          "projectTitle": "Project AB",
-                                                          "totalAmount": "200000.00",
-                                                          "currency": "USD",
-                                                          "milestones": [
-                                                            {
-                                                              "milestone": {
-                                                                "externalMilestoneId": "MS-001",
-                                                                "milestoneTitle": "Milestone 1",
-                                                                "milestoneAmount": "100000.00",
-                                                                "currency": "USD",
-                                                                "milestoneDate": "2026-12-31"
-                                                              },
-                                                              "allocatedAmount": "100000.00"
-                                                            }
-                                                          ]
-                                                        }
-                                                      ]
-                                                    }"""
-                                    ),
-                                    @ExampleObject(
-                                            name = "FUNDING – existing project, existing milestone",
-                                            summary = "Reference PROJ-AB and MS-001 created in the previous FUNDING event",
-                                            value = """
-                                                    {
-                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "FUNDING",
-                                                      "fundingId": "GRANT-2025-002",
-                                                      "fundingHash": "9a1b2c3d4e5f6789",
-                                                      "fundingEntity": "Cardano Foundation",
-                                                      "currency": "USD",
-                                                      "allocations": [
-                                                        {
-                                                          "externalProjectId": "PROJ-AB",
-                                                          "milestones": [
-                                                            {
-                                                              "milestone": { "externalMilestoneId": "MS-001" },
-                                                              "allocatedAmount": "50000.00"
-                                                            }
-                                                          ]
-                                                        }
-                                                      ]
-                                                    }"""
-                                    ),
-                                    @ExampleObject(
-                                            name = "SPENDING – new project, new milestone",
-                                            summary = "Create project PROJ-CD and milestone MS-001 on-the-fly while recording spending",
+                                            name = "SPENDING – project tree with sub-projects and milestones",
+                                            summary = "Creates project \"project1\" with sub-projects \"sub1\"/\"sub2\" and milestones \"mil1\"/\"mil2\"/\"mil3\" on-the-fly while recording spending",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
                                                       "eventType": "SPENDING",
-                                                      "fundingId": "GRANT-2025-001",
-                                                      "currency": "USD",
-                                                      "category": "Infrastructure",
-                                                      "vendor": "Cloud Co.",
-                                                      "amountFcy": "2500.00",
+                                                      "fundingId": "1234",
+                                                      "fundingHash": "45646",
+                                                      "currency": "EUR",
+                                                      "eventDate": "2026-07-17",
+                                                      "amountFcy": "20000.00",
                                                       "spendCurrency": "USD",
-                                                      "fxRate": "1.00",
-                                                      "amountRcy": "2500.00",
-                                                      "eventDate": "2026-05-01",
-                                                      "notes": "Monthly hosting",
+                                                      "fxRate": "0.5",
+                                                      "amountRcy": "10000.00",
                                                       "allocations": [
                                                         {
-                                                          "fundingId": "GRANT-2025-001-CD",
-                                                          "externalProjectId": "PROJ-CD",
-                                                          "projectTitle": "Project CD",
-                                                          "totalAmount": "100000.00",
-                                                          "currency": "USD",
-                                                          "milestones": [
-                                                            {
-                                                              "milestone": {
-                                                                "externalMilestoneId": "MS-001",
-                                                                "milestoneTitle": "Milestone 1",
-                                                                "milestoneAmount": "50000.00",
-                                                                "currency": "USD",
-                                                                "milestoneDate": "2026-09-30"
-                                                              },
-                                                              "allocatedAmount": "2500.00"
-                                                            }
-                                                          ]
-                                                        }
-                                                      ]
-                                                    }"""
-                                    ),
-                                    @ExampleObject(
-                                            name = "SPENDING – sub-project tree + multi-milestone",
-                                            summary = "SPENDING creating sub-project WP-1 with three milestones on-the-fly",
-                                            value = """
-                                                    {
-                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "SPENDING",
-                                                      "fundingId": "GRANT-2025-001",
-                                                      "currency": "USD",
-                                                      "category": "Personnel",
-                                                      "vendor": "Contractor A",
-                                                      "amountFcy": "200000.00",
-                                                      "spendCurrency": "USD",
-                                                      "fxRate": "1.00",
-                                                      "amountRcy": "200000.00",
-                                                      "eventDate": "2026-04-01",
-                                                      "hash": "sha256:aabbcc112233",
-                                                      "notes": "Invoice #INV-2026-101",
-                                                      "allocations": [
-                                                        {
-                                                          "fundingId": "GRANT-2025-001-GH",
-                                                          "externalProjectId": "PROJ-GH",
-                                                          "projectTitle": "Project GH",
-                                                          "totalAmount": "300000.00",
-                                                          "currency": "USD",
+                                                          "externalProjectId": "47014cf0-4088-4a1f-b3fa-d80903b92b37",
+                                                          "projectTitle": "project1",
+                                                          "totalAmount": "10000.00",
+                                                          "currency": "EUR",
                                                           "subProjects": [
                                                             {
-                                                              "externalProjectId": "WP-1",
-                                                              "projectTitle": "Work Package 1",
-                                                              "totalAmount": "200000.00",
-                                                              "currency": "USD",
+                                                              "externalProjectId": "98b68eb1-ae19-4421-bee2-3259f5aa24ab",
+                                                              "projectTitle": "sub1",
+                                                              "totalAmount": "5000.00",
+                                                              "currency": "EUR",
                                                               "milestones": [
                                                                 {
                                                                   "milestone": {
-                                                                    "externalMilestoneId": "MS-001",
-                                                                    "milestoneTitle": "Deliverable 1 – Design",
-                                                                    "milestoneAmount": "50000.00",
-                                                                    "currency": "USD",
-                                                                    "milestoneDate": "2026-06-30"
+                                                                    "externalMilestoneId": "4f5413fc-88af-43e7-8df5-1dcfade98b59",
+                                                                    "milestoneTitle": "mil1",
+                                                                    "milestoneAmount": "2500.00",
+                                                                    "currency": "EUR",
+                                                                    "milestoneDate": "2026-07-17"
                                                                   },
-                                                                  "allocatedAmount": "50000.00"
+                                                                  "allocatedAmount": "2500.00"
                                                                 },
                                                                 {
                                                                   "milestone": {
-                                                                    "externalMilestoneId": "MS-002",
-                                                                    "milestoneTitle": "Deliverable 2 – Implementation",
-                                                                    "milestoneAmount": "100000.00",
-                                                                    "currency": "USD",
-                                                                    "milestoneDate": "2026-09-30"
+                                                                    "externalMilestoneId": "3c7a48e6-223c-44de-a075-ca41dff63038",
+                                                                    "milestoneTitle": "mil2",
+                                                                    "milestoneAmount": "2500.00",
+                                                                    "currency": "EUR",
+                                                                    "milestoneDate": "2026-07-18"
                                                                   },
-                                                                  "allocatedAmount": "100000.00"
-                                                                },
+                                                                  "allocatedAmount": "2500.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "externalProjectId": "82d7d217-980a-4138-b3ae-871c8c5f7bd8",
+                                                              "projectTitle": "sub2",
+                                                              "totalAmount": "5000.00",
+                                                              "currency": "EUR",
+                                                              "milestones": [
                                                                 {
                                                                   "milestone": {
-                                                                    "externalMilestoneId": "MS-003",
-                                                                    "milestoneTitle": "Deliverable 3 – Audit & Closeout",
-                                                                    "milestoneAmount": "50000.00",
-                                                                    "currency": "USD",
-                                                                    "milestoneDate": "2026-12-31"
+                                                                    "externalMilestoneId": "3f3c7c12-5214-4f62-ab1a-ae55cefdaff1",
+                                                                    "milestoneTitle": "mil3",
+                                                                    "milestoneAmount": "5000.00",
+                                                                    "currency": "EUR",
+                                                                    "milestoneDate": "2026-07-26"
                                                                   },
-                                                                  "allocatedAmount": "50000.00"
+                                                                  "allocatedAmount": "5000.00"
                                                                 }
                                                               ]
                                                             }
@@ -288,33 +193,42 @@ public class SpendingEventController {
                                                     }"""
                                     ),
                                     @ExampleObject(
-                                            name = "REFUND – new project, new milestone",
-                                            summary = "Create project PROJ-EF and milestone MS-001 on-the-fly while recording a refund",
+                                            name = "FUNDING – allocate to the existing project tree",
+                                            summary = "Allocates funding to the existing \"project1\" / \"sub1\" / \"sub2\" project tree and its milestones created by the SPENDING example above",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "eventType": "REFUND",
-                                                      "fundingId": "GRANT-2025-001",
-                                                      "fundingHash": "refund-tx-hash-abc123",
-                                                      "currency": "USD",
-                                                      "eventDate": "2026-06-01",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "1234",
+                                                      "fundingHash": "tttt55656",
+                                                      "fundingEntity": "1222",
+                                                      "currency": "EUR",
+                                                      "eventDate": "2026-07-18",
                                                       "allocations": [
                                                         {
-                                                          "fundingId": "GRANT-2025-001-EF",
-                                                          "externalProjectId": "PROJ-EF",
-                                                          "projectTitle": "Project EF",
-                                                          "totalAmount": "80000.00",
-                                                          "currency": "USD",
-                                                          "milestones": [
+                                                          "externalProjectId": "47014cf0-4088-4a1f-b3fa-d80903b92b37",
+                                                          "subProjects": [
                                                             {
-                                                              "milestone": {
-                                                                "externalMilestoneId": "MS-001",
-                                                                "milestoneTitle": "Final Milestone",
-                                                                "milestoneAmount": "80000.00",
-                                                                "currency": "USD",
-                                                                "milestoneDate": "2026-12-31"
-                                                              },
-                                                              "allocatedAmount": "5000.00"
+                                                              "externalProjectId": "98b68eb1-ae19-4421-bee2-3259f5aa24ab",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "externalMilestoneId": "4f5413fc-88af-43e7-8df5-1dcfade98b59" },
+                                                                  "allocatedAmount": "2500.00"
+                                                                },
+                                                                {
+                                                                  "milestone": { "externalMilestoneId": "3c7a48e6-223c-44de-a075-ca41dff63038" },
+                                                                  "allocatedAmount": "2500.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "externalProjectId": "82d7d217-980a-4138-b3ae-871c8c5f7bd8",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "externalMilestoneId": "3f3c7c12-5214-4f62-ab1a-ae55cefdaff1" },
+                                                                  "allocatedAmount": "5000.00"
+                                                                }
+                                                              ]
                                                             }
                                                           ]
                                                         }

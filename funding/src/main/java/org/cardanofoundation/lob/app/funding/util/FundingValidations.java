@@ -137,7 +137,7 @@ public final class FundingValidations {
             String hash, String notes) {
 
         boolean anySpendField = category != null || vendor != null || amountFcy != null || spendCurrency != null
-                || fxRate != null || amountRcy != null || hash != null || notes != null || currency != null;
+                || fxRate != null || amountRcy != null || hash != null || notes != null;
 
         if (eventType != EventType.SPENDING) {
             if (anySpendField) {
