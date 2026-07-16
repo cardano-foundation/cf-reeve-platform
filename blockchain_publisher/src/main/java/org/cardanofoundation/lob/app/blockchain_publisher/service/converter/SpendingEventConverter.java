@@ -44,16 +44,16 @@ public class SpendingEventConverter {
         entity.setFundingEntity(view.getFundingEntity());
 
         entity.setTotalAmount(orZero(view.getAmount()));
-        entity.setCurrency(custCode(view.getCurrency()));
-        entity.setCurrencyId(currencyId(view.getCurrency()));
+        entity.setCurrencyRcy(custCode(view.getCurrencyRcy()));
+        entity.setCurrencyRcyId(currencyId(view.getCurrencyRcy()));
 
         // Spend detail lives on the event now (SPENDING events only).
         entity.setCategory(view.getCategory());
         entity.setVendor(view.getVendor());
         entity.setAmountFcy(view.getAmountFcy());
         entity.setAmountRcy(view.getAmountRcy());
-        entity.setSpendCurrency(custCode(view.getSpendCurrency()));
-        entity.setSpendCurrencyId(currencyId(view.getSpendCurrency()));
+        entity.setCurrencyFcy(custCode(view.getCurrencyFcy()));
+        entity.setCurrencyFcyId(currencyId(view.getCurrencyFcy()));
         entity.setFxRate(view.getFxRate());
         entity.setDocumentHash(view.getDocumentHash());
         entity.setNotes(view.getNotes());

@@ -96,8 +96,8 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
     @NotBlank
-    @Column(name = "currency", nullable = false)
-    private String currency;
+    @Column(name = "currency_rcy", nullable = false)
+    private String currencyRcy;
 
     /** Event date. Applies to all event types; for a SPENDING event this is the spend date. */
     @Nullable
@@ -124,10 +124,10 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "amount_rcy")
     private BigDecimal amountRcy;
 
-    /** Foreign currency of the spend (e.g. EUR); {@link #currency} is the reporting currency. */
+    /** Foreign currency of the spend (e.g. EUR); {@link #currencyRcy} is the reporting currency. */
     @Nullable
-    @Column(name = "spend_currency")
-    private String spendCurrency;
+    @Column(name = "currency_fcy")
+    private String currencyFcy;
 
     @Nullable
     @Column(name = "fx_rate")
@@ -165,13 +165,13 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
                             EventType eventType,
                             String fundingId,
                             String fundingHash,
-                            String currency) {
+                            String currencyRcy) {
         return SHA3.digestAsHex("%s::%s::%s::%s::%s".formatted(
                 organisationId,
                 eventType,
                 fundingId,
                 fundingHash == null ? "" : fundingHash,
-                currency));
+                currencyRcy));
     }
 
 }

@@ -166,43 +166,60 @@ class FundingValidationsTest {
                 .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
     }
 
-    // --- spendDetail(eventType, category, vendor, amountFcy, spendCurrency, fxRate, amountRcy, hash, notes) ---
+    // --- spendDetail(eventType, category, vendor, amountFcy, currencyFcy, fxRate, amountRcy, currencyRcy, hash, notes) ---
 
     @Test
     void spendDetail_rejected_whenSpendFieldsOnNonSpendingEvent() {
         assertThat(title(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, new BigDecimal("100000"), null, null, null, null, null)))
+                null, null, new BigDecimal("100000"), null, null, null, null, null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED);
     }
 
     @Test
     void spendDetail_allowed_whenNonSpendingEventHasNoSpendFields() {
         assertThat(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, null, null, null, null, null, null)).isEmpty();
+                null, null, null, null, null, null, null, null, null)).isEmpty();
     }
 
     @Test
     void spendDetail_required_forSpendingEvent() {
         assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
-                "Personnel", "Vendor", null, "EUR", null, null, null, null)))
+                "Personnel", "Vendor", null, "EUR", null, null, null, null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
     }
 
     @Test
-    void spendDetail_rejected_whenFxRateMismatch() {
-        // amountFcy (100000) != amountRcy (50000) * fxRate (3)
+    void spendDetail_required_whenCurrencyRcyMissing() {
+        // amountFcy/amountRcy/fxRate/currencyFcy present, currencyRcy (the last positional arg before hash) absent
         assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
-                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("3"),
-                new BigDecimal("50000"), null, null)))
-                .isEqualTo(ErrorTitleConstants.FX_RATE_MISMATCH);
+                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2"),
+                new BigDecimal("50000"), null, null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_required_whenCurrencyFcyMissing() {
+        assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
+                new BigDecimal("50000"), "USD", null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_allowed_whenFxRateInconsistentWithAmounts() {
+        // The fxRate/amountFcy/amountRcy consistency check was intentionally removed: the method now
+        // only requires the fields to be present, not internally consistent (100000 != 50000 * 2.5).
+        assertThat(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2.5"),
+                new BigDecimal("50000"), "USD", null, null)).isEmpty();
     }
 
     @Test
     void spendDetail_valid_forConsistentSpend() {
-        // amountFcy (100000) == amountRcy (50000) * fxRate (2)
+        // All required fields are present - validation passes
         assertThat(FundingValidations.spendDetail(EventType.SPENDING,
                 "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2"),
-                new BigDecimal("50000"), null, null)).isEmpty();
+                new BigDecimal("50000"), "USD", null, null)).isEmpty();
     }
 
     @Test

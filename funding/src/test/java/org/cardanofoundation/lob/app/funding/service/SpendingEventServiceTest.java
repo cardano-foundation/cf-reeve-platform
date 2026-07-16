@@ -265,7 +265,7 @@ class SpendingEventServiceTest {
     void create_returnsLeft_whenSpendingEventMissingSpendFields() {
         // SPENDING event with allocations but no amountFcy/amountRcy/fxRate on the event.
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
-                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currencyRcy("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .externalProjectId("PROJ-AB").milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
                 .build();
@@ -276,13 +276,19 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_returnsLeft_whenFxRateDoesNotMatch() {
+    void create_succeeds_whenFxRateDoesNotMatchAmounts() {
+        // The fxRate/amountFcy/amountRcy consistency check was intentionally removed — an inconsistent
+        // fxRate (50000 * 3 = 150000 != amountFcy 100000) no longer blocks event creation.
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
         SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
-        request.setFxRate(new BigDecimal("3")); // 50000 * 3 = 150000 != amountFcy 100000
+        request.setFxRate(new BigDecimal("3"));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FX_RATE_MISMATCH);
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getFxRate()).isEqualByComparingTo("3");
     }
 
     @Test
@@ -716,7 +722,7 @@ class SpendingEventServiceTest {
 
         assertThat(view.getEventId()).isEqualTo("e1");
         assertThat(view.getAmountFcy()).isEqualByComparingTo(AMOUNT_FCY);
-        assertThat(view.getSpendCurrency()).isEqualTo("EUR");
+        assertThat(view.getCurrencyFcy()).isEqualTo("EUR");
         assertThat(view.getVendor()).isEqualTo("Vendor AB");
         assertThat(view.getProjectAllocations()).hasSize(1);
         var mv = view.getProjectAllocations().get(0).getMilestoneAllocations().get(0);
@@ -738,9 +744,9 @@ class SpendingEventServiceTest {
 
         assertThat(view.getEventId()).isEqualTo("e1");
         assertThat(view.getEventDate()).isEqualTo(LocalDate.of(2025, 4, 3));
-        assertThat(view.getCurrency().getCustCode()).isEqualTo("USD");
+        assertThat(view.getCurrencyRcy().getCustCode()).isEqualTo("USD");
         assertThat(view.getAmountFcy()).isEqualByComparingTo(AMOUNT_FCY);
-        assertThat(view.getSpendCurrency().getCustCode()).isEqualTo("EUR");
+        assertThat(view.getCurrencyFcy().getCustCode()).isEqualTo("EUR");
         assertThat(view.getVendor()).isEqualTo("Vendor AB");
         assertThat(view.getProjectAllocations()).hasSize(1);
         // Direct allocation (project has no parent): milestones at the project level, no sub-project.
@@ -748,6 +754,21 @@ class SpendingEventServiceTest {
         assertThat(allocation.getSubProject()).isNull();
         SpendingEventPublishView.Milestone m = allocation.getMilestones().get(0);
         assertThat(m.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
+    }
+
+    @Test
+    void toPublishView_fundingEvent_hasReportingCurrencyOnly() {
+        // FUNDING events carry no spend detail: currencyRcy (reporting) must still be published,
+        // and currencyFcy (spend currency) must stay null since there is no spend to convert.
+        FundingEventEntity event = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        event.setCreatedAt(LocalDateTime.of(2025, 6, 15, 10, 0));
+        event.setTotalAmount(new BigDecimal("300.00"));
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
+
+        SpendingEventPublishView view = spendingEventService.toPublishView(event);
+
+        assertThat(view.getCurrencyRcy().getCustCode()).isEqualTo("USD");
+        assertThat(view.getCurrencyFcy()).isNull();
     }
 
     @Test
@@ -866,7 +887,7 @@ class SpendingEventServiceTest {
     void createEvent_returnsErrorView_whenCreateFails() {
         SpendingEventView result = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
-                .fundingEntity("Cardano Foundation").currency("USD")
+                .fundingEntity("Cardano Foundation").currencyRcy("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder().externalProjectId(null)
                         .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
                 .build());
@@ -877,7 +898,7 @@ class SpendingEventServiceTest {
     @Test
     void create_returnsLeft_whenFundingEventMissingFundingEntity() {
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
-                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currency("USD")
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currencyRcy("USD")
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .externalProjectId("PROJ-AB").milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
                 .build();
@@ -941,7 +962,7 @@ class SpendingEventServiceTest {
     private FundingEventEntity eventEntity(EventType type, EventStatus status) {
         return FundingEventEntity.builder()
                 .id("e1").eventType(type).status(status).organisationId("org1")
-                .fundingId("GRANT-2025-001").currency("USD").totalAmount(BigDecimal.ZERO).build();
+                .fundingId("GRANT-2025-001").currencyRcy("USD").totalAmount(BigDecimal.ZERO).build();
     }
 
     private ProjectEntity projectEntity() {
@@ -966,7 +987,7 @@ class SpendingEventServiceTest {
         event.setVendor("Vendor AB");
         event.setAmountFcy(AMOUNT_FCY);
         event.setAmountRcy(AMOUNT_RCY);
-        event.setSpendCurrency("EUR");
+        event.setCurrencyFcy("EUR");
         event.setFxRate(FX_RATE);
         event.setEventDate(LocalDate.of(2025, 4, 3));
         return event;
@@ -993,15 +1014,15 @@ class SpendingEventServiceTest {
     private SpendingEventCreateRequest fundingRequest(EventProjectAllocationRequest allocation) {
         return SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
-                .fundingEntity("Cardano Foundation").currency("USD")
+                .fundingEntity("Cardano Foundation").currencyRcy("USD")
                 .allocations(List.of(allocation)).build();
     }
 
     /** A SPENDING event request with event-level spend detail (consistent: 100000 = 50000 * 2). */
     private SpendingEventCreateRequest spendingRequest(EventMilestoneAllocationRequest milestone) {
         return SpendingEventCreateRequest.builder()
-                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currency("USD")
-                .category("Personnel").vendor("Vendor AB").amountFcy(AMOUNT_FCY).spendCurrency("EUR")
+                .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currencyRcy("USD")
+                .category("Personnel").vendor("Vendor AB").amountFcy(AMOUNT_FCY).currencyFcy("EUR")
                 .fxRate(FX_RATE).amountRcy(AMOUNT_RCY).eventDate(LocalDate.of(2025, 4, 3))
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .externalProjectId("PROJ-AB").milestones(List.of(milestone)).build()))

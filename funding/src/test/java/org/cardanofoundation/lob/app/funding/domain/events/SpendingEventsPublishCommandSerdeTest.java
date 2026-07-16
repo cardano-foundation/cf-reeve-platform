@@ -58,11 +58,11 @@ class SpendingEventsPublishCommandSerdeTest {
                 .fundingId("fund-1")
                 .fundingHash("ftx-1")
                 .amount(new BigDecimal("85.00"))
-                .currency(usd)
+                .currencyRcy(usd)
                 .category("Personnel")
                 .vendor("Vendor AB")
                 .amountFcy(new BigDecimal("100.00"))
-                .spendCurrency(eur)
+                .currencyFcy(eur)
                 .fxRate(new BigDecimal("0.85"))
                 .amountRcy(new BigDecimal("85.00"))
                 .documentHash("doc-hash-1")
@@ -88,7 +88,7 @@ class SpendingEventsPublishCommandSerdeTest {
         assertThat(resultView.getAmountFcy()).isEqualByComparingTo("100.00");
         assertThat(resultView.getAmountRcy()).isEqualByComparingTo("85.00");
         assertThat(resultView.getEventDate()).isEqualTo(LocalDate.of(2025, 4, 3));
-        assertThat(resultView.getSpendCurrency().getCustCode()).isEqualTo("EUR");
+        assertThat(resultView.getCurrencyFcy().getCustCode()).isEqualTo("EUR");
         assertThat(resultView.getVendor()).isEqualTo("Vendor AB");
 
         SpendingEventPublishView.Milestone resultMs = resultSub.getMilestones().get(0);
@@ -123,7 +123,7 @@ class SpendingEventsPublishCommandSerdeTest {
                 .eventDate(LocalDate.of(2025, 1, 15))
                 .fundingId("fund-1")
                 .amount(new BigDecimal("50.00"))
-                .currency(usd)
+                .currencyRcy(usd)
                 .projectAllocations(List.of(allocation))
                 .build();
 
