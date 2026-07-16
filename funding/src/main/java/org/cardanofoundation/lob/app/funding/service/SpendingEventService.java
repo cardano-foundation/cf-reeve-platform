@@ -202,7 +202,7 @@ public class SpendingEventService {
         event.setFundingId(request.getFundingId());
         event.setFundingHash(request.getFundingHash());
         event.setFundingEntity(request.getFundingEntity());
-        event.setCurrency(request.getCurrency());
+        event.setCurrencyRcy(request.getCurrencyRcy());
         event.setEventDate(request.getEventDate());
         applySpendDetail(event, request);
 
@@ -244,7 +244,7 @@ public class SpendingEventService {
         event.setVendor(request.getVendor());
         event.setAmountFcy(request.getAmountFcy());
         event.setAmountRcy(request.getAmountRcy());
-        event.setSpendCurrency(request.getSpendCurrency());
+        event.setCurrencyFcy(request.getCurrencyFcy());
         event.setFxRate(request.getFxRate());
         event.setHash(request.getHash());
         event.setNotes(request.getNotes());
@@ -252,8 +252,8 @@ public class SpendingEventService {
 
     private static Optional<ProblemDetail> validateEventSpendDetail(FundingEventEntity event) {
         return FundingValidations.spendDetail(event.getEventType(),
-                event.getCategory(), event.getVendor(), event.getAmountFcy(), event.getSpendCurrency(),
-                event.getFxRate(), event.getAmountRcy(),event.getCurrency(), event.getHash(), event.getNotes());
+                event.getCategory(), event.getVendor(), event.getAmountFcy(), event.getCurrencyFcy(),
+                event.getFxRate(), event.getAmountRcy(),event.getCurrencyRcy(), event.getHash(), event.getNotes());
     }
 
     private static Optional<ProblemDetail> validateEventTotals(FundingEventEntity event) {
@@ -304,7 +304,7 @@ public class SpendingEventService {
                 .status(event.getStatus())
                 .fundingId(event.getFundingId())
                 .totalAmount(event.getTotalAmount())
-                .currency(event.getCurrency())
+                .currencyRcy(event.getCurrencyRcy())
                 .txHash(event.getTxHash())
                 .ledgerDispatchStatus(event.getLedgerDispatchStatus())
                 .fundingHash(event.getFundingHash())
@@ -313,7 +313,7 @@ public class SpendingEventService {
                 .category(event.getCategory())
                 .vendor(event.getVendor())
                 .amountFcy(event.getAmountFcy())
-                .spendCurrency(event.getSpendCurrency())
+                .currencyFcy(event.getCurrencyFcy())
                 .fxRate(event.getFxRate())
                 .amountRcy(event.getAmountRcy())
                 .hash(event.getHash())
@@ -334,11 +334,11 @@ public class SpendingEventService {
                 .fundingHash(event.getFundingHash())
                 .fundingEntity(event.getFundingEntity())
                 .amount(event.getTotalAmount())
-                .currency(toCurrency(event.getCurrency()))
+                .currencyRcy(toCurrency(event.getCurrencyRcy()))
                 .category(event.getCategory())
                 .vendor(event.getVendor())
                 .amountFcy(event.getAmountFcy())
-                .spendCurrency(event.getSpendCurrency() != null ? toCurrency(event.getSpendCurrency()) : null)
+                .currencyFcy(event.getCurrencyFcy() != null ? toCurrency(event.getCurrencyFcy()) : null)
                 .fxRate(event.getFxRate())
                 .amountRcy(event.getAmountRcy())
                 .documentHash(event.getHash())
@@ -660,20 +660,20 @@ public class SpendingEventService {
                         request.getEventType(),
                         request.getFundingId(),
                         request.getFundingHash(),
-                        request.getCurrency()))
+                        request.getCurrencyRcy()))
                 .eventType(request.getEventType())
                 .status(EventStatus.DRAFT)
                 .organisationId(request.getOrganisationId())
                 .fundingId(request.getFundingId())
                 .fundingHash(request.getFundingHash())
                 .fundingEntity(request.getFundingEntity())
-                .currency(request.getCurrency())
+                .currencyRcy(request.getCurrencyRcy())
                 .eventDate(request.getEventDate())
                 .category(request.getCategory())
                 .vendor(request.getVendor())
                 .amountFcy(request.getAmountFcy())
                 .amountRcy(request.getAmountRcy())
-                .spendCurrency(request.getSpendCurrency())
+                .currencyFcy(request.getCurrencyFcy())
                 .fxRate(request.getFxRate())
                 .hash(request.getHash())
                 .notes(request.getNotes())

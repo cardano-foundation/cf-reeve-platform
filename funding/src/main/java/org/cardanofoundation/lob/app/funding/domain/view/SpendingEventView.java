@@ -42,7 +42,7 @@ public class SpendingEventView implements ErrorAware {
     private BigDecimal totalAmount;
 
     @Schema(example = "USD")
-    private String currency;
+    private String currencyRcy;
 
     @Nullable
     @Schema(example = "2736...FF28")
@@ -81,7 +81,7 @@ public class SpendingEventView implements ErrorAware {
 
     @Nullable
     @Schema(example = "EUR", description = "Foreign currency of the spend.")
-    private String spendCurrency;
+    private String currencyFcy;
 
     @Nullable
     @Schema(example = "1.176470")

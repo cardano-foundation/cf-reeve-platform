@@ -133,10 +133,10 @@ public final class FundingValidations {
     public static Optional<ProblemDetail> spendDetail(
             EventType eventType,
             String category, String vendor,
-            BigDecimal amountFcy, String spendCurrency, BigDecimal fxRate, BigDecimal amountRcy, String currency,
+            BigDecimal amountFcy, String currencyFcy, BigDecimal fxRate, BigDecimal amountRcy, String currencyRcy,
             String hash, String notes) {
 
-        boolean anySpendField = category != null || vendor != null || amountFcy != null || spendCurrency != null
+        boolean anySpendField = category != null || vendor != null || amountFcy != null || currencyFcy != null
                 || fxRate != null || amountRcy != null || hash != null || notes != null;
 
         if (eventType != EventType.SPENDING) {
@@ -149,9 +149,9 @@ public final class FundingValidations {
         }
 
         // SPENDING: the amount fields are required to record the spend.
-        if (amountFcy == null || amountRcy == null || fxRate == null || currency == null || spendCurrency == null) {
+        if (amountFcy == null || amountRcy == null || fxRate == null || currencyRcy == null || currencyFcy == null) {
             return Optional.of(Problems.badRequest(
-                    "amountFcy, amountRcy, currency, spendCurrency and fxRate are required for SPENDING events",
+                    "amountFcy, amountRcy, currencyRcy, currencyFcy and fxRate are required for SPENDING events",
                     ErrorTitleConstants.SPEND_FIELDS_REQUIRED));
         }
 

@@ -111,11 +111,11 @@ public class SpendingEventMetadataSerialiser {
         if (event.getNotes() != null) {
             metadataMap.put("notes", event.getNotes());
         }
-        if (event.getCurrency() != null) {
-            metadataMap.put("currency", serialiseCurrency(event.getCurrencyId(), event.getCurrency()));
+        if (event.getCurrencyRcy() != null) {
+            metadataMap.put("currency_rcy", serialiseCurrency(event.getCurrencyRcyId(), event.getCurrencyRcy()));
         }
-        if (event.getSpendCurrency() != null) {
-            metadataMap.put("spend_currency", serialiseCurrency(event.getSpendCurrencyId(), event.getSpendCurrency()));
+        if (event.getCurrencyFcy() != null) {
+            metadataMap.put("currency_fcy", serialiseCurrency(event.getCurrencyFcyId(), event.getCurrencyFcy()));
         }
 
         val allocationList = MetadataBuilder.createList();

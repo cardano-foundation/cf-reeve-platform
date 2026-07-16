@@ -82,7 +82,7 @@ class SpendingEventConverterTest {
                 .fundingHash("ftx-1")
                 .fundingEntity("Funding Entity")
                 .amount(new BigDecimal("123.45"))
-                .currency(usd())
+                .currencyRcy(usd())
                 .projectAllocations(List.of(allocation("proj-1", "Project One", List.of())))
                 .build();
 
@@ -95,8 +95,8 @@ class SpendingEventConverterTest {
         assertEquals("ftx-1", entity.getFundingTx());
         assertEquals("Funding Entity", entity.getFundingEntity());
         assertEquals(new BigDecimal("123.45"), entity.getTotalAmount());
-        assertEquals("USD", entity.getCurrency());
-        assertEquals("ISO_4217:USD", entity.getCurrencyId());
+        assertEquals("USD", entity.getCurrencyRcy());
+        assertEquals("ISO_4217:USD", entity.getCurrencyRcyId());
         assertEquals("org1", entity.getOrganisationId());
         assertEquals(Optional.of(BlockchainPublishStatus.STORED), entity.getL1SubmissionData().flatMap(d -> d.getPublishStatus()));
     }
@@ -114,10 +114,10 @@ class SpendingEventConverterTest {
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
                 .eventDate(LocalDate.of(2026, 6, 9)).fundingId("fund-1")
-                .amount(new BigDecimal("50.00")).currency(usd())
+                .amount(new BigDecimal("50.00")).currencyRcy(usd())
                 // spend detail — event level
                 .category("Personnel").vendor("Vendor AB").amountFcy(new BigDecimal("100.00"))
-                .spendCurrency(eur()).fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
+                .currencyFcy(eur()).fxRate(new BigDecimal("0.85")).amountRcy(new BigDecimal("85.00"))
                 .documentHash("hash-1").notes("note")
                 .projectAllocations(List.of(subProjectAllocation("proj-1", "Project One", "sub-1", "Sub One", List.of(milestone))))
                 .build();
@@ -128,8 +128,8 @@ class SpendingEventConverterTest {
         assertEquals("Vendor AB", entity.getVendor());
         assertEquals(new BigDecimal("100.00"), entity.getAmountFcy());
         assertEquals(new BigDecimal("85.00"), entity.getAmountRcy());
-        assertEquals("EUR", entity.getSpendCurrency());
-        assertEquals("ISO_4217:EUR", entity.getSpendCurrencyId());
+        assertEquals("EUR", entity.getCurrencyFcy());
+        assertEquals("ISO_4217:EUR", entity.getCurrencyFcyId());
         assertEquals(new BigDecimal("0.85"), entity.getFxRate());
         assertEquals("hash-1", entity.getDocumentHash());
 
@@ -159,7 +159,7 @@ class SpendingEventConverterTest {
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.FUNDING)
-                .currency(usd()).amount(new BigDecimal("100.00"))
+                .currencyRcy(usd()).amount(new BigDecimal("100.00"))
                 .projectAllocations(List.of(allocation("proj-1", "Project One", List.of(milestone))))
                 .build();
 
@@ -179,7 +179,7 @@ class SpendingEventConverterTest {
 
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.FUNDING)
-                .currency(usd()).amount(BigDecimal.ONE)
+                .currencyRcy(usd()).amount(BigDecimal.ONE)
                 .projectAllocations(List.of(
                         allocation("proj-1", "Project One", List.of()),
                         allocation("proj-2", "Project Two", List.of())))
@@ -197,7 +197,7 @@ class SpendingEventConverterTest {
         stubOrganisation();
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
-                .currency(usd()).amount(BigDecimal.ONE)
+                .currencyRcy(usd()).amount(BigDecimal.ONE)
                 .projectAllocations(null)
                 .build();
 
@@ -211,7 +211,7 @@ class SpendingEventConverterTest {
         stubOrganisation();
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
-                .currency(usd()).amount(null)
+                .currencyRcy(usd()).amount(null)
                 .projectAllocations(List.of())
                 .build();
 
@@ -221,18 +221,18 @@ class SpendingEventConverterTest {
     }
 
     @Test
-    void nullCurrency_nullCustCodeAndCurrencyId() {
+    void nullCurrencyRcy_nullCustCodeAndCurrencyRcyId() {
         stubOrganisation();
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("org1").eventType(EventType.SPENDING)
-                .currency(null).amount(BigDecimal.ONE)
+                .currencyRcy(null).amount(BigDecimal.ONE)
                 .projectAllocations(List.of())
                 .build();
 
         SpendingEventEntity entity = converter.convertToDbDetached("org1", view);
 
-        assertThat(entity.getCurrency()).isNull();
-        assertThat(entity.getCurrencyId()).isNull();
+        assertThat(entity.getCurrencyRcy()).isNull();
+        assertThat(entity.getCurrencyRcyId()).isNull();
     }
 
     @Test
@@ -240,7 +240,7 @@ class SpendingEventConverterTest {
         when(organisationPublicApi.findByOrganisationId("unknown")).thenReturn(Optional.empty());
         SpendingEventPublishView view = SpendingEventPublishView.builder()
                 .eventId("event-1").organisationId("unknown").eventType(EventType.SPENDING)
-                .currency(usd()).amount(BigDecimal.ONE)
+                .currencyRcy(usd()).amount(BigDecimal.ONE)
                 .projectAllocations(List.of())
                 .build();
 

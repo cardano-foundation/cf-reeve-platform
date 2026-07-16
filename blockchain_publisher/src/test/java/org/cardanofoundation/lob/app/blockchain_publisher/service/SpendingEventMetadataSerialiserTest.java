@@ -76,16 +76,16 @@ class SpendingEventMetadataSerialiserTest {
         event.setEventType(EventType.SPENDING);
         event.setFundingId("fund1");
         event.setFundingTx("ftx1");
-        event.setCurrency("USD");
-        event.setCurrencyId("ISO_4217:USD");
+        event.setCurrencyRcy("USD");
+        event.setCurrencyRcyId("ISO_4217:USD");
         event.setEventDate(LocalDate.of(2025, 4, 3));
         // Spend detail — event level.
         event.setCategory("Personnel");
         event.setVendor("Vendor AB");
         event.setAmountFcy(new BigDecimal("100.00"));
         event.setAmountRcy(new BigDecimal("85.00"));
-        event.setSpendCurrency("EUR");
-        event.setSpendCurrencyId("ISO_4217:EUR");
+        event.setCurrencyFcy("EUR");
+        event.setCurrencyFcyId("ISO_4217:EUR");
         event.setFxRate(new BigDecimal("0.85"));
         event.setDocumentHash("doc-hash-1");
         event.setNotes("Invoice #1");
@@ -137,8 +137,8 @@ class SpendingEventMetadataSerialiserTest {
         assertThat(eventMap.get("hash")).isEqualTo("doc-hash-1");
         assertThat(eventMap.get("notes")).isEqualTo("Invoice #1");
         assertThat(eventMap.get("date")).isEqualTo("2025-04-03");
-        assertThat(((MetadataMap) eventMap.get("currency")).get("cust_code")).isEqualTo("USD");
-        assertThat(((MetadataMap) eventMap.get("spend_currency")).get("cust_code")).isEqualTo("EUR");
+        assertThat(((MetadataMap) eventMap.get("currency_rcy")).get("cust_code")).isEqualTo("USD");
+        assertThat(((MetadataMap) eventMap.get("currency_fcy")).get("cust_code")).isEqualTo("EUR");
 
         // Sub-project allocation: project_id/project_title carry the root; the sub-project's own
         // id/title/milestones are nested under sub_project, and there are no project-level milestones.
@@ -176,8 +176,8 @@ class SpendingEventMetadataSerialiserTest {
         event.setFundingId("fund1");
         event.setFundingTx("ftx1");
         event.setFundingEntity("FundingEntity");
-        event.setCurrency("USD");
-        event.setCurrencyId("ISO_4217:USD");
+        event.setCurrencyRcy("USD");
+        event.setCurrencyRcyId("ISO_4217:USD");
         event.setEventDate(LocalDate.of(2025, 1, 15));
         event.setOrganisation(organisation());
         event.setProjectAllocations(List.of(allocation));

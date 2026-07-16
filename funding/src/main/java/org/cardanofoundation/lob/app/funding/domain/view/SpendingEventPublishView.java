@@ -36,7 +36,7 @@ public class SpendingEventPublishView {
     private String fundingEntity;
 
     private BigDecimal amount;
-    private Currency currency;
+    private Currency currencyRcy;
 
     // --- Spend detail: the event's single spend record. SPENDING events only. ---
     @Nullable
@@ -46,7 +46,7 @@ public class SpendingEventPublishView {
     @Nullable
     private BigDecimal amountFcy;
     @Nullable
-    private Currency spendCurrency;
+    private Currency currencyFcy;
     @Nullable
     private BigDecimal fxRate;
     @Nullable

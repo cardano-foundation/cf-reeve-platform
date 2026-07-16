@@ -128,10 +128,10 @@ public class SpendingEventController {
                                                       "eventType": "SPENDING",
                                                       "fundingId": "1234",
                                                       "fundingHash": "45646",
-                                                      "currency": "EUR",
+                                                      "currencyRcy": "EUR",
                                                       "eventDate": "2026-07-17",
                                                       "amountFcy": "20000.00",
-                                                      "spendCurrency": "USD",
+                                                      "currencyFcy": "USD",
                                                       "fxRate": "0.5",
                                                       "amountRcy": "10000.00",
                                                       "allocations": [
@@ -202,7 +202,7 @@ public class SpendingEventController {
                                                       "fundingId": "1234",
                                                       "fundingHash": "tttt55656",
                                                       "fundingEntity": "1222",
-                                                      "currency": "EUR",
+                                                      "currencyRcy": "EUR",
                                                       "eventDate": "2026-07-18",
                                                       "allocations": [
                                                         {
@@ -272,7 +272,7 @@ public class SpendingEventController {
                                                       "fundingId": "GRANT-2025-001",
                                                       "fundingHash": "updated-hash-abc",
                                                       "fundingEntity": "Cardano Foundation",
-                                                      "currency": "USD",
+                                                      "currencyRcy": "USD",
                                                       "allocations": [
                                                         {
                                                           "externalProjectId": "PROJ-AB",
