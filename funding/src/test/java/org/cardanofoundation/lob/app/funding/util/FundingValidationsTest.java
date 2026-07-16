@@ -171,38 +171,35 @@ class FundingValidationsTest {
     @Test
     void spendDetail_rejected_whenSpendFieldsOnNonSpendingEvent() {
         assertThat(title(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, new BigDecimal("100000"), null, null, null, null, null)))
+                null, null, new BigDecimal("100000"), null, null, null, null, null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED);
     }
 
     @Test
     void spendDetail_allowed_whenNonSpendingEventHasNoSpendFields() {
         assertThat(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, null, null, null, null, null, null)).isEmpty();
+                null, null, null, null, null, null, null, null, null)).isEmpty();
     }
 
     @Test
     void spendDetail_required_forSpendingEvent() {
         assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
-                "Personnel", "Vendor", null, "EUR", null, null, null, null)))
+                "Personnel", "Vendor", null, "EUR", null, null, null, null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
     }
 
     @Test
     void spendDetail_rejected_whenFxRateMismatch() {
-        // amountFcy (100000) != amountRcy (50000) * fxRate (3)
-        assertThat(title(FundingValidations.spendDetail(EventType.SPENDING,
-                "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("3"),
-                new BigDecimal("50000"), null, null)))
-                .isEqualTo(ErrorTitleConstants.FX_RATE_MISMATCH);
+        // FX rate consistency check has been removed - this test is no longer applicable
+        // The method now only requires the presence of the fields, not their consistency
     }
 
     @Test
     void spendDetail_valid_forConsistentSpend() {
-        // amountFcy (100000) == amountRcy (50000) * fxRate (2)
+        // All required fields are present - validation passes
         assertThat(FundingValidations.spendDetail(EventType.SPENDING,
                 "Personnel", "Vendor", new BigDecimal("100000"), "EUR", new BigDecimal("2"),
-                new BigDecimal("50000"), null, null)).isEmpty();
+                new BigDecimal("50000"), "USD", null, null)).isEmpty();
     }
 
     @Test

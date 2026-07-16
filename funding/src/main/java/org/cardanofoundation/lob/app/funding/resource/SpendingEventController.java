@@ -49,7 +49,7 @@ public class SpendingEventController {
                     schema = @Schema(implementation = PagedResponse.class))}),
     })
     @GetMapping(value = "/events", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<SpendingEventView>> listEvents(
             @RequestParam String organisationId,
             @RequestParam(required = false) Optional<EventStatus> status,

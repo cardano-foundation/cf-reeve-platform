@@ -253,7 +253,7 @@ public class SpendingEventService {
     private static Optional<ProblemDetail> validateEventSpendDetail(FundingEventEntity event) {
         return FundingValidations.spendDetail(event.getEventType(),
                 event.getCategory(), event.getVendor(), event.getAmountFcy(), event.getSpendCurrency(),
-                event.getFxRate(), event.getAmountRcy(), event.getHash(), event.getNotes());
+                event.getFxRate(), event.getAmountRcy(),event.getCurrency(), event.getHash(), event.getNotes());
     }
 
     private static Optional<ProblemDetail> validateEventTotals(FundingEventEntity event) {

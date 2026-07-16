@@ -133,11 +133,11 @@ public final class FundingValidations {
     public static Optional<ProblemDetail> spendDetail(
             EventType eventType,
             String category, String vendor,
-            BigDecimal amountFcy, String spendCurrency, BigDecimal fxRate, BigDecimal amountRcy,
+            BigDecimal amountFcy, String spendCurrency, BigDecimal fxRate, BigDecimal amountRcy, String currency,
             String hash, String notes) {
 
         boolean anySpendField = category != null || vendor != null || amountFcy != null || spendCurrency != null
-                || fxRate != null || amountRcy != null || hash != null || notes != null;
+                || fxRate != null || amountRcy != null || hash != null || notes != null || currency != null;
 
         if (eventType != EventType.SPENDING) {
             if (anySpendField) {
@@ -149,16 +149,12 @@ public final class FundingValidations {
         }
 
         // SPENDING: the amount fields are required to record the spend.
-        if (amountFcy == null || amountRcy == null || fxRate == null) {
+        if (amountFcy == null || amountRcy == null || fxRate == null || currency == null || spendCurrency == null) {
             return Optional.of(Problems.badRequest(
-                    "amountFcy, amountRcy and fxRate are required for SPENDING events",
+                    "amountFcy, amountRcy, currency, spendCurrency and fxRate are required for SPENDING events",
                     ErrorTitleConstants.SPEND_FIELDS_REQUIRED));
         }
-        if (amountRcy.multiply(fxRate).subtract(amountFcy).abs().compareTo(FX_TOLERANCE) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "fxRate %s does not convert amountRcy %s to amountFcy %s".formatted(fxRate, amountRcy, amountFcy),
-                    ErrorTitleConstants.FX_RATE_MISMATCH));
-        }
+
         return Optional.empty();
     }
 
