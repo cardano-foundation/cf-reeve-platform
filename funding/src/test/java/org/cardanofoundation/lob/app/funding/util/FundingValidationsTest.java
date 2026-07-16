@@ -166,7 +166,7 @@ class FundingValidationsTest {
                 .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
     }
 
-    // --- spendDetail(eventType, category, vendor, amountFcy, spendCurrency, fxRate, amountRcy, hash, notes) ---
+    // --- spendDetail(eventType, category, vendor, amountFcy, currencyFcy, fxRate, amountRcy, currencyRcy, hash, notes) ---
 
     @Test
     void spendDetail_rejected_whenSpendFieldsOnNonSpendingEvent() {
