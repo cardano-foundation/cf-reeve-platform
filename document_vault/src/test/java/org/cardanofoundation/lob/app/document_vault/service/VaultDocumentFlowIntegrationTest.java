@@ -76,7 +76,6 @@ class VaultDocumentFlowIntegrationTest {
         keyRequest.setOrganisationId(ORG_ID);
         keyRequest.setLabel("laptop");
         keyRequest.setPublicKey("a".repeat(64));
-        keyRequest.setEmail("system@example.org");
         String keyId = keyService.registerKey(keyRequest).get().keyId();
 
         // 2. resolve (sender auto-included -> self key returned)

@@ -106,7 +106,6 @@ class VaultDocumentServiceTest {
         key.setAccountId(accountId);
         key.setOrganisationId(org);
         key.setAccountName("Name " + accountId);
-        key.setEmail(accountId + "@example.org");
         key.setPublicKey("e".repeat(64));
         key.setLabel("k");
         key.setOrigin(KeyOrigin.SELF_ENROLLED);

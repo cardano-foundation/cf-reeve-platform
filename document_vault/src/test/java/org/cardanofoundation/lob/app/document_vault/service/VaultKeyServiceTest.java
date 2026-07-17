@@ -34,6 +34,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
+import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -47,6 +48,8 @@ class VaultKeyServiceTest {
     @Mock
     private VaultKeyRepository keyRepository;
     @Mock
+    private AddressbookEntryRepository entryRepository;
+    @Mock
     private KeycloakSecurityHelper securityHelper;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
@@ -55,7 +58,7 @@ class VaultKeyServiceTest {
 
     @BeforeEach
     void currentUser() {
-        service = new VaultKeyService(keyRepository, securityHelper, organisationPublicApi);
+        service = new VaultKeyService(keyRepository, entryRepository, securityHelper, organisationPublicApi);
         ReflectionTestUtils.setField(service, "adminRoleName", "admin");
         // lenient: MockitoExtension defaults to STRICT_STUBS and early-return tests never consume this stub
         lenient().when(securityHelper.getCurrentUserId()).thenReturn("acc1");
@@ -73,7 +76,6 @@ class VaultKeyServiceTest {
         request.setOrganisationId(org);
         request.setLabel("laptop");
         request.setPublicKey(publicKey);
-        request.setEmail("alice@example.org");
         return request;
     }
 
@@ -89,9 +91,11 @@ class VaultKeyServiceTest {
 
         assertTrue(result.isRight());
         assertEquals(HEX64, result.get().publicKey());
-        assertEquals("alice@example.org", result.get().email());
         assertEquals("org1", result.get().organisationId());
         assertEquals("acc1", result.get().accountId());
+        // the Keycloak username, snapshotted from the caller's own token — no e-mail is asked for or
+        // stored: the account is the contact
+        assertEquals("Alice", result.get().accountName());
     }
 
     @Test
@@ -231,7 +235,6 @@ class VaultKeyServiceTest {
         key.setAccountId(accountId);
         key.setOrganisationId("org1");
         key.setAccountName("Bob");
-        key.setEmail("bob@example.org");
         key.setPublicKey(HEX64);
         key.setLabel("phone");
         key.setOrigin(KeyOrigin.SELF_ENROLLED);

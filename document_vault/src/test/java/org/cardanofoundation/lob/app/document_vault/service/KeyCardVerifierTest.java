@@ -18,9 +18,9 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 
 /**
  * The import is permissionless (contract §2.8, amended): there is no issuer and no signature.
- * {@link KeyCardVerifier} checks only what the backend must still guarantee on its own: a
- * supported version/type, no private-key material (I5), and that the card names the organisation
- * it is being imported into.
+ * {@link KeyCardVerifier} checks only what the backend can guarantee on its own: a supported
+ * version/type, and no private-key material (I5). The organisation a card names is the holder's own
+ * and is never matched against the importing org — see {@link #acceptsACardFromAForeignOrganisation()}.
  */
 class KeyCardVerifierTest {
 
@@ -46,7 +46,7 @@ class KeyCardVerifierTest {
 
     @Test
     void acceptsAValidCard() {
-        assertTrue(verifier.verify(card(), "org1").isRight());
+        assertTrue(verifier.verify(card()).isRight());
     }
 
     @Test
@@ -54,7 +54,7 @@ class KeyCardVerifierTest {
         KeyCardDto card = card();
         card.setV(2);
 
-        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card, "org1");
+        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card);
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.UNSUPPORTED_CARD_VERSION, result.getLeft().getTitle());
@@ -65,7 +65,7 @@ class KeyCardVerifierTest {
         KeyCardDto card = card();
         card.setType("SOMETHING_ELSE");
 
-        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card, "org1");
+        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card);
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.UNSUPPORTED_CARD_VERSION, result.getLeft().getTitle());
@@ -77,17 +77,25 @@ class KeyCardVerifierTest {
         KeyCardDto card = card();
         card.putUnknown("privateKey", Map.of("wrapped", "deadbeef"));
 
-        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card, "org1");
+        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card);
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.CARD_CONTAINS_PRIVATE_KEY, result.getLeft().getTitle());
     }
 
+    /**
+     * The headline case: a card minted outside Reeve names its holder's own organisation — a free-form
+     * label like "Privat", never the importing org's hex id. An outside issuer cannot know that id, so
+     * requiring a match made external cards unimportable. The card's org is provenance, not a gate.
+     */
     @Test
-    void rejectsACardIssuedForAnotherOrganisation() {
-        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card(), "other-org");
+    void acceptsACardFromAForeignOrganisation() {
+        KeyCardDto card = card();
+        card.setSubject(new KeyCardDto.Subject(CardSubjectType.EXTERNAL, "indexer-uuid-1",
+                "Bob Miller", "bob@example.org", "Privat"));
 
-        assertTrue(result.isLeft());
-        assertEquals(VaultProblems.CARD_ORG_MISMATCH, result.getLeft().getTitle());
+        Either<ProblemDetail, KeyCardDto> result = verifier.verify(card);
+
+        assertTrue(result.isRight());
     }
 }

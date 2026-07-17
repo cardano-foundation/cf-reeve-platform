@@ -11,7 +11,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import jakarta.annotation.Nullable;
@@ -33,9 +32,9 @@ import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
+import org.cardanofoundation.lob.app.document_vault.domain.KeyRef;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
-import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
@@ -46,7 +45,6 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentUploaded
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
-import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -68,7 +66,7 @@ public class VaultDocumentService {
     public static final Set<Integer> SUPPORTED_ENVELOPE_VERSIONS = Set.of(1);
 
     private final VaultDocumentRepository documentRepository;
-    private final VaultKeyRepository keyRepository;
+    private final VaultKeyLookupService keyLookupService;
     private final KeycloakSecurityHelper securityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
     private final ApplicationEventPublisher eventPublisher;
@@ -122,12 +120,13 @@ public class VaultDocumentService {
                     "Organisation %s does not exist.".formatted(organisationId)));
         }
 
+        // A slot may wrap to an organisation key or to an addressbook contact; the lookup spans both, and
+        // this check does not care which it got — only that it belongs to this organisation.
         List<String> keyIds = request.getSlots().stream().map(UploadDocumentRequest.SlotRequest::getKeyId).toList();
-        Map<String, VaultKeyEntity> keysById = keyRepository.findAllById(keyIds).stream()
-                .collect(Collectors.toMap(VaultKeyEntity::getId, Function.identity()));
+        Map<String, KeyRef> keysById = keyLookupService.findAllById(keyIds);
         for (UploadDocumentRequest.SlotRequest slot : request.getSlots()) {
-            VaultKeyEntity key = keysById.get(slot.getKeyId());
-            if (key == null || !key.getOrganisationId().equals(organisationId)) {
+            KeyRef key = keysById.get(slot.getKeyId());
+            if (key == null || !key.organisationId().equals(organisationId)) {
                 return Either.left(VaultProblems.unprocessable(VaultProblems.SLOT_KEY_INVALID,
                         "Slot key %s is unknown or not registered in organisation %s."
                                 .formatted(slot.getKeyId(), organisationId)));
@@ -155,8 +154,11 @@ public class VaultDocumentService {
 
         VaultDocumentEntity saved = documentRepository.save(document);
 
+        // Addressbook contacts drop out here: they have no account to notify. The event is an in-app
+        // signal to Reeve users, and a contact reads the document as a published record in the Indexer.
         Set<String> recipientAccountIds = request.getSlots().stream()
-                .map(slot -> keysById.get(slot.getKeyId()).getAccountId())
+                .map(slot -> keysById.get(slot.getKeyId()).accountId())
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         eventPublisher.publishEvent(new DocumentSharedEvent(saved.getId(), organisationId, recipientAccountIds));
 
@@ -282,11 +284,13 @@ public class VaultDocumentService {
 
         // Resolve the slot keys once: they answer both "who can read this?" and "may I?".
         List<String> keyIds = document.getSlots().stream().map(DocumentSlot::getKeyId).toList();
-        Map<String, VaultKeyEntity> slotKeys = keyRepository.findAllById(keyIds).stream()
-                .collect(Collectors.toMap(VaultKeyEntity::getId, key -> key));
+        Map<String, KeyRef> slotKeys = keyLookupService.findAllById(keyIds);
 
+        // accountId comes first: a slot wrapped to an addressbook contact has a null account, and that
+        // is the answer, not an oversight. A contact has no Reeve login to authorise, so no caller can
+        // ever match one — they read published documents in the Indexer instead.
         boolean envelopeAccessible = document.getCreatedByAccount().equals(accountId)
-                || slotKeys.values().stream().anyMatch(key -> key.getAccountId().equals(accountId));
+                || slotKeys.values().stream().anyMatch(key -> accountId.equals(key.accountId()));
 
         return Either.right(new DocumentEnvelopeView(
                 document.getId(), document.getOrganisationId(), document.getStatus(),
@@ -311,8 +315,10 @@ public class VaultDocumentService {
                 document.getSlots().stream()
                         .map(slot -> slotKeys.get(slot.getKeyId()))
                         .filter(Objects::nonNull)
-                        .map(key -> new DocumentEnvelopeView.RecipientView(key.getId(), key.getAccountId(),
-                                key.getAccountName(), key.getLabel(), key.getAssurance()))
+                        // accountId is null for an addressbook contact — they are a recipient without an
+                        // account, which is exactly what the reader should see.
+                        .map(key -> new DocumentEnvelopeView.RecipientView(key.id(), key.accountId(),
+                                key.displayName(), key.label(), key.assurance()))
                         .toList(),
                 document.getLedgerDispatchStatus(), document.getLedgerDispatchError(),
                 document.getTxHash(), document.getIpfsCid(),

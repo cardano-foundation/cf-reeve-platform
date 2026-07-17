@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -24,12 +24,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.document_vault.domain.card.KeyCardDto;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.AddressbookEntryEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.CardSubjectType;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.ImportDestination;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 import org.cardanofoundation.lob.app.document_vault.domain.request.ImportCardRequest;
-import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
+import org.cardanofoundation.lob.app.document_vault.domain.view.ImportCardResultView;
+import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -37,8 +40,11 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * The import is permissionless (contract §2.8, amended): there is no issuer and no signature, so
- * {@link KeyCardVerifier} is exercised for real here (it is trivial and dependency-free) rather
- * than mocked — these tests pin CardImportService's own behaviour, not a stubbed verifier.
+ * {@link KeyCardVerifier} is exercised for real here (it is trivial and dependency-free) rather than
+ * mocked — these tests pin CardImportService's own behaviour, not a stubbed verifier.
+ *
+ * Alice is the caller throughout; Bob is therefore always somebody else. That is what makes the routing
+ * rule observable: a card about Alice is her own key, a card about Bob is a contact.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -49,6 +55,8 @@ class CardImportServiceTest {
     @Mock
     private VaultKeyRepository keyRepository;
     @Mock
+    private AddressbookEntryRepository entryRepository;
+    @Mock
     private KeycloakSecurityHelper securityHelper;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
@@ -57,13 +65,20 @@ class CardImportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CardImportService(keyRepository, securityHelper, organisationPublicApi, new KeyCardVerifier());
+        service = new CardImportService(keyRepository, entryRepository, securityHelper, organisationPublicApi,
+                new KeyCardVerifier());
         when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(securityHelper.getCurrentUserId()).thenReturn("sub-alice");
+        when(securityHelper.getCurrentUser()).thenReturn("Alice Adams");
         when(organisationPublicApi.findByOrganisationId("org1"))
                 .thenReturn(Optional.of(new Organisation()));
         when(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey(any(), any(), any()))
                 .thenReturn(Optional.empty());
+        when(entryRepository.findByOrganisationIdAndPublicKey(any(), any()))
+                .thenReturn(Optional.empty());
         when(keyRepository.save(any(VaultKeyEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(entryRepository.save(any(AddressbookEntryEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -85,114 +100,172 @@ class CardImportServiceTest {
         return request;
     }
 
+    private AddressbookEntryEntity savedEntry() {
+        ArgumentCaptor<AddressbookEntryEntity> saved = ArgumentCaptor.forClass(AddressbookEntryEntity.class);
+        verify(entryRepository).save(saved.capture());
+        return saved.getValue();
+    }
+
+    private VaultKeyEntity savedKey() {
+        ArgumentCaptor<VaultKeyEntity> saved = ArgumentCaptor.forClass(VaultKeyEntity.class);
+        verify(keyRepository).save(saved.capture());
+        return saved.getValue();
+    }
+
     /** The headline requirement: adding a new recipient persists them for later use. */
     @Test
-    void importingAContactCardCreatesAnAddressbookEntryForTheHolder() {
-        Either<ProblemDetail, VaultKeyView> result =
+    void importingACardAboutSomeoneElseCreatesAnAddressbookContact() {
+        Either<ProblemDetail, ImportCardResultView> result =
                 service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
 
         assertTrue(result.isRight());
-        ArgumentCaptor<VaultKeyEntity> saved = ArgumentCaptor.forClass(VaultKeyEntity.class);
-        verify(keyRepository).save(saved.capture());
-        // the SUBJECT owns the key, not the importer
-        assertEquals("sub-bob", saved.getValue().getAccountId());
-        assertEquals("bob@example.org", saved.getValue().getEmail());
-        assertEquals(KeyOrigin.INDEXER_ISSUED, saved.getValue().getOrigin());
-        assertEquals(KeyAssurance.PORTABLE, saved.getValue().getAssurance());
-        assertFalse(saved.getValue().isExternal());
-        assertEquals("sub-bob", result.get().accountId());
-        assertEquals("Bob Miller", result.get().accountName());
+        assertEquals(ImportDestination.ADDRESSBOOK_ENTRY, result.get().destination());
+        AddressbookEntryEntity entry = savedEntry();
+        assertEquals("Bob Miller", entry.getDisplayName());
+        assertEquals("bob@example.org", entry.getEmail());
+        assertEquals(X25519_PUB, entry.getPublicKey());
+        assertEquals(KeyAssurance.PORTABLE, entry.getAssurance());
+        assertEquals("org1", entry.getOrganisationId());
+        verify(keyRepository, never()).save(any());
     }
 
+    /**
+     * The key-substitution guard, now structural. The card claims a REEVE_ACCOUNT subject — Bob's real
+     * Keycloak sub — but says nothing this backend can check: a card is unsigned, so subjectId is only
+     * what the importer typed. It becomes a contact regardless, and a contact has no account id at all,
+     * so it cannot be returned by any lookup of Bob's account and cannot join his wrap set.
+     */
     @Test
-    void anExternalHolderIsMarkedExternal() {
-        service.importCard(request(CardSubjectType.EXTERNAL, "indexer-uuid-1"));
+    void aCardClaimingSomeoneElsesReeveAccountStillOnlyBecomesAContact() {
+        Either<ProblemDetail, ImportCardResultView> result =
+                service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
 
-        ArgumentCaptor<VaultKeyEntity> saved = ArgumentCaptor.forClass(VaultKeyEntity.class);
-        verify(keyRepository).save(saved.capture());
-        assertTrue(saved.getValue().isExternal());
-        assertEquals("indexer-uuid-1", saved.getValue().getAccountId());
+        assertEquals(ImportDestination.ADDRESSBOOK_ENTRY, result.get().destination());
+        // nothing was written to the organisation key table — Bob's account is untouched
+        verify(keyRepository, never()).save(any());
     }
 
-    /** A card whose subject IS the caller lands in their own keychain — no branch, the subject decides. */
+    /** A card whose subject IS the caller is their own key: it binds to their account and reaches /keys/me. */
     @Test
     void importingOwnCardBindsTheKeyToTheCaller() {
-        service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-alice"));
+        Either<ProblemDetail, ImportCardResultView> result =
+                service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-alice"));
 
-        ArgumentCaptor<VaultKeyEntity> saved = ArgumentCaptor.forClass(VaultKeyEntity.class);
-        verify(keyRepository).save(saved.capture());
-        assertEquals("sub-alice", saved.getValue().getAccountId()); // shows up in GET /keys/me
+        assertTrue(result.isRight());
+        assertEquals(ImportDestination.ORG_KEY, result.get().destination());
+        VaultKeyEntity key = savedKey();
+        assertEquals("sub-alice", key.getAccountId()); // shows up in GET /keys/me
+        assertEquals("org1", key.getOrganisationId());
+        assertEquals(KeyOrigin.INDEXER_ISSUED, key.getOrigin());
+        assertEquals(KeyAssurance.PORTABLE, key.getAssurance());
+        // the name comes from the caller's own token, not the card: this is their account, and the token
+        // is the only part of an import that is not self-asserted
+        assertEquals("Alice Adams", key.getAccountName());
+        verify(entryRepository, never()).save(any());
+    }
+
+    /**
+     * The reported bug, end to end. A card minted outside Reeve names its holder's own organisation as a
+     * human label — "Privat" — and an outside issuer cannot know the importing org's hex id. Requiring a
+     * match rejected the card with 422 CARD_ORG_MISMATCH and made the addressbook useless for exactly the
+     * external contacts it exists to hold. The card's organisation is kept as provenance, never compared.
+     */
+    @Test
+    void aCardFromOutsideReeveImportsAndKeepsItsHolderOrganisation() {
+        ImportCardRequest request = new ImportCardRequest();
+        request.setOrganisationId("75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94");
+        request.setCard(card(CardSubjectType.EXTERNAL, "indexer-uuid-1", "Privat"));
+        when(securityHelper.canUserAccessOrg("75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"))
+                .thenReturn(true);
+        when(organisationPublicApi
+                .findByOrganisationId("75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"))
+                .thenReturn(Optional.of(new Organisation()));
+
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
+
+        assertTrue(result.isRight());
+        AddressbookEntryEntity entry = savedEntry();
+        assertEquals("Privat", entry.getHomeOrganisationId()); // kept as provenance
+        // the addressbook it landed in is the REQUEST's organisation, never the card's
+        assertEquals("75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                entry.getOrganisationId());
+    }
+
+    /** An external tool has no organisation to name for its holder, so the field is optional. */
+    @Test
+    void aCardWithoutAHolderOrganisationImports() {
+        ImportCardRequest request = new ImportCardRequest();
+        request.setOrganisationId("org1");
+        request.setCard(card(CardSubjectType.EXTERNAL, "indexer-uuid-1", null));
+
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
+
+        assertTrue(result.isRight());
+        assertNull(savedEntry().getHomeOrganisationId());
     }
 
     /** Re-adding a recipient is a normal thing for a user to do, not an error. */
     @Test
-    void reimportingTheSameCardUpdatesInPlaceInsteadOfDuplicating() {
-        VaultKeyEntity existing = new VaultKeyEntity();
-        existing.setId("existing-key");
-        existing.setAccountId("sub-bob");
+    void reimportingTheSameCardUpdatesTheContactInPlaceInsteadOfDuplicating() {
+        AddressbookEntryEntity existing = new AddressbookEntryEntity();
+        existing.setId("existing-entry");
         existing.setOrganisationId("org1");
         existing.setPublicKey(X25519_PUB);
-        existing.setLabel("stale label");
+        existing.setDisplayName("stale name");
         existing.setEmail("stale@example.org");
-        when(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey("sub-bob", "org1", X25519_PUB))
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
                 .thenReturn(Optional.of(existing));
 
-        Either<ProblemDetail, VaultKeyView> result =
+        Either<ProblemDetail, ImportCardResultView> result =
                 service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
 
         assertTrue(result.isRight());
-        assertEquals("existing-key", result.get().keyId()); // same row, no duplicate
-        assertEquals("bob@example.org", result.get().email()); // refreshed from the card
+        assertEquals("existing-entry", result.get().entry().entryId()); // same row, no duplicate
+        assertEquals("bob@example.org", result.get().entry().email()); // refreshed from the card
+        assertEquals("Bob Miller", result.get().entry().displayName());
     }
 
     /**
-     * Contract §2.8.5: re-importing an existing row refreshes ONLY label/email. Provenance
-     * (origin, assurance, external) must never move on a re-import — a PORTABLE key must never
-     * silently upgrade to PASSKEY, and a SELF_ENROLLED row must never flip to INDEXER_ISSUED, just
-     * because a card for the same public key came in.
+     * Provenance records what a card claimed when a contact first entered the addressbook. Letting a
+     * later import rewrite the origin a sender already verified out-of-band would defeat the point of
+     * showing it, and a PORTABLE key must never quietly become PASSKEY.
      */
     @Test
-    void reimportingAnExistingRowRefreshesOnlyLabelAndEmailNotProvenance() {
-        VaultKeyEntity existing = new VaultKeyEntity();
-        existing.setId("existing-key");
-        existing.setAccountId("sub-bob");
+    void reimportingAContactRefreshesDetailsButNeverProvenance() {
+        AddressbookEntryEntity existing = new AddressbookEntryEntity();
+        existing.setId("existing-entry");
         existing.setOrganisationId("org1");
         existing.setPublicKey(X25519_PUB);
-        existing.setAccountName("Bob M.");
-        existing.setLabel("stale label");
+        existing.setDisplayName("stale name");
         existing.setEmail("stale@example.org");
-        existing.setOrigin(KeyOrigin.SELF_ENROLLED);
         existing.setAssurance(KeyAssurance.PASSKEY);
-        existing.setExternal(false);
-        when(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey("sub-bob", "org1", X25519_PUB))
+        existing.setHomeOrganisationId("Privat");
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
                 .thenReturn(Optional.of(existing));
 
-        Either<ProblemDetail, VaultKeyView> result =
-                service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
+        service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
 
-        assertTrue(result.isRight());
-        ArgumentCaptor<VaultKeyEntity> saved = ArgumentCaptor.forClass(VaultKeyEntity.class);
-        verify(keyRepository).save(saved.capture());
-        // provenance is untouched by a re-import
-        assertEquals(KeyOrigin.SELF_ENROLLED, saved.getValue().getOrigin());
-        assertEquals(KeyAssurance.PASSKEY, saved.getValue().getAssurance());
-        assertFalse(saved.getValue().isExternal());
-        assertEquals("Bob M.", saved.getValue().getAccountName());
-        // only label/email refresh from the card
-        assertEquals("Bob's audit key", saved.getValue().getLabel());
-        assertEquals("bob@example.org", saved.getValue().getEmail());
+        AddressbookEntryEntity saved = savedEntry();
+        // the incoming card says PORTABLE and names "org1" — neither may move
+        assertEquals(KeyAssurance.PASSKEY, saved.getAssurance());
+        assertEquals("Privat", saved.getHomeOrganisationId());
+        // only what the card says about the person refreshes
+        assertEquals("Bob Miller", saved.getDisplayName());
+        assertEquals("bob@example.org", saved.getEmail());
     }
 
     @Test
     void aRejectedCardWritesNothing() {
         ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
-        // org mismatch between the card's subject and the request organisation -> verifier rejects
-        request.setCard(card(CardSubjectType.REEVE_ACCOUNT, "sub-bob", "other-org"));
+        // an unsupported version -> verifier rejects. (This used to lean on an org mismatch, back when
+        // the card's organisation was a gate; the point of the test is the write, not the reason.)
+        request.getCard().setV(2);
 
-        Either<ProblemDetail, VaultKeyView> result = service.importCard(request);
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
 
         assertTrue(result.isLeft());
-        assertEquals(VaultProblems.CARD_ORG_MISMATCH, result.getLeft().getTitle());
+        assertEquals(VaultProblems.UNSUPPORTED_CARD_VERSION, result.getLeft().getTitle());
+        verify(entryRepository, never()).save(any());
         verify(keyRepository, never()).save(any());
     }
 
@@ -201,10 +274,11 @@ class CardImportServiceTest {
         ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
         request.getCard().putUnknown("privateKey", java.util.Map.of("wrapped", "deadbeef"));
 
-        Either<ProblemDetail, VaultKeyView> result = service.importCard(request);
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.CARD_CONTAINS_PRIVATE_KEY, result.getLeft().getTitle());
+        verify(entryRepository, never()).save(any());
         verify(keyRepository, never()).save(any());
     }
 
@@ -212,11 +286,12 @@ class CardImportServiceTest {
     void importIntoAForeignOrganisationIsForbidden() {
         when(securityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        Either<ProblemDetail, VaultKeyView> result =
+        Either<ProblemDetail, ImportCardResultView> result =
                 service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
 
         assertTrue(result.isLeft());
         assertEquals(403, result.getLeft().getStatus());
+        verify(entryRepository, never()).save(any());
         verify(keyRepository, never()).save(any());
     }
 }

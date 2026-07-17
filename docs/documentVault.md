@@ -285,7 +285,9 @@ Verification (backend, on import), in this order:
 2. No `privateKey` section — otherwise `400 CARD_CONTAINS_PRIVATE_KEY`. Checked **before** the signature, so an unsigned card stuffed with key material is rejected too.
 3. `issuer.publicKey` appears in the deployment's configured issuer allowlist **and** is the key registered for that `issuerId` — otherwise `422 CARD_ISSUER_UNKNOWN`. A card signed by a key nobody configured is worthless; that is the whole point.
 4. The Ed25519 signature verifies over the signing input above — otherwise `422 CARD_SIGNATURE_INVALID`.
-5. `subject.organisationId` equals the request's `organisationId` — otherwise `422 CARD_ORG_MISMATCH`.
+5. ~~`subject.organisationId` equals the request's `organisationId`.~~ **Removed.** `subject.organisationId` is the HOLDER's own organisation — a free-form label like "Privat" on a card minted outside Reeve — and has nothing to do with which addressbook the card is imported into. It is stored as provenance (`document_vault_key.home_organisation_id`), shown to senders picking a recipient, and never compared. The rule made sense only while the field was issuer-signed (steps 3–4): with no signature it compared client input against client input, and it made external cards — the ones the addressbook exists to hold — unimportable. Which organisation the entry lands in is decided by the request, whose org is authorised against the caller's JWT.
+
+> **Note:** steps 3 and 4 above are **not implemented**. The shipped code accepts unsigned, self-asserted cards (trust-on-first-use); there is no issuer allowlist and no signature check, so `CARD_ISSUER_UNKNOWN`, `CARD_SIGNATURE_INVALID` and `CARD_IMPORT_UNAVAILABLE` are not returned by any code path. This section describes the originally designed signed-card model. Resolving the split — build the signature pipeline, or bring this doc down to the implemented model — is an open product decision. If signatures are ever built, the org-match rule becomes meaningful again and should return **as a check on a signed field**, which is not what it was.
 
 #### 2.8.4 Assurance tiers — and the honest claim
 
@@ -551,7 +553,7 @@ The server decides what the card *is* from its subject — the client does not g
 
 A key imported here stops being addressable the moment its issuer leaves `lob.document_vault.card.issuers` (§2.8.5): it disappears from the addressbook (§5.3) and from resolve (§5.4), and upload rejects any slot naming it (§5.8). Nothing about the key row changes — the trust decision lives entirely in config.
 
-Errors: `503 CARD_IMPORT_UNAVAILABLE` (this deployment configured no card issuers — hide the "add recipient" action entirely), `422 CARD_ISSUER_UNKNOWN`, `422 CARD_SIGNATURE_INVALID`, `422 CARD_ORG_MISMATCH` (the card names a different organisation), `400 CARD_CONTAINS_PRIVATE_KEY` (strip it client-side; the backend must never hold one — I5), `400 UNSUPPORTED_CARD_VERSION`, `403 USER_NOT_IN_ORGANISATION`.
+Errors (as implemented): `400 CARD_CONTAINS_PRIVATE_KEY` (strip it client-side; the backend must never hold one — I5), `400 UNSUPPORTED_CARD_VERSION`, `403 USER_NOT_IN_ORGANISATION`, `404 ORGANISATION_NOT_FOUND`. A card naming a different organisation is **accepted** — that is the normal case for an externally-issued card (§2.8.3). The signed-card errors `503 CARD_IMPORT_UNAVAILABLE`, `422 CARD_ISSUER_UNKNOWN` and `422 CARD_SIGNATURE_INVALID` belong to the unimplemented issuer/signature steps and are never returned; see the note in §2.8.3.
 
 ## 6. Error catalog (ProblemDetail `title` values)
 
@@ -578,7 +580,7 @@ Errors: `503 CARD_IMPORT_UNAVAILABLE` (this deployment configured no card issuer
 | `CARD_IMPORT_UNAVAILABLE` | 503 | No card issuers configured — hide "add recipient by card" entirely. |
 | `CARD_ISSUER_UNKNOWN` | 422 | The card's issuer is not in this deployment's allowlist — it proves nothing here. |
 | `CARD_SIGNATURE_INVALID` | 422 | Signature does not verify over §2.8.3's signing input — corrupt or forged card. |
-| `CARD_ORG_MISMATCH` | 422 | The card was issued for a different organisation. |
+| ~~`CARD_ORG_MISMATCH`~~ | — | **Removed** (§2.8.3). A card names its holder's organisation, not the importing one; the two are never compared. |
 | `CARD_CONTAINS_PRIVATE_KEY` | 400 | The `privateKey` section must be stripped client-side; the backend never stores one (I5). |
 | `UNSUPPORTED_CARD_VERSION` | 400 | Card `v` newer than the server understands. |
 

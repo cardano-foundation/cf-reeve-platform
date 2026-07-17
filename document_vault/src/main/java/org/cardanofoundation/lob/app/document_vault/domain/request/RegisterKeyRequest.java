@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.document_vault.domain.request;
 
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -32,11 +31,9 @@ public class RegisterKeyRequest extends BaseRequest {
     @Pattern(regexp = "^[0-9a-f]{64}$", message = "publicKey must be 32 bytes of lowercase hex.")
     private String publicKey;
 
-    @Schema(description = "Notification e-mail (addressbook). Stays server-side — never exported to IPFS or L1.")
-    @NotBlank
-    @Email
-    @Size(max = 320)
-    private String email;
+    // No e-mail: an organisation key belongs to a Keycloak user, and the account is already the
+    // contact. Asking for one here would invite a second, unverified address for the same person.
+    // Addressbook entries do carry one — nobody logs in as a contact, so it is all there is.
 
     @Size(max = 512)
     private String credentialId;

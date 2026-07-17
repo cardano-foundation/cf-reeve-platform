@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.document_vault.domain.card;
 import java.util.HashMap;
 import java.util.Map;
 
+import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -64,12 +65,19 @@ public class KeyCardDto {
         return unknown;
     }
 
+    /**
+     * @param organisationId the HOLDER's own organisation, as they describe it — a free-form label like
+     *                       "Privat", not a Reeve organisation id. Optional: a tool minting a card
+     *                       outside Reeve has no organisation to name and should not have to invent one.
+     *                       Stored as provenance and shown to senders; never matched against the
+     *                       organisation the card is imported into.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Subject(@NotNull CardSubjectType subjectType,
                           @NotBlank @Size(max = 255) String subjectId,
                           @NotBlank @Size(max = 255) String displayName,
                           @NotBlank @Email @Size(max = 320) String email,
-                          @NotBlank String organisationId) {
+                          @Nullable @Size(max = 255) String organisationId) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

@@ -34,6 +34,7 @@ import org.cardanofoundation.lob.app.document_vault.DocumentVaultContextIntegrat
 import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.document_vault.domain.request.CreateAddressbookEntryRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
@@ -76,6 +77,8 @@ class VaultPublishIntegrationTest {
     @Autowired
     private VaultKeyService keyService;
     @Autowired
+    private AddressbookService addressbookService;
+    @Autowired
     private RecipientResolutionService resolutionService;
     @Autowired
     private VaultDocumentService documentService;
@@ -110,8 +113,17 @@ class VaultPublishIntegrationTest {
         keyRequest.setOrganisationId(ORG_ID);
         keyRequest.setLabel("laptop");
         keyRequest.setPublicKey("a".repeat(64));
-        keyRequest.setEmail(CANARY_EMAIL);
-        String keyId = keyService.registerKey(keyRequest).get().keyId();
+        keyService.registerKey(keyRequest);
+
+        // The canary rides on an ADDRESSBOOK contact, which is where e-mail lives now that an
+        // organisation key takes its identity from Keycloak instead. Wrapping the document to a contact
+        // therefore exercises the path where PII could actually leak into a publish command.
+        CreateAddressbookEntryRequest contact = new CreateAddressbookEntryRequest();
+        contact.setOrganisationId(ORG_ID);
+        contact.setDisplayName("Canary Contact");
+        contact.setEmail(CANARY_EMAIL);
+        contact.setPublicKey("d".repeat(64));
+        String keyId = addressbookService.create(contact).get().entryId();
 
         UploadDocumentRequest upload = new UploadDocumentRequest();
         upload.setOrganisationId(ORG_ID);

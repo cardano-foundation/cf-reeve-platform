@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.document_vault.repository;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.document_vault.DocumentVaultContextIntegrationTest;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.AddressbookEntryEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
@@ -44,6 +46,8 @@ class VaultRepositoryIntegrationTest {
     @Autowired
     private VaultKeyRepository keyRepository;
     @Autowired
+    private AddressbookEntryRepository entryRepository;
+    @Autowired
     private WrappedRecordRepository recordRepository;
     @Autowired
     private VaultDocumentRepository documentRepository;
@@ -58,13 +62,25 @@ class VaultRepositoryIntegrationTest {
         key.setAccountId(accountId);
         key.setOrganisationId(org);
         key.setAccountName("Name " + accountId);
-        key.setEmail(accountId + "@example.org");
         key.setPublicKey(publicKey);
         key.setLabel("laptop");
         // origin/assurance are NOT NULL columns — a fixture without them fails on flush, not on assert
         key.setOrigin(KeyOrigin.SELF_ENROLLED);
         key.setAssurance(KeyAssurance.PASSKEY);
         return key;
+    }
+
+    private AddressbookEntryEntity entry(String id, String org, String publicKey, String displayName) {
+        AddressbookEntryEntity entry = new AddressbookEntryEntity();
+        entry.setId(id);
+        entry.setOrganisationId(org);
+        entry.setDisplayName(displayName);
+        entry.setEmail("bob@example.org");
+        entry.setDescription("external auditor");
+        entry.setPublicKey(publicKey);
+        entry.setAssurance(KeyAssurance.PORTABLE);
+        entry.setHomeOrganisationId("Privat");
+        return entry;
     }
 
     @Test
@@ -77,7 +93,7 @@ class VaultRepositoryIntegrationTest {
         List<VaultKeyEntity> org1Keys = keyRepository.findByOrganisationId("org1");
         assertEquals(1, org1Keys.size());
         assertEquals("k1", org1Keys.get(0).getId());
-        assertEquals("acc1@example.org", org1Keys.get(0).getEmail());
+        assertEquals("Name acc1", org1Keys.get(0).getAccountName());
         assertEquals("org1", org1Keys.get(0).getOrganisationId());
         assertEquals(KeyOrigin.SELF_ENROLLED, org1Keys.get(0).getOrigin());
         assertEquals(KeyAssurance.PASSKEY, org1Keys.get(0).getAssurance());
@@ -85,6 +101,101 @@ class VaultRepositoryIntegrationTest {
         assertEquals(1, keyRepository.findByAccountIdInAndOrganisationId(List.of("acc1", "acc2"), "org1").size());
         assertTrue(keyRepository.existsByAccountIdAndOrganisationIdAndPublicKey("acc1", "org1", HEX64));
         assertTrue(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey("acc1", "org1", HEX64).isPresent());
+    }
+
+    /**
+     * The addressbook is scoped per organisation, and (organisation, publicKey) is its idempotency key —
+     * the constraint card re-import leans on to refresh a contact instead of duplicating them. Everything
+     * else about a contact may repeat.
+     */
+    @Test
+    void addressbookEntryRoundTripAndOrgScoping() {
+        entryRepository.save(entry("e1", "org1", HEX64, "Bob Miller"));
+        entryRepository.save(entry("e2", "org2", HEX64, "Bob Miller"));
+        // same organisation, same name, DIFFERENT key — a contact is not identified by their name
+        entryRepository.save(entry("e3", "org1", "d".repeat(64), "Bob Miller"));
+        em.flush();
+        em.clear();
+
+        List<AddressbookEntryEntity> org1 = entryRepository.findByOrganisationId("org1");
+        assertEquals(2, org1.size());
+
+        AddressbookEntryEntity reloaded = entryRepository
+                .findByOrganisationIdAndPublicKey("org1", HEX64).orElseThrow();
+        assertEquals("e1", reloaded.getId());
+        assertEquals("Privat", reloaded.getHomeOrganisationId());
+        assertEquals(KeyAssurance.PORTABLE, reloaded.getAssurance());
+        // a contact has no account id at all — that absence is what stops an imported card ever being
+        // mistaken for a Keycloak user
+        assertEquals("bob@example.org", reloaded.getEmail());
+    }
+
+    /** A hand-entered contact claims no custody tier, and null must survive the round trip as null. */
+    @Test
+    void anAddressbookEntryWithNoAssuranceOrEmailRoundTrips() {
+        AddressbookEntryEntity entry = entry("e-bare", "org1", HEX64, "Anonymous");
+        entry.setAssurance(null);
+        entry.setEmail(null);
+        entry.setHomeOrganisationId(null);
+        entryRepository.save(entry);
+        em.flush();
+        em.clear();
+
+        AddressbookEntryEntity reloaded = entryRepository.findById("e-bare").orElseThrow();
+        assertNull(reloaded.getAssurance());
+        assertNull(reloaded.getEmail());
+        assertNull(reloaded.getHomeOrganisationId());
+    }
+
+    /**
+     * VaultKeyService.delete's contract: "A document already wrapped to this public key stays
+     * decryptable — its ciphertext and slots are immutable ... deleting only removes the directory
+     * entry, so the key stops being offered as a future recipient."
+     *
+     * Every unit test of delete mocks the repository, so nothing has ever run that sentence against a
+     * real database. It cannot hold while document_vault_document_slot.key_id carries a foreign key
+     * with no ON DELETE clause: Postgres defaults to NO ACTION and refuses to orphan the slot. So
+     * deleting a key anyone ever encrypted to is a 500, not a directory tidy-up.
+     */
+    @Test
+    void deletingAKeyThatADocumentWasWrappedToLeavesTheDocumentIntact() {
+        keyRepository.save(key("k-used", "sender", HEX64, "org1"));
+
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc-wrapped");
+        doc.setOrganisationId("org1");
+        doc.setStatus(VaultDocumentStatus.DRAFT);
+        doc.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        doc.setEnvelopeVersion(1);
+        doc.setContentHash(HEX64);
+        doc.setPlaintextHash(HEX64);
+        doc.setCiphertext(new byte[] {1, 2, 3});
+        doc.setPayloadNonce("f".repeat(24));
+        doc.setFileName("report.pdf");
+        doc.setSizeBytes(3L);
+        doc.setCreatedByAccount("sender");
+        doc.setCreatedByName("Sender Name");
+        doc.setSlots(List.of(new DocumentSlot("k-used", "me", HEX64, HEX96)));
+        documentRepository.save(doc);
+        em.flush();
+        // MUST clear before deleting. SimpleJpaRepository.delete() silently no-ops when the entity
+        // reports isNew(), and VaultBaseEntity.isNew only flips on @PostLoad. Straight after save() the
+        // instance is still in the first-level cache, so findById would hand it back unloaded, isNew
+        // would stay true, and the delete would vanish — testing nothing. The service reloads in its own
+        // transaction, so this mirrors what it actually does.
+        em.clear();
+
+        keyRepository.deleteById("k-used");
+        em.flush();
+        em.clear();
+
+        // the directory entry is gone...
+        assertTrue(keyRepository.findById("k-used").isEmpty());
+        // ...and the document it was wrapped to is untouched, slot and ciphertext included
+        VaultDocumentEntity reloaded = documentRepository.findById("doc-wrapped").orElseThrow();
+        assertEquals(1, reloaded.getSlots().size());
+        assertEquals("k-used", reloaded.getSlots().get(0).getKeyId());
+        assertArrayEquals(new byte[] {1, 2, 3}, reloaded.getCiphertext());
     }
 
     @Test

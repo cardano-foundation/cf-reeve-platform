@@ -6,6 +6,7 @@ import org.springframework.http.ProblemDetail;
 public final class VaultProblems {
 
     public static final String KEY_NOT_FOUND = "KEY_NOT_FOUND";
+    public static final String ADDRESSBOOK_ENTRY_NOT_FOUND = "ADDRESSBOOK_ENTRY_NOT_FOUND";
     public static final String DOCUMENT_NOT_FOUND = "DOCUMENT_NOT_FOUND";
     public static final String RECORD_NOT_FOUND = "RECORD_NOT_FOUND";
     public static final String ORGANISATION_NOT_FOUND = "ORGANISATION_NOT_FOUND";
@@ -13,6 +14,7 @@ public final class VaultProblems {
     public static final String DUPLICATE_PUBLIC_KEY = "DUPLICATE_PUBLIC_KEY";
     public static final String NOT_KEY_OWNER = "NOT_KEY_OWNER";
     public static final String RECIPIENT_KEY_MISSING = "RECIPIENT_KEY_MISSING";
+    public static final String RECIPIENT_ENTRY_MISSING = "RECIPIENT_ENTRY_MISSING";
     public static final String SENDER_KEY_MISSING = "SENDER_KEY_MISSING";
     public static final String SENDER_KEY_INVALID = "SENDER_KEY_INVALID";
     public static final String SLOT_KEY_INVALID = "SLOT_KEY_INVALID";
@@ -25,7 +27,6 @@ public final class VaultProblems {
     public static final String ALREADY_PUBLISHED = "ALREADY_PUBLISHED";
     public static final String DOCUMENT_PUBLISHING_UNAVAILABLE = "DOCUMENT_PUBLISHING_UNAVAILABLE";
     // Key cards
-    public static final String CARD_ORG_MISMATCH = "CARD_ORG_MISMATCH";
     public static final String CARD_CONTAINS_PRIVATE_KEY = "CARD_CONTAINS_PRIVATE_KEY";
     public static final String UNSUPPORTED_CARD_VERSION = "UNSUPPORTED_CARD_VERSION";
 

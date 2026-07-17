@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.document_vault.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import lombok.RequiredArgsConstructor;
 
@@ -16,13 +17,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.document_vault.domain.entity.AddressbookEntryEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.RecipientKind;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.domain.view.RecipientKeyView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
+import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -33,6 +37,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 public class VaultKeyService {
 
     private final VaultKeyRepository keyRepository;
+    private final AddressbookEntryRepository entryRepository;
     private final KeycloakSecurityHelper securityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
 
@@ -62,14 +67,12 @@ public class VaultKeyService {
         key.setAccountId(accountId);
         key.setOrganisationId(organisationId);
         key.setAccountName(securityHelper.getCurrentUser());
-        key.setEmail(request.getEmail());
         key.setCredentialId(request.getCredentialId());
         key.setPublicKey(request.getPublicKey());
         key.setLabel(request.getLabel());
         // Self-enrollment is the passkey path by definition: the key was born on the caller's device.
         key.setOrigin(KeyOrigin.SELF_ENROLLED);
         key.setAssurance(KeyAssurance.PASSKEY);
-        key.setExternal(false);
 
         return Either.right(toView(keyRepository.save(key)));
     }
@@ -96,9 +99,11 @@ public class VaultKeyService {
     }
 
     /**
-     * The org addressbook: every key registered in the org is offerable as a recipient. Trust is the
-     * sender's out-of-band responsibility, not a server-side gate. Directories are small (one row per
-     * key per org), so the read is unpaged and the list is paged in memory.
+     * Everyone in the org you can encrypt to: colleagues with registered keys, and addressbook contacts.
+     * One list, because the sender picks a recipient without caring which store they came from — the
+     * {@code kind} tells them apart where it matters. Trust is the sender's out-of-band responsibility,
+     * not a server-side gate. Directories are small, so both reads are unpaged and the merged list is
+     * paged in memory.
      */
     @Transactional(readOnly = true)
     public Either<ProblemDetail, PagedResponse<RecipientKeyView>> listRecipients(String organisationId,
@@ -107,8 +112,11 @@ public class VaultKeyService {
             return Either.left(VaultProblems.forbidden(
                     "Current user is not a member of organisation %s.".formatted(organisationId)));
         }
-        List<RecipientKeyView> addressable = keyRepository.findByOrganisationId(organisationId).stream()
-                .map(VaultKeyService::toRecipientView)
+        List<RecipientKeyView> addressable = Stream.concat(
+                        keyRepository.findByOrganisationId(organisationId).stream()
+                                .map(VaultKeyService::toRecipientView),
+                        entryRepository.findByOrganisationId(organisationId).stream()
+                                .map(VaultKeyService::toRecipientView))
                 .toList();
         return Either.right(PagedResponse.ofList(addressable, pageable));
     }
@@ -142,15 +150,23 @@ public class VaultKeyService {
 
     /** Shared with RecipientResolutionService and CardImportService — one mapping, one place. */
     static RecipientKeyView toRecipientView(VaultKeyEntity key) {
-        return new RecipientKeyView(key.getAccountId(), key.getAccountName(), key.getEmail(),
-                key.getId(), key.getPublicKey(), key.getLabel(),
-                key.getAssurance(), key.getOrigin(), key.isExternal());
+        // recipientId is the ACCOUNT id, not the key id: a colleague may hold several keys and a sender
+        // picks the person, not the device. Contacts are the other way round — one entry, one key.
+        return new RecipientKeyView(RecipientKind.ORG_KEY, key.getAccountId(), key.getId(),
+                key.getAccountName(), null, key.getPublicKey(), key.getLabel(),
+                key.getAssurance(), key.getOrigin(), null);
+    }
+
+    static RecipientKeyView toRecipientView(AddressbookEntryEntity entry) {
+        return new RecipientKeyView(RecipientKind.ADDRESSBOOK_ENTRY, entry.getId(), entry.getId(),
+                entry.getDisplayName(), entry.getEmail(), entry.getPublicKey(), entry.getDescription(),
+                entry.getAssurance(), null, entry.getHomeOrganisationId());
     }
 
     /** Package-private + static so CardImportService reuses the exact same mapping. */
     static VaultKeyView toView(VaultKeyEntity key) {
         return new VaultKeyView(key.getId(), key.getOrganisationId(), key.getAccountId(), key.getAccountName(),
-                key.getLabel(), key.getPublicKey(), key.getEmail(), key.getCredentialId(),
-                key.getAssurance(), key.getOrigin(), key.isExternal(), key.getCreatedAt());
+                key.getLabel(), key.getPublicKey(), key.getCredentialId(),
+                key.getAssurance(), key.getOrigin(), key.getCreatedAt());
     }
 }

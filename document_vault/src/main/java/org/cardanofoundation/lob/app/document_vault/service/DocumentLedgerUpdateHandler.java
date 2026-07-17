@@ -1,7 +1,9 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,10 +21,10 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStat
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.document_vault.domain.KeyRef;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishedEvent;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
-import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 
 @Service
 @Slf4j
@@ -30,7 +32,7 @@ import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepositor
 public class DocumentLedgerUpdateHandler {
 
     private final VaultDocumentRepository documentRepository;
-    private final VaultKeyRepository keyRepository;
+    private final VaultKeyLookupService keyLookupService;
     private final ApplicationEventPublisher eventPublisher;
 
     // Codex adversarial-review finding 2 (pre-commit ledger updates, the reverse direction of the
@@ -85,8 +87,13 @@ public class DocumentLedgerUpdateHandler {
         if (firstFinality) {
             Set<String> keyIds = new HashSet<>();
             document.getSlots().forEach(slot -> keyIds.add(slot.getKeyId()));
-            Set<String> recipientAccountIds = new HashSet<>();
-            keyRepository.findAllById(keyIds).forEach(key -> recipientAccountIds.add(key.getAccountId()));
+            // Addressbook contacts resolve to a null account and are filtered out: the event carries
+            // Reeve account ids for in-app notification, and a contact has no login to notify. They see
+            // the document as a published record in the Indexer, which is how they were always meant to.
+            Set<String> recipientAccountIds = keyLookupService.findAllById(keyIds).values().stream()
+                    .map(KeyRef::accountId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
             eventPublisher.publishEvent(new DocumentPublishedEvent(
                     document.getId(), document.getOrganisationId(), recipientAccountIds));
         }

@@ -23,18 +23,22 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import org.cardanofoundation.lob.app.document_vault.domain.request.ImportCardRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.ResolveRecipientsRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
-import org.cardanofoundation.lob.app.document_vault.service.CardImportService;
 import org.cardanofoundation.lob.app.document_vault.service.RecipientResolutionService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultKeyService;
 
+/**
+ * ORGANISATION keys: those belonging to a Keycloak user in the org who owns the private half. Contacts
+ * you merely hold a public key for are not keys in this sense — they live in the addressbook, at
+ * {@link AddressbookController}.
+ */
 @RestController
 @RequestMapping("/api/v1/document-vault")
-@Tag(name = "Document Vault — Keys", description = "Encryption-key directory / addressbook: registration, bindings, org recipients")
+@Tag(name = "Document Vault — Organisation keys",
+        description = "Keys belonging to Keycloak users who own the private half. For external contacts, see the Addressbook.")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 public class VaultKeyController {
@@ -43,10 +47,10 @@ public class VaultKeyController {
             + "or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole())";
 
     private final VaultKeyService keyService;
-    private final CardImportService cardImportService;
     private final RecipientResolutionService recipientResolutionService;
 
-    @Operation(description = "Register a new X25519 public key for the current account")
+    @Operation(description = "Register a new X25519 public key for the current account. No e-mail: the "
+            + "Keycloak account is already the contact.")
     @PostMapping(value = "/keys", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(ALL_ROLES)
     public ResponseEntity<Object> registerKey(@Valid @RequestBody RegisterKeyRequest request) {
@@ -76,7 +80,9 @@ public class VaultKeyController {
         return Responses.respond(keyService.listOrganisationKeys(organisationId, pageable), HttpStatus.OK);
     }
 
-    @Operation(description = "Addressbook of an organisation the caller belongs to: recipients with keys and contact e-mail (paged)")
+    @Operation(description = "Everyone in the organisation you can encrypt to — colleagues with keys AND "
+            + "addressbook contacts, in one list. Each carries a `kind` saying which it is. Render "
+            + "`assurance` and `homeOrganisationId`: trust here is the sender's out-of-band judgement.")
     @GetMapping(value = "/organisations/{organisationId}/recipients", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize(ALL_ROLES)
     public ResponseEntity<Object> listRecipients(@PathVariable String organisationId,
@@ -84,15 +90,9 @@ public class VaultKeyController {
         return Responses.respond(keyService.listRecipients(organisationId, pageable), HttpStatus.OK);
     }
 
-    @Operation(description = "Import a permissionless key card: adds a recipient to the organisation's "
-            + "addressbook, or adopts an imported key as your own. Verify the key out-of-band before use.")
-    @PostMapping(value = "/cards/import", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
-    public ResponseEntity<Object> importCard(@Valid @RequestBody ImportCardRequest request) {
-        return Responses.respond(cardImportService.importCard(request), HttpStatus.OK);
-    }
-
-    @Operation(description = "Resolve recipient account ids into the validated, deduped public-key set to encrypt to (sender auto-included)")
+    @Operation(description = "Resolve recipients into the validated, deduped public-key set to encrypt to "
+            + "(sender auto-included). Colleagues go in `recipientAccountIds`, addressbook contacts in "
+            + "`recipientEntryIds` — both taken from the `recipientId` of the recipients listing.")
     @PostMapping(value = "/recipients/resolve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(ALL_ROLES)
     public ResponseEntity<Object> resolveRecipients(@Valid @RequestBody ResolveRecipientsRequest request) {

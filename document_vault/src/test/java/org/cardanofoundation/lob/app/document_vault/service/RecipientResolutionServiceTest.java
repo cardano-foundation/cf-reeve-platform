@@ -55,7 +55,6 @@ class RecipientResolutionServiceTest {
         key.setAccountId(accountId);
         key.setOrganisationId("org1");
         key.setAccountName("Name " + accountId);
-        key.setEmail(accountId + "@example.org");
         key.setPublicKey(publicKey);
         key.setLabel("k");
         key.setOrigin(KeyOrigin.SELF_ENROLLED);
@@ -83,7 +82,7 @@ class RecipientResolutionServiceTest {
 
         assertTrue(result.isRight());
         assertEquals(2, result.get().size());
-        assertTrue(result.get().stream().anyMatch(v -> v.accountId().equals("sender")));
+        assertTrue(result.get().stream().anyMatch(v -> "sender".equals(v.recipientId())));
     }
 
     @Test

@@ -19,6 +19,14 @@ import org.springframework.data.domain.Persistable;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 
+/**
+ * An ORGANISATION key: its holder is a Keycloak user in this organisation and owns the private half.
+ * Identity comes from the login, which is why there is no e-mail here — the account is the contact.
+ *
+ * Not an addressbook entry. A public key someone merely handed you is an {@link AddressbookEntryEntity}:
+ * a contact, not an account, in its own table. Keeping the two apart is what makes it impossible for an
+ * imported card to claim a Keycloak account it cannot prove it owns.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -30,6 +38,8 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     @Column(name = "key_id", nullable = false)
     private String id;
 
+    /** The holder's Keycloak sub. Always a real account: a card about anyone else becomes an
+     *  {@link AddressbookEntryEntity} instead, so no foreign identity can appear here. */
     @NotBlank
     @Column(name = "account_id", nullable = false)
     private String accountId;
@@ -39,14 +49,15 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     @Column(name = "organisation_id", nullable = false)
     private String organisationId;
 
+    /**
+     * The holder's Keycloak username, snapshotted from their own JWT at registration. This platform has
+     * no way to resolve a username from a sub — there is no Keycloak admin client, and
+     * {@code KeycloakSecurityHelper.getCurrentUser()} reads only the current token — so it cannot be
+     * refreshed and goes stale if the user renames themselves. Display only; never an identity.
+     */
     @Nullable
     @Column(name = "account_name")
     private String accountName;
-
-    /** Notification address (addressbook). Internal only — must NEVER be exported to IPFS or L1 (spec B5 #3). */
-    @NotBlank
-    @Column(name = "email", nullable = false, length = 320)
-    private String email;
 
     @Nullable
     @Column(name = "credential_id")
@@ -78,10 +89,6 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     @Enumerated(EnumType.STRING)
     @Column(name = "assurance", nullable = false, length = 20)
     private KeyAssurance assurance;
-
-    /** True when the holder has no Reeve login (they read published documents in the Indexer instead). */
-    @Column(name = "external", nullable = false)
-    private boolean external;
 
     @Override
     public boolean isNew() {

@@ -75,8 +75,13 @@ public class UploadDocumentRequest extends BaseRequest {
         @NotBlank
         private String keyId;
 
+        /**
+         * A label only, never a trust anchor (I6) — but the obvious thing for a client to put here is
+         * the recipient's accountId, so it tracks that column's width rather than the old 255: an
+         * imported id carries an 'ext:' prefix and can reach 259.
+         */
         @NotBlank
-        @Size(max = 255)
+        @Size(max = 260)
         private String recipientRef;
 
         @NotBlank
