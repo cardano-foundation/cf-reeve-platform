@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -316,6 +317,19 @@ public final class FundingValidations {
             return Optional.of(Problems.badRequest(
                     "fundingEntity is required for FUNDING events",
                     ErrorTitleConstants.FUNDING_ENTITY_REQUIRED));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * An event's date (funding date, spending date or refund date, depending on {@code eventType})
+     * may not be in the future.
+     */
+    public static Optional<ProblemDetail> eventDateNotInFuture(LocalDate eventDate) {
+        if (eventDate != null && eventDate.isAfter(LocalDate.now())) {
+            return Optional.of(Problems.badRequest(
+                    "eventDate %s must not be in the future".formatted(eventDate),
+                    ErrorTitleConstants.EVENT_DATE_IN_FUTURE));
         }
         return Optional.empty();
     }

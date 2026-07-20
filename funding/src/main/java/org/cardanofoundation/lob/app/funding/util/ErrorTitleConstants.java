@@ -45,6 +45,7 @@ public final class ErrorTitleConstants {
     public static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
     public static final String EVENT_TYPE_IMMUTABLE = "EVENT_TYPE_IMMUTABLE";
     public static final String FUNDING_ENTITY_REQUIRED = "FUNDING_ENTITY_REQUIRED";
+    public static final String EVENT_DATE_IN_FUTURE = "EVENT_DATE_IN_FUTURE";
     public static final String ORGANISATION_NOT_FOUND = "ORGANISATION_NOT_FOUND";
     public static final String ORGANISATION_MISMATCH = "ORGANISATION_MISMATCH";
     public static final String UNAUTHORIZED = "UNAUTHORIZED";

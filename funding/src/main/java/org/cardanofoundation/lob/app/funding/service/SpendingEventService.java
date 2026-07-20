@@ -217,6 +217,9 @@ public class SpendingEventService {
         Optional<ProblemDetail> entityProblem = FundingValidations.fundingEntity(event.getEventType(), event.getFundingEntity());
         if (entityProblem.isPresent()) return Either.left(entityProblem.get());
 
+        Optional<ProblemDetail> eventDateProblem = FundingValidations.eventDateNotInFuture(event.getEventDate());
+        if (eventDateProblem.isPresent()) return Either.left(eventDateProblem.get());
+
         Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
         if (spendProblem.isPresent()) return Either.left(spendProblem.get());
 

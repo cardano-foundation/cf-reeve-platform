@@ -276,6 +276,44 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenEventDateInFuture() {
+        // Rejected before allocations are resolved — no project/milestone stubbing required.
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setEventDate(FUTURE_DATE);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_DATE_IN_FUTURE);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_succeeds_whenEventDateIsToday() {
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setEventDate(LocalDate.now());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
+    }
+
+    @Test
+    void create_succeeds_whenEventDateIsNull() {
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setEventDate(null);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
+    }
+
+    @Test
     void create_succeeds_whenFxRateDoesNotMatchAmounts() {
         // The fxRate/amountFcy/amountRcy consistency check was intentionally removed — an inconsistent
         // fxRate (50000 * 3 = 150000 != amountFcy 100000) no longer blocks event creation.
@@ -656,6 +694,19 @@ class SpendingEventServiceTest {
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_MISMATCH);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsLeft_whenEventDateInFuture() {
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.FUNDING, EventStatus.DRAFT)));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setEventDate(FUTURE_DATE);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_DATE_IN_FUTURE);
         verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
