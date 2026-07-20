@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.funding.util;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -398,5 +399,28 @@ class FundingValidationsTest {
         assertThat(FundingValidations.firstDuplicate(List.of("A", "B", "C"))).isEmpty();
         // Nulls are ignored — two nulls are not a duplicate.
         assertThat(FundingValidations.firstDuplicate(java.util.Arrays.asList("A", null, null))).isEmpty();
+    }
+
+    // --- eventDateNotInFuture(eventDate) ---
+
+    @Test
+    void eventDateNotInFuture_pastDate_isAllowed() {
+        assertThat(FundingValidations.eventDateNotInFuture(LocalDate.now().minusDays(1))).isEmpty();
+    }
+
+    @Test
+    void eventDateNotInFuture_today_isAllowed() {
+        assertThat(FundingValidations.eventDateNotInFuture(LocalDate.now())).isEmpty();
+    }
+
+    @Test
+    void eventDateNotInFuture_nullDate_isAllowed() {
+        assertThat(FundingValidations.eventDateNotInFuture(null)).isEmpty();
+    }
+
+    @Test
+    void eventDateNotInFuture_futureDate_isRejected() {
+        assertThat(title(FundingValidations.eventDateNotInFuture(LocalDate.now().plusDays(1))))
+                .isEqualTo(ErrorTitleConstants.EVENT_DATE_IN_FUTURE);
     }
 }
