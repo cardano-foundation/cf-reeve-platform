@@ -1,7 +1,9 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -56,6 +58,12 @@ public class CeremonyService implements AttestationConsumptionApi {
      */
     private static final Set<CeremonyState> LINK_ADVANCEABLE_STATES =
             EnumSet.of(CeremonyState.CREATED, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_RECEIVED);
+
+    /** The subset of {@link #TERMINAL_STATES} {@link #findTerminalNonConsumedCeremonyIds} reports —
+     *  {@code CONSUMED} is terminal too, but must never be treated as "safe to delete" by a caller
+     *  (see that method's javadoc), so it is deliberately excluded here. */
+    private static final Set<CeremonyState> TERMINAL_NON_CONSUMED_STATES =
+            EnumSet.of(CeremonyState.FAILED, CeremonyState.EXPIRED);
 
     private final KeriAttestationCeremonyRepository ceremonyRepository;
     private final KeriIdentityLinkRepository identityLinkRepository;
@@ -191,6 +199,18 @@ public class CeremonyService implements AttestationConsumptionApi {
      * is still at generation {@code expectedGeneration} and state {@code from}. A superseded worker
      * (its step was retried, or the ceremony moved on for some other reason) silently no-ops instead
      * of corrupting newer state — there is no way to report failure back to it, by design.
+     *
+     * <p><b>Global lock order (item 4, round 2): ceremony before link.</b> This method row-locks the
+     * ceremony FIRST; {@code mutator} then commonly locks the identity-link row too (both
+     * {@code KeriCredentialService#persistCredentialIfIdentityStillCurrent} and
+     * {@code KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent} call
+     * {@code KeriIdentityLinkRepository#findByUserIdForUpdate} from inside their {@code completeStep}
+     * mutator). Every other code path in this module that needs both locks — chiefly
+     * {@code KeriOobiService}'s relink — MUST acquire them in this same order (ceremony rows, then the
+     * link row) to avoid a lock-order inversion: two transactions taking the same two locks in opposite
+     * orders is a textbook Postgres deadlock (one transaction locks A then waits on B while the other
+     * locks B then waits on A). See {@code KeriOobiService#persistLink}'s javadoc for how its relink path
+     * honors this.
      *
      * @return {@code true} if the CAS matched and the transition (and mutator) actually ran,
      *         {@code false} if this call was a stale no-op. Callers that do something <em>after</em>
@@ -339,6 +359,14 @@ public class CeremonyService implements AttestationConsumptionApi {
 
         return Either.right(new ConsumedAttestation(ceremony.getId(), link.getAid(), ceremony.getMetadataDigest(),
                 ceremony.getMetadataLabel(), ceremony.getKelSequence()));
+    }
+
+    @Override
+    public List<String> findTerminalNonConsumedCeremonyIds(Collection<String> ceremonyIds) {
+        if (ceremonyIds.isEmpty()) {
+            return List.of();
+        }
+        return ceremonyRepository.findIdsByIdInAndStateIn(ceremonyIds, TERMINAL_NON_CONSUMED_STATES);
     }
 
     // --- internals ---

@@ -70,4 +70,15 @@ public interface KeriAttestationCeremonyRepository extends JpaRepository<KeriAtt
             + "where c.state in :terminal and c.updatedAt < :cutoff")
     long deleteByStateInAndUpdatedAtBefore(@Param("terminal") Collection<CeremonyState> terminal,
                                             @Param("cutoff") LocalDateTime cutoff);
+
+    /**
+     * Backs {@link org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi
+     * #findTerminalNonConsumedCeremonyIds} (Task 13): of {@code ids}, the ones currently in one of
+     * {@code states} (the caller passes {@code FAILED}/{@code EXPIRED}). Selects only the id column —
+     * a target provider's freeze-cleanup sweep needs nothing else from this row.
+     */
+    @Query("select c.id from keri_attestation.KeriAttestationCeremonyEntity c "
+            + "where c.id in :ids and c.state in :states")
+    List<String> findIdsByIdInAndStateIn(@Param("ids") Collection<String> ids,
+                                          @Param("states") Collection<CeremonyState> states);
 }

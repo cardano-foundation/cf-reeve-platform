@@ -204,6 +204,50 @@ public class VaultDocumentService {
     }
 
     /**
+     * Read-only load for KERI wallet-attestation (design §5.2, Task 13): existence, org-membership
+     * and DRAFT-status checks identical to {@link #publish(String)}'s early guards (same
+     * {@code documentRepository}/{@code securityHelper} idiom, same {@link VaultProblems}), but
+     * without ANY of {@code publish}'s side effects — no status flip, no
+     * {@link DocumentPublishCommand} event, no IPFS-availability probe. Called from
+     * {@code blockchain_publisher}'s {@code DocumentAttestationTargetProvider} both to authorize a
+     * ceremony (design §3.3 {@code authorize}) and, immediately before freezing, to load the exact
+     * document row to build the envelope from (design §3.3 {@code prepareDigest}) — at ATTEST time
+     * the document is still DRAFT in this module; no publisher-side row exists yet, so the freeze
+     * step cannot go through {@code publish()} or any publisher-side lookup.
+     *
+     * <p>Deliberately a plain {@code findById}, not {@code findByIdForUpdate}: this never mutates the
+     * document, and documents have no in-place edit path once uploaded (blueprint B3), so there is
+     * nothing here for a row lock to serialize against. The real double-check happens where it must —
+     * inside {@code publish()}'s own locked transaction, when a ceremony is actually consumed.
+     *
+     * <p>{@code userId} is accepted (rather than derived internally) to match the
+     * {@code AttestationTargetProvider} port's {@code authorize(targetId, userId)} shape (design
+     * §3.3) it backs; like every other authorization check in this class, the actual org-membership
+     * decision is {@link KeycloakSecurityHelper#canUserAccessOrg(String)}, which reads the request's
+     * current {@code SecurityContextHolder} JWT rather than an arbitrary caller-supplied id — correct
+     * here because both call sites (ceremony creation and the ATTEST step's synchronous
+     * authorize-then-freeze) run in the same request thread as the user identified by that JWT.
+     */
+    @Transactional(readOnly = true)
+    public Either<ProblemDetail, VaultDocumentEntity> loadForAttestation(String documentId, String userId) {
+        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
+        if (documentM.isEmpty()) {
+            return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
+                    "No document %s.".formatted(documentId)));
+        }
+        VaultDocumentEntity document = documentM.get();
+        if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
+            return Either.left(VaultProblems.forbidden(
+                    "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
+        }
+        if (document.getStatus() != VaultDocumentStatus.DRAFT) {
+            return Either.left(VaultProblems.conflict(VaultProblems.ALREADY_PUBLISHED,
+                    "Document %s is already published.".formatted(documentId)));
+        }
+        return Either.right(document);
+    }
+
+    /**
      * Builds the PII-free {@link DocumentPublishCommand} handed to blockchain_publisher. Extracted
      * (Codex adversarial-review finding 1) so this exact field mapping is shared by BOTH emission
      * sites and cannot drift apart: {@link #publish(String)} above, and {@code

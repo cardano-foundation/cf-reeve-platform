@@ -18,10 +18,14 @@ import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
+import org.cardanofoundation.lob.app.blockchain_publisher.job.DocumentAttestationFreezeCleanupJob;
+import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationTargetProvider;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
@@ -33,7 +37,11 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
+import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
+import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Configuration
 public class TransactionSubmissionConfig {
@@ -166,6 +174,44 @@ public class TransactionSubmissionConfig {
                                                                   ObjectMapper objectMapper
     ) {
         return new OrganiserWalletMetadataTxSubmitter(backendService, organiserAccount, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
+    public DocumentAttestationTargetProvider documentAttestationTargetProvider(
+            VaultDocumentService vaultDocumentService,
+            DocumentConverter documentConverter,
+            DocumentIpfsSerialiser documentIpfsSerialiser,
+            DocumentMetadataSerialiser documentMetadataSerialiser,
+            BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+            Optional<IpfsPublisher> ipfsPublisher,
+            Cip170MetadataFactory cip170MetadataFactory,
+            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
+            KeycloakSecurityHelper securityHelper,
+            Clock clock
+    ) {
+        return new DocumentAttestationTargetProvider(
+                vaultDocumentService,
+                documentConverter,
+                documentIpfsSerialiser,
+                documentMetadataSerialiser,
+                blockchainReaderPublicApi,
+                ipfsPublisher,
+                cip170MetadataFactory,
+                documentAttestationFreezeRepository,
+                securityHelper,
+                clock
+        );
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
+    public DocumentAttestationFreezeCleanupJob documentAttestationFreezeCleanupJob(
+            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
+            AttestationConsumptionApi attestationConsumptionApi,
+            Clock clock
+    ) {
+        return new DocumentAttestationFreezeCleanupJob(documentAttestationFreezeRepository, attestationConsumptionApi, clock);
     }
 
 //    @Bean

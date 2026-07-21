@@ -487,6 +487,54 @@ class VaultDocumentServiceTest {
         verify(ipfsAvailability, never()).getIfAvailable();
     }
 
+    @Test
+    void loadForAttestationReturnsDraftDocument() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+
+        Either<ProblemDetail, VaultDocumentEntity> result = service.loadForAttestation("doc1", "sender");
+
+        assertTrue(result.isRight());
+        assertEquals("doc1", result.get().getId());
+        assertEquals(VaultDocumentStatus.DRAFT, result.get().getStatus());
+    }
+
+    @Test
+    void loadForAttestationUnknownDocumentIs404() {
+        when(documentRepository.findById("nope")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, VaultDocumentEntity> result = service.loadForAttestation("nope", "sender");
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.DOCUMENT_NOT_FOUND, result.getLeft().getTitle());
+    }
+
+    @Test
+    void loadForAttestationRejectsNonMember() {
+        VaultDocumentEntity doc = draftDoc();
+        doc.setOrganisationId("other-org");
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+        when(securityHelper.canUserAccessOrg("other-org")).thenReturn(false);
+
+        Either<ProblemDetail, VaultDocumentEntity> result = service.loadForAttestation("doc1", "sender");
+
+        assertTrue(result.isLeft());
+        assertEquals(403, result.getLeft().getStatus());
+        assertEquals(VaultProblems.USER_NOT_IN_ORGANISATION, result.getLeft().getTitle());
+    }
+
+    @Test
+    void loadForAttestationRejectsAlreadyPublishedDocument() {
+        VaultDocumentEntity doc = draftDoc();
+        doc.setStatus(VaultDocumentStatus.PUBLISHED);
+        when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
+
+        Either<ProblemDetail, VaultDocumentEntity> result = service.loadForAttestation("doc1", "sender");
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ALREADY_PUBLISHED, result.getLeft().getTitle());
+    }
+
     private VaultDocumentEntity draftDoc() {
         VaultDocumentEntity doc = new VaultDocumentEntity();
         doc.setId("doc1");

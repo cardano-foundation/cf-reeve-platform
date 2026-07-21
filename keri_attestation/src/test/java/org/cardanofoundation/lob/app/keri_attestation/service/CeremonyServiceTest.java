@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -759,5 +760,26 @@ class CeremonyServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.IDENTITY_RELINKED, result.getLeft().getTitle());
+    }
+
+    // --- findTerminalNonConsumedCeremonyIds (Task 13: blockchain_publisher's freeze cleanup) ---
+
+    @Test
+    void findTerminalNonConsumedCeremonyIdsDelegatesToTheFailedOrExpiredQuery() {
+        Set<String> ids = Set.of("cer-1", "cer-2", "cer-3");
+        when(ceremonyRepository.findIdsByIdInAndStateIn(ids, EnumSet.of(CeremonyState.FAILED, CeremonyState.EXPIRED)))
+                .thenReturn(List.of("cer-1", "cer-3"));
+
+        List<String> result = service.findTerminalNonConsumedCeremonyIds(ids);
+
+        assertEquals(List.of("cer-1", "cer-3"), result);
+    }
+
+    @Test
+    void findTerminalNonConsumedCeremonyIdsShortCircuitsOnEmptyInput() {
+        List<String> result = service.findTerminalNonConsumedCeremonyIds(Set.of());
+
+        assertTrue(result.isEmpty());
+        verifyNoInteractions(ceremonyRepository, identityLinkRepository, targetProviderRegistry);
     }
 }
