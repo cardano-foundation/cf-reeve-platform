@@ -841,7 +841,7 @@ class DbSynchronisationUseCaseServiceTest {
         txItem.setId(TransactionItem.id(txId, "0"));
 
         val erpViolation = TransactionViolation.builder()
-                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                .code(TransactionViolationCode.TRANSACTION_NOT_IN_ERP)
                 .severity(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR)
                 .source(Source.ERP)
                 .processorModule("reconciliation")
@@ -906,7 +906,7 @@ class DbSynchronisationUseCaseServiceTest {
         txItem.setId(TransactionItem.id(txId, "0"));
 
         val erpViolation = TransactionViolation.builder()
-                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                .code(TransactionViolationCode.TRANSACTION_NOT_IN_ERP)
                 .severity(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR)
                 .source(Source.ERP)
                 .processorModule("reconciliation")
@@ -969,7 +969,7 @@ class DbSynchronisationUseCaseServiceTest {
         txItem.setId(TransactionItem.id(txId, "0"));
 
         val erpViolation = TransactionViolation.builder()
-                .code(TransactionViolationCode.TX_NOT_IN_ERP)
+                .code(TransactionViolationCode.TRANSACTION_NOT_IN_ERP)
                 .severity(org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation.Severity.ERROR)
                 .source(Source.ERP)
                 .processorModule("reconciliation")

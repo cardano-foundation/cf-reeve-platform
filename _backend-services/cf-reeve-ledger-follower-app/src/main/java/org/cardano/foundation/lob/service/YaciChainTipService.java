@@ -1,7 +1,7 @@
 package org.cardano.foundation.lob.service;
 
 import com.bloxbean.cardano.yaci.store.api.blocks.service.BlockService;
-import com.bloxbean.cardano.yaci.store.core.service.EraService;
+import com.bloxbean.cardano.yaci.store.core.service.ChainTipService;
 import io.vavr.control.Either;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +23,7 @@ public class YaciChainTipService implements BlockchainDataChainTipService {
 
     private final BlockService blockService;
     private final ChainSyncService chainSyncService;
-    private final EraService eraService;
+    private final ChainTipService chainTipService;
 
     private final CardanoNetwork network;
     private final CacheManager cacheManager;
@@ -43,7 +43,8 @@ public class YaciChainTipService implements BlockchainDataChainTipService {
 
         var chainSync = chainSyncService.getSyncStatus(true);
 
-        Optional<Integer> currentEpoch = eraService.getTipAndCurrentEpoch().isPresent() ? Optional.of(eraService.getTipAndCurrentEpoch().get()._2) : Optional.empty();
+        // In yaci-store 2.0.2, EraService.getTipAndCurrentEpoch() moved to ChainTipService (same package, same signature).
+        Optional<Integer> currentEpoch = chainTipService.getTipAndCurrentEpoch().isPresent() ? Optional.of(chainTipService.getTipAndCurrentEpoch().get()._2) : Optional.empty();
 
         return Either.right(ChainTip.builder()
                 .blockHash(latestBlock.getHash())

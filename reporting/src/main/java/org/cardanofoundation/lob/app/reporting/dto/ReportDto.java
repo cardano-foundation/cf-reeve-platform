@@ -5,18 +5,18 @@ import java.util.List;
 import jakarta.validation.constraints.NotNull;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Data
-@Builder
+@SuperBuilder
 @Getter
 @Setter
 @NoArgsConstructor

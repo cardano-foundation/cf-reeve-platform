@@ -1,0 +1,47 @@
+spring:
+  datasource:
+    name: ${DB_NAME:postgres}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=lob_service}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    baselineOnMigrate: true
+    cleanDisabled: false
+    locations:
+      - classpath:db/migration/{vendor}/common
+      - classpath:db/migration/{vendor}/test
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+  kafka:
+    enabled: false
+
+keycloak:
+  enabled: false
+  token-url: ""
+  authorization-url: ""
+
+lob:
+  cardano:
+    network: "DEV"
+  blockfrost:
+    url: "http://localhost:8080/api/v1/"
+    api_key: ""
+  netsuite:
+    enabled: false
+    client:
+      url: ""
+  csv:
+    delimiter: ","
+  blockchain-reader:
+    enabled: false
+  blockchain-publisher:
+    enabled: false
+    rollback:
+      enabled: false
+
+testcontainers:
+  enabled: true

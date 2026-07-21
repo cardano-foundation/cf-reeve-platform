@@ -9,10 +9,10 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import org.flywaydb.core.Flyway;
 
@@ -30,10 +30,11 @@ import org.cardanofoundation.lob.app.blockchain_publisher.config.TimeConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepository;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API1L1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.API3L1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.BlockchainReportsDispatcher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.BlockchainTransactionsDispatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoDispatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoStatusWatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.BlockchainTransactionSubmissionService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.TransactionSubmissionService;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
@@ -52,18 +53,20 @@ class BlockchainPublisherServiceDuplicateEventsTest {
     private TransactionEntityRepository transactionEntityRepository;
     @Autowired
     private ReportEntityRepository reportEntityRepository;
-    @MockBean
-    private BlockchainReportsDispatcher blockchainReportsDispatcher;
-    @MockBean
-    private BlockchainTransactionsDispatcher blockchainTransactionsDispatcher;
-    @MockBean
+    @MockitoBean
+    private CardanoDispatcher cardanoDispatcher;
+    @MockitoBean
+    private CardanoStatusWatcher cardanoStatusWatcher;
+    @MockitoBean
     private BlockchainTransactionSubmissionService blockchainTransactionSubmissionService;
-    @MockBean
+    @MockitoBean
     private TransactionSubmissionService transactionSubmissionService;
-    @MockBean
+    @MockitoBean
     private API1L1TransactionCreator api1L1TransactionCreator;
-    @MockBean
+    @MockitoBean
     private API3L1TransactionCreator api3L1TransactionCreator;
+    @MockitoBean
+    private SpendingEventL1TransactionCreator spendingEventL1TransactionCreator;
 
 
     @BeforeEach

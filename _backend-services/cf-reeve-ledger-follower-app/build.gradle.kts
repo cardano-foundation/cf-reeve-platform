@@ -12,7 +12,7 @@ springBoot {
 }
 
 group = "org.cardano.foundation"
-version = "1.4.3"
+version = "1.6.0"
 java.sourceCompatibility = JavaVersion.VERSION_21
 
 configurations {
@@ -59,7 +59,8 @@ dependencies {
     implementation("com.querydsl:querydsl-jpa")
     annotationProcessor("com.querydsl:querydsl-apt")
 
-    val cardanoClientVersion = "0.6.6"
+    // Aligned with yaci-store 2.0.2's transitive cardano-client-lib 0.7.2 (avoids a 0.6.x / 0.7.x split).
+    val cardanoClientVersion = "0.7.2"
     implementation("com.bloxbean.cardano:cardano-client-crypto:$cardanoClientVersion")
     implementation("com.bloxbean.cardano:cardano-client-backend-blockfrost:$cardanoClientVersion")
 
@@ -67,12 +68,15 @@ dependencies {
 
     implementation("io.vavr:vavr:0.10.4")
 
-    // yaci-store dependencies
-    val yaciStoreVersion = "0.1.6"
+    // yaci-store dependencies (upgraded 0.1.6 -> 2.0.2; 2.x is where the plugin subsystem / @Plugin joinpoints exist)
+    val yaciStoreVersion = "2.0.2"
     implementation("com.bloxbean.cardano:yaci-store-spring-boot-starter:$yaciStoreVersion")
     implementation("com.bloxbean.cardano:yaci-store-blocks-spring-boot-starter:$yaciStoreVersion")
     implementation("com.bloxbean.cardano:yaci-store-transaction-spring-boot-starter:$yaciStoreVersion")
     implementation("com.bloxbean.cardano:yaci-store-metadata-spring-boot-starter:$yaciStoreVersion")
+    // Utxo store: enables UTXO indexing (address_utxo / tx_input tables) and the @Plugin(key="utxo.unspent.save")
+    // joinpoint that the address MVEL filter in application.yaml hooks. Defaults to enabled (store.utxo.enabled=true).
+    implementation("com.bloxbean.cardano:yaci-store-utxo-spring-boot-starter:$yaciStoreVersion")
     
     runtimeOnly("org.postgresql:postgresql")
 

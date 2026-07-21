@@ -41,7 +41,7 @@ public class LOBOnChainBatchProcessor {
                 val lobBatch = metadataDeserialiser.decode(envelopeCborMap);
 
                 if (lobBatch.isEmpty()) {
-                    log.warn("Failed to decode transaction {}. Block: {}.", txEvent.getTxHash(), event.getEventMetadata());
+                    log.warn("Failed to decode transaction {}. Block: {}.", txEvent.getTxHash(), event.getMetadata());
                     continue;
                 }
 

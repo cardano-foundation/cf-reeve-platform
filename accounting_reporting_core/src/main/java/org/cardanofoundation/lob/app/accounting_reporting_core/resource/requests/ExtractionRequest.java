@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.web.multipart.MultipartFile;
@@ -21,7 +22,7 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 @AllArgsConstructor
 @NoArgsConstructor
 @Slf4j
-@Builder
+@SuperBuilder
 public class ExtractionRequest extends BaseRequest {
 
     @Schema(example = "NETSUITE")

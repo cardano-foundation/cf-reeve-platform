@@ -31,6 +31,7 @@ services:
       STORE_CARDANO_HOST: yaci-cli
       SOTRE_CARDANO_PORT: 3001
       STORE_CARDANO_PROTOCOL_MAGIC: 42
+      LOB_UTXO_FILTER_ADDRESSES: addr_test1qppcuzs25ghufz2mzg37hcm77px4matwz2hz072z4ms7umqasylaf2uure0h5dw6zmm4ctnxfm0m9gf8lst6fflthlhq5hrg7w
     depends_on:
       postgres-follower:
         condition: service_healthy
@@ -56,6 +57,9 @@ services:
       - "5173:5173"
     env_file:
       - ./yaci-config/env
+    environment:
+      PUBLIC_INDEXER_BASE_URL: ${PUBLIC_INDEXER_BASE_URL:-http://yaci-cli:8080/api/v1}
+      PUBLIC_INDEXER_WS_URL: ${PUBLIC_INDEXER_WS_URL:-ws://localhost:8082/ws/liveblocks}
     networks:
       - lob
 volumes:
