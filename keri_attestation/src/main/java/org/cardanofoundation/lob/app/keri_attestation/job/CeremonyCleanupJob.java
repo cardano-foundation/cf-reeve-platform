@@ -25,14 +25,14 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
  *
  * <p>Two independent sweeps:
  * <ol>
- *   <li>{@link #expireOverdueCeremonies()} — {@link CeremonyService} already applies TTL expiry
+ *   <li>{@code expireOverdueCeremonies()} — {@code CeremonyService} already applies TTL expiry
  *       lazily on every read/transition of a single ceremony, but a ceremony nobody ever looks at
  *       again (the user simply walked away mid-flow) would otherwise sit forever in a non-terminal
  *       state, still counting against that user's active-ceremony limit. This sweep is what actually
  *       frees the slot.</li>
- *   <li>{@link #deleteOldTerminalCeremonies()} — terminal rows (CONSUMED/FAILED/EXPIRED) are pure
+ *   <li>{@code deleteOldTerminalCeremonies()} — terminal rows (CONSUMED/FAILED/EXPIRED) are pure
  *       audit trail once the ceremony is done; this purges anything older than
- *       {@value #RETENTION_DAYS} days so the table does not grow unbounded. This only ever deletes
+ *       7 days so the table does not grow unbounded. This only ever deletes
  *       ceremony rows in this module — {@code blockchain_publisher}'s own freeze-row cleanup for
  *       terminal ceremonies is a separate job (Task 13), not cascaded from here.</li>
  * </ol>
