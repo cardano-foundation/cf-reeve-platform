@@ -20,17 +20,16 @@ import org.springframework.stereotype.Component;
  * {@link KeriAttestService#awaitAnchor}; {@link #awaitAuthBeginConfirmation} to
  * {@link KeriAuthBeginService#awaitAuthBeginConfirmation}.
  *
- * <p><b>Circular dependency, and why it's resolved with {@code @Lazy}:</b> both
- * {@link KeriAttestService} and {@link KeriAuthBeginService} dispatch back through this same bean (to
- * run their own continuation asynchronously), which would otherwise be a genuine constructor-injection
- * cycle (e.g. {@code KeriAttestService -> CeremonyAsyncRunner -> KeriAttestService}). Both are
- * injected here as {@code @Lazy} constructor parameters to break it: Spring hands this bean a
- * deferred-resolution proxy for each instead of forcing their eager construction while this bean
- * itself is still being built, and the proxy resolves to the real (by then fully constructed) bean the
- * first time an {@code @Async} method here actually runs — always well after context startup has
- * finished constructing every singleton, so there is no risk of dereferencing a half-built bean.
- * {@link KeriCredentialService} does not participate in the cycle (nothing depends on it dispatching
- * back through this bean) and is injected normally.
+ * <p><b>Circular dependency, and why it's resolved with {@code @Lazy}:</b> {@link KeriAttestService},
+ * {@link KeriCredentialService} (Task 10's {@code startCredentialRequest}) and
+ * {@link KeriAuthBeginService} all dispatch back through this same bean (to run their own continuation
+ * asynchronously), which would otherwise be a genuine constructor-injection cycle (e.g.
+ * {@code KeriAttestService -> CeremonyAsyncRunner -> KeriAttestService}). All three are injected here
+ * as {@code @Lazy} constructor parameters to break it: Spring hands this bean a deferred-resolution
+ * proxy for each instead of forcing their eager construction while this bean itself is still being
+ * built, and the proxy resolves to the real (by then fully constructed) bean the first time an
+ * {@code @Async} method here actually runs — always well after context startup has finished
+ * constructing every singleton, so there is no risk of dereferencing a half-built bean.
  */
 @Component
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
@@ -40,7 +39,7 @@ public class CeremonyAsyncRunner {
     private final KeriCredentialService credentialService;
     private final KeriAuthBeginService authBeginService;
 
-    public CeremonyAsyncRunner(@Lazy KeriAttestService attestService, KeriCredentialService credentialService,
+    public CeremonyAsyncRunner(@Lazy KeriAttestService attestService, @Lazy KeriCredentialService credentialService,
             @Lazy KeriAuthBeginService authBeginService) {
         this.attestService = attestService;
         this.credentialService = credentialService;

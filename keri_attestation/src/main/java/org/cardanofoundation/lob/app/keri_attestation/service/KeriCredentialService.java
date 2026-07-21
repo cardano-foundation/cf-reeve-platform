@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,7 +39,9 @@ import org.cardanofoundation.signify.app.credentialing.ipex.IpexApplyArgs;
  * part of a step POST (build + send the apply, persist where to correlate the reply, return quickly);
  * {@link #awaitPresentation} is the async continuation (offer → agree → grant → admit → fetch → validate
  * → persist → complete/fail the ceremony step) that a background worker runs after the synchronous part
- * returns (Task 9 wires the executor — this method is unit-tested directly for now).
+ * returns. {@link #startCredentialRequest} (Task 10) is the orchestrating entry point the controller
+ * actually calls: {@code beginStep} + a retry pre-check + {@link #startPresentation} +
+ * {@link CeremonyAsyncRunner} dispatch, mirroring {@link KeriAttestService#startAttest}'s shape exactly.
  */
 @Service
 @RequiredArgsConstructor
@@ -49,6 +52,11 @@ public class KeriCredentialService {
     private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer");
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant");
 
+    /** Short wait for the retry pre-check (design §4.2 "before re-sending... checks for a
+     *  late-arriving matching notification") — mirrors {@link KeriAttestService}'s own retry-precheck
+     *  timeout, applied here to the credential-presentation step instead of the ATTEST anchor. */
+    private static final Duration RETRY_PRECHECK_TIMEOUT = Duration.ofSeconds(2);
+
     @Qualifier("keriAttestationSignifyClient")
     private final SignifyClient client;
     private final KeriAgentService agentService;
@@ -58,6 +66,81 @@ public class KeriCredentialService {
     private final KeriAttestationCeremonyRepository ceremonyRepository;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
+    private final CeremonyAsyncRunner asyncRunner;
+
+    // --- orchestration (Task 10): begin the step, avoid a redundant apply if a reply already arrived,
+    //     dispatch the async continuation. The controller calls only this method. ---
+
+    /**
+     * Orchestrates the CREDENTIAL_REQUEST step end-to-end for a controller call (design §4.2), mirroring
+     * {@link KeriAttestService#startAttest}: {@link CeremonyService#beginStep} from {@code OOBI_RESOLVED}
+     * to {@code CREDENTIAL_REQUESTED} (or, on retry, re-enters {@code CREDENTIAL_REQUESTED} with a
+     * bumped {@code attemptGeneration}), then a short retry pre-check for a reply that already arrived on
+     * the previous attempt's apply before resending one.
+     */
+    public Either<ProblemDetail, Void> startCredentialRequest(String ceremonyId, String userId, boolean retry) {
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
+                CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, retry);
+        if (begun.isLeft()) {
+            return Either.left(begun.getLeft());
+        }
+        KeriAttestationCeremonyEntity ceremony = begun.get();
+        int generation = ceremony.getAttemptGeneration();
+
+        Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
+        if (linkOpt.isEmpty() || linkOpt.get().getAid() == null) {
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.IDENTITY_NOT_LINKED,
+                    "User %s has no linked identity to request a credential presentation from.".formatted(userId));
+        }
+        String linkedAid = linkOpt.get().getAid();
+
+        // Retry pre-check (design §4.2, mirrors KeriAttestService#startAttest): before sending a fresh
+        // IPEX apply, look for a late-arriving offer correlated to the PREVIOUS attempt's apply. Found:
+        // skip straight to dispatching the async continuation — its own (non-destructive)
+        // correlator.awaitCorrelated call will find the same offer again, so nothing needs re-sending.
+        // Not found (or this is the first attempt, requestExnSaid still null): fall through and build +
+        // send a fresh apply below.
+        if (retry && ceremony.getRequestExnSaid() != null) {
+            Optional<CorrelatedNotification> lateOffer = correlator.awaitCorrelated(OFFER_ROUTES, linkedAid,
+                    ceremony.getRequestExnSaid(), RETRY_PRECHECK_TIMEOUT);
+            if (lateOffer.isPresent()) {
+                return dispatchAwaitPresentation(ceremonyId, generation);
+            }
+        }
+
+        Either<ProblemDetail, Void> sent = startPresentation(ceremony);
+        if (sent.isLeft()) {
+            ProblemDetail problem = sent.getLeft();
+            ceremonyService.failStep(ceremonyId, generation, CeremonyState.CREDENTIAL_REQUESTED, problem.getTitle(),
+                    problem.getDetail());
+            return Either.left(problem);
+        }
+
+        return dispatchAwaitPresentation(ceremonyId, generation);
+    }
+
+    private Either<ProblemDetail, Void> dispatchAwaitPresentation(String ceremonyId, int generation) {
+        try {
+            asyncRunner.awaitPresentation(ceremonyId, generation);
+        } catch (Exception e) {
+            // The executor rejected the dispatch (pool/queue saturated) — the apply (if this attempt
+            // sent one) is already on its way to the wallet, but with no worker left to await its
+            // reply, the ceremony must not be left non-terminal with an unhandled exception as the only
+            // signal. A retry's pre-check (above) will pick up a late-arriving offer instead of
+            // resending. Mirrors KeriAttestService#startAttest's identical dispatch-failure handling.
+            log.warn("Failed to dispatch credential presentation wait for ceremony {}: {}", ceremonyId,
+                    e.getMessage());
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                    "Failed to dispatch the presentation wait: " + e.getMessage());
+        }
+        return Either.right(null);
+    }
+
+    private Either<ProblemDetail, Void> failCredentialRequest(String ceremonyId, int generation, String title,
+            String detail) {
+        ceremonyService.failStep(ceremonyId, generation, CeremonyState.CREDENTIAL_REQUESTED, title, detail);
+        return Either.left(KeriAttestationProblems.unprocessable(title, detail));
+    }
 
     // --- synchronous: build + send the apply, persist requestExnSaid before the send completes ---
 

@@ -90,6 +90,8 @@ class KeriCredentialServiceTest {
     private KeriAttestationCeremonyRepository ceremonyRepository;
     @Mock
     private KeriIdentityLinkRepository identityLinkRepository;
+    @Mock
+    private CeremonyAsyncRunner asyncRunner;
 
     private KeriCredentialService service;
 
@@ -101,7 +103,7 @@ class KeriCredentialServiceTest {
         lenient().when(agentService.agentOobi()).thenReturn(AGENT_OOBI);
 
         service = new KeriCredentialService(client, agentService, correlator, validator, ceremonyService,
-                ceremonyRepository, identityLinkRepository, properties());
+                ceremonyRepository, identityLinkRepository, properties(), asyncRunner);
     }
 
     private static KeriAttestationProperties properties() {
@@ -212,6 +214,129 @@ class KeriCredentialServiceTest {
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
         assertEquals(APPLY_SAID, ceremony.getRequestExnSaid());
         verify(ceremonyRepository).save(ceremony);
+    }
+
+    // ==================== startCredentialRequest ====================
+
+    @Test
+    void startCredentialRequestHappyPathSendsApplyThenDispatchesAsyncWait() throws Exception {
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isRight());
+        verify(ipex).submitApply(AGENT_NAME, exn, List.of("sig1"), List.of(LINKED_AID));
+        verify(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void startCredentialRequestBeginStepFailureReturnsLeftWithoutOtherInteractions() {
+        ProblemDetail problem = KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE, "x");
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.left(problem));
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(problem, result.getLeft());
+        verifyNoInteractions(identityLinkRepository, correlator, ipex, asyncRunner);
+    }
+
+    @Test
+    void startCredentialRequestWithNoIdentityLinkFailsWithIdentityNotLinked() {
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.IDENTITY_NOT_LINKED, result.getLeft().getTitle());
+        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.IDENTITY_NOT_LINKED,
+                "User user-1 has no linked identity to request a credential presentation from.");
+        verifyNoInteractions(correlator, ipex, asyncRunner);
+    }
+
+    @Test
+    void startCredentialRequestApplyBuildFailureFailsWithCredentialRequestFailed() throws Exception {
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(ipex.apply(any())).thenThrow(new IOException("agent unreachable"));
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
+        verifyNoInteractions(asyncRunner);
+    }
+
+    @Test
+    void startCredentialRequestDispatchFailureFailsWithCredentialRequestFailedInsteadOfPropagating() throws Exception {
+        // If CeremonyAsyncRunner's executor rejects the dispatch (pool/queue saturated), the apply has
+        // already been sent to the wallet — the ceremony must still land in a terminal, retryable state
+        // rather than letting the rejection exception escape startCredentialRequest uncaught.
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("pool saturated"))
+                .when(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
+    }
+
+    @Test
+    void startCredentialRequestRetryWithLateArrivedOfferSkipsResendAndDispatchesAsyncWait() throws Exception {
+        KeriAttestationCeremonyEntity ceremony = ceremony(APPLY_SAID);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, true);
+
+        assertTrue(result.isRight());
+        verifyNoInteractions(ipex);
+        verify(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void startCredentialRequestRetryWithNoLateOfferFallsThroughToTheNormalSendFlow() throws Exception {
+        String oldApplySaid = "EOLDAPPLYSAID000000000000000000000000000";
+        KeriAttestationCeremonyEntity ceremony = ceremony(oldApplySaid);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(oldApplySaid), any()))
+                .thenReturn(Optional.empty());
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, true);
+
+        assertTrue(result.isRight());
+        verify(ipex).submitApply(AGENT_NAME, exn, List.of("sig1"), List.of(LINKED_AID));
+        verify(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
     }
 
     // ==================== awaitPresentation ====================
