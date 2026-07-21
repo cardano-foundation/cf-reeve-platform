@@ -9,6 +9,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,14 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
  * "the triggering POST returns 202 immediately and the frontend polls"), exactly like the wallet-wait
  * steps ({@link KeriCredentialService#awaitPresentation}, {@link KeriAttestService#awaitAnchor}) never
  * return anything to a caller at all.
+ *
+ * <p><b>F9 fix:</b> {@link CardanoMetadataTxSubmitter} is implemented by {@code blockchain_publisher}
+ * (design §3.3) — a module that is not guaranteed to be enabled alongside this one. A hard
+ * constructor-injected dependency on it would fail this service's bean creation (and therefore this
+ * whole module's startup) whenever {@code keri_attestation} is enabled without
+ * {@code blockchain_publisher}. It is instead injected as an {@link ObjectProvider} and resolved at
+ * each use site ({@link #verifyExternal}, {@link #submitOwn}); when absent, the affected step fails
+ * cleanly via {@code failStep} instead of throwing.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,11 +59,12 @@ public class KeriAuthBeginService {
 
     private static final List<Long> AUTH_BEGIN_AUTHORIZED_LABELS = List.of(1447L);
     private static final long AUTH_BEGIN_METADATA_LABEL = 170L;
+    private static final String NO_SUBMITTER_DETAIL = "No Cardano transaction submitter available in this deployment.";
 
     private final KeriAttestationClient client;
     private final CesrChainReducer cesrChainReducer;
     private final Cip170MetadataFactory metadataFactory;
-    private final CardanoMetadataTxSubmitter submitter;
+    private final ObjectProvider<CardanoMetadataTxSubmitter> submitterProvider;
     private final CeremonyService ceremonyService;
     private final KeriAttestationCeremonyRepository ceremonyRepository;
     private final KeriIdentityLinkRepository identityLinkRepository;
@@ -94,6 +104,13 @@ public class KeriAuthBeginService {
 
     private void verifyExternal(String ceremonyId, int generation, KeriAttestationCeremonyEntity ceremony,
             KeriIdentityLinkEntity link, String txHash) {
+        CardanoMetadataTxSubmitter submitter = submitterProvider.getIfAvailable();
+        if (submitter == null) {
+            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED, NO_SUBMITTER_DETAIL);
+            return;
+        }
+
         Optional<Map<String, Object>> metadataOpt;
         try {
             metadataOpt = submitter.readCip170Metadata(txHash);
@@ -167,6 +184,13 @@ public class KeriAuthBeginService {
                     KeriAttestationProblems.IDENTITY_NOT_LINKED,
                     "User %s has no validated credential to build an AUTH_BEGIN chain from."
                             .formatted(link.getUserId()));
+            return;
+        }
+
+        CardanoMetadataTxSubmitter submitter = submitterProvider.getIfAvailable();
+        if (submitter == null) {
+            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    KeriAttestationProblems.AUTH_BEGIN_SUBMISSION_UNAVAILABLE, NO_SUBMITTER_DETAIL);
             return;
         }
 
@@ -253,6 +277,17 @@ public class KeriAuthBeginService {
             ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
                     KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
                     "No pending AUTH_BEGIN transaction hash was recorded to confirm.");
+            return;
+        }
+
+        // Defensive (F9 fix): submitOwn already required the submitter to exist to reach this point, but
+        // this worker can run well after that (the confirmation poll can last up to
+        // authBeginRollbackWindow, default 30 minutes) — a redeploy that removes the submitter mid-wait
+        // must still resolve the ceremony rather than NPE.
+        CardanoMetadataTxSubmitter submitter = submitterProvider.getIfAvailable();
+        if (submitter == null) {
+            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK, NO_SUBMITTER_DETAIL);
             return;
         }
 

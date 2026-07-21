@@ -31,6 +31,12 @@ public final class KeriAttestationProblems {
     public static final String CREDENTIAL_REQUEST_FAILED = "CREDENTIAL_REQUEST_FAILED";
     public static final String AUTH_BEGIN_ROLLED_BACK = "AUTH_BEGIN_ROLLED_BACK";
     public static final String AUTH_BEGIN_UNVERIFIED = "AUTH_BEGIN_UNVERIFIED";
+    /** F9 fix: {@code KeriAuthBeginService#submitOwn} could not build/submit a fresh AUTH_BEGIN
+     *  transaction because no {@code CardanoMetadataTxSubmitter} implementation is available in this
+     *  deployment (the module is enabled without {@code blockchain_publisher}). Distinct from
+     *  {@link #AUTH_BEGIN_UNVERIFIED}, which is the external-authority-verification path's equivalent
+     *  failure for the same underlying cause. */
+    public static final String AUTH_BEGIN_SUBMISSION_UNAVAILABLE = "AUTH_BEGIN_SUBMISSION_UNAVAILABLE";
     public static final String ATTESTATION_UNAVAILABLE = "ATTESTATION_UNAVAILABLE";
     public static final String OOBI_INVALID = "OOBI_INVALID";
     public static final String TARGET_MISMATCH = "TARGET_MISMATCH";

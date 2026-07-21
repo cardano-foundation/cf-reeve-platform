@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ProblemDetail;
 
 import com.bloxbean.cardano.client.metadata.MetadataMap;
@@ -65,6 +66,8 @@ class KeriAuthBeginServiceTest {
     @Mock
     private CardanoMetadataTxSubmitter submitter;
     @Mock
+    private ObjectProvider<CardanoMetadataTxSubmitter> submitterProvider;
+    @Mock
     private CeremonyService ceremonyService;
     @Mock
     private KeriAttestationCeremonyRepository ceremonyRepository;
@@ -79,8 +82,10 @@ class KeriAuthBeginServiceTest {
     void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.credentials()).thenReturn(credentials);
-        service = new KeriAuthBeginService(keriClient, cesrChainReducer, metadataFactory, submitter, ceremonyService,
-                ceremonyRepository, identityLinkRepository, properties(), asyncRunner);
+        // Present by default (F9 fix) — the specific "submitter unavailable" tests override this to null.
+        lenient().when(submitterProvider.getIfAvailable()).thenReturn(submitter);
+        service = new KeriAuthBeginService(keriClient, cesrChainReducer, metadataFactory, submitterProvider,
+                ceremonyService, ceremonyRepository, identityLinkRepository, properties(), asyncRunner);
     }
 
     private static KeriAttestationProperties properties() {
@@ -303,6 +308,22 @@ class KeriAuthBeginServiceTest {
                 eq(KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED), any());
     }
 
+    @Test
+    void submitAuthBeginExternalWithNoSubmitterAvailableFailsWithAuthBeginUnverified() {
+        // F9 fix: module enabled without blockchain_publisher -> no CardanoMetadataTxSubmitter bean.
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
+        when(submitterProvider.getIfAvailable()).thenReturn(null);
+
+        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+
+        assertTrue(result.isRight());
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED), any());
+        verifyNoInteractions(submitter);
+    }
+
     // ==================== submitAuthBegin: own submission ====================
 
     /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply the mutator to
@@ -438,6 +459,23 @@ class KeriAuthBeginServiceTest {
         verifyNoInteractions(asyncRunner);
     }
 
+    @Test
+    void submitAuthBeginOwnSubmissionWithNoSubmitterAvailableFailsWithAuthBeginSubmissionUnavailable() {
+        // F9 fix: module enabled without blockchain_publisher -> no CardanoMetadataTxSubmitter bean. The
+        // credential-presence guard already passed, so this is specifically about the submitter itself.
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
+        when(submitterProvider.getIfAvailable()).thenReturn(null);
+
+        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+
+        assertTrue(result.isRight());
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(KeriAttestationProblems.AUTH_BEGIN_SUBMISSION_UNAVAILABLE), any());
+        verifyNoInteractions(credentials, cesrChainReducer, asyncRunner, submitter);
+    }
+
     // ==================== awaitAuthBeginConfirmation ====================
 
     @Test
@@ -458,6 +496,22 @@ class KeriAuthBeginServiceTest {
         verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.AUTH_BEGIN_SUBMITTED,
                 KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
                 "No pending AUTH_BEGIN transaction hash was recorded to confirm.");
+        verifyNoInteractions(submitter);
+    }
+
+    @Test
+    void awaitAuthBeginConfirmationWithNoSubmitterAvailableFailsWithAuthBeginRolledBack() {
+        // F9 fix: defensive — the submitter existed at submit time but is gone by the time this poll
+        // runs (e.g. a redeploy removed blockchain_publisher mid-wait).
+        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
+        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
+        when(submitterProvider.getIfAvailable()).thenReturn(null);
+
+        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK), any());
         verifyNoInteractions(submitter);
     }
 
