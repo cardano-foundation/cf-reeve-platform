@@ -9,6 +9,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -49,21 +50,30 @@ class CeremonyServiceTest {
             true, null, "identifier", null,
             Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT1.5S"),
             3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
-            Duration.parse("PT15S"), Duration.parse("PT30M"), Duration.parse("PT2S"), Duration.parse("PT3S"));
+            Duration.parse("PT15S"), Duration.parse("PT30M"), Duration.parse("PT2S"), Duration.parse("PT3S"),
+            Duration.parse("PT2M"), null);
 
     @Mock
     private KeriAttestationCeremonyRepository ceremonyRepository;
     @Mock
     private KeriIdentityLinkRepository identityLinkRepository;
+    @Mock
+    private AttestationTargetProviderRegistry targetProviderRegistry;
+    @Mock
+    private AttestationTargetProvider targetProvider;
 
     private CeremonyService service;
 
     @BeforeEach
     void setUp() {
-        service = new CeremonyService(ceremonyRepository, identityLinkRepository, properties);
+        service = new CeremonyService(ceremonyRepository, identityLinkRepository, properties, targetProviderRegistry);
         // Not every test needs the active-ceremony count stubbed (only create() reads it); STRICT_STUBS
         // would otherwise flag it as unnecessary in every other test.
         lenient().when(ceremonyRepository.countByUserIdAndStateNotIn(anyString(), any())).thenReturn(0L);
+        // Default create() to an authorized DOCUMENT provider so every pre-existing create() test keeps
+        // exercising fast-forward/limit behavior without also having to stub target authorization (F2).
+        lenient().when(targetProviderRegistry.forType(anyString())).thenReturn(Optional.of(targetProvider));
+        lenient().when(targetProvider.authorize(anyString(), anyString())).thenReturn(Optional.empty());
     }
 
     private KeriAttestationCeremonyEntity ceremony(CeremonyState state) {
@@ -156,6 +166,44 @@ class CeremonyServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_LIMIT_REACHED, result.getLeft().getTitle());
+    }
+
+    // --- create: target authorization (F2 fix, design §3.3) ---
+
+    @Test
+    void createRejectsAnUnknownTargetTypeWithNoRegisteredProvider() {
+        when(targetProviderRegistry.forType("UNKNOWN")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, "UNKNOWN", "target-1");
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.TARGET_MISMATCH, result.getLeft().getTitle());
+        verifyNoInteractions(identityLinkRepository);
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void createPropagatesTheProvidersAuthorizationProblem() {
+        ProblemDetail authProblem = KeriAttestationProblems.forbidden("user may not publish document doc-1");
+        when(targetProvider.authorize("doc-1", USER)).thenReturn(Optional.of(authProblem));
+
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+
+        assertTrue(result.isLeft());
+        assertEquals(authProblem, result.getLeft());
+        verifyNoInteractions(identityLinkRepository);
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void createProceedsAndCallsTheProviderWhenTheTargetIsAuthorized() {
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
+        when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+
+        assertTrue(result.isRight());
+        verify(targetProvider).authorize("doc-1", USER);
     }
 
     // --- get: ownership + lazy expiry ---
@@ -271,6 +319,98 @@ class CeremonyServiceTest {
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_EXPIRED, result.getLeft().getTitle());
         assertEquals(CeremonyState.EXPIRED, ceremony.getState());
+    }
+
+    // --- link-derived fast-forward floor (F1 fix, design §4.2) ---
+
+    @Test
+    void getAdvancesARestingCeremonyToTheCurrentLinkDerivedFloor() {
+        // Ceremony was created before the user resolved OOBI; the user has since resolved it — a plain
+        // GET must reflect that identity-level progress instead of leaving the ceremony stuck at CREATED.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREATED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", null, null)));
+
+        Either<ProblemDetail, CeremonyView> result = service.get(CEREMONY_ID, USER);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.OOBI_RESOLVED, result.get().state());
+        assertEquals(CeremonyState.OOBI_RESOLVED, ceremony.getState());
+        verify(ceremonyRepository).save(ceremony);
+    }
+
+    @Test
+    void beginStepAdvancesARestingCeremonyBeforeCheckingTheExpectedState() {
+        // Without the F1 fix this beginStep call 409s forever: the ceremony is stuck at CREATED even
+        // though the identity link already has an AID, so credential/request (which expects
+        // OOBI_RESOLVED) would never be reachable.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREATED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", null, null)));
+
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
+                CEREMONY_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.CREDENTIAL_REQUESTED, result.get().getState());
+    }
+
+    @Test
+    void getNeverAdvancesACeremonyThatIsActivelyWaitingOnAStep() {
+        // The link is far ahead (through AUTH_BEGIN), but a step in flight must never be silently
+        // fast-forwarded out from under its own in-flight async worker.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREDENTIAL_REQUESTED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", "a".repeat(64))));
+
+        Either<ProblemDetail, CeremonyView> result = service.get(CEREMONY_ID, USER);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.CREDENTIAL_REQUESTED, result.get().state());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void beginStepNeverAdvancesAWaitingStateViaTheLinkFloor() {
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.AUTH_BEGIN_SUBMITTED);
+        ceremony.setUpdatedAt(LocalDateTime.now().minusSeconds(30));
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
+                CEREMONY_ID, USER, CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, true);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.AUTH_BEGIN_SUBMITTED, result.get().getState());
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void getNeverAdvancesACeremonyWhoseBindingVersionIsBehindTheCurrentLink() {
+        // The ceremony (helper default bindingVersion=1) was created under the old identity; the link
+        // has since been relinked to bindingVersion=2 — its progress must never be used to fast-forward
+        // a ceremony that belongs to a now-superseded identity.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREATED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(2, "Eaid-new", null, null)));
+
+        Either<ProblemDetail, CeremonyView> result = service.get(CEREMONY_ID, USER);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.CREATED, result.get().state());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void getNeverAdvancesAttestAnchoredEvenWhenTheLinkLooksFurtherAlong() {
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", "a".repeat(64))));
+
+        Either<ProblemDetail, CeremonyView> result = service.get(CEREMONY_ID, USER);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.ATTEST_ANCHORED, result.get().state());
+        verify(ceremonyRepository, never()).save(any());
     }
 
     // --- completeStep / failStep: CAS on (attemptGeneration, state) ---

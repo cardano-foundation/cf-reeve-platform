@@ -49,6 +49,16 @@ public interface KeriAttestationCeremonyRepository extends JpaRepository<KeriAtt
             Collection<CeremonyState> terminal, LocalDateTime cutoff);
 
     /**
+     * Candidates for {@code CeremonyCleanupJob}'s step-level stale-detection sweep (design §4.2/§7,
+     * F4 fix): ceremonies sitting in one of the WAITING states whose {@code updatedAt} is older than a
+     * broad discovery cutoff. Unlocked for the same reason as {@link #findByStateNotInAndExpiresAtBefore}
+     * — the sweep re-verifies each candidate (including its precise, per-state timeout) under
+     * {@link #findByIdForUpdate} before writing.
+     */
+    List<KeriAttestationCeremonyEntity> findByStateInAndUpdatedAtBefore(
+            Collection<CeremonyState> waiting, LocalDateTime cutoff);
+
+    /**
      * Purges terminal rows older than {@code CeremonyCleanupJob}'s retention window. A single bulk
      * JPQL delete rather than a Spring Data derived delete — the derived form SELECTs every matching
      * row into the persistence context and removes them one-by-one inside one long transaction, which

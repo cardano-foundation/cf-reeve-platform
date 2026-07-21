@@ -49,6 +49,9 @@ class KeriAttestationModuleFlagTest {
             assertThat(properties.authBeginConfirmations()).isEqualTo(3);
             assertThat(properties.limits().maxActiveCeremoniesPerUser()).isEqualTo(3);
             assertThat(properties.limits().stepCooldown()).isEqualTo(Duration.parse("PT10S"));
+            assertThat(properties.stepTimeoutGrace()).isEqualTo(Duration.parse("PT2M"));
+            assertThat(properties.executor().walletPoolSize()).isEqualTo(4);
+            assertThat(properties.executor().confirmationPoolSize()).isEqualTo(2);
         });
     }
 }

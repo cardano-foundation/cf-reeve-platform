@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEFAULTS;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -20,12 +19,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -113,7 +112,7 @@ class KeriCredentialServiceTest {
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
                 Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),
-                Duration.parse("PT0.01S"));
+                Duration.parse("PT0.01S"), Duration.parse("PT2M"), null);
     }
 
     private static KeriAttestationCeremonyEntity ceremony(String requestExnSaid) {
@@ -342,7 +341,7 @@ class KeriCredentialServiceTest {
     // ==================== awaitPresentation ====================
 
     @Test
-    void awaitPresentationHappyPathWalksOfferAgreeGrantAdmitValidatesAndCompletesInOrder() throws Exception {
+    void awaitPresentationHappyPathWalksOfferAgreeGrantAdmitValidatesAndCompletesTheStep() throws Exception {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         KeriIdentityLinkEntity initialLink = link(LINKED_AID);
         KeriIdentityLinkEntity freshLink = link(LINKED_AID);
@@ -371,21 +370,26 @@ class KeriCredentialServiceTest {
 
         verify(ipex).submitAgree(AGENT_NAME, agreeExn, List.of("sig2"), List.of(LINKED_AID));
         verify(ipex).submitAdmit(AGENT_NAME, admitExn, List.of("sig3"), "atc3", List.of(LINKED_AID));
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+
+        // F5 fix: the link write happens inside completeStep's mutator (mirrors
+        // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent) — capture it and run it the way
+        // CeremonyService really would, then assert its effect. It must not have run as a side effect of
+        // the mocked completeStep call itself.
+        ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> mutatorCaptor = ArgumentCaptor.forClass(Consumer.class);
+        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), mutatorCaptor.capture());
+        verify(identityLinkRepository, never()).save(any());
+
+        mutatorCaptor.getValue().accept(ceremony(APPLY_SAID));
 
         assertEquals(CREDENTIAL_SAID, freshLink.getCredentialSaid());
         assertEquals(RESULT_SCHEMA_SAID, freshLink.getCredentialSchemaSaid());
         verify(identityLinkRepository).save(freshLink);
-        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
-                eq(CeremonyState.CREDENTIAL_RECEIVED), any());
-        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
 
-        // Notifications are only claimed (marked+deleted) after both the link and the ceremony
-        // transition are durably committed.
-        InOrder inOrder = inOrder(identityLinkRepository, ceremonyService, correlator);
-        inOrder.verify(identityLinkRepository).save(freshLink);
-        inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
-        inOrder.verify(correlator).markAndDelete(OFFER_NOTIF_ID);
-        inOrder.verify(correlator).markAndDelete(GRANT_NOTIF_ID);
+        // Notifications are only claimed (marked+deleted) once completeStep reports success.
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
@@ -547,7 +551,8 @@ class KeriCredentialServiceTest {
                 KeriAttestationProblems.CREDENTIAL_REJECTED, "issuee mismatch");
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         // Only one identityLinkRepository.findById call (the initial linkedAid lookup) — rejection
-        // returns before the fresh-link re-fetch, and nothing is ever persisted to the link.
+        // returns before completeStep is ever called, so its link-writing mutator never runs and
+        // nothing is ever persisted to the link.
         verify(identityLinkRepository, never()).save(any());
         verify(correlator, never()).markAndDelete(any());
     }
@@ -613,11 +618,12 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void awaitPresentationRelinkMidFlightFailsWithIdentityRelinkedAndDoesNotPersistStaleCredential() throws Exception {
-        // Guard is bindingVersion-based (mirrors CeremonyService#validateAndConsume), not an AID-string
-        // comparison: the ceremony was created under bindingVersion 1; a relink that landed mid-flight
-        // bumps the link to bindingVersion 2 (and, realistically, a new AID — but the guard itself only
-        // needs the version to differ to catch it).
+    void awaitPresentationRelinkMidFlightCompletesTheStepButSkipsPersistingTheStaleCredential() throws Exception {
+        // F5 fix: the relink check now lives inside completeStep's mutator (mirrors
+        // KeriAuthBeginService's identical mid-flight-relink skip), not as an earlier explicit failStep
+        // guard — the ceremony's own (state, attemptGeneration) CAS has no way to know about a relink,
+        // so the step still completes; the write to the (now stale) link is what's skipped.
+        // CeremonyService#validateAndConsume's own bindingVersion check is the final safety net.
         KeriAttestationCeremonyEntity ceremonyEntity = ceremony(APPLY_SAID);
         ceremonyEntity.setBindingVersion(1);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
@@ -639,27 +645,33 @@ class KeriCredentialServiceTest {
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
                 .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
 
         service.awaitPresentation(CEREMONY_ID, GENERATION);
 
-        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
-                KeriAttestationProblems.IDENTITY_RELINKED,
-                "Identity for user user-1 changed while awaiting the credential presentation.");
-        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+        ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> mutatorCaptor = ArgumentCaptor.forClass(Consumer.class);
+        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), mutatorCaptor.capture());
+
+        mutatorCaptor.getValue().accept(ceremonyEntity);
+
         assertNull(relinkedLink.getCredentialSaid());
         verify(identityLinkRepository, never()).save(any());
-        verify(correlator, never()).markAndDelete(any());
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
-    void awaitPresentationStaleCompleteStepNeverMarksNotificationsAsClaimed() throws Exception {
+    void awaitPresentationStaleCompleteStepNeverMarksNotificationsAsClaimedOrWritesTheLink() throws Exception {
         // completeStep returning false means a retry's generation bump superseded this attempt's CAS —
-        // the winning attempt's own correlator wait still needs these notifications unread/undeleted,
-        // so this attempt must not claim them despite having otherwise "succeeded" up to this point.
+        // the winning attempt's own correlator wait still needs these notifications unread/undeleted, so
+        // this attempt must not claim them despite having otherwise "succeeded" up to this point. F5
+        // fix: since the link write now happens inside completeStep's own mutator, a stale (false) CAS
+        // means the mutator never ran in the first place, so the link must never be written either.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
-        KeriIdentityLinkEntity initialLink = link(LINKED_AID);
-        KeriIdentityLinkEntity freshLink = link(LINKED_AID);
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(freshLink));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
 
         when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
@@ -679,5 +691,6 @@ class KeriCredentialServiceTest {
         service.awaitPresentation(CEREMONY_ID, GENERATION);
 
         verify(correlator, never()).markAndDelete(any());
+        verify(identityLinkRepository, never()).save(any());
     }
 }

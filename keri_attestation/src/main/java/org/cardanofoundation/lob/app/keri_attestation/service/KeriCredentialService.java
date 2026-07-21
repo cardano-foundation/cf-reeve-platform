@@ -310,34 +310,27 @@ public class KeriCredentialService {
             return;
         }
 
-        // Re-fetch the link fresh rather than reusing linkOpt, and compare bindingVersion (the same
-        // idiom CeremonyService#validateAndConsume uses) rather than the AID string: a relink bumps
-        // bindingVersion unconditionally and is the module's canonical "has this identity changed"
-        // signal, whereas comparing AIDs alone would miss a relink that raced in and back out, or any
-        // relink that isn't reflected by a simple AID inequality. This must never attach a freshly
-        // validated credential to a link that no longer matches the binding this ceremony was created
-        // under.
-        Optional<KeriIdentityLinkEntity> freshLinkOpt = identityLinkRepository.findById(ceremony.getUserId());
-        if (freshLinkOpt.isEmpty() || freshLinkOpt.get().getBindingVersion() != ceremony.getBindingVersion()) {
-            ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                    KeriAttestationProblems.IDENTITY_RELINKED,
-                    "Identity for user %s changed while awaiting the credential presentation."
-                            .formatted(ceremony.getUserId()));
-            return;
-        }
-
-        KeriIdentityLinkEntity link = freshLinkOpt.get();
-        link.setCredentialSaid(vc.credentialSaid());
-        link.setCredentialSchemaSaid(vc.schemaSaid());
-        identityLinkRepository.save(link);
+        // Fold the link write into completeStep's mutator (F5 fix — mirrors
+        // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent exactly): the credential write and
+        // the ceremony's CREDENTIAL_REQUESTED -> CREDENTIAL_RECEIVED transition must commit atomically,
+        // in CeremonyService's one transaction. The old code saved the link in its own separate
+        // transaction before ever calling completeStep, so a stale CAS below (a retry superseded this
+        // attempt) still left the link durably written even though the ceremony transition it belongs
+        // with never happened.
+        String userId = ceremony.getUserId();
+        int bindingVersion = ceremony.getBindingVersion();
+        String finalCredentialSaid = vc.credentialSaid();
+        String finalSchemaSaid = vc.schemaSaid();
 
         boolean completed = ceremonyService.completeStep(ceremonyId, expectedGeneration,
                 CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED,
-                c -> { /* nothing extra to persist on the ceremony row */ });
+                c -> persistCredentialIfIdentityStillCurrent(userId, bindingVersion, finalCredentialSaid,
+                        finalSchemaSaid));
         if (!completed) {
-            // Stale CAS (a retry superseded this attempt) — the notifications must be left alone: the
-            // winning attempt's own correlator wait is (or will be) matching against the same requests
-            // and needs to find them still unread/undeleted.
+            // Stale CAS (a retry superseded this attempt) — the link must not be written either (the
+            // mutator above never runs), and the notifications must be left alone: the winning attempt's
+            // own correlator wait is (or will be) matching against the same requests and needs to find
+            // them still unread/undeleted.
             return;
         }
 
@@ -349,6 +342,35 @@ public class KeriCredentialService {
     }
 
     // --- internals ---
+
+    /**
+     * Persists the validated credential to the identity link. <b>Only ever called from inside a
+     * {@link CeremonyService#completeStep} mutator</b> — same rationale as
+     * {@link KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent}'s javadoc: {@code
+     * completeStep} only invokes its mutator after the ceremony row's own {@code (state,
+     * attemptGeneration)} CAS has already confirmed this is the current, non-superseded attempt, so a
+     * stale attempt's mutator never runs, and both the link write and the ceremony transition commit
+     * together in {@code CeremonyService}'s one transaction. The re-fetch + bindingVersion re-check here
+     * additionally guards the one race {@code completeStep}'s own CAS does not cover: a relink landing
+     * mid-flight (a separate {@code KeriOobiService} write, out-of-band of the ceremony's own CAS
+     * fields) must never let a stale write re-attach a credential to what is now a different identity —
+     * the ceremony step itself still completes (the CAS on {@code (state, attemptGeneration)} has no
+     * way to know about the relink); {@link CeremonyService#validateAndConsume}'s own bindingVersion
+     * check is the final safety net at consumption time.
+     */
+    private void persistCredentialIfIdentityStillCurrent(String userId, int expectedBindingVersion,
+            String credentialSaid, String credentialSchemaSaid) {
+        identityLinkRepository.findById(userId).ifPresent(freshLink -> {
+            if (freshLink.getBindingVersion() != expectedBindingVersion) {
+                log.warn("Skipping credential link write for user {}: identity was relinked (expected binding "
+                        + "version {}, now {}).", userId, expectedBindingVersion, freshLink.getBindingVersion());
+                return;
+            }
+            freshLink.setCredentialSaid(credentialSaid);
+            freshLink.setCredentialSchemaSaid(credentialSchemaSaid);
+            identityLinkRepository.save(freshLink);
+        });
+    }
 
     private static String extractCredentialSaid(Map<String, Object> grantExn) {
         Object e = grantExn.get("e");

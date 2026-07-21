@@ -86,7 +86,7 @@ class KeriAuthBeginServiceTest {
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
                 Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),
-                Duration.parse("PT0.01S"));
+                Duration.parse("PT0.01S"), Duration.parse("PT2M"), null);
     }
 
     private static KeriAttestationCeremonyEntity ceremony() {

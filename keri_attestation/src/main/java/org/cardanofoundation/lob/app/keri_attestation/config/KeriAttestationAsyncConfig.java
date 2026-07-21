@@ -7,35 +7,49 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /**
- * The dedicated async executor for this module's long-running wallet/chain waits (design §4.2
- * "waiting steps run on a dedicated async executor"). Named {@code keriAttestationExecutor} so it
- * cannot collide, by bean name, with any executor a host application already defines; every
- * {@code @Async("keriAttestationExecutor")} method on
- * {@link org.cardanofoundation.lob.app.keri_attestation.service.CeremonyAsyncRunner} is pinned to it
- * explicitly rather than falling back to Spring's shared default executor (or, worse, running on the
- * calling thread if no async executor were configured at all).
+ * The module's two dedicated async executors for its long-running wallet/chain waits (design §4.2
+ * "waiting steps run on a dedicated async executor"; hardened by the F3 fix). Every
+ * {@code @Async(...)} method on
+ * {@link org.cardanofoundation.lob.app.keri_attestation.service.CeremonyAsyncRunner} is pinned
+ * explicitly to one of these two beans rather than falling back to Spring's shared default executor
+ * (or, worse, running on the calling thread if no async executor were configured at all).
  *
- * <p>Two threads: this module dispatches at most three concurrent long-running waits per ceremony
- * (credential presentation, ATTEST anchor, AUTH_BEGIN confirmation) and each user is capped at
- * {@code limits.max-active-ceremonies-per-user} (default 3) open ceremonies, so a small fixed pool is
- * enough to avoid unbounded thread growth under the module's own per-user rate limits while still
- * allowing real concurrency across ceremonies/users. Not {@code @ConditionalOnProperty}-gated on its
- * own: harmless (an idle thread pool) if the module is enabled but no consumer ever schedules work on
- * it, and this bean itself never touches a KERI agent.
+ * <p><b>Two pools, not one (F3):</b> {@code keriAttestationExecutor} carries the short wallet-approval
+ * waits — credential presentation ({@code awaitPresentation}) and ATTEST anchoring
+ * ({@code awaitAnchor}) — each bounded by {@link KeriAttestationProperties#remotesignTimeout()}
+ * (default 3 minutes). {@code keriAttestationConfirmationExecutor} carries only
+ * {@code awaitAuthBeginConfirmation}, a blocking poll loop bounded by the much longer
+ * {@link KeriAttestationProperties#authBeginRollbackWindow()} (default 30 minutes). A single shared
+ * pool previously let a burst of AUTH_BEGIN confirmations occupy every thread for up to half an hour,
+ * starving every other ceremony's short wallet-approval wait behind them; splitting the pools makes
+ * that starvation impossible by construction. Pool sizes are configurable via
+ * {@link KeriAttestationProperties.Executor} (defaults: 4 wallet threads, 2 confirmation threads).
+ *
+ * <p>Not {@code @ConditionalOnProperty}-gated on their own: harmless (idle thread pools) if the module
+ * is enabled but no consumer ever schedules work on them, and these beans never themselves touch a
+ * KERI agent.
  */
 @Configuration
 public class KeriAttestationAsyncConfig {
 
-    private static final int POOL_SIZE = 2;
     private static final int QUEUE_CAPACITY = 50;
 
     @Bean(name = "keriAttestationExecutor")
-    public Executor keriAttestationExecutor() {
+    public Executor keriAttestationExecutor(KeriAttestationProperties properties) {
+        return buildExecutor(properties.executor().walletPoolSize(), "keri-attest-");
+    }
+
+    @Bean(name = "keriAttestationConfirmationExecutor")
+    public Executor keriAttestationConfirmationExecutor(KeriAttestationProperties properties) {
+        return buildExecutor(properties.executor().confirmationPoolSize(), "keri-confirm-");
+    }
+
+    private static Executor buildExecutor(int poolSize, String threadNamePrefix) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(POOL_SIZE);
-        executor.setMaxPoolSize(POOL_SIZE);
+        executor.setCorePoolSize(poolSize);
+        executor.setMaxPoolSize(poolSize);
         executor.setQueueCapacity(QUEUE_CAPACITY);
-        executor.setThreadNamePrefix("keri-attest-");
+        executor.setThreadNamePrefix(threadNamePrefix);
         executor.initialize();
         return executor;
     }

@@ -22,9 +22,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.service.KeriAttestationProblems;
 
 @ExtendWith(MockitoExtension.class)
 class CeremonyCleanupJobTest {
@@ -34,10 +36,21 @@ class CeremonyCleanupJobTest {
 
     private CeremonyCleanupJob job;
 
+    private static KeriAttestationProperties properties() {
+        return new KeriAttestationProperties(
+                true, null, "identifier", null,
+                Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT1.5S"),
+                3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
+                Duration.parse("PT15S"), Duration.parse("PT30M"), Duration.parse("PT2S"), Duration.parse("PT3S"),
+                Duration.parse("PT2M"), null);
+    }
+
     @BeforeEach
     void setUp() {
-        job = new CeremonyCleanupJob(ceremonyRepository);
+        job = new CeremonyCleanupJob(ceremonyRepository, properties());
         lenient().when(ceremonyRepository.findByStateNotInAndExpiresAtBefore(anyCollection(), any()))
+                .thenReturn(List.of());
+        lenient().when(ceremonyRepository.findByStateInAndUpdatedAtBefore(anyCollection(), any()))
                 .thenReturn(List.of());
         lenient().when(ceremonyRepository.deleteByStateInAndUpdatedAtBefore(anyCollection(), any()))
                 .thenReturn(0L);
@@ -109,5 +122,73 @@ class CeremonyCleanupJobTest {
         LocalDateTime expectedCutoff = LocalDateTime.now().minusDays(7);
         assertTrue(Duration.between(cutoffCaptor.getValue(), expectedCutoff).abs().toSeconds() < 5,
                 "cutoff should be ~7 days before now, was " + cutoffCaptor.getValue());
+    }
+
+    // --- step-level stale detection (F4 fix, design §4.2/§7) ---
+
+    @Test
+    void sweepFailsAnOverdueWaitingCeremonyWithKeriStepTimedOut() {
+        // remotesignTimeout=PT3M + stepTimeoutGrace=PT2M = stale past 5 minutes; 10 minutes is well
+        // past that for CREDENTIAL_REQUESTED.
+        KeriAttestationCeremonyEntity stale = ceremony(CeremonyState.CREDENTIAL_REQUESTED, LocalDateTime.now().plusHours(1));
+        stale.setUpdatedAt(LocalDateTime.now().minusMinutes(10));
+        when(ceremonyRepository.findByStateInAndUpdatedAtBefore(anyCollection(), any())).thenReturn(List.of(stale));
+        when(ceremonyRepository.findByIdForUpdate("cer-1")).thenReturn(Optional.of(stale));
+
+        job.sweep();
+
+        assertEquals(CeremonyState.FAILED, stale.getState());
+        assertEquals(KeriAttestationProblems.KERI_STEP_TIMED_OUT, stale.getErrorTitle());
+        assertTrue(stale.getErrorDetail().contains("CREDENTIAL_REQUESTED"));
+        verify(ceremonyRepository).save(stale);
+    }
+
+    @Test
+    void sweepLeavesAFreshWaitingCeremonyUntouched() {
+        KeriAttestationCeremonyEntity fresh = ceremony(CeremonyState.CREDENTIAL_REQUESTED, LocalDateTime.now().plusHours(1));
+        fresh.setUpdatedAt(LocalDateTime.now().minusSeconds(5));
+        when(ceremonyRepository.findByStateInAndUpdatedAtBefore(anyCollection(), any())).thenReturn(List.of(fresh));
+        when(ceremonyRepository.findByIdForUpdate("cer-1")).thenReturn(Optional.of(fresh));
+
+        job.sweep();
+
+        assertEquals(CeremonyState.CREDENTIAL_REQUESTED, fresh.getState());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void sweepUsesTheLongerAuthBeginRollbackWindowRatherThanTheShorterRemotesignTimeoutForAuthBeginSubmitted() {
+        // 10 minutes old is well past remotesignTimeout(3m)+grace(2m)=5m, but nowhere near
+        // authBeginRollbackWindow(30m)+grace(2m)=32m — AUTH_BEGIN_SUBMITTED must not be failed yet.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.AUTH_BEGIN_SUBMITTED, LocalDateTime.now().plusHours(1));
+        ceremony.setUpdatedAt(LocalDateTime.now().minusMinutes(10));
+        when(ceremonyRepository.findByStateInAndUpdatedAtBefore(anyCollection(), any())).thenReturn(List.of(ceremony));
+        when(ceremonyRepository.findByIdForUpdate("cer-1")).thenReturn(Optional.of(ceremony));
+
+        job.sweep();
+
+        assertEquals(CeremonyState.AUTH_BEGIN_SUBMITTED, ceremony.getState());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    /**
+     * Mirrors {@link #sweepDoesNotExpireACandidateThatMovedOnBeforeTheLockedRecheck}: the discovery
+     * read is unlocked, so a candidate can have legitimately moved on to a resting or terminal state
+     * (e.g. a retry's {@code beginStep}, or a completed step) by the time the locked re-check runs —
+     * it must be skipped, not clobbered back to FAILED.
+     */
+    @Test
+    void sweepSkipsAWaitingCandidateThatMovedToARestingOrTerminalStateBeforeTheLockedRecheck() {
+        KeriAttestationCeremonyEntity staleView = ceremony(CeremonyState.CREDENTIAL_REQUESTED, LocalDateTime.now().plusHours(1));
+        staleView.setUpdatedAt(LocalDateTime.now().minusMinutes(10));
+        when(ceremonyRepository.findByStateInAndUpdatedAtBefore(anyCollection(), any())).thenReturn(List.of(staleView));
+        KeriAttestationCeremonyEntity currentView = ceremony(CeremonyState.CREDENTIAL_RECEIVED, LocalDateTime.now().plusHours(1));
+        currentView.setUpdatedAt(LocalDateTime.now());
+        when(ceremonyRepository.findByIdForUpdate("cer-1")).thenReturn(Optional.of(currentView));
+
+        job.sweep();
+
+        assertEquals(CeremonyState.CREDENTIAL_RECEIVED, currentView.getState());
+        verify(ceremonyRepository, never()).save(any());
     }
 }

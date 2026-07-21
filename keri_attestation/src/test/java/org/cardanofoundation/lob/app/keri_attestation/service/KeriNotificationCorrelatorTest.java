@@ -77,7 +77,8 @@ class KeriNotificationCorrelatorTest {
                 true, null, "identifier", null,
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), pollInterval,
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
-                Duration.parse("PT15S"), Duration.parse("PT30M"), Duration.parse("PT2S"), Duration.parse("PT3S"));
+                Duration.parse("PT15S"), Duration.parse("PT30M"), Duration.parse("PT2S"), Duration.parse("PT3S"),
+                Duration.parse("PT2M"), null);
     }
 
     // --- notification / exchange fixture builders ---

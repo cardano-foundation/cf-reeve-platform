@@ -164,6 +164,33 @@ class CeremonyRepositoryTest {
     }
 
     @Test
+    void findByStateInAndUpdatedAtBeforeReturnsOnlyStaleWaitingCeremonies() {
+        Set<CeremonyState> waiting = EnumSet.of(CeremonyState.CREDENTIAL_REQUESTED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, CeremonyState.ATTEST_REQUESTED);
+
+        KeriAttestationCeremonyEntity stale = ceremony("c-stale-waiting", "user-8", CeremonyState.CREDENTIAL_REQUESTED);
+        ceremonyRepository.save(stale);
+        // not yet stale — updatedAt defaults to "now" via @PrePersist, must be excluded
+        ceremonyRepository.save(ceremony("c-fresh-waiting", "user-8", CeremonyState.ATTEST_REQUESTED));
+        // resting state, even if old — must be excluded regardless of updatedAt
+        ceremonyRepository.save(ceremony("c-resting", "user-8", CeremonyState.CREATED));
+        em.flush();
+
+        em.createQuery("update keri_attestation.KeriAttestationCeremonyEntity c set c.updatedAt = :old "
+                        + "where c.id in :ids")
+                .setParameter("old", LocalDateTime.now().minusHours(1))
+                .setParameter("ids", List.of("c-stale-waiting", "c-resting"))
+                .executeUpdate();
+        em.clear();
+
+        List<KeriAttestationCeremonyEntity> result = ceremonyRepository.findByStateInAndUpdatedAtBefore(waiting,
+                LocalDateTime.now().minusMinutes(5));
+
+        assertEquals(1, result.size());
+        assertEquals("c-stale-waiting", result.get(0).getId());
+    }
+
+    @Test
     void deleteByStateInAndUpdatedAtBeforePurgesOnlyOldTerminalCeremonies() {
         ceremonyRepository.save(ceremony("c-old-consumed", "user-7", CeremonyState.CONSUMED));
         ceremonyRepository.save(ceremony("c-recent-consumed", "user-7", CeremonyState.CONSUMED));

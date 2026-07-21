@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.keri_attestation.job;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -13,9 +14,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.service.KeriAttestationProblems;
 
 /**
  * Ceremony-row housekeeping (design §4.2), same {@code @Scheduled(fixedDelayString = ...)} /
@@ -23,13 +26,22 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
  * only when {@code lob.keri-attestation.enabled=true}, and inert unless the consuming application also
  * enables Spring scheduling.
  *
- * <p>Two independent sweeps:
+ * <p>Three independent sweeps:
  * <ol>
  *   <li>{@code expireOverdueCeremonies()} — {@code CeremonyService} already applies TTL expiry
  *       lazily on every read/transition of a single ceremony, but a ceremony nobody ever looks at
  *       again (the user simply walked away mid-flow) would otherwise sit forever in a non-terminal
  *       state, still counting against that user's active-ceremony limit. This sweep is what actually
  *       frees the slot.</li>
+ *   <li>{@code failStaleWaitingSteps()} (F4 fix, design §4.2/§7) — a ceremony can also get stuck
+ *       <em>inside</em> a single waiting step (e.g. the backend restarts mid-wait and no worker is ever
+ *       left to complete or fail it) well before its overall ceremony TTL is up. This sweep fails a
+ *       WAITING-state ceremony (CREDENTIAL_REQUESTED, AUTH_BEGIN_SUBMITTED, ATTEST_REQUESTED) whose
+ *       {@code updatedAt} is older than that step's own timeout plus
+ *       {@link KeriAttestationProperties#stepTimeoutGrace()} with
+ *       {@code FAILED(KERI_STEP_TIMED_OUT)}. FAILED is retryable by design — a subsequent retry POST
+ *       bumps {@code attemptGeneration} and re-enters the same waiting state, so this is a recovery
+ *       mechanism, not a dead end.</li>
  *   <li>{@code deleteOldTerminalCeremonies()} — terminal rows (CONSUMED/FAILED/EXPIRED) are pure
  *       audit trail once the ceremony is done; this purges anything older than
  *       7 days so the table does not grow unbounded. This only ever deletes
@@ -44,14 +56,19 @@ public class CeremonyCleanupJob {
 
     private static final Set<CeremonyState> TERMINAL =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
+    private static final Set<CeremonyState> WAITING =
+            EnumSet.of(CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    CeremonyState.ATTEST_REQUESTED);
     private static final int RETENTION_DAYS = 7;
 
     private final KeriAttestationCeremonyRepository ceremonyRepository;
+    private final KeriAttestationProperties properties;
 
     @Scheduled(fixedDelayString = "${lob.keri-attestation.cleanup.fixed_delay:PT10M}")
     @Transactional
     public void sweep() {
         expireOverdueCeremonies();
+        failStaleWaitingSteps();
         deleteOldTerminalCeremonies();
     }
 
@@ -85,6 +102,65 @@ public class CeremonyCleanupJob {
         if (expiredCount > 0) {
             log.info("keri_attestation cleanup expired {} overdue ceremony(ies)", expiredCount);
         }
+    }
+
+    /** Step-level stale detection (F4 fix, design §4.2/§7) — see this class's javadoc. */
+    private void failStaleWaitingSteps() {
+        LocalDateTime now = LocalDateTime.now();
+        // Broad, unlocked discovery read: the shortest possible step timeout (remotesignTimeout, used
+        // by CREDENTIAL_REQUESTED/ATTEST_REQUESTED) plus grace. AUTH_BEGIN_SUBMITTED's own longer
+        // authBeginRollbackWindow is re-checked precisely per-candidate below, so a candidate that isn't
+        // actually overdue for its specific state is simply skipped, never clobbered.
+        LocalDateTime discoveryCutoff = now.minus(shortestStepTimeout()).minus(properties.stepTimeoutGrace());
+        List<KeriAttestationCeremonyEntity> candidates =
+                ceremonyRepository.findByStateInAndUpdatedAtBefore(WAITING, discoveryCutoff);
+        if (candidates.isEmpty()) {
+            return;
+        }
+        int failedCount = 0;
+        for (KeriAttestationCeremonyEntity candidate : candidates) {
+            // Same race-safety idiom as expireOverdueCeremonies(): re-fetch under the row lock and
+            // re-verify (including the precise per-state cutoff) before writing, since the discovery
+            // read above is unlocked and this entity has no @Version column.
+            Optional<KeriAttestationCeremonyEntity> locked = ceremonyRepository.findByIdForUpdate(candidate.getId());
+            if (locked.isEmpty()) {
+                continue;
+            }
+            KeriAttestationCeremonyEntity ceremony = locked.get();
+            CeremonyState waitingState = ceremony.getState();
+            if (!WAITING.contains(waitingState)) {
+                continue;
+            }
+            LocalDateTime stepCutoff = now.minus(stepTimeoutFor(waitingState)).minus(properties.stepTimeoutGrace());
+            if (ceremony.getUpdatedAt().isAfter(stepCutoff)) {
+                continue;
+            }
+            ceremony.setState(CeremonyState.FAILED);
+            ceremony.setErrorTitle(KeriAttestationProblems.KERI_STEP_TIMED_OUT);
+            ceremony.setErrorDetail(
+                    "Ceremony %s timed out waiting in state %s.".formatted(ceremony.getId(), waitingState));
+            ceremony.setUpdatedAt(now);
+            ceremonyRepository.save(ceremony);
+            failedCount++;
+        }
+        if (failedCount > 0) {
+            log.info("keri_attestation cleanup failed {} stale waiting-step ceremony(ies) with {}", failedCount,
+                    KeriAttestationProblems.KERI_STEP_TIMED_OUT);
+        }
+    }
+
+    private Duration shortestStepTimeout() {
+        Duration remotesign = properties.remotesignTimeout();
+        Duration authBeginRollback = properties.authBeginRollbackWindow();
+        return remotesign.compareTo(authBeginRollback) <= 0 ? remotesign : authBeginRollback;
+    }
+
+    private Duration stepTimeoutFor(CeremonyState waitingState) {
+        return switch (waitingState) {
+            case CREDENTIAL_REQUESTED, ATTEST_REQUESTED -> properties.remotesignTimeout();
+            case AUTH_BEGIN_SUBMITTED -> properties.authBeginRollbackWindow();
+            default -> throw new IllegalStateException("Not a waiting state: " + waitingState);
+        };
     }
 
     private void deleteOldTerminalCeremonies() {

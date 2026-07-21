@@ -18,7 +18,11 @@ import org.springframework.stereotype.Component;
  * unit-testable method: {@link #awaitPresentation} to the already-built (Task 7)
  * {@link KeriCredentialService#awaitPresentation}; {@link #awaitAnchor} to
  * {@link KeriAttestService#awaitAnchor}; {@link #awaitAuthBeginConfirmation} to
- * {@link KeriAuthBeginService#awaitAuthBeginConfirmation}.
+ * {@link KeriAuthBeginService#awaitAuthBeginConfirmation}. The first two are pinned to
+ * {@code keriAttestationExecutor}; {@link #awaitAuthBeginConfirmation} is pinned to a separate
+ * {@code keriAttestationConfirmationExecutor} — see
+ * {@link org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationAsyncConfig}'s javadoc
+ * for why (F3 fix: a long AUTH_BEGIN confirmation poll must never starve short wallet-approval waits).
  *
  * <p><b>Circular dependency, and why it's resolved with {@code @Lazy}:</b> {@link KeriAttestService},
  * {@link KeriCredentialService} (Task 10's {@code startCredentialRequest}) and
@@ -56,7 +60,11 @@ public class CeremonyAsyncRunner {
         credentialService.awaitPresentation(ceremonyId, generation);
     }
 
-    @Async("keriAttestationExecutor")
+    // Dedicated confirmation pool (F3 fix): this poll loop blocks for up to
+    // KeriAttestationProperties#authBeginRollbackWindow() (default 30 minutes), so it must never share
+    // a pool with the short (<=remotesignTimeout, default 3 minutes) wallet-approval waits above —
+    // see KeriAttestationAsyncConfig's javadoc.
+    @Async("keriAttestationConfirmationExecutor")
     public void awaitAuthBeginConfirmation(String ceremonyId, int generation) {
         authBeginService.awaitAuthBeginConfirmation(ceremonyId, generation);
     }

@@ -21,15 +21,25 @@ public record KeriAttestationProperties(
         @DefaultValue("PT15S") Duration authBeginPollInterval,
         @DefaultValue("PT30M") Duration authBeginRollbackWindow,
         @DefaultValue("PT2S") Duration keyStateRetryInitialDelay,
-        @DefaultValue("PT3S") Duration keyStateRetryInterval) {
+        @DefaultValue("PT3S") Duration keyStateRetryInterval,
+        /** Grace period added on top of a waiting step's own timeout ({@link #remotesignTimeout()}
+         *  for CREDENTIAL_REQUESTED/ATTEST_REQUESTED, {@link #authBeginRollbackWindow()} for
+         *  AUTH_BEGIN_SUBMITTED) before {@code CeremonyCleanupJob}'s stale-step sweep fails a
+         *  ceremony stuck in that state with {@code KERI_STEP_TIMED_OUT} (design §4.2/§7). */
+        @DefaultValue("PT2M") Duration stepTimeoutGrace,
+        Executor executor) {
 
     // Spring's ValueObjectBinder only instantiates a nested record when at least one of its own
     // properties is present in a property source; @DefaultValue alone won't trigger construction
-    // of `limits` when the whole `lob.keri-attestation.limits.*` section is absent. Normalize here
-    // so callers always see the documented defaults instead of a null Limits.
+    // of `limits` (or `executor`) when the whole `lob.keri-attestation.limits.*` (or `.executor.*`)
+    // section is absent. Normalize here so callers always see the documented defaults instead of a
+    // null Limits/Executor.
     public KeriAttestationProperties {
         if (limits == null) {
             limits = new Limits(3, Duration.parse("PT10S"));
+        }
+        if (executor == null) {
+            executor = new Executor(4, 2);
         }
     }
 
@@ -42,5 +52,17 @@ public record KeriAttestationProperties(
     public record Limits(
             @DefaultValue("3") int maxActiveCeremoniesPerUser,
             @DefaultValue("PT10S") Duration stepCooldown) {
+    }
+
+    /**
+     * Pool sizes for the module's two dedicated async executors (design §4.2, F3 fix): a burst of
+     * AUTH_BEGIN confirmation polls — each a blocking loop that can run for up to
+     * {@link #authBeginRollbackWindow()} (default 30 minutes) — must never be able to starve the
+     * much shorter (≤{@link #remotesignTimeout()}, default 3 minutes) wallet-approval waits for
+     * credential presentation and ATTEST anchoring by occupying every thread in a single shared pool.
+     */
+    public record Executor(
+            @DefaultValue("4") int walletPoolSize,
+            @DefaultValue("2") int confirmationPoolSize) {
     }
 }

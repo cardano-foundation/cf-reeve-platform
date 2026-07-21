@@ -45,9 +45,22 @@ public class CeremonyService implements AttestationConsumptionApi {
     private static final Set<CeremonyState> TERMINAL_STATES =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
 
+    /**
+     * The "resting" states {@link #advanceToLinkDerivedFloor} is allowed to move a ceremony out of
+     * (F1 fix, design §4.2): exactly the states {@link #fastForwardState} can itself produce as a
+     * ceremony's initial state at {@link #create(String, String, String) create} time. A ceremony
+     * actively waiting on a step
+     * ({@code CREDENTIAL_REQUESTED}, {@code AUTH_BEGIN_SUBMITTED}, {@code ATTEST_REQUESTED}) must
+     * never be silently fast-forwarded out from under its own in-flight worker; terminal states and
+     * {@code ATTEST_ANCHORED} are not link-derived at all and must never move here either.
+     */
+    private static final Set<CeremonyState> LINK_ADVANCEABLE_STATES =
+            EnumSet.of(CeremonyState.CREATED, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_RECEIVED);
+
     private final KeriAttestationCeremonyRepository ceremonyRepository;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
+    private final AttestationTargetProviderRegistry targetProviderRegistry;
 
     /**
      * Fast-forwards the initial state from the caller's identity link (design §4.2): a ceremony never
@@ -63,6 +76,18 @@ public class CeremonyService implements AttestationConsumptionApi {
         if (activeCount >= properties.limits().maxActiveCeremoniesPerUser()) {
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_LIMIT_REACHED,
                     "User %s already has %d active ceremonies, the maximum allowed.".formatted(userId, activeCount)));
+        }
+
+        // Target authorization (F2 fix, design §3.3): a ceremony must never be created for a target the
+        // caller cannot publish, or a target type nothing in the application knows how to attest.
+        Optional<AttestationTargetProvider> providerOpt = targetProviderRegistry.forType(targetType);
+        if (providerOpt.isEmpty()) {
+            return Either.left(KeriAttestationProblems.unprocessable(KeriAttestationProblems.TARGET_MISMATCH,
+                    "No provider for target type %s.".formatted(targetType)));
+        }
+        Optional<ProblemDetail> authFailure = providerOpt.get().authorize(targetId, userId);
+        if (authFailure.isPresent()) {
+            return Either.left(authFailure.get());
         }
 
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
@@ -95,6 +120,11 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(forbiddenProblem(ceremonyId));
         }
 
+        // Link-derived fast-forward (F1 fix, design §4.2 "completing an identity-level step advances
+        // any open ceremony automatically"): a ceremony resting at CREATED/OOBI_RESOLVED/
+        // CREDENTIAL_RECEIVED must reflect identity-level progress made after it was created.
+        advanceToLinkDerivedFloor(ceremony);
+
         // Lazy expiry (design §4.2): a read reports/persists EXPIRED rather than erroring — the
         // caller asked "what's the state of this ceremony" and EXPIRED is a perfectly good answer.
         lazilyExpireIfNeeded(ceremony);
@@ -126,6 +156,13 @@ public class CeremonyService implements AttestationConsumptionApi {
         if (lazilyExpireIfNeeded(ceremony)) {
             return Either.left(expiredProblem(ceremonyId));
         }
+
+        // Link-derived fast-forward (F1 fix, design §4.2), under the row lock and before the
+        // expected-state check below: a ceremony created before an identity-level step (e.g. OOBI
+        // resolve) completed must not stay stuck at its stale initial state forever once that step
+        // finishes — this is what lets, e.g., credential/request succeed right after oobi/resolve
+        // without the caller having re-polled GET first.
+        advanceToLinkDerivedFloor(ceremony);
 
         LocalDateTime now = LocalDateTime.now();
         if (retry) {
@@ -254,6 +291,32 @@ public class CeremonyService implements AttestationConsumptionApi {
     }
 
     // --- internals ---
+
+    /**
+     * Recomputes the fast-forward floor from the ceremony owner's CURRENT identity link and advances
+     * the ceremony in place if it is behind (F1 fix, design §4.2). Only ever moves a ceremony sitting
+     * in one of {@link #LINK_ADVANCEABLE_STATES} — a waiting step, a terminal state, or
+     * {@code ATTEST_ANCHORED} is left untouched. Guarded on {@code bindingVersion} matching the link's
+     * current value so a relinked ceremony (already being invalidated by {@code KeriOobiService}, or
+     * about to be) is never advanced using the new identity's progress either. Never touches
+     * {@code attemptGeneration} — this is not a step transition, just catching the ceremony's resting
+     * state up to what the identity link already reflects.
+     */
+    private void advanceToLinkDerivedFloor(KeriAttestationCeremonyEntity ceremony) {
+        if (!LINK_ADVANCEABLE_STATES.contains(ceremony.getState())) {
+            return;
+        }
+        Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(ceremony.getUserId());
+        if (linkOpt.isEmpty() || linkOpt.get().getBindingVersion() != ceremony.getBindingVersion()) {
+            return;
+        }
+        CeremonyState floor = fastForwardState(linkOpt);
+        if (floor.ordinal() > ceremony.getState().ordinal()) {
+            ceremony.setState(floor);
+            ceremony.setUpdatedAt(LocalDateTime.now());
+            ceremonyRepository.save(ceremony);
+        }
+    }
 
     private static CeremonyState fastForwardState(Optional<KeriIdentityLinkEntity> linkOpt) {
         if (linkOpt.isEmpty()) {
