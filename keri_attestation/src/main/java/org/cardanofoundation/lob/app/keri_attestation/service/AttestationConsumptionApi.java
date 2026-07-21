@@ -27,7 +27,7 @@ public interface AttestationConsumptionApi {
      * holds for one of them can never be dispatched and is safe to delete.
      *
      * <p>A ceremony id absent from the returned list is NOT necessarily still open — it may also be
-     * {@code CONSUMED} (must never be deleted: {@link CeremonyCleanupJob}'s own retention sweep keeps
+     * {@code CONSUMED} (must never be deleted: {@link org.cardanofoundation.lob.app.keri_attestation.job.CeremonyCleanupJob}'s own retention sweep keeps
      * those rows forever precisely so a late dispatch retry can still read them) or already purged by
      * that same sweep (which only ever purges {@code FAILED}/{@code EXPIRED} rows, never {@code
      * CONSUMED} — see its javadoc). Callers must treat "absent" as "keep", never as "safe to delete":
