@@ -16,7 +16,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -42,6 +44,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
+import org.cardanofoundation.lob.app.document_vault.domain.KeyRef;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
@@ -55,7 +58,6 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentEnvelope
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentUploadedView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
-import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -70,8 +72,11 @@ class VaultDocumentServiceTest {
 
     @Mock
     private VaultDocumentRepository documentRepository;
+    // The service resolves slot/document keys via VaultKeyLookupService now, not VaultKeyRepository
+    // directly: a slot may name either an organisation key or an addressbook entry, and the lookup
+    // spans both stores behind one KeyRef result.
     @Mock
-    private VaultKeyRepository keyRepository;
+    private VaultKeyLookupService keyLookupService;
     @Mock
     private KeycloakSecurityHelper securityHelper;
     @Mock
@@ -113,6 +118,16 @@ class VaultDocumentServiceTest {
         return key;
     }
 
+    /** Mirrors what VaultKeyLookupService.findAllById returns: org keys reduced to KeyRef, by id. */
+    private Map<String, KeyRef> keyRefs(VaultKeyEntity... keys) {
+        Map<String, KeyRef> byId = new LinkedHashMap<>();
+        for (VaultKeyEntity key : keys) {
+            byId.put(key.getId(), KeyRef.ofOrgKey(key.getId(), key.getOrganisationId(), key.getAccountId(),
+                    key.getPublicKey(), key.getAccountName(), key.getLabel(), key.getAssurance()));
+        }
+        return byId;
+    }
+
     private UploadDocumentRequest request() {
         UploadDocumentRequest request = new UploadDocumentRequest();
         request.setOrganisationId("org1");
@@ -140,7 +155,7 @@ class VaultDocumentServiceTest {
     @Test
     void uploadPersistsEnvelopeAndPublishesMinimizedEvent() throws Exception {
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(new Organisation()));
-        when(keyRepository.findAllById(any())).thenReturn(List.of(
+        when(keyLookupService.findAllById(any())).thenReturn(keyRefs(
                 orgKey("k-s", "sender", "org1"),
                 orgKey("k-r", "recipient", "org1")));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -166,7 +181,7 @@ class VaultDocumentServiceTest {
     void uploadRejectsUnknownSlotKey() {
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(new Organisation()));
         // slot k-r references a key that does not exist in the directory
-        when(keyRepository.findAllById(any())).thenReturn(List.of(
+        when(keyLookupService.findAllById(any())).thenReturn(keyRefs(
                 orgKey("k-s", "sender", "org1")));
 
         Either<ProblemDetail, DocumentUploadedView> result = service.upload(request());
@@ -178,7 +193,7 @@ class VaultDocumentServiceTest {
     @Test
     void uploadRejectsSlotKeyOfAnotherOrganisation() {
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(new Organisation()));
-        when(keyRepository.findAllById(any())).thenReturn(List.of(
+        when(keyLookupService.findAllById(any())).thenReturn(keyRefs(
                 orgKey("k-s", "sender", "org1"),
                 orgKey("k-r", "recipient", "other-org")));
 
@@ -332,7 +347,7 @@ class VaultDocumentServiceTest {
     void fetchByCreatorReturnsEnvelopeWithCiphertext() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
-        when(keyRepository.findAllById(any())).thenReturn(List.of(orgKey("k-s", "sender", "org1")));
+        when(keyLookupService.findAllById(any())).thenReturn(keyRefs(orgKey("k-s", "sender", "org1")));
 
         Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
 
@@ -349,7 +364,7 @@ class VaultDocumentServiceTest {
         when(securityHelper.getCurrentUserId()).thenReturn("recipient");
         VaultDocumentEntity doc = draftDoc(); // created by "sender", slot references key k-s
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
-        when(keyRepository.findAllById(any())).thenReturn(List.of(orgKey("k-s", "recipient", "org1")));
+        when(keyLookupService.findAllById(any())).thenReturn(keyRefs(orgKey("k-s", "recipient", "org1")));
 
         Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
 
@@ -369,7 +384,7 @@ class VaultDocumentServiceTest {
         when(securityHelper.getCurrentUserId()).thenReturn("stranger");
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
-        when(keyRepository.findAllById(any())).thenReturn(List.of(orgKey("k-s", "sender", "org1")));
+        when(keyLookupService.findAllById(any())).thenReturn(keyRefs(orgKey("k-s", "sender", "org1")));
 
         Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
 

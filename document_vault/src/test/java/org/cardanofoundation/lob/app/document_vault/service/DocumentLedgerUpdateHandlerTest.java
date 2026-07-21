@@ -6,7 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -27,15 +27,16 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishedEvent;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
-import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 
 @ExtendWith(MockitoExtension.class)
 class DocumentLedgerUpdateHandlerTest {
 
     @Mock
     private VaultDocumentRepository documentRepository;
+    // apply() resolves each slot's keyId through VaultKeyLookupService now, not VaultKeyRepository
+    // directly, since a slot may name either an organisation key or an addressbook entry.
     @Mock
-    private VaultKeyRepository keyRepository;
+    private VaultKeyLookupService keyLookupService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -82,7 +83,7 @@ class DocumentLedgerUpdateHandlerTest {
         doc.setOrganisationId("org1");
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(keyRepository.findAllById(any())).thenReturn(List.of());
+        when(keyLookupService.findAllById(any())).thenReturn(Map.of());
 
         handler.handleLedgerUpdatedEvent(event(LedgerUpdateType.DOCUMENT, LedgerDispatchStatus.FINALIZED, Set.of()));
 

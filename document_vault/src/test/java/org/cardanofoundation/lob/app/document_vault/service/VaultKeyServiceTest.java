@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.document_vault.domain.entity.AddressbookEntryEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
@@ -139,14 +140,19 @@ class VaultKeyServiceTest {
 
     @Test
     void listRecipientsExposesPagedAddressbookEntries() {
+        // listRecipients merges TWO stores: colleagues' org keys (no email — the Keycloak account is
+        // the contact, see VaultKeyService.toRecipientView(VaultKeyEntity)) and addressbook entries
+        // (which may carry one). Only an addressbook entry can expose an email here.
         when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(keyRepository.findByOrganisationId("org1")).thenReturn(List.of(orgKey("k1", "acc2")));
+        when(entryRepository.findByOrganisationId("org1")).thenReturn(List.of(addressbookEntry("e1")));
 
         var result = service.listRecipients("org1", Pageable.unpaged());
 
         assertTrue(result.isRight());
-        assertEquals(1, result.get().total());
-        assertEquals("bob@example.org", result.get().content().get(0).email());
+        assertEquals(2, result.get().total());
+        assertTrue(result.get().content().stream()
+                .anyMatch(v -> "bob@example.org".equals(v.email())));
     }
 
     @Test
@@ -240,5 +246,17 @@ class VaultKeyServiceTest {
         key.setOrigin(KeyOrigin.SELF_ENROLLED);
         key.setAssurance(KeyAssurance.PASSKEY);
         return key;
+    }
+
+    private AddressbookEntryEntity addressbookEntry(String entryId) {
+        AddressbookEntryEntity entry = new AddressbookEntryEntity();
+        entry.setId(entryId);
+        entry.setOrganisationId("org1");
+        entry.setDisplayName("Bob Contact");
+        entry.setEmail("bob@example.org");
+        entry.setDescription("external auditor");
+        entry.setPublicKey("f".repeat(64));
+        entry.setAssurance(KeyAssurance.PORTABLE);
+        return entry;
     }
 }

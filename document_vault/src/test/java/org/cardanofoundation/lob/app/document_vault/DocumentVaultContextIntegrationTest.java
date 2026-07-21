@@ -46,9 +46,16 @@ public class DocumentVaultContextIntegrationTest {
 
     @Test
     void flywayCreatedVaultTables() {
+        // document_vault_key, document_vault_addressbook_entry, document_vault_wrapped_record,
+        // document_vault_document, document_vault_document_slot (V1.6_100_13 migration). The
+        // addressbook split added document_vault_addressbook_entry as its own table rather than a
+        // column on document_vault_key, so a card naming someone else's account is unrepresentable
+        // rather than merely rejected (see AddressbookEntryEntity's javadoc).
         Integer tables = jdbcTemplate.queryForObject(
                 "select count(*) from information_schema.tables where table_name like 'document_vault_%'",
                 Integer.class);
-        assertEquals(4, tables);
+        assertEquals(5, tables,
+                "Expected the 5 document_vault_* tables (key, addressbook_entry, wrapped_record, "
+                        + "document, document_slot) created by V1.6_100_13__lob_service_app_document_vault_module.sql");
     }
 }

@@ -189,7 +189,10 @@ class PlaintextAtRestScanIntegrationTest {
                                 "privateKey", Map.of(
                                         "algorithm", "AES-256-GCM",
                                         "wrapped", privateCanary))))
-                .post("/api/v1/document-vault/cards/import")
+                // Card import moved to the addressbook resource (3e452260): a card about someone else
+                // becomes an addressbook contact, and the endpoint that accepts any permissionless card
+                // now lives at AddressbookController, not the old (removed) /cards/import route.
+                .post("/api/v1/document-vault/addressbook/import")
                 .then().statusCode(400)
                 .body("title", equalTo("CARD_CONTAINS_PRIVATE_KEY"));
 

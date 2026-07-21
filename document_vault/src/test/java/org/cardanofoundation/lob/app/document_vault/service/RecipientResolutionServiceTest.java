@@ -27,6 +27,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 import org.cardanofoundation.lob.app.document_vault.domain.request.ResolveRecipientsRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.RecipientKeyView;
+import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -36,6 +37,12 @@ class RecipientResolutionServiceTest {
 
     @Mock
     private VaultKeyRepository keyRepository;
+    // The constructor also takes AddressbookEntryRepository (recipients may now be addressbook
+    // contacts, not just colleagues' keys). No test here names a recipientEntryId, so
+    // entries.entryIdsOrEmpty() is always empty and this mock's default (empty list) answer is
+    // exactly what resolve() needs — nothing further to stub.
+    @Mock
+    private AddressbookEntryRepository entryRepository;
     @Mock
     private KeycloakSecurityHelper securityHelper;
 
