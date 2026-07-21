@@ -83,9 +83,6 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
 
     public static final String TARGET_TYPE = "DOCUMENT";
 
-    /** Cardano metadata label the frozen 1447 map is (later) published under. */
-    private static final String METADATA_LABEL = "1447";
-
     public static final String ERROR_FREEZING_DOCUMENT_METADATA = "ERROR_FREEZING_DOCUMENT_METADATA";
 
     private final VaultDocumentService vaultDocumentService;
@@ -98,6 +95,16 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
     private final DocumentAttestationFreezeRepository freezeRepository;
     private final KeycloakSecurityHelper securityHelper;
     private final Clock clock;
+    /**
+     * Cardano metadata label the frozen 1447 map is (later) published under — the SAME
+     * {@code ${lob.l1.transaction.metadata_label:1447}} value {@code TransactionSubmissionConfig}
+     * wires into {@code documentL1TransactionCreator}'s {@code metadataTag}, threaded through here
+     * (rather than duplicated as a hardcoded constant) so a deployment that overrides the property
+     * can never see {@code ceremony.metadataLabel} / {@code ConsumedAttestation.metadataLabel}
+     * (surfaced via {@code GET /ceremonies/{id}}) silently disagree with the label dispatch actually
+     * publishes under (M3 milestone-review finding).
+     */
+    private final int metadataLabel;
 
     @Override
     public String targetType() {
@@ -116,7 +123,7 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
         Optional<DocumentAttestationFreezeEntity> existing =
                 freezeRepository.findByDocumentIdAndCeremonyId(targetId, ceremonyId);
         if (existing.isPresent()) {
-            return Either.right(new AttestationDigest(existing.get().getDigestQb64(), METADATA_LABEL));
+            return Either.right(new AttestationDigest(existing.get().getDigestQb64(), String.valueOf(metadataLabel)));
         }
 
         if (ipfsPublisher.isEmpty()) {
@@ -184,7 +191,7 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
             log.info("Froze DOCUMENT attestation metadata for ceremony:{}, document:{}, cid:{}",
                     freeze.getCeremonyId(), freeze.getDocumentId(), freeze.getIpfsCid());
 
-            return Either.right(new AttestationDigest(digestQb64, METADATA_LABEL));
+            return Either.right(new AttestationDigest(digestQb64, String.valueOf(metadataLabel)));
         } catch (DataIntegrityViolationException e) {
             log.info("Lost the freeze unique-constraint race for document:{}, ceremony:{} - "
                             + "returning the concurrent winner's digest instead",
@@ -192,7 +199,7 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
 
             return freezeRepository.findByDocumentIdAndCeremonyId(freeze.getDocumentId(), freeze.getCeremonyId())
                     .<Either<ProblemDetail, AttestationDigest>>map(winner ->
-                            Either.right(new AttestationDigest(winner.getDigestQb64(), METADATA_LABEL)))
+                            Either.right(new AttestationDigest(winner.getDigestQb64(), String.valueOf(metadataLabel))))
                     .orElseGet(() -> Either.left(concurrentFreezeRaceProblem(freeze.getDocumentId(), freeze.getCeremonyId())));
         }
     }

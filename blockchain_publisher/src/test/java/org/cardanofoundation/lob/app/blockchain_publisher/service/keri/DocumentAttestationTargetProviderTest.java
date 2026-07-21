@@ -111,20 +111,14 @@ class DocumentAttestationTargetProviderTest {
     }
 
     private DocumentAttestationTargetProvider provider() {
-        return new DocumentAttestationTargetProvider(
-                vaultDocumentService,
-                documentConverter,
-                documentIpfsSerialiser,
-                documentMetadataSerialiser,
-                blockchainReaderPublicApi,
-                Optional.of(ipfsPublisher),
-                cip170MetadataFactory,
-                freezeRepository,
-                securityHelper,
-                FIXED_CLOCK);
+        return provider(Optional.of(ipfsPublisher), 1447);
     }
 
     private DocumentAttestationTargetProvider provider(Optional<IpfsPublisher> ipfs) {
+        return provider(ipfs, 1447);
+    }
+
+    private DocumentAttestationTargetProvider provider(Optional<IpfsPublisher> ipfs, int metadataLabel) {
         return new DocumentAttestationTargetProvider(
                 vaultDocumentService,
                 documentConverter,
@@ -135,7 +129,8 @@ class DocumentAttestationTargetProviderTest {
                 cip170MetadataFactory,
                 freezeRepository,
                 securityHelper,
-                FIXED_CLOCK);
+                FIXED_CLOCK,
+                metadataLabel);
     }
 
     private static VaultDocumentEntity vaultDocumentFixture() {
@@ -242,6 +237,29 @@ class DocumentAttestationTargetProviderTest {
         assertThat(saved.getDigestQb64()).isEqualTo(expectedDigest);
     }
 
+    /**
+     * Same happy path as {@link #prepareDigestFreezesEnvelopeAndReturnsTheDigest}, but exercises
+     * {@code saveFreeze}'s own {@code metadataLabel} usage (a different call site than the
+     * idempotent-existing-row return) with a deliberately non-default value — see
+     * {@link #prepareDigestReturnsTheConfiguredMetadataLabelRatherThanAHardcodedDefault} for why this
+     * matters (M3 milestone-review fix).
+     */
+    @Test
+    void prepareDigestFreezesEnvelopeUnderTheConfiguredNonDefaultMetadataLabel() {
+        VaultDocumentEntity vaultDocument = vaultDocumentFixture();
+        when(freezeRepository.findByDocumentIdAndCeremonyId("doc-1", "cer-1")).thenReturn(Optional.empty());
+        when(vaultDocumentService.loadForAttestation("doc-1", "user-1")).thenReturn(Either.right(vaultDocument));
+        when(securityHelper.getCurrentUserId()).thenReturn("user-1");
+        when(ipfsPublisher.publish(anyString())).thenReturn(Either.right("bafy-cid-1"));
+        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(CHAIN_TIP));
+
+        Either<ProblemDetail, AttestationDigest> result =
+                provider(Optional.of(ipfsPublisher), 2023).prepareDigest("doc-1", "cer-1");
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().metadataLabel()).isEqualTo("2023");
+    }
+
     @Test
     void prepareDigestIsIdempotentPerDocumentAndCeremony() {
         DocumentAttestationFreezeEntity existing = new DocumentAttestationFreezeEntity();
@@ -256,6 +274,29 @@ class DocumentAttestationTargetProviderTest {
 
         verifyNoInteractions(vaultDocumentService, ipfsPublisher, blockchainReaderPublicApi);
         verify(freezeRepository, never()).save(any());
+    }
+
+    /**
+     * M3 milestone-review fix: {@code metadataLabel} is threaded into the provider via its
+     * constructor from the SAME {@code ${lob.l1.transaction.metadata_label:1447}} property
+     * {@code TransactionSubmissionConfig} wires into {@code documentL1TransactionCreator}'s
+     * {@code metadataTag}, rather than a hardcoded {@code "1447"} constant — proven here with a
+     * deliberately non-default value, so a deployment that overrides the property can never see
+     * {@code ceremony.metadataLabel} / {@code ConsumedAttestation.metadataLabel} silently disagree
+     * with the label dispatch actually publishes under.
+     */
+    @Test
+    void prepareDigestReturnsTheConfiguredMetadataLabelRatherThanAHardcodedDefault() {
+        DocumentAttestationFreezeEntity existing = new DocumentAttestationFreezeEntity();
+        existing.setDigestQb64("Ealready-frozen-digest");
+        when(freezeRepository.findByDocumentIdAndCeremonyId("doc-1", "cer-1")).thenReturn(Optional.of(existing));
+
+        Either<ProblemDetail, AttestationDigest> result =
+                provider(Optional.of(ipfsPublisher), 9999).prepareDigest("doc-1", "cer-1");
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().digestQb64()).isEqualTo("Ealready-frozen-digest");
+        assertThat(result.get().metadataLabel()).isEqualTo("9999");
     }
 
     /**

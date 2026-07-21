@@ -212,7 +212,11 @@ public class TransactionSubmissionConfig {
             Cip170MetadataFactory cip170MetadataFactory,
             DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
             KeycloakSecurityHelper securityHelper,
-            Clock clock
+            Clock clock,
+            // Same property (and default) documentL1TransactionCreator's metadataTag is wired with
+            // above - so a freeze's ceremony.metadataLabel / ConsumedAttestation.metadataLabel can
+            // never disagree with the label dispatch actually publishes under (M3 finding).
+            @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel
     ) {
         return new DocumentAttestationTargetProvider(
                 vaultDocumentService,
@@ -224,7 +228,8 @@ public class TransactionSubmissionConfig {
                 cip170MetadataFactory,
                 documentAttestationFreezeRepository,
                 securityHelper,
-                clock
+                clock,
+                metadataLabel
         );
     }
 
