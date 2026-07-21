@@ -271,33 +271,51 @@ public class KeriCredentialService {
             }
             offerNotification = offer.get();
 
+            ExchangeMessageResult agreeResult;
             try {
-                ExchangeMessageResult agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
+                agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
                         .senderName(agentName).recipient(linkedAid).message("")
                         .offerSaid(offerNotification.exnSaid()).build());
-                agreeSaid = (String) agreeResult.exn().getKed().get("d");
-                client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
-                        List.of(linkedAid));
             } catch (Exception e) {
                 interruptIfNeeded(e);
-                failRequest(ceremonyId, expectedGeneration, "Failed to send IPEX agree: " + e.getMessage());
+                failRequest(ceremonyId, expectedGeneration, "Failed to build IPEX agree: " + e.getMessage());
                 return;
             }
+            agreeSaid = (String) agreeResult.exn().getKed().get("d");
 
-            // F8 fix: persist the AGREE_SENT phase transition, overwriting requestExnSaid with the
-            // agree's SAID (design: requestExnSaid always names whichever exn this ceremony is currently
-            // waiting on a correlated reply for). This guarded update also refreshes updatedAt — the F7
-            // heartbeat that keeps a legitimately in-progress two-phase wait from looking stale to the
-            // cleanup sweep's budget for CREDENTIAL_REQUESTED.
+            // F8 residual fix: persist phase=AGREE_SENT + requestExnSaid=agreeSaid (overwriting the
+            // apply's SAID — design: requestExnSaid always names whichever exn this ceremony is
+            // currently waiting on a correlated reply for) BEFORE calling submitAgree, not after. The
+            // agree's SAID is deterministic from the built (not-yet-sent) exn, matching
+            // startPresentation's/KeriAttestService#startAttest's persist-before-send idiom exactly. This
+            // guarded update also refreshes updatedAt — the F7 heartbeat that keeps a legitimately
+            // in-progress two-phase wait from looking stale to the cleanup sweep's budget for
+            // CREDENTIAL_REQUESTED.
+            //
+            // A crash between this persist committing and submitAgree actually reaching the wallet is
+            // safe: the agree was never sent, so no grant will ever arrive for it. A retry resuming at
+            // AGREE_SENT skips straight to awaiting a grant correlated to the persisted agreeSaid (never
+            // re-sending — see the class javadoc); finding none, it times out after remotesignTimeout
+            // and fails the step via KERI_WALLET_TIMEOUT, exactly the outcome a genuine dropped-agree
+            // would produce. No special-casing needed for the crash window.
             boolean phasePersisted = ceremonyService.updateWaitingStepData(ceremonyId, expectedGeneration,
                     CeremonyState.CREDENTIAL_REQUESTED, c -> {
                         c.setStepPhase(PHASE_AGREE_SENT);
                         c.setRequestExnSaid(agreeSaid);
                     });
             if (!phasePersisted) {
-                // Stale CAS (a retry superseded this attempt) — abandon; the winning attempt's own wait
-                // handles everything from here, and the offer notification is left unread/undeleted for
-                // whichever attempt still needs it.
+                // Stale CAS (a retry superseded this attempt) — never send; the winning attempt's own
+                // wait handles everything from here, and the offer notification is left unread/undeleted
+                // for whichever attempt still needs it.
+                return;
+            }
+
+            try {
+                client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
+                        List.of(linkedAid));
+            } catch (Exception e) {
+                interruptIfNeeded(e);
+                failRequest(ceremonyId, expectedGeneration, "Failed to send IPEX agree: " + e.getMessage());
                 return;
             }
         }
@@ -465,15 +483,18 @@ public class KeriCredentialService {
         return said instanceof String s ? s : null;
     }
 
+    /** Item 5 (round 2) fix: routed through {@link #failCredentialStep} rather than calling
+     *  {@code ceremonyService.failStep} directly — every failure exit from this class must clear
+     *  {@code stepPhase} the same way, not just the ones that happened to be wired through the helper
+     *  already. */
     private void failTimeout(String ceremonyId, int expectedGeneration, String detail) {
-        ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                KeriAttestationProblems.KERI_WALLET_TIMEOUT, detail);
+        failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.KERI_WALLET_TIMEOUT, detail);
     }
 
+    /** Item 5 (round 2) fix: see {@link #failTimeout}'s javadoc — same reasoning. */
     private void failRequest(String ceremonyId, int expectedGeneration, String detail) {
         log.warn("Credential presentation failed for ceremony {}: {}", ceremonyId, detail);
-        ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, detail);
+        failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, detail);
     }
 
     private static void interruptIfNeeded(Exception e) {

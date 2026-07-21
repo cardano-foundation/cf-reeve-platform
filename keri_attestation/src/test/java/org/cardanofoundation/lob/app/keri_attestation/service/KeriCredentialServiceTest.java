@@ -7,9 +7,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEFAULTS;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -25,6 +27,7 @@ import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -452,6 +455,14 @@ class KeriCredentialServiceTest {
         assertEquals("AGREE_SENT", phaseScratch.getStepPhase());
         assertEquals(AGREE_SAID, phaseScratch.getRequestExnSaid());
 
+        // Item 3 (round 2) fix: the phase persist must happen BEFORE submitAgree actually sends, not
+        // after -- the agree's SAID is deterministic from the built (not-yet-sent) exn, so this mirrors
+        // startPresentation's/startAttest's persist-before-send idiom.
+        InOrder phaseBeforeSendOrder = inOrder(ceremonyService, ipex);
+        phaseBeforeSendOrder.verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), any());
+        phaseBeforeSendOrder.verify(ipex).submitAgree(any(), any(), any(), any());
+
         // F5 fix: the link write happens inside completeStep's mutator (mirrors
         // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent) — capture it and run it the way
         // CeremonyService really would, then assert its effect. It must not have run as a side effect of
@@ -570,7 +581,9 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void awaitPresentationAgreeSendFailureFailsWithCredentialRequestFailed() throws Exception {
+    void awaitPresentationAgreeBuildFailureFailsWithCredentialRequestFailedAndNeverPersistsPhase() throws Exception {
+        // Item 3 (round 2) fix: agree() throwing is now specifically the BUILD failure -- it happens
+        // before the phase persist, so no phase/requestExnSaid write should have been attempted at all.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
@@ -582,6 +595,33 @@ class KeriCredentialServiceTest {
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
         verifyNoInteractions(credentials);
+        verify(correlator, never()).markAndDelete(any());
+        verify(ipex, never()).submitAgree(any(), any(), any(), any());
+    }
+
+    @Test
+    void awaitPresentationAgreeSendFailureAfterPhaseAlreadyPersistedStillFailsCleanlyAndClearsPhase()
+            throws Exception {
+        // Item 3 (round 2) fix: the phase (AGREE_SENT) and requestExnSaid=agreeSaid are persisted BEFORE
+        // submitAgree is called. If submitAgree itself then throws (the send genuinely failed, as
+        // opposed to a silent crash), the step must still fail cleanly via CREDENTIAL_REQUEST_FAILED --
+        // and item 5's phase-clearing helper must still clear the now-moot AGREE_SENT marker.
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(ipex.submitAgree(any(), any(), any(), any())).thenThrow(new IOException("network blip"));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        // Two guarded-update calls total: the phase persist (before the send attempt) and the failure
+        // path's own clearing update (failRequest -> failCredentialStep).
+        verify(ceremonyService, times(2)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), any());
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
         verify(correlator, never()).markAndDelete(any());
     }
 
