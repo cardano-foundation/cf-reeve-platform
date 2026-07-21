@@ -161,8 +161,10 @@ public class KeriAttestationController {
     // --- internals ---
 
     private static IdentityView toIdentityView(KeriIdentityLinkEntity link) {
+        IdentityView.IdentityCredentialView credential = link.getCredentialSaid() == null ? null
+                : new IdentityView.IdentityCredentialView(link.getCredentialSaid(), link.getCredentialSchemaSaid());
         IdentityView.AuthBeginView authBegin = link.getAuthBeginTxHash() == null ? null
                 : new IdentityView.AuthBeginView(link.getAuthBeginTxHash(), link.getAuthBeginAt(), false);
-        return new IdentityView(true, link.getAid(), link.getCredentialSaid(), authBegin);
+        return new IdentityView(true, link.getAid(), credential, authBegin);
     }
 }

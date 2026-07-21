@@ -8,7 +8,14 @@ import java.time.Instant;
  * the ordinary answer for a user who has never resolved an OOBI — this is a {@code 200}, not a
  * {@code 404}: the frontend polls this endpoint to decide whether to show the linking flow at all.
  */
-public record IdentityView(boolean linked, String aid, String credentialSaid, AuthBeginView authBegin) {
+public record IdentityView(boolean linked, String aid, IdentityCredentialView credential, AuthBeginView authBegin) {
+
+    /**
+     * The validated leaf credential's SAID and schema SAID (design §4.5), set together once a
+     * successful IPEX presentation completes. {@code null} while the link has no credential yet.
+     */
+    public record IdentityCredentialView(String said, String schemaSaid) {
+    }
 
     /**
      * {@code txHash}/{@code at} come straight off {@code KeriIdentityLinkEntity}. {@code external} is

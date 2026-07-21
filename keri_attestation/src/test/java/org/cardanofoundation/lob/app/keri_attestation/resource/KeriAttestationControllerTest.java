@@ -100,6 +100,7 @@ class KeriAttestationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(false))
                 .andExpect(jsonPath("$.aid").doesNotExist())
+                .andExpect(jsonPath("$.credential").doesNotExist())
                 .andExpect(jsonPath("$.authBegin").doesNotExist());
     }
 
@@ -109,6 +110,7 @@ class KeriAttestationControllerTest {
         link.setUserId(USER_ID);
         link.setAid("EAID000000000000000000000000000000000000");
         link.setCredentialSaid("ECRED00000000000000000000000000000000000");
+        link.setCredentialSchemaSaid("ESCHEMA0000000000000000000000000000000000");
         link.setAuthBeginTxHash("deadbeef");
         link.setAuthBeginAt(Instant.parse("2026-01-01T00:00:00Z"));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
@@ -117,7 +119,8 @@ class KeriAttestationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(true))
                 .andExpect(jsonPath("$.aid").value("EAID000000000000000000000000000000000000"))
-                .andExpect(jsonPath("$.credentialSaid").value("ECRED00000000000000000000000000000000000"))
+                .andExpect(jsonPath("$.credential.said").value("ECRED00000000000000000000000000000000000"))
+                .andExpect(jsonPath("$.credential.schemaSaid").value("ESCHEMA0000000000000000000000000000000000"))
                 .andExpect(jsonPath("$.authBegin.txHash").value("deadbeef"))
                 .andExpect(jsonPath("$.authBegin.external").value(false));
     }
@@ -132,6 +135,7 @@ class KeriAttestationControllerTest {
         mockMvc.perform(get("/api/v1/keri-attestation/identity"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(true))
+                .andExpect(jsonPath("$.credential").doesNotExist())
                 .andExpect(jsonPath("$.authBegin").doesNotExist());
     }
 
