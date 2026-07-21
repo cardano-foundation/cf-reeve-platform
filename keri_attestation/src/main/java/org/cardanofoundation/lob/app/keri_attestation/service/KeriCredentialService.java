@@ -67,10 +67,16 @@ public class KeriCredentialService {
             return Either.left(identityNotLinked(ceremony.getUserId()));
         }
         String linkedAid = linkOpt.get().getAid();
-        String schemaSaid = firstAllowedSchema();
         String agentName = agentService.agentName();
 
         try {
+            List<String> schemaSaids = properties.credentialPolicy().schemaSaids();
+            if (schemaSaids == null || schemaSaids.isEmpty()) {
+                return Either.left(requestFailed(
+                        "No schema SAIDs configured under lob.keri-attestation.credential-policy.schema-saids."));
+            }
+            String schemaSaid = schemaSaids.get(0);
+
             IpexApplyArgs applyArgs = IpexApplyArgs.builder()
                     .senderName(agentName)
                     .recipient(linkedAid)
@@ -101,6 +107,14 @@ public class KeriCredentialService {
 
     // --- asynchronous continuation: offer -> agree -> grant -> admit -> fetch -> validate -> persist ---
 
+    /**
+     * Runs unsupervised on a background worker (Task 9) with no caller left to report a thrown
+     * exception to — an escaped exception here would leave the ceremony stuck at
+     * {@code CREDENTIAL_REQUESTED} forever instead of landing in a terminal, retryable state. Every
+     * external-boundary call (signify-java client calls, the correlator, the validator) is therefore
+     * deliberately wrapped in a catch broad enough to guarantee this method always resolves the
+     * ceremony via {@code completeStep} or {@code failStep} before returning, never by propagating.
+     */
     public void awaitPresentation(String ceremonyId, int expectedGeneration) {
         Optional<KeriAttestationCeremonyEntity> ceremonyOpt = ceremonyRepository.findById(ceremonyId);
         if (ceremonyOpt.isEmpty()) {
@@ -180,19 +194,48 @@ public class KeriCredentialService {
             return;
         }
 
-        Either<ProblemDetail, ValidatedCredential> validated = validator.validate(fullCesr, linkedAid,
-                properties.credentialPolicy().schemaSaids(), properties.credentialPolicy().trustedRootAids());
+        // This is the only external-boundary call in this method not backed by a checked-exception
+        // contract, so it's easy to forget it can still throw (e.g. a malformed/hostile chain tripping
+        // an assumption CredentialChainValidator didn't explicitly guard) — wrapped the same as every
+        // other step so a defect here fails the ceremony instead of the worker.
+        Either<ProblemDetail, ValidatedCredential> validated;
+        try {
+            validated = validator.validate(fullCesr, linkedAid, properties.credentialPolicy().schemaSaids(),
+                    properties.credentialPolicy().trustedRootAids());
+        } catch (Exception e) {
+            interruptIfNeeded(e);
+            ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
+                    KeriAttestationProblems.CREDENTIAL_REJECTED, "Chain validation error: " + e.getMessage());
+            return;
+        }
         if (validated.isLeft()) {
             ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
                     KeriAttestationProblems.CREDENTIAL_REJECTED, validated.getLeft().getDetail());
             return;
         }
+        ValidatedCredential vc = validated.get();
 
-        // Re-fetch the link fresh rather than reusing linkOpt: a relink racing this whole round trip
-        // would have changed the AID (and bumped bindingVersion) since we started, and this must never
-        // attach a freshly-validated credential to the *old* AID's row.
+        // Defense-in-depth: the validator finds its leaf by issuee match, independently of the SAID we
+        // fetched the stream for — they must agree. A mismatch would mean the presented stream's
+        // issuee-matching leaf isn't the credential the grant/admit round trip was actually about,
+        // which should be structurally impossible but is cheap to assert outright rather than trust.
+        if (!credentialSaid.equals(vc.credentialSaid())) {
+            ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
+                    KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    "Validated leaf credential %s does not match the fetched credential %s."
+                            .formatted(vc.credentialSaid(), credentialSaid));
+            return;
+        }
+
+        // Re-fetch the link fresh rather than reusing linkOpt, and compare bindingVersion (the same
+        // idiom CeremonyService#validateAndConsume uses) rather than the AID string: a relink bumps
+        // bindingVersion unconditionally and is the module's canonical "has this identity changed"
+        // signal, whereas comparing AIDs alone would miss a relink that raced in and back out, or any
+        // relink that isn't reflected by a simple AID inequality. This must never attach a freshly
+        // validated credential to a link that no longer matches the binding this ceremony was created
+        // under.
         Optional<KeriIdentityLinkEntity> freshLinkOpt = identityLinkRepository.findById(ceremony.getUserId());
-        if (freshLinkOpt.isEmpty() || !linkedAid.equals(freshLinkOpt.get().getAid())) {
+        if (freshLinkOpt.isEmpty() || freshLinkOpt.get().getBindingVersion() != ceremony.getBindingVersion()) {
             ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
                     KeriAttestationProblems.IDENTITY_RELINKED,
                     "Identity for user %s changed while awaiting the credential presentation."
@@ -200,7 +243,6 @@ public class KeriCredentialService {
             return;
         }
 
-        ValidatedCredential vc = validated.get();
         KeriIdentityLinkEntity link = freshLinkOpt.get();
         link.setCredentialSaid(vc.credentialSaid());
         link.setCredentialSchemaSaid(vc.schemaSaid());
@@ -217,15 +259,6 @@ public class KeriCredentialService {
     }
 
     // --- internals ---
-
-    private String firstAllowedSchema() {
-        List<String> schemaSaids = properties.credentialPolicy().schemaSaids();
-        if (schemaSaids == null || schemaSaids.isEmpty()) {
-            throw new IllegalStateException(
-                    "No schema SAIDs configured under lob.keri-attestation.credential-policy.schema-saids.");
-        }
-        return schemaSaids.get(0);
-    }
 
     private static String extractCredentialSaid(Map<String, Object> grantExn) {
         Object e = grantExn.get("e");

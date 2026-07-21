@@ -161,6 +161,34 @@ class CredentialChainValidatorTest {
     }
 
     @Test
+    void acdcWithNullIssuerIsRejectedNotThrown() {
+        // isAcdc() only requires the "i" key to be present (containsKey), not its value non-null — a
+        // structurally-plausible but malformed/hostile ACDC could carry i:null. Must resolve to a clean
+        // CREDENTIAL_REJECTED, never an NPE out of the walk. Built as raw JSON text rather than via the
+        // acdc()/CESRStreamUtil.makeCESRStream helpers: those round-trip the event map through
+        // Utils.jsonStringify, which drops null-valued entries entirely (so the "i" key wouldn't even
+        // survive re-parsing) — writing the wire text directly guarantees "i":null is actually present,
+        // exactly as a real malformed/hostile stream could present it.
+        String credentialSaid = "Eleaf000000000000000000000000000000";
+        String issJson = "{\"v\":\"KERI10JSON0000ed_\",\"t\":\"iss\",\"d\":\"Eissleaf000000000000000000000000000\","
+                + "\"i\":\"" + credentialSaid + "\",\"s\":\"0\",\"ri\":\"Eregistry00000000000000000000000000000\","
+                + "\"dt\":\"2026-07-21T00:00:00.000000+00:00\"}";
+        String acdcJson = "{\"v\":\"ACDC10JSON000197_\",\"d\":\"" + credentialSaid + "\",\"i\":null,"
+                + "\"ri\":\"Eregistry00000000000000000000000000000\",\"s\":\"Eschema000000000000000000000000000000\","
+                + "\"a\":{\"d\":\"Eattr00000000000000000000000000000000\",\"i\":\"Eholder0000000000000000000000000000\"}}";
+        String cesr = issJson + acdcJson;
+
+        Either<ProblemDetail, ValidatedCredential> result = validator.validate(cesr,
+                "Eholder0000000000000000000000000000", List.of("Eschema000000000000000000000000000000"),
+                List.of("Eroot00000000000000000000000000000000"));
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
+        assertTrue(result.getLeft().getDetail().contains("no issuer"), () -> "expected a no-issuer rejection, got: "
+                + result.getLeft().getDetail());
+    }
+
+    @Test
     void edgeWalkTerminatesOnACycleInsteadOfLoopingForever() {
         // Two credentials whose edges reference each other: A's edge points at B, B's edge points at
         // A. Neither ever reaches a childless (root) node, so without cycle detection the ancestry

@@ -424,10 +424,78 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void awaitPresentationRelinkMidFlightFailsWithIdentityRelinkedAndDoesNotPersistStaleCredential() throws Exception {
+    void awaitPresentationValidatorThrowingFailsTheStepInsteadOfPropagatingAndLeavingTheCeremonyStuck()
+            throws Exception {
+        // The validator call is the one external-boundary call in this method without a checked-
+        // exception contract — easy to forget it can still throw on a malformed/hostile chain. An
+        // escaped RuntimeException here must not propagate out of an unsupervised async worker and
+        // leave the ceremony stuck at CREDENTIAL_REQUESTED forever.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenThrow(new RuntimeException("null issuer somewhere in the chain"));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REJECTED), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(identityLinkRepository, never()).save(any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationValidatedLeafSaidMismatchingFetchedCredentialSaidIsRejected() throws Exception {
+        // Defense-in-depth: the validator finds its leaf independently (by issuee match), so its result
+        // must be cross-checked against the SAID this whole round trip actually fetched and admitted.
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        String someOtherCredentialSaid = "ESOMEOTHERCREDSAID00000000000000000000";
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(someOtherCredentialSaid, RESULT_SCHEMA_SAID)));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REJECTED), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(identityLinkRepository, never()).save(any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationRelinkMidFlightFailsWithIdentityRelinkedAndDoesNotPersistStaleCredential() throws Exception {
+        // Guard is bindingVersion-based (mirrors CeremonyService#validateAndConsume), not an AID-string
+        // comparison: the ceremony was created under bindingVersion 1; a relink that landed mid-flight
+        // bumps the link to bindingVersion 2 (and, realistically, a new AID — but the guard itself only
+        // needs the version to differ to catch it).
+        KeriAttestationCeremonyEntity ceremonyEntity = ceremony(APPLY_SAID);
+        ceremonyEntity.setBindingVersion(1);
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
         KeriIdentityLinkEntity initialLink = link(LINKED_AID);
+        initialLink.setBindingVersion(1);
         KeriIdentityLinkEntity relinkedLink = link(OTHER_AID);
+        relinkedLink.setBindingVersion(2);
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(relinkedLink));
 
         when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))

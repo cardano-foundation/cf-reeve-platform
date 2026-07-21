@@ -126,16 +126,24 @@ public class CredentialChainValidator {
             return tel;
         }
 
+        // A structurally-plausible ACDC (isAcdc() only requires the "i" key present, not its value
+        // non-null) can still carry a null issuer. Guarded here, once, before either branch below
+        // reads it via .equals() — a malformed/hostile chain is rejected outright instead of NPE-ing
+        // the caller (see KeriCredentialService.awaitPresentation's javadoc for the matching
+        // defense-in-depth wrapper around this whole call).
+        String nodeIssuer = (String) node.get("i");
+        if (nodeIssuer == null) {
+            return reject("Credential %s has no issuer (i) — malformed chain.".formatted(nodeSaid));
+        }
+
         List<Map.Entry<String, Object>> edges = substantiveEdges(node);
         if (edges.isEmpty()) {
-            String rootIssuer = (String) node.get("i");
-            if (trustedRootAids == null || !trustedRootAids.contains(rootIssuer)) {
-                return reject("Credential chain issuer %s is not a trusted root AID.".formatted(rootIssuer));
+            if (trustedRootAids == null || !trustedRootAids.contains(nodeIssuer)) {
+                return reject("Credential chain issuer %s is not a trusted root AID.".formatted(nodeIssuer));
             }
             return Either.right(null);
         }
 
-        String nodeIssuer = (String) node.get("i");
         for (Map.Entry<String, Object> edgeEntry : edges) {
             Object edgeValue = edgeEntry.getValue();
             Map<String, Object> edge = edgeValue instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
