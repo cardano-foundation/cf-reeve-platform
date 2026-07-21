@@ -167,6 +167,8 @@ class KeriNotificationCorrelatorTest {
 
         assertTrue(result.isEmpty());
         verifyNoInteractions(exchanges);
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
     }
 
     @Test
@@ -179,6 +181,8 @@ class KeriNotificationCorrelatorTest {
 
         assertTrue(result.isEmpty());
         verifyNoInteractions(exchanges);
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
     }
 
     @Test
@@ -213,6 +217,19 @@ class KeriNotificationCorrelatorTest {
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
                 correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(30));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void timesOutCleanlyInsteadOfPropagatingWhenTheClientRepeatedlyThrows() throws Exception {
+        // A transient agent hiccup (network blip, 5xx, ...) must not blow up the caller's async
+        // worker — it's logged and retried on the next poll, same as any other empty round, until the
+        // deadline is reached.
+        when(notifications.list()).thenThrow(new RuntimeException("agent unreachable"));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
 
         assertTrue(result.isEmpty());
     }

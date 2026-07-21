@@ -119,6 +119,9 @@ public class KeriNotificationCorrelator {
             Notifying.Notifications.NotificationListResponse response = client.notifications().list();
             notes = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
             });
+            if (notes == null) {
+                notes = List.of();
+            }
         } catch (InterruptedException e) {
             throw e;
         } catch (Exception e) {
