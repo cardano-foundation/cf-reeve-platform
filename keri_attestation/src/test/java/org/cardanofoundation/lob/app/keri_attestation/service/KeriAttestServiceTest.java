@@ -75,6 +75,7 @@ class KeriAttestServiceTest {
     private static final String NOTIF_ID = "0ANOTIFID0000000000000000000000000000";
     private static final String EVENT_SAID = "EEVENT00000000000000000000000000000000";
     private static final String SEQUENCE = "3";
+    private static final String FLOOR_SEQUENCE = "2";
     private static final List<String> REMOTESIGN_REF_ROUTES =
             List.of("/remotesign/ixn/ref", "/exn/remotesign/ixn/ref");
 
@@ -207,6 +208,18 @@ class KeriAttestServiceTest {
         return builtExn;
     }
 
+    /** Stubs the key-state query ({@code keyStates.query} + {@code operations.wait}) that
+     *  {@code queryLatestSequenceWithRetries} performs — used both by {@code startAttest} (F5 fix: the
+     *  floor query, before sending) and by {@code resolveAndComplete}'s no-candidate bounded-scan
+     *  fallback (the current-sequence query). One stub covers whichever of the two a given test's
+     *  execution path reaches, since both call the exact same underlying method with the same argument
+     *  shapes. */
+    private void stubKeyStateSequence(String sequence) throws Exception {
+        when(keyStates.query(eq(WALLET_AID), any())).thenReturn(Map.of());
+        Operation<Object> op = Operation.builder().response(Map.of("s", sequence)).build();
+        when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(op);
+    }
+
     /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply whichever mutator it is
      *  called with to {@code ceremony} — the same object identity {@code startAttest}'s caller holds —
      *  and report success. {@code startAttest} calls this twice per attempt (digest, then requestExnSaid)
@@ -235,6 +248,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
         when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
         Serder builtExn = stubHappySend();
+        stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, false);
@@ -242,7 +256,9 @@ class KeriAttestServiceTest {
         assertTrue(result.isRight());
         assertEquals(METADATA_LABEL, ceremony.getMetadataLabel());
         assertEquals(NEW_REQUEST_EXN_SAID, ceremony.getRequestExnSaid());
-        verify(ceremonyService, times(2)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+        // F5 fix: digest, floor sequence, and requestExnSaid — three guarded updates per attempt now.
+        assertEquals(FLOOR_SEQUENCE, ceremony.getKelFloorSequence());
+        verify(ceremonyService, times(3)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
                 eq(CeremonyState.ATTEST_REQUESTED), any());
         verify(ceremonyRepository, never()).save(any());
         verify(exchanges).createExchangeMessage(any(), eq("/remotesign/ixn/req"), eq(Map.of("d", DIGEST)),
@@ -268,6 +284,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
         when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
         stubHappySend();
+        stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
         org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("pool saturated"))
                 .when(asyncRunner).awaitAnchor(CEREMONY_ID, GENERATION);
@@ -404,6 +421,7 @@ class KeriAttestServiceTest {
         when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_PREFIX)));
         when(exchanges.createExchangeMessage(any(), anyString(), anyMap(), anyMap(), anyString(), any(), any()))
                 .thenThrow(new RuntimeException("agent unreachable"));
+        stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, false);
@@ -411,9 +429,10 @@ class KeriAttestServiceTest {
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_REQUEST_FAILED, result.getLeft().getTitle());
         assertNull(ceremony.getRequestExnSaid());
-        // Only the digest write reached the guarded update — building the exchange message threw before
-        // the requestExnSaid write, so that second call never happens.
-        verify(ceremonyService, times(1)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+        // F5 fix: digest and floor writes both reached the guarded update — building the exchange
+        // message threw before the requestExnSaid write, so that third call never happens.
+        assertEquals(FLOOR_SEQUENCE, ceremony.getKelFloorSequence());
+        verify(ceremonyService, times(2)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
                 eq(CeremonyState.ATTEST_REQUESTED), any());
         verify(ceremonyRepository, never()).save(any());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
@@ -467,6 +486,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
         when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
         stubHappySend();
+        stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, true);
@@ -579,9 +599,13 @@ class KeriAttestServiceTest {
 
         service.awaitAnchor(CEREMONY_ID, GENERATION);
 
+        // F5 fix: the ref exn here carries an explicit candidate (both sequence and SAID), so this goes
+        // through the explicit-candidate verification path, not the old generic "seal doesn't contain
+        // digest" message.
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH),
-                eq("Anchoring event seal does not contain digest " + DIGEST + "."));
+                eq("The wallet ref's explicit anchoring-event candidate did not verify (not found, sequence "
+                        + "before the floor, or seal does not contain digest " + DIGEST + ")."));
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(correlator, never()).markAndDelete(any());
     }
@@ -633,6 +657,65 @@ class KeriAttestServiceTest {
         verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(CeremonyState.ATTEST_ANCHORED), any());
         verify(correlator).markAndDelete(NOTIF_ID);
+    }
+
+    // --- F5 fix: floor sequence ---
+
+    @Test
+    void awaitAnchorRejectsAnOldEventWithTheSameDigestBelowTheFloor() throws Exception {
+        // An old ixn event that happens to carry the same metadata digest (e.g. left over from a prior
+        // attestation of identical content) must never satisfy a fresh request just because the digest
+        // matches — it must also be at or after the floor sequence queried before this request was sent.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        ceremony.setKelFloorSequence("5");
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        // No explicit candidate on the ref exn — goes through the bounded-scan fallback.
+        Map<String, Object> refExn = refExn(WALLET_AID, null, null);
+        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
+        stubKeyStateSequence("6");
+
+        Object seal = List.of(Map.of("d", DIGEST));
+        // Below the floor (sequence 2 < floor 5) but carries the matching digest — must be rejected.
+        Map<String, Object> oldEvent = kelEvent("ixn", "2", "EOLDEVENT00000000000000000000000000000", seal);
+        when(keyEvents.get(WALLET_AID)).thenReturn(List.of(oldEvent));
+
+        service.awaitAnchor(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitAnchorWithMismatchedExplicitCandidateDoesNotFallBackToScanningTheKel() throws Exception {
+        // A mismatched explicit ref-derived candidate must fail immediately — no fallback shopping for
+        // a different KEL event, even when one exists that WOULD satisfy the digest/floor if the code
+        // ever looked at it.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        ceremony.setKelFloorSequence("1");
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        // Explicit candidate naming a SAID/sequence that doesn't exist in the KEL at all.
+        Map<String, Object> refExn = refExn(WALLET_AID, "9", "ENONEXISTENTEVENT000000000000000000000");
+        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
+
+        // A different event that WOULD satisfy digest+floor if a scan ever considered it.
+        Object seal = List.of(Map.of("d", DIGEST));
+        Map<String, Object> otherEvent = kelEvent("ixn", SEQUENCE, EVENT_SAID, seal);
+        when(keyEvents.get(WALLET_AID)).thenReturn(List.of(otherEvent));
+
+        service.awaitAnchor(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(correlator, never()).markAndDelete(any());
+        // No fallback: the explicit-candidate branch never queries key state to bound a scan.
+        verifyNoInteractions(keyStates);
     }
 
     @Test

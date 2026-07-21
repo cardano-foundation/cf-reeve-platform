@@ -51,6 +51,12 @@ public class KeriCredentialService {
     private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer");
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant");
 
+    /** F8 fix: {@code step_phase} values marking which half of the two-phase CREDENTIAL_REQUESTED wait
+     *  (apply/offer, then agree/grant) an attempt last reached — see
+     *  {@link KeriAttestationCeremonyEntity#getStepPhase()}. */
+    static final String PHASE_APPLY_SENT = "APPLY_SENT";
+    static final String PHASE_AGREE_SENT = "AGREE_SENT";
+
     /** Short wait for the retry pre-check (design §4.2 "before re-sending... checks for a
      *  late-arriving matching notification") — mirrors {@link KeriAttestService}'s own retry-precheck
      *  timeout, applied here to the credential-presentation step instead of the ATTEST anchor. */
@@ -92,12 +98,22 @@ public class KeriCredentialService {
         }
         String linkedAid = linkOpt.get().getAid();
 
+        // F8 fix: a retry resuming at AGREE_SENT already has BOTH the apply and agree sent by a
+        // previous attempt (requestExnSaid now holds the agree's SAID, not the apply's) — never
+        // re-send either, and never re-run the offer precheck below (there is no offer left to claim;
+        // that phase is done). awaitPresentation's own phase-aware, full-timeout wait (await grant,
+        // admit, fetch, validate, complete) handles everything from here; a separate short precheck here
+        // would add nothing that wait doesn't already do, since there is nothing left to avoid resending.
+        if (retry && PHASE_AGREE_SENT.equals(ceremony.getStepPhase())) {
+            return dispatchAwaitPresentation(ceremonyId, generation);
+        }
+
         // Retry pre-check (design §4.2, mirrors KeriAttestService#startAttest): before sending a fresh
         // IPEX apply, look for a late-arriving offer correlated to the PREVIOUS attempt's apply. Found:
         // skip straight to dispatching the async continuation — its own (non-destructive)
         // correlator.awaitCorrelated call will find the same offer again, so nothing needs re-sending.
         // Not found (or this is the first attempt, requestExnSaid still null): fall through and build +
-        // send a fresh apply below.
+        // send a fresh apply below. Only reached for phase APPLY_SENT or null (no phase recorded yet).
         if (retry && ceremony.getRequestExnSaid() != null) {
             Optional<CorrelatedNotification> lateOffer = correlator.awaitCorrelated(OFFER_ROUTES, linkedAid,
                     ceremony.getRequestExnSaid(), RETRY_PRECHECK_TIMEOUT);
@@ -109,8 +125,7 @@ public class KeriCredentialService {
         Either<ProblemDetail, Void> sent = startPresentation(ceremony);
         if (sent.isLeft()) {
             ProblemDetail problem = sent.getLeft();
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.CREDENTIAL_REQUESTED, problem.getTitle(),
-                    problem.getDetail());
+            failCredentialStep(ceremonyId, generation, problem.getTitle(), problem.getDetail());
             return Either.left(problem);
         }
 
@@ -136,8 +151,19 @@ public class KeriCredentialService {
 
     private Either<ProblemDetail, Void> failCredentialRequest(String ceremonyId, int generation, String title,
             String detail) {
-        ceremonyService.failStep(ceremonyId, generation, CeremonyState.CREDENTIAL_REQUESTED, title, detail);
+        failCredentialStep(ceremonyId, generation, title, detail);
         return Either.left(KeriAttestationProblems.unprocessable(title, detail));
+    }
+
+    /** F8 fix: fails the CREDENTIAL_REQUESTED step, first best-effort clearing {@code stepPhase} so a
+     *  terminal (FAILED) row never carries a stale phase marker. The clear is a separate guarded update
+     *  from the {@code failStep} CAS that follows it — both independently no-op if the ceremony has
+     *  since moved on, which is harmless: clearing a phase that is about to become moot changes nothing
+     *  observable. */
+    private void failCredentialStep(String ceremonyId, int expectedGeneration, String title, String detail) {
+        ceremonyService.updateWaitingStepData(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
+                c -> c.setStepPhase(null));
+        ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED, title, detail);
     }
 
     // --- synchronous: build + send the apply, persist requestExnSaid before the send completes ---
@@ -174,9 +200,13 @@ public class KeriCredentialService {
             // check for a late-arriving correlated reply before re-sending. Routed through the guarded
             // update (F2 fix) rather than a direct save of this detached entity: a concurrent retry/sweep
             // transition landing between beginStep's row lock releasing and this write must never be
-            // silently overwritten.
+            // silently overwritten. Also records the APPLY_SENT phase (F8 fix) so a later retry knows
+            // this attempt got at least this far.
             boolean persisted = ceremonyService.updateWaitingStepData(ceremony.getId(), ceremony.getAttemptGeneration(),
-                    CeremonyState.CREDENTIAL_REQUESTED, c -> c.setRequestExnSaid(exnSaid));
+                    CeremonyState.CREDENTIAL_REQUESTED, c -> {
+                        c.setRequestExnSaid(exnSaid);
+                        c.setStepPhase(PHASE_APPLY_SENT);
+                    });
             if (!persisted) {
                 return Either.left(staleCeremonyProblem(ceremony.getId()));
             }
@@ -201,6 +231,13 @@ public class KeriCredentialService {
      * external-boundary call (signify-java client calls, the correlator, the validator) is therefore
      * deliberately wrapped in a catch broad enough to guarantee this method always resolves the
      * ceremony via {@code completeStep} or {@code failStep} before returning, never by propagating.
+     *
+     * <p><b>Phase-aware (F8 fix):</b> when this attempt resumes at {@code stepPhase == AGREE_SENT}
+     * (persisted by a previous attempt that got at least that far), the offer wait and agree send are
+     * both skipped entirely — {@code requestExnSaid} already holds the agree's SAID from that persist,
+     * so this jumps straight to awaiting the grant. Otherwise (phase {@code APPLY_SENT} or {@code null})
+     * the normal offer-wait/agree-send happens, and its own persisted phase transition to
+     * {@code AGREE_SENT} is what a later retry would resume from.
      */
     public void awaitPresentation(String ceremonyId, int expectedGeneration) {
         Optional<KeriAttestationCeremonyEntity> ceremonyOpt = ceremonyRepository.findById(ceremonyId);
@@ -211,32 +248,58 @@ public class KeriCredentialService {
 
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(ceremony.getUserId());
         if (linkOpt.isEmpty() || linkOpt.get().getAid() == null) {
-            ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                    KeriAttestationProblems.IDENTITY_NOT_LINKED,
+            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.IDENTITY_NOT_LINKED,
                     "User %s has no linked identity to await a presentation from.".formatted(ceremony.getUserId()));
             return;
         }
         String linkedAid = linkOpt.get().getAid();
         String agentName = agentService.agentName();
 
-        Optional<CorrelatedNotification> offer = correlator.awaitCorrelated(OFFER_ROUTES, linkedAid,
-                ceremony.getRequestExnSaid(), properties.remotesignTimeout());
-        if (offer.isEmpty()) {
-            failTimeout(ceremonyId, expectedGeneration, "Timed out waiting for /exn/ipex/offer.");
-            return;
-        }
-
+        CorrelatedNotification offerNotification = null;
         String agreeSaid;
-        try {
-            ExchangeMessageResult agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
-                    .senderName(agentName).recipient(linkedAid).message("")
-                    .offerSaid(offer.get().exnSaid()).build());
-            agreeSaid = (String) agreeResult.exn().getKed().get("d");
-            client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(), List.of(linkedAid));
-        } catch (Exception e) {
-            interruptIfNeeded(e);
-            failRequest(ceremonyId, expectedGeneration, "Failed to send IPEX agree: " + e.getMessage());
-            return;
+
+        if (PHASE_AGREE_SENT.equals(ceremony.getStepPhase())) {
+            // F8 fix: resuming after a retry that already sent the apply AND the agree — requestExnSaid
+            // was overwritten to the agree's SAID when that phase was persisted.
+            agreeSaid = ceremony.getRequestExnSaid();
+        } else {
+            Optional<CorrelatedNotification> offer = correlator.awaitCorrelated(OFFER_ROUTES, linkedAid,
+                    ceremony.getRequestExnSaid(), properties.remotesignTimeout());
+            if (offer.isEmpty()) {
+                failTimeout(ceremonyId, expectedGeneration, "Timed out waiting for /exn/ipex/offer.");
+                return;
+            }
+            offerNotification = offer.get();
+
+            try {
+                ExchangeMessageResult agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
+                        .senderName(agentName).recipient(linkedAid).message("")
+                        .offerSaid(offerNotification.exnSaid()).build());
+                agreeSaid = (String) agreeResult.exn().getKed().get("d");
+                client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
+                        List.of(linkedAid));
+            } catch (Exception e) {
+                interruptIfNeeded(e);
+                failRequest(ceremonyId, expectedGeneration, "Failed to send IPEX agree: " + e.getMessage());
+                return;
+            }
+
+            // F8 fix: persist the AGREE_SENT phase transition, overwriting requestExnSaid with the
+            // agree's SAID (design: requestExnSaid always names whichever exn this ceremony is currently
+            // waiting on a correlated reply for). This guarded update also refreshes updatedAt — the F7
+            // heartbeat that keeps a legitimately in-progress two-phase wait from looking stale to the
+            // cleanup sweep's budget for CREDENTIAL_REQUESTED.
+            boolean phasePersisted = ceremonyService.updateWaitingStepData(ceremonyId, expectedGeneration,
+                    CeremonyState.CREDENTIAL_REQUESTED, c -> {
+                        c.setStepPhase(PHASE_AGREE_SENT);
+                        c.setRequestExnSaid(agreeSaid);
+                    });
+            if (!phasePersisted) {
+                // Stale CAS (a retry superseded this attempt) — abandon; the winning attempt's own wait
+                // handles everything from here, and the offer notification is left unread/undeleted for
+                // whichever attempt still needs it.
+                return;
+            }
         }
 
         Optional<CorrelatedNotification> grant = correlator.awaitCorrelated(GRANT_ROUTES, linkedAid, agreeSaid,
@@ -291,13 +354,13 @@ public class KeriCredentialService {
                     properties.credentialPolicy().trustedRootAids());
         } catch (Exception e) {
             interruptIfNeeded(e);
-            ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                    KeriAttestationProblems.CREDENTIAL_REJECTED, "Chain validation error: " + e.getMessage());
+            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    "Chain validation error: " + e.getMessage());
             return;
         }
         if (validated.isLeft()) {
-            ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                    KeriAttestationProblems.CREDENTIAL_REJECTED, validated.getLeft().getDetail());
+            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    validated.getLeft().getDetail());
             return;
         }
         ValidatedCredential vc = validated.get();
@@ -307,20 +370,20 @@ public class KeriCredentialService {
         // issuee-matching leaf isn't the credential the grant/admit round trip was actually about,
         // which should be structurally impossible but is cheap to assert outright rather than trust.
         if (!credentialSaid.equals(vc.credentialSaid())) {
-            ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                    KeriAttestationProblems.CREDENTIAL_REJECTED,
+            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REJECTED,
                     "Validated leaf credential %s does not match the fetched credential %s."
                             .formatted(vc.credentialSaid(), credentialSaid));
             return;
         }
 
-        // Fold the link write into completeStep's mutator (F5 fix — mirrors
+        // Fold the link write into completeStep's mutator (mirrors
         // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent exactly): the credential write and
         // the ceremony's CREDENTIAL_REQUESTED -> CREDENTIAL_RECEIVED transition must commit atomically,
         // in CeremonyService's one transaction. The old code saved the link in its own separate
         // transaction before ever calling completeStep, so a stale CAS below (a retry superseded this
         // attempt) still left the link durably written even though the ceremony transition it belongs
-        // with never happened.
+        // with never happened. Also clears stepPhase (F8 fix) — the step is done, so no phase marker
+        // should linger on the row.
         String userId = ceremony.getUserId();
         int bindingVersion = ceremony.getBindingVersion();
         String finalCredentialSaid = vc.credentialSaid();
@@ -328,8 +391,11 @@ public class KeriCredentialService {
 
         boolean completed = ceremonyService.completeStep(ceremonyId, expectedGeneration,
                 CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED,
-                c -> persistCredentialIfIdentityStillCurrent(userId, bindingVersion, finalCredentialSaid,
-                        finalSchemaSaid));
+                c -> {
+                    persistCredentialIfIdentityStillCurrent(userId, bindingVersion, finalCredentialSaid,
+                            finalSchemaSaid);
+                    c.setStepPhase(null);
+                });
         if (!completed) {
             // Stale CAS (a retry superseded this attempt) — the link must not be written either (the
             // mutator above never runs), and the notifications must be left alone: the winning attempt's
@@ -340,8 +406,12 @@ public class KeriCredentialService {
 
         // Only after both the link and the ceremony transition are durably committed: an earlier
         // mark-and-delete would let a crash between the two silently lose the wallet's replies, exactly
-        // the failure mode KeriNotificationCorrelator#markAndDelete's contract exists to prevent.
-        correlator.markAndDelete(offer.get().notificationId());
+        // the failure mode KeriNotificationCorrelator#markAndDelete's contract exists to prevent. No
+        // offer notification to mark when this attempt resumed at AGREE_SENT (F8 fix) — it skipped the
+        // offer wait entirely, so it never claimed one.
+        if (offerNotification != null) {
+            correlator.markAndDelete(offerNotification.notificationId());
+        }
         correlator.markAndDelete(grant.get().notificationId());
     }
 

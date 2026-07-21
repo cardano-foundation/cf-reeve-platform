@@ -192,6 +192,43 @@ class CeremonyCleanupJobTest {
     }
 
     /**
+     * F7 fix: CREDENTIAL_REQUESTED legitimately spans up to TWO wallet-approval waits (offer, then
+     * grant), so its budget is {@code 2 x remotesignTimeout + grace} = {@code 2x3m+2m = 8m}, not the
+     * single-wait {@code remotesignTimeout + grace} = 5m every other waiting state gets. 6 minutes old is
+     * past the old (pre-F7) single-wait budget but still within the new doubled one.
+     */
+    @Test
+    void sweepDoesNotFailACredentialRequestedCeremonyWithinTheDoubledTwoPhaseBudget() {
+        KeriAttestationCeremonyEntity ceremony =
+                ceremony(CeremonyState.CREDENTIAL_REQUESTED, LocalDateTime.now().plusHours(1));
+        ceremony.setUpdatedAt(LocalDateTime.now().minusMinutes(6));
+        when(ceremonyRepository.findByStateInAndUpdatedAtBefore(anyCollection(), any())).thenReturn(List.of(ceremony));
+        when(ceremonyRepository.findByIdForUpdate("cer-1")).thenReturn(Optional.of(ceremony));
+
+        job.sweep();
+
+        assertEquals(CeremonyState.CREDENTIAL_REQUESTED, ceremony.getState());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    /** Same budget as {@link #sweepDoesNotFailACredentialRequestedCeremonyWithinTheDoubledTwoPhaseBudget},
+     *  past its end this time: 9 minutes is past {@code 2x3m+2m = 8m}. */
+    @Test
+    void sweepFailsACredentialRequestedCeremonyPastTheDoubledTwoPhaseBudget() {
+        KeriAttestationCeremonyEntity ceremony =
+                ceremony(CeremonyState.CREDENTIAL_REQUESTED, LocalDateTime.now().plusHours(1));
+        ceremony.setUpdatedAt(LocalDateTime.now().minusMinutes(9));
+        when(ceremonyRepository.findByStateInAndUpdatedAtBefore(anyCollection(), any())).thenReturn(List.of(ceremony));
+        when(ceremonyRepository.findByIdForUpdate("cer-1")).thenReturn(Optional.of(ceremony));
+
+        job.sweep();
+
+        assertEquals(CeremonyState.FAILED, ceremony.getState());
+        assertEquals(KeriAttestationProblems.KERI_STEP_TIMED_OUT, ceremony.getErrorTitle());
+        verify(ceremonyRepository).save(ceremony);
+    }
+
+    /**
      * Mirrors {@link #sweepDoesNotExpireACandidateThatMovedOnBeforeTheLockedRecheck}: the discovery
      * read is unlocked, so a candidate can have legitimately moved on to a resting or terminal state
      * (e.g. a retry's {@code beginStep}, or a completed step) by the time the locked re-check runs —

@@ -107,6 +107,15 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "kel_event_said")
     private String kelEventSaid;
 
+    /** F5 fix: the wallet's KEL sequence (hex) at ATTEST-request time, queried and persisted BEFORE the
+     *  remotesign request is sent. Any candidate/fallback anchoring event {@code awaitAnchor} accepts
+     *  must have a sequence at or after this floor, so an old KEL event that happens to carry the same
+     *  {@link #metadataDigest} (e.g. left over from a prior attestation of identical content) can never
+     *  satisfy a fresh request. */
+    @Nullable
+    @Column(name = "kel_floor_sequence", length = 64)
+    private String kelFloorSequence;
+
     /** Pending AUTH_BEGIN tx hash while this ceremony is {@code AUTH_BEGIN_SUBMITTED} (Task 9). The
      *  CONFIRMED hash is persisted separately to {@code KeriIdentityLinkEntity#authBeginTxHash} (one
      *  per identity, not per ceremony) once {@code KeriAuthBeginService#awaitAuthBeginConfirmation}
@@ -114,6 +123,16 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Nullable
     @Column(name = "auth_begin_tx_hash")
     private String authBeginTxHash;
+
+    /** F8 fix: which half of the two-phase CREDENTIAL_REQUESTED wait (apply/offer, then agree/grant) a
+     *  retry last reached — {@code APPLY_SENT} or {@code AGREE_SENT} (see
+     *  {@code KeriCredentialService}'s constants of the same names). {@code null} means no phase
+     *  recorded yet, equivalent to {@code APPLY_SENT} for retry purposes. Cleared on step
+     *  completion/failure so a stale value never lingers once this ceremony's CREDENTIAL_REQUESTED step
+     *  is done. */
+    @Nullable
+    @Column(name = "step_phase", length = 32)
+    private String stepPhase;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

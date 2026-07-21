@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -109,14 +110,29 @@ public class CeremonyCleanupJob {
         }
     }
 
-    /** Step-level stale detection (F4 fix, design §4.2/§7) — see this class's javadoc. */
+    /**
+     * Step-level stale detection (design §4.2/§7) — see this class's javadoc.
+     *
+     * <p><b>Per-state budget (F7 fix):</b> {@code CREDENTIAL_REQUESTED} legitimately spans up to
+     * <em>two</em> wallet-approval waits (offer, then grant — design §4.2/{@code KeriCredentialService}
+     * §4.6's two-phase IPEX flow), not one, so its budget is {@code 2 × remotesignTimeout + grace}
+     * rather than the single {@code remotesignTimeout + grace} every other waiting state gets. Without
+     * this, a ceremony legitimately still waiting on the SECOND wallet approval (grant, after an already
+     * -completed offer/agree round trip) could be swept as stale mid-flight. This is defense in depth
+     * on top of the F8 fix's own heartbeat: {@code KeriCredentialService#awaitPresentation}'s
+     * AGREE_SENT phase persist refreshes {@code updatedAt} between the two waits via the same guarded
+     * update that records the phase transition, so a ceremony that's actually making progress resets its
+     * own clock; the doubled budget here is what protects the (rarer, but real) case where the whole
+     * offer round trip alone takes close to the single-{@code remotesignTimeout} budget.
+     */
     private void failStaleWaitingSteps() {
         LocalDateTime now = LocalDateTime.now();
-        // Broad, unlocked discovery read: the shortest possible step timeout (remotesignTimeout, used
-        // by CREDENTIAL_REQUESTED/ATTEST_REQUESTED) plus grace. AUTH_BEGIN_SUBMITTED's own longer
-        // authBeginRollbackWindow is re-checked precisely per-candidate below, so a candidate that isn't
+        Map<CeremonyState, Duration> budgets = stepTimeoutBudgets();
+        // Broad, unlocked discovery read: the shortest of the per-state budgets above, plus grace. Every
+        // other (longer) budget is re-checked precisely per-candidate below, so a candidate that isn't
         // actually overdue for its specific state is simply skipped, never clobbered.
-        LocalDateTime discoveryCutoff = now.minus(shortestStepTimeout()).minus(properties.stepTimeoutGrace());
+        Duration shortestBudget = budgets.values().stream().min(Duration::compareTo).orElseThrow();
+        LocalDateTime discoveryCutoff = now.minus(shortestBudget).minus(properties.stepTimeoutGrace());
         List<KeriAttestationCeremonyEntity> candidates =
                 ceremonyRepository.findByStateInAndUpdatedAtBefore(WAITING, discoveryCutoff);
         if (candidates.isEmpty()) {
@@ -136,7 +152,7 @@ public class CeremonyCleanupJob {
             if (!WAITING.contains(waitingState)) {
                 continue;
             }
-            LocalDateTime stepCutoff = now.minus(stepTimeoutFor(waitingState)).minus(properties.stepTimeoutGrace());
+            LocalDateTime stepCutoff = now.minus(budgets.get(waitingState)).minus(properties.stepTimeoutGrace());
             if (ceremony.getUpdatedAt().isAfter(stepCutoff)) {
                 continue;
             }
@@ -154,18 +170,15 @@ public class CeremonyCleanupJob {
         }
     }
 
-    private Duration shortestStepTimeout() {
-        Duration remotesign = properties.remotesignTimeout();
-        Duration authBeginRollback = properties.authBeginRollbackWindow();
-        return remotesign.compareTo(authBeginRollback) <= 0 ? remotesign : authBeginRollback;
-    }
-
-    private Duration stepTimeoutFor(CeremonyState waitingState) {
-        return switch (waitingState) {
-            case CREDENTIAL_REQUESTED, ATTEST_REQUESTED -> properties.remotesignTimeout();
-            case AUTH_BEGIN_SUBMITTED -> properties.authBeginRollbackWindow();
-            default -> throw new IllegalStateException("Not a waiting state: " + waitingState);
-        };
+    /** Per-state sweep budget (F7 fix): the maximum time a ceremony may legitimately sit in a given
+     *  {@link #WAITING} state before the sweep considers it stale (before {@link #properties}'
+     *  {@code stepTimeoutGrace} is added on top). */
+    private Map<CeremonyState, Duration> stepTimeoutBudgets() {
+        Duration remotesignTimeout = properties.remotesignTimeout();
+        return Map.of(
+                CeremonyState.CREDENTIAL_REQUESTED, remotesignTimeout.multipliedBy(2),
+                CeremonyState.ATTEST_REQUESTED, remotesignTimeout,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, properties.authBeginRollbackWindow());
     }
 
     /**

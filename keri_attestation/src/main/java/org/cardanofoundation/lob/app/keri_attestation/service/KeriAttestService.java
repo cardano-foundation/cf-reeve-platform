@@ -110,7 +110,8 @@ public class KeriAttestService {
             Optional<CorrelatedNotification> lateRef = correlator.awaitCorrelated(REMOTESIGN_REF_ROUTES, walletAid,
                     ceremony.getRequestExnSaid(), RETRY_PRECHECK_TIMEOUT);
             if (lateRef.isPresent()) {
-                resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getMetadataDigest(), lateRef.get());
+                resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getMetadataDigest(),
+                        ceremony.getKelFloorSequence(), lateRef.get());
                 return Either.right(null);
             }
         }
@@ -149,6 +150,22 @@ public class KeriAttestService {
                     c.setMetadataLabel(digest.metadataLabel());
                 });
         if (!digestPersisted) {
+            return Either.left(staleCeremonyProblem(ceremonyId));
+        }
+
+        // F5 fix: query the wallet's CURRENT KEL sequence and persist it as a floor BEFORE the
+        // remotesign request is sent. awaitAnchor requires any accepted anchoring event to be at or
+        // after this floor — without it, an old KEL event that happens to carry the same metadata
+        // digest (e.g. left over from a prior attestation of identical content) could satisfy a fresh
+        // request that the wallet never actually acted on.
+        Optional<String> floorSequence = queryLatestSequenceWithRetries(walletAid);
+        if (floorSequence.isEmpty()) {
+            return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                    "Failed to query the wallet's current KEL sequence to establish an anchor floor.");
+        }
+        boolean floorPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
+                CeremonyState.ATTEST_REQUESTED, c -> c.setKelFloorSequence(floorSequence.get()));
+        if (!floorPersisted) {
             return Either.left(staleCeremonyProblem(ceremonyId));
         }
 
@@ -232,40 +249,61 @@ public class KeriAttestService {
             return;
         }
 
-        resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getMetadataDigest(), ref.get());
+        resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getMetadataDigest(),
+                ceremony.getKelFloorSequence(), ref.get());
     }
 
     // --- shared: from a correlated ref, locate + verify the anchoring KEL event, then complete ---
 
     /**
-     * From the correlated ref (not from "latest key state" alone, design §4.6 step 5): try to read the
-     * anchoring event's sequence/SAID directly from the ref exn's payload; if that fails, fall back to
-     * {@link #queryLatestSequenceWithRetries} — a bounded-retry key-state query used only to confirm
-     * KEL availability. <b>This fallback races with unrelated wallet events</b> (any other interaction
-     * the wallet's AID performs between the request and this read could be mistaken for the anchor) —
-     * exactly the risk the Task 8 spike (see {@code docs/keri/spike/RemotesignAnchorSpike.java}'s
-     * {@code locateAnchoringEvent}) exists to characterize against a real wallet; this fallback should
-     * be revisited once the spike's ref-exn-payload findings are recorded in the module README, since
-     * the primary (payload-based) path should normally make it unnecessary.
+     * From the correlated ref (not from "latest key state" alone, design §4.6 step 5), verified against
+     * {@code floorSequence} (F5 fix — see {@link KeriAttestationCeremonyEntity#getKelFloorSequence()}):
+     * <ol>
+     *   <li>If the ref exn payload yields an explicit candidate ({@link #extractCandidate}), that
+     *       candidate MUST resolve to a KEL event whose sequence is at or after {@code floorSequence}
+     *       AND whose seal contains {@code metadataDigest}. If it doesn't — wrong event, too old, or
+     *       simply not found — this fails immediately with {@code ATTEST_SEAL_MISMATCH}; there is no
+     *       fallback shopping for a different event once an explicit candidate is on the table.</li>
+     *   <li>If the ref exn payload yields no candidate at all, this falls back to a <b>bounded</b> scan
+     *       of {@code ixn} events between {@code floorSequence} and the wallet's current key-state
+     *       sequence (queried via {@link #queryLatestSequenceWithRetries}), looking for one whose seal
+     *       contains {@code metadataDigest}. Unlike the removed unconditional "accept the latest ixn
+     *       event" path, an event outside that bounded window — including one older than the floor —
+     *       can never satisfy the request, regardless of its seal.</li>
+     * </ol>
+     * The exact ref-exn-payload shape (which yields candidate 1) isn't confirmed against a live wallet
+     * yet (Task 8); both paths are unit-tested independently.
      */
     private void resolveAndComplete(String ceremonyId, int generation, String walletAid, String metadataDigest,
-            CorrelatedNotification ref) {
+            String floorSequence, CorrelatedNotification ref) {
         try {
             AnchorCandidate candidate = extractCandidate(ref.exn());
-            if (candidate.isEmpty()) {
-                candidate = new AnchorCandidate(null, queryLatestSequenceWithRetries(walletAid).orElse(null));
-            }
-
             List<Map<String, Object>> kel = fetchKel(walletAid);
-            Map<String, Object> event = locateEvent(kel, candidate);
+            List<Map<String, Object>> ixnEvents = kel.stream().filter(ke -> "ixn".equals(ke.get("t"))).toList();
 
-            if (event == null || !sealContainsDigest(event.get("a"), metadataDigest)) {
-                ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
-                        KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
-                        event == null
-                                ? "No interaction (ixn) event found on the wallet AID's KEL to verify the anchor."
-                                : "Anchoring event seal does not contain digest %s.".formatted(metadataDigest));
-                return;
+            Map<String, Object> event;
+            if (!candidate.isEmpty()) {
+                event = locateExplicitCandidate(ixnEvents, candidate);
+                if (event == null || !satisfiesFloorAndDigest(event, floorSequence, metadataDigest)) {
+                    ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
+                            KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
+                            "The wallet ref's explicit anchoring-event candidate did not verify (not found, "
+                                    + "sequence before the floor, or seal does not contain digest %s)."
+                                            .formatted(metadataDigest));
+                    return;
+                }
+            } else {
+                Optional<String> currentSequence = queryLatestSequenceWithRetries(walletAid);
+                event = currentSequence
+                        .map(cs -> scanForSealMatch(ixnEvents, floorSequence, cs, metadataDigest))
+                        .orElse(null);
+                if (event == null) {
+                    ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
+                            KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
+                            "No interaction (ixn) event between the floor sequence and the wallet's current "
+                                    + "key state matched digest %s.".formatted(metadataDigest));
+                    return;
+                }
             }
 
             String sequence = String.valueOf(event.get("s"));
@@ -378,13 +416,11 @@ public class KeriAttestService {
         return null;
     }
 
-    /** Prefers the {@code ixn} event matching {@code candidate}'s SAID, then its sequence. Falls back
-     *  to the LATEST {@code ixn} event if neither matched (or no candidate was available) — this
-     *  fallback races with unrelated wallet events, same caveat as
-     *  {@link #queryLatestSequenceWithRetries}. */
-    private static Map<String, Object> locateEvent(List<Map<String, Object>> kel, AnchorCandidate candidate) {
-        List<Map<String, Object>> ixnEvents = kel.stream().filter(ke -> "ixn".equals(ke.get("t"))).toList();
-
+    /** Locates the {@code ixn} event an explicit ref-derived {@code candidate} names — by SAID first,
+     *  then by sequence (F5 fix: no fallback to "the latest event" if neither matches — a caller with an
+     *  explicit candidate that can't be found must fail, not shop for a different event). */
+    private static Map<String, Object> locateExplicitCandidate(List<Map<String, Object>> ixnEvents,
+            AnchorCandidate candidate) {
         if (candidate.said() != null) {
             for (Map<String, Object> ke : ixnEvents) {
                 if (candidate.said().equals(ke.get("d"))) {
@@ -399,7 +435,47 @@ public class KeriAttestService {
                 }
             }
         }
-        return ixnEvents.isEmpty() ? null : ixnEvents.get(ixnEvents.size() - 1);
+        return null;
+    }
+
+    /** Bounded scan (F5 fix) over {@code ixnEvents} whose sequence falls within
+     *  [{@code floorSequence}, {@code currentSequence}] (hex-compared numerically), returning the first
+     *  whose seal contains {@code digestQb64} — or {@code null} if none in that window match. Replaces
+     *  the old unconditional "accept the latest ixn event" fallback: an event outside the window can
+     *  never satisfy the request regardless of its seal, and a {@code null} floor is treated as no lower
+     *  bound (only ceremonies created before this column existed should ever have one). */
+    private static Map<String, Object> scanForSealMatch(List<Map<String, Object>> ixnEvents, String floorSequence,
+            String currentSequence, String digestQb64) {
+        long floor = floorSequence != null ? parseHexSequence(floorSequence) : 0L;
+        long current = parseHexSequence(currentSequence);
+        for (Map<String, Object> ke : ixnEvents) {
+            long sn = parseHexSequence(String.valueOf(ke.get("s")));
+            if (sn < floor || sn > current) {
+                continue;
+            }
+            if (sealContainsDigest(ke.get("a"), digestQb64)) {
+                return ke;
+            }
+        }
+        return null;
+    }
+
+    /** {@code event}'s sequence must be at or after {@code floorSequence} (hex-compared numerically; a
+     *  {@code null} floor imposes no lower bound) AND its seal must contain {@code digestQb64} (F5 fix).
+     */
+    private static boolean satisfiesFloorAndDigest(Map<String, Object> event, String floorSequence,
+            String digestQb64) {
+        if (floorSequence != null) {
+            long sn = parseHexSequence(String.valueOf(event.get("s")));
+            if (sn < parseHexSequence(floorSequence)) {
+                return false;
+            }
+        }
+        return sealContainsDigest(event.get("a"), digestQb64);
+    }
+
+    private static long parseHexSequence(String hexSequence) {
+        return Long.parseLong(hexSequence, 16);
     }
 
     private static boolean sealContainsDigest(Object sealField, String digestQb64) {

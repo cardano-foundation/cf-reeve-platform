@@ -104,6 +104,13 @@ class KeriCredentialServiceTest {
         lenient().when(client.credentials()).thenReturn(credentials);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
         lenient().when(agentService.agentOobi()).thenReturn(AGENT_OOBI);
+        // F8 fix: awaitPresentation's normal (non-resumed) flow persists the AGREE_SENT phase transition
+        // via a guarded update after sending the agree, before waiting for the grant. Default this to
+        // succeed (without applying the mutator) so every test not specifically about that persist can
+        // still reach the rest of the flow; tests that DO care override this with a more specific stub
+        // defined after this one, which Mockito resolves in preference to this default.
+        lenient().when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), any())).thenReturn(true);
 
         service = new KeriCredentialService(keriClient, agentService, correlator, validator, ceremonyService,
                 ceremonyRepository, identityLinkRepository, properties(), asyncRunner);
@@ -380,6 +387,23 @@ class KeriCredentialServiceTest {
         verify(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
     }
 
+    @Test
+    void startCredentialRequestRetryWithAgreeSentPhaseNeverResendsAndDispatchesAsyncWait() {
+        // F8 fix: a retry resuming at AGREE_SENT already has BOTH the apply and agree sent by a
+        // previous attempt -- must never re-send either, and must never re-run the offer precheck.
+        KeriAttestationCeremonyEntity ceremony = ceremony(AGREE_SAID);
+        ceremony.setStepPhase("AGREE_SENT");
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, true);
+
+        assertTrue(result.isRight());
+        verify(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
+        verifyNoInteractions(correlator, ipex);
+    }
+
     // ==================== awaitPresentation ====================
 
     @Test
@@ -417,6 +441,17 @@ class KeriCredentialServiceTest {
         verify(ipex).submitAdmit(AGENT_NAME, admitExn, List.of("sig3"), "atc3", List.of(LINKED_AID));
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
 
+        // F8 fix: sending the agree persists the AGREE_SENT phase transition (and overwrites
+        // requestExnSaid with the agree's SAID) via a guarded update, separate from completeStep's own.
+        ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> phaseMutatorCaptor =
+                ArgumentCaptor.forClass(Consumer.class);
+        verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), phaseMutatorCaptor.capture());
+        KeriAttestationCeremonyEntity phaseScratch = ceremony(APPLY_SAID);
+        phaseMutatorCaptor.getValue().accept(phaseScratch);
+        assertEquals("AGREE_SENT", phaseScratch.getStepPhase());
+        assertEquals(AGREE_SAID, phaseScratch.getRequestExnSaid());
+
         // F5 fix: the link write happens inside completeStep's mutator (mirrors
         // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent) — capture it and run it the way
         // CeremonyService really would, then assert its effect. It must not have run as a side effect of
@@ -426,14 +461,56 @@ class KeriCredentialServiceTest {
                 eq(CeremonyState.CREDENTIAL_RECEIVED), mutatorCaptor.capture());
         verify(identityLinkRepository, never()).save(any());
 
-        mutatorCaptor.getValue().accept(ceremony(APPLY_SAID));
+        KeriAttestationCeremonyEntity completeScratch = ceremony(APPLY_SAID);
+        completeScratch.setStepPhase("AGREE_SENT");
+        mutatorCaptor.getValue().accept(completeScratch);
 
         assertEquals(CREDENTIAL_SAID, freshLink.getCredentialSaid());
         assertEquals(RESULT_SCHEMA_SAID, freshLink.getCredentialSchemaSaid());
         verify(identityLinkRepository).save(freshLink);
+        // F8 fix: the step is done — no phase marker should linger on the row.
+        assertNull(completeScratch.getStepPhase());
 
         // Notifications are only claimed (marked+deleted) once completeStep reports success.
         verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator).markAndDelete(GRANT_NOTIF_ID);
+    }
+
+    @Test
+    void awaitPresentationResumingAtAgreeSentSkipsOfferAndAgreeAndCorrelatesGrantOnThePersistedAgreeSaid()
+            throws Exception {
+        // F8 fix: a retry resuming at AGREE_SENT already sent both apply and agree in a previous
+        // attempt -- requestExnSaid holds the agree's SAID. This attempt must never wait for an offer or
+        // send a second agree; it correlates the grant directly on that persisted SAID.
+        KeriAttestationCeremonyEntity resumedCeremony = ceremony(AGREE_SAID);
+        resumedCeremony.setStepPhase("AGREE_SENT");
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(resumedCeremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        // agree/submitAgree are never called (no re-send); admit() below still happens normally, once
+        // the correlated grant arrives.
+        verify(ipex, never()).agree(any());
+        verify(ipex, never()).submitAgree(any(), any(), any(), any());
+        verify(ipex).admit(any());
+        verify(correlator, never()).awaitCorrelated(eq(OFFER_ROUTES), any(), any(), any());
+        verify(correlator).awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+
+        // No offer notification was ever claimed (this attempt never fetched one).
+        verify(correlator, never()).markAndDelete(OFFER_NOTIF_ID);
         verify(correlator).markAndDelete(GRANT_NOTIF_ID);
     }
 
