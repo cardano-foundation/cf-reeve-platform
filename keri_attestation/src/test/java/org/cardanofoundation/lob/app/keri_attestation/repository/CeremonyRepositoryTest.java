@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Import;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.config.TestContainerConfig;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
@@ -41,7 +43,11 @@ class CeremonyRepositoryTest {
     @EnableAutoConfiguration
     @EnableJpaRepositories("org.cardanofoundation.lob.app.keri_attestation")
     @EntityScan("org.cardanofoundation.lob.app.keri_attestation")
+    // Task 3 added @Service/@Component classes (CeremonyService, CeremonyCleanupJob) to this package;
+    // they now get picked up by this scan too, so the properties they depend on must be bindable here
+    // just like in the real KeriAttestationModuleConfig pairing of ComponentScan + EnableConfigurationProperties.
     @ComponentScan(basePackages = "org.cardanofoundation.lob.app.keri_attestation")
+    @EnableConfigurationProperties(KeriAttestationProperties.class)
     @Import(TestContainerConfig.class)
     static class TestConfig {
     }
@@ -133,6 +139,53 @@ class CeremonyRepositoryTest {
         assertTrue(active.stream().allMatch(c -> !TERMINAL.contains(c.getState())));
         assertTrue(active.stream().map(KeriAttestationCeremonyEntity::getId)
                 .toList().containsAll(List.of("c-active-1", "c-active-2")));
+    }
+
+    @Test
+    void findByStateNotInAndExpiresAtBeforeReturnsOnlyOverdueNonTerminalCeremonies() {
+        KeriAttestationCeremonyEntity overdue = ceremony("c-overdue", "user-6", CeremonyState.ATTEST_REQUESTED);
+        overdue.setExpiresAt(LocalDateTime.now().minusMinutes(1));
+        ceremonyRepository.save(overdue);
+        // not yet due (helper defaults expiresAt to now+1h) — must be excluded
+        ceremonyRepository.save(ceremony("c-not-due-yet", "user-6", CeremonyState.ATTEST_REQUESTED));
+        // terminal but also overdue — terminal always wins, must be excluded (it's already done)
+        KeriAttestationCeremonyEntity terminalOverdue = ceremony("c-terminal-overdue", "user-6", CeremonyState.CONSUMED);
+        terminalOverdue.setExpiresAt(LocalDateTime.now().minusMinutes(1));
+        ceremonyRepository.save(terminalOverdue);
+
+        em.flush();
+        em.clear();
+
+        List<KeriAttestationCeremonyEntity> result =
+                ceremonyRepository.findByStateNotInAndExpiresAtBefore(TERMINAL, LocalDateTime.now());
+
+        assertEquals(1, result.size());
+        assertEquals("c-overdue", result.get(0).getId());
+    }
+
+    @Test
+    void deleteByStateInAndUpdatedAtBeforePurgesOnlyOldTerminalCeremonies() {
+        ceremonyRepository.save(ceremony("c-old-consumed", "user-7", CeremonyState.CONSUMED));
+        ceremonyRepository.save(ceremony("c-recent-consumed", "user-7", CeremonyState.CONSUMED));
+        ceremonyRepository.save(ceremony("c-old-active", "user-7", CeremonyState.CREATED));
+        em.flush();
+
+        // Age two rows' updatedAt via a bulk JPQL update, which bypasses @PreUpdate — a plain save()
+        // would just have onUpdate() reset updatedAt back to "now" on the next flush.
+        em.createQuery("update keri_attestation.KeriAttestationCeremonyEntity c "
+                        + "set c.updatedAt = :old where c.id in :ids")
+                .setParameter("old", LocalDateTime.now().minusDays(10))
+                .setParameter("ids", List.of("c-old-consumed", "c-old-active"))
+                .executeUpdate();
+        em.clear();
+
+        long deleted = ceremonyRepository.deleteByStateInAndUpdatedAtBefore(TERMINAL, LocalDateTime.now().minusDays(7));
+
+        assertEquals(1, deleted);
+        assertTrue(ceremonyRepository.findById("c-old-consumed").isEmpty());
+        assertTrue(ceremonyRepository.findById("c-recent-consumed").isPresent());
+        // non-terminal: must survive purge regardless of age
+        assertTrue(ceremonyRepository.findById("c-old-active").isPresent());
     }
 
     @Test

@@ -5,3 +5,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration/postgresql/common
+
+lob:
+  keri-attestation:
+    enabled: true

@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.keri_attestation.repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -8,6 +9,7 @@ import jakarta.persistence.LockModeType;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -36,4 +38,26 @@ public interface KeriAttestationCeremonyRepository extends JpaRepository<KeriAtt
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from keri_attestation.KeriAttestationCeremonyEntity c where c.id = :id")
     Optional<KeriAttestationCeremonyEntity> findByIdForUpdate(@Param("id") String id);
+
+    /**
+     * Candidates for {@code CeremonyCleanupJob}'s lazy-expiry sweep: still open, but past their TTL.
+     * Unlocked — {@code CeremonyCleanupJob} re-checks each candidate under {@link #findByIdForUpdate}
+     * before writing, so this discovery read racing a legitimate concurrent transition never causes a
+     * lost update.
+     */
+    List<KeriAttestationCeremonyEntity> findByStateNotInAndExpiresAtBefore(
+            Collection<CeremonyState> terminal, LocalDateTime cutoff);
+
+    /**
+     * Purges terminal rows older than {@code CeremonyCleanupJob}'s retention window. A single bulk
+     * JPQL delete rather than a Spring Data derived delete — the derived form SELECTs every matching
+     * row into the persistence context and removes them one-by-one inside one long transaction, which
+     * is slow and lock-heavy against a real backlog (mirrors
+     * {@code VaultDocumentRepository#deleteByStatusAndCreatedAtBefore} in document_vault).
+     */
+    @Modifying
+    @Query("delete from keri_attestation.KeriAttestationCeremonyEntity c "
+            + "where c.state in :terminal and c.updatedAt < :cutoff")
+    long deleteByStateInAndUpdatedAtBefore(@Param("terminal") Collection<CeremonyState> terminal,
+                                            @Param("cutoff") LocalDateTime cutoff);
 }
