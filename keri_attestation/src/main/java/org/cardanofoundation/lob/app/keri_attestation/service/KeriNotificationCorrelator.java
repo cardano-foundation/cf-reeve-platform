@@ -18,6 +18,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.signify.app.Notifying;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import org.cardanofoundation.signify.cesr.exceptions.serialize.SerializeException;
 import org.cardanofoundation.signify.cesr.util.Utils;
 
 /**
@@ -43,6 +44,11 @@ import org.cardanofoundation.signify.cesr.util.Utils;
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
 public class KeriNotificationCorrelator {
 
+    /** After this many consecutive {@link SerializeException}s parsing the notification list,
+     *  {@link #awaitCorrelated} gives up early instead of waiting out the full timeout — see its
+     *  javadoc. */
+    private static final int MAX_CONSECUTIVE_PARSE_FAILURES = 3;
+
     @Qualifier("keriAttestationSignifyClient")
     private final SignifyClient client;
     private final KeriAttestationProperties properties;
@@ -64,15 +70,42 @@ public class KeriNotificationCorrelator {
      * already read — is left completely untouched; this method never calls {@code mark}/{@code delete}
      * itself.
      *
+     * <p>A transport failure listing notifications (network blip, 5xx, ...) is logged at {@code WARN}
+     * and retried on the normal poll cadence, indistinguishable from an empty poll — the agent is still
+     * reachable, so waiting out the full {@code timeout} is the right call. A response that <em>parses
+     * incorrectly</em> is a different kind of failure: since the shape this class expects hasn't been
+     * confirmed against a live agent (Task 8), a defect here would otherwise present as "every ceremony
+     * times out" with the real cause buried in a WARN log identical to a flaky agent's. Those are
+     * therefore logged at {@code ERROR} and counted; after {@value #MAX_CONSECUTIVE_PARSE_FAILURES}
+     * consecutive parse failures this method gives up immediately instead of waiting out the rest of
+     * {@code timeout}, so a caller fails in seconds rather than minutes. A single transport success (or
+     * an empty/non-matching poll) between parse failures resets the count.
+     *
      * @return the correlated notification, or {@link Optional#empty()} if none arrived before the
-     *         timeout. Never throws on timeout.
+     *         timeout (or the wait was abandoned early after repeated parse failures). Never throws on
+     *         timeout.
      */
     public Optional<CorrelatedNotification> awaitCorrelated(List<String> routes, String expectedSenderAid,
             String requestExnSaid, Duration timeout) {
         Instant deadline = Instant.now().plus(timeout);
+        int consecutiveParseFailures = 0;
         while (true) {
             try {
-                Optional<CorrelatedNotification> claimed = pollOnce(routes, expectedSenderAid, requestExnSaid);
+                Optional<CorrelatedNotification> claimed;
+                try {
+                    claimed = pollOnce(routes, expectedSenderAid, requestExnSaid);
+                    consecutiveParseFailures = 0;
+                } catch (NotificationWireShapeException e) {
+                    consecutiveParseFailures++;
+                    if (consecutiveParseFailures >= MAX_CONSECUTIVE_PARSE_FAILURES) {
+                        log.error("Giving up on notification wait after {} consecutive wire-shape parse "
+                                        + "failures instead of waiting out the remaining timeout — this "
+                                        + "looks like a defect, not agent flakiness.",
+                                consecutiveParseFailures);
+                        return Optional.empty();
+                    }
+                    claimed = Optional.empty();
+                }
                 if (claimed.isPresent()) {
                     return claimed;
                 }
@@ -114,19 +147,33 @@ public class KeriNotificationCorrelator {
 
     private Optional<CorrelatedNotification> pollOnce(List<String> routes, String expectedSenderAid,
             String requestExnSaid) throws InterruptedException {
+        Notifying.Notifications.NotificationListResponse response;
+        try {
+            response = client.notifications().list();
+        } catch (InterruptedException e) {
+            throw e;
+        } catch (Exception e) {
+            // Transport-level failure (network blip, 5xx, ...): the agent may simply be flaky right
+            // now, so this is treated the same as an empty poll and retried on the normal cadence.
+            log.warn("Failed to list KERI notifications, will retry: {}", e.getMessage());
+            return Optional.empty();
+        }
+
         List<Notification> notes;
         try {
-            Notifying.Notifications.NotificationListResponse response = client.notifications().list();
             notes = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
             });
             if (notes == null) {
                 notes = List.of();
             }
-        } catch (InterruptedException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("Failed to list KERI notifications, will retry: {}", e.getMessage());
-            return Optional.empty();
+        } catch (SerializeException e) {
+            // The agent answered, but the body didn't deserialize into the shape this class expects.
+            // Distinct from a transport failure on purpose — see awaitCorrelated's javadoc for why this
+            // is not treated as transient.
+            log.error("Failed to parse the KERI notification list — this looks like a wire-shape "
+                    + "mismatch, not a transient transport error: {}", e.getMessage());
+            throw new NotificationWireShapeException(
+                    "notifications().list() response did not match the expected shape", e);
         }
 
         for (Notification note : notes) {
@@ -217,6 +264,14 @@ public class KeriNotificationCorrelator {
             return false;
         }
         return false;
+    }
+
+    /** Marks a {@link SerializeException} from parsing the notification list as a probable wire-shape
+     *  defect rather than a transient transport error — see {@link #awaitCorrelated}'s javadoc. */
+    private static final class NotificationWireShapeException extends RuntimeException {
+        NotificationWireShapeException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     // --- raw notification shape, mirroring docs/keri/advanced/PublishExistingCredential.java ---

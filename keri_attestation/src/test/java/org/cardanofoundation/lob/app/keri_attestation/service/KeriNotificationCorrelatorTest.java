@@ -10,18 +10,25 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -85,6 +92,21 @@ class KeriNotificationCorrelatorTest {
             return MAPPER.writeValueAsString(value);
         } catch (Exception e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    /** Captures {@link KeriNotificationCorrelator}'s own log events for the duration of {@code body}. */
+    private static List<ILoggingEvent> captureLogs(Runnable body) {
+        Logger logger = (Logger) LoggerFactory.getLogger(KeriNotificationCorrelator.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            body.run();
+            return appender.list;
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
         }
     }
 
@@ -232,6 +254,52 @@ class KeriNotificationCorrelatorTest {
                 correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
 
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void transportIOExceptionRetriesAtWarnUntilTheFullTimeoutRatherThanAbortingEarly() throws Exception {
+        when(notifications.list()).thenThrow(new IOException("agent unreachable"));
+
+        AtomicReference<Optional<KeriNotificationCorrelator.CorrelatedNotification>> resultRef = new AtomicReference<>();
+        Instant start = Instant.now();
+        List<ILoggingEvent> events = captureLogs(() -> resultRef.set(
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(60))));
+        Duration elapsed = Duration.between(start, Instant.now());
+
+        assertTrue(resultRef.get().isEmpty());
+        // A transport failure must never trip the parse-failure early-abort path: with this test's 5ms
+        // poll interval, that path would return in well under 20ms (3 strikes) if it were wrongly
+        // triggered here. Waiting most of the way to the full 60ms timeout instead proves each failed
+        // poll was treated as retryable, exactly as before this fix.
+        assertTrue(elapsed.toMillis() >= 45, "expected to wait close to the full timeout, took " + elapsed);
+        assertTrue(events.stream().anyMatch(e -> e.getLevel() == Level.WARN),
+                "expected a WARN-level log for the transport failure");
+        assertTrue(events.stream().noneMatch(e -> e.getLevel() == Level.ERROR),
+                "a transport failure must not log at ERROR — that's reserved for wire-shape parse failures");
+    }
+
+    @Test
+    void parseFailureLogsAtErrorAndAbortsEarlyAfterThreeConsecutiveFailures() throws Exception {
+        // Malformed JSON body: every poll fails to deserialize into List<Notification>, surfacing as
+        // signify's SerializeException rather than a transport exception.
+        when(notifications.list())
+                .thenReturn(new Notifying.Notifications.NotificationListResponse(0, 0, 0, "not-valid-json"));
+
+        AtomicReference<Optional<KeriNotificationCorrelator.CorrelatedNotification>> resultRef = new AtomicReference<>();
+        Instant start = Instant.now();
+        List<ILoggingEvent> events = captureLogs(() -> resultRef.set(
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(5))));
+        Duration elapsed = Duration.between(start, Instant.now());
+
+        assertTrue(resultRef.get().isEmpty());
+        // The 3-strike abort must fire well before the 5s deadline (poll interval is 5ms, so 3 rounds
+        // complete in milliseconds) — this is the "fail in seconds, not minutes" behavior.
+        assertTrue(elapsed.toMillis() < 1000, "expected an early abort well before the 5s deadline, took " + elapsed);
+
+        long errorLogCount = events.stream().filter(e -> e.getLevel() == Level.ERROR).count();
+        assertTrue(errorLogCount >= 3, "expected at least 3 ERROR-level parse-failure logs, saw " + errorLogCount);
+        assertTrue(events.stream().noneMatch(e -> e.getLevel() == Level.WARN),
+                "a wire-shape parse failure must not log at WARN — that would hide it as transient");
     }
 
     // --- markAndDelete ---
