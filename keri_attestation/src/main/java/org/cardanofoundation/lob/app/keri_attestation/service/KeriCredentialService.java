@@ -171,9 +171,15 @@ public class KeriCredentialService {
             // Persist BEFORE the send completes (design §4.6 pattern applied here too): the SAID is
             // deterministic from the built (unsent) exn, so if the network call below fails partway
             // through, the ceremony still records what was — or was about to be — sent, and a retry can
-            // check for a late-arriving correlated reply before re-sending.
-            ceremony.setRequestExnSaid(exnSaid);
-            ceremonyRepository.save(ceremony);
+            // check for a late-arriving correlated reply before re-sending. Routed through the guarded
+            // update (F2 fix) rather than a direct save of this detached entity: a concurrent retry/sweep
+            // transition landing between beginStep's row lock releasing and this write must never be
+            // silently overwritten.
+            boolean persisted = ceremonyService.updateWaitingStepData(ceremony.getId(), ceremony.getAttemptGeneration(),
+                    CeremonyState.CREDENTIAL_REQUESTED, c -> c.setRequestExnSaid(exnSaid));
+            if (!persisted) {
+                return Either.left(staleCeremonyProblem(ceremony.getId()));
+            }
 
             client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(), List.of(linkedAid));
             return Either.right(null);
@@ -407,5 +413,13 @@ public class KeriCredentialService {
 
     private static ProblemDetail requestFailed(String detail) {
         return KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, detail);
+    }
+
+    /** F2 fix: a sync-path guarded update ({@link CeremonyService#updateWaitingStepData}) found the
+     *  ceremony no longer waiting on the step it was called for — a concurrent retry/sweep transition
+     *  beat this attempt to it. Reported the same way any other stale-state conflict is. */
+    private static ProblemDetail staleCeremonyProblem(String ceremonyId) {
+        return KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
+                "Ceremony %s is no longer waiting on the expected step.".formatted(ceremonyId));
     }
 }

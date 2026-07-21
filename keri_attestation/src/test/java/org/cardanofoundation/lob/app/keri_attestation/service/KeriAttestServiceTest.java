@@ -207,6 +207,20 @@ class KeriAttestServiceTest {
         return builtExn;
     }
 
+    /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply whichever mutator it is
+     *  called with to {@code ceremony} — the same object identity {@code startAttest}'s caller holds —
+     *  and report success. {@code startAttest} calls this twice per attempt (digest, then requestExnSaid)
+     *  with the same {@code (ceremonyId, generation, ATTEST_REQUESTED)} arguments, so one stub serves
+     *  both calls. */
+    private void stubGuardedUpdateSuccess(KeriAttestationCeremonyEntity ceremony) {
+        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                any())).thenAnswer(inv -> {
+                    Consumer<KeriAttestationCeremonyEntity> mutator = inv.getArgument(3);
+                    mutator.accept(ceremony);
+                    return true;
+                });
+    }
+
     // ==================== startAttest ====================
 
     @Test
@@ -221,13 +235,16 @@ class KeriAttestServiceTest {
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
         when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
         Serder builtExn = stubHappySend();
+        stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         assertEquals(METADATA_LABEL, ceremony.getMetadataLabel());
         assertEquals(NEW_REQUEST_EXN_SAID, ceremony.getRequestExnSaid());
-        verify(ceremonyRepository, times(2)).save(ceremony);
+        verify(ceremonyService, times(2)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.ATTEST_REQUESTED), any());
+        verify(ceremonyRepository, never()).save(any());
         verify(exchanges).createExchangeMessage(any(), eq("/remotesign/ixn/req"), eq(Map.of("d", DIGEST)),
                 eq(Map.of()), eq(WALLET_AID), any(), any());
         verify(exchanges).sendFromEvents(AGENT_NAME, "remotesign", builtExn, List.of("sig1"), "atc1",
@@ -251,6 +268,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
         when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
         stubHappySend();
+        stubGuardedUpdateSuccess(ceremony);
         org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("pool saturated"))
                 .when(asyncRunner).awaitAnchor(CEREMONY_ID, GENERATION);
 
@@ -329,6 +347,29 @@ class KeriAttestServiceTest {
     }
 
     @Test
+    void startAttestStaleGuardedUpdateOnDigestWriteReturnsInvalidStateAndNeverSends() {
+        // F2 fix: a concurrent retry/sweep transition beat this attempt's digest write — the remotesign
+        // request must never be built/sent for a step that has already moved on.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+                CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
+        when(provider.authorize(TARGET_ID, USER_ID)).thenReturn(Optional.empty());
+        when(provider.prepareDigest(TARGET_ID, CEREMONY_ID))
+                .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
+        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                any())).thenReturn(false);
+
+        Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
+        verifyNoInteractions(kedFactory, exchanges, identifiers, asyncRunner);
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
     void startAttestPrepareDigestFailureFailsWithTheProvidersProblemAndNeverPersistsDigest() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
@@ -345,6 +386,7 @@ class KeriAttestServiceTest {
         assertEquals(digestProblem, result.getLeft());
         verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.ATTEST_REQUESTED,
                 digestProblem.getTitle(), digestProblem.getDetail());
+        verify(ceremonyService, never()).updateWaitingStepData(any(), anyInt(), any(), any());
         verifyNoInteractions(ceremonyRepository, asyncRunner);
     }
 
@@ -362,13 +404,18 @@ class KeriAttestServiceTest {
         when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_PREFIX)));
         when(exchanges.createExchangeMessage(any(), anyString(), anyMap(), anyMap(), anyString(), any(), any()))
                 .thenThrow(new RuntimeException("agent unreachable"));
+        stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_REQUEST_FAILED, result.getLeft().getTitle());
         assertNull(ceremony.getRequestExnSaid());
-        verify(ceremonyRepository, times(1)).save(ceremony);
+        // Only the digest write reached the guarded update — building the exchange message threw before
+        // the requestExnSaid write, so that second call never happens.
+        verify(ceremonyService, times(1)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.ATTEST_REQUESTED), any());
+        verify(ceremonyRepository, never()).save(any());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(KeriAttestationProblems.ATTEST_REQUEST_FAILED), any());
         verifyNoInteractions(asyncRunner);
@@ -420,6 +467,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
         when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
         stubHappySend();
+        stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, true);
 

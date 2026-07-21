@@ -302,6 +302,18 @@ class KeriAuthBeginServiceTest {
 
     // ==================== submitAuthBegin: own submission ====================
 
+    /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply the mutator to
+     *  {@code ceremony} and report success, mirroring the real guarded update when the row lock still
+     *  matches. */
+    private void stubGuardedUpdateSuccess(KeriAttestationCeremonyEntity ceremony) {
+        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.AUTH_BEGIN_SUBMITTED), any())).thenAnswer(inv -> {
+                    Consumer<KeriAttestationCeremonyEntity> mutator = inv.getArgument(3);
+                    mutator.accept(ceremony);
+                    return true;
+                });
+    }
+
     @Test
     void submitAuthBeginOwnSubmissionHappyPathPersistsTxHashAndDispatchesConfirmationWait() throws Exception {
         KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
@@ -314,13 +326,42 @@ class KeriAuthBeginServiceTest {
         MetadataMap map = mock(MetadataMap.class);
         when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
         when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.right(TX_HASH));
+        stubGuardedUpdateSuccess(ceremonyEntity);
 
         Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
         assertEquals(TX_HASH, ceremonyEntity.getAuthBeginTxHash());
-        verify(ceremonyRepository).save(ceremonyEntity);
+        verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.AUTH_BEGIN_SUBMITTED), any());
+        verify(ceremonyRepository, never()).save(any());
         verify(asyncRunner).awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void submitAuthBeginOwnSubmissionStaleGuardedUpdateSkipsDispatchWithoutFailingTheStep() throws Exception {
+        // F2 fix: a concurrent retry/sweep transition beat this attempt's tx-hash write — the
+        // confirmation wait must never be dispatched for a step that has already moved on, and per this
+        // class's own return-value convention (see class javadoc) submitAuthBegin still reports right()
+        // since the request itself was accepted and processed.
+        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremonyEntity));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR"));
+        byte[] reduced = "reduced".getBytes();
+        when(cesrChainReducer.reduceToVcpIssAcdc("FULL-CESR")).thenReturn(reduced);
+        MetadataMap map = mock(MetadataMap.class);
+        when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
+        when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.right(TX_HASH));
+        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.AUTH_BEGIN_SUBMITTED), any())).thenReturn(false);
+
+        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+
+        assertTrue(result.isRight());
+        verifyNoInteractions(asyncRunner);
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
     }
 
@@ -528,6 +569,7 @@ class KeriAuthBeginServiceTest {
         MetadataMap map = mock(MetadataMap.class);
         when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
         when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.right(TX_HASH));
+        stubGuardedUpdateSuccess(ceremonyEntity);
         org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("pool saturated"))
                 .when(asyncRunner).awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
 

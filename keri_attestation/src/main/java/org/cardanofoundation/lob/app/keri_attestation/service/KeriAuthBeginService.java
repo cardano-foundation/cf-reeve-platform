@@ -202,8 +202,18 @@ public class KeriAuthBeginService {
             return;
         }
 
-        ceremony.setAuthBeginTxHash(txHash);
-        ceremonyRepository.save(ceremony);
+        // Routed through the guarded update (F2 fix) rather than a direct save of this detached entity:
+        // a concurrent retry/sweep transition landing between beginStep's row lock releasing and this
+        // write must never be silently overwritten. A stale (false) result means the ceremony has
+        // already moved on for some other reason — abandon here the same way an unsupervised async
+        // worker would, rather than dispatching a confirmation wait for a step that no longer exists.
+        boolean persisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, c -> c.setAuthBeginTxHash(txHash));
+        if (!persisted) {
+            log.warn("Skipping AUTH_BEGIN confirmation dispatch for ceremony {}: no longer waiting on "
+                    + "AUTH_BEGIN_SUBMITTED.", ceremonyId);
+            return;
+        }
 
         try {
             asyncRunner.awaitAuthBeginConfirmation(ceremonyId, generation);

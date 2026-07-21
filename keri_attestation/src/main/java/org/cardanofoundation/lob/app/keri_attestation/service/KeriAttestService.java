@@ -140,9 +140,17 @@ public class KeriAttestService {
             return Either.left(problem);
         }
         AttestationDigest digest = digestResult.get();
-        ceremony.setMetadataDigest(digest.digestQb64());
-        ceremony.setMetadataLabel(digest.metadataLabel());
-        ceremonyRepository.save(ceremony);
+        // Routed through the guarded update (F2 fix) rather than a direct save of this detached entity:
+        // a concurrent retry/sweep transition landing between beginStep's row lock releasing and this
+        // write must never be silently overwritten.
+        boolean digestPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
+                CeremonyState.ATTEST_REQUESTED, c -> {
+                    c.setMetadataDigest(digest.digestQb64());
+                    c.setMetadataLabel(digest.metadataLabel());
+                });
+        if (!digestPersisted) {
+            return Either.left(staleCeremonyProblem(ceremonyId));
+        }
 
         try {
             Optional<HabState> senderOpt = client.client().identifiers().get(agentService.agentName());
@@ -157,9 +165,13 @@ public class KeriAttestService {
 
             // Persist BEFORE the send completes (design §4.6 step 3): the SAID is deterministic from
             // the built (not-yet-sent) exn, matching KeriCredentialService#startPresentation's idiom.
+            // Guarded (F2 fix) for the same reason as the digest write above.
             String requestExnSaid = (String) built.exn().getKed().get("d");
-            ceremony.setRequestExnSaid(requestExnSaid);
-            ceremonyRepository.save(ceremony);
+            boolean exnPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
+                    CeremonyState.ATTEST_REQUESTED, c -> c.setRequestExnSaid(requestExnSaid));
+            if (!exnPersisted) {
+                return Either.left(staleCeremonyProblem(ceremonyId));
+            }
 
             client.client().exchanges().sendFromEvents(agentService.agentName(), REMOTESIGN_TOPIC, built.exn(), built.sigs(),
                     built.atc(), List.of(walletAid));
@@ -413,5 +425,13 @@ public class KeriAttestService {
         if (e instanceof InterruptedException) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /** F2 fix: a sync-path guarded update ({@link CeremonyService#updateWaitingStepData}) found the
+     *  ceremony no longer waiting on {@code ATTEST_REQUESTED} — a concurrent retry/sweep transition beat
+     *  this attempt to it. Reported the same way any other stale-state conflict is. */
+    private static ProblemDetail staleCeremonyProblem(String ceremonyId) {
+        return KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
+                "Ceremony %s is no longer waiting on the expected step.".formatted(ceremonyId));
     }
 }

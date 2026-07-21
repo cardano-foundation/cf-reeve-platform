@@ -546,6 +546,92 @@ class CeremonyServiceTest {
         assertEquals(null, ceremony.getErrorDetail());
     }
 
+    // --- updateWaitingStepData: guarded step-data write (F2 fix) ---
+
+    @Test
+    void updateWaitingStepDataHappyPathAppliesMutatorAndPersistsWithoutChangingState() {
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        boolean updated = service.updateWaitingStepData(CEREMONY_ID, 0, CeremonyState.ATTEST_REQUESTED,
+                c -> c.setRequestExnSaid("Eexn123"));
+
+        assertTrue(updated);
+        assertEquals("Eexn123", ceremony.getRequestExnSaid());
+        assertEquals(CeremonyState.ATTEST_REQUESTED, ceremony.getState());
+        assertEquals(0, ceremony.getAttemptGeneration());
+        verify(ceremonyRepository).save(ceremony);
+    }
+
+    @Test
+    void updateWaitingStepDataWithStaleGenerationMutatesNothing() {
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED);
+        ceremony.setAttemptGeneration(1);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        boolean updated = service.updateWaitingStepData(CEREMONY_ID, 0, CeremonyState.ATTEST_REQUESTED,
+                c -> c.setRequestExnSaid("Eexn123"));
+
+        assertFalse(updated);
+        assertEquals(null, ceremony.getRequestExnSaid());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void updateWaitingStepDataWithWrongCurrentStateMutatesNothing() {
+        // Regression for the detached-entity-save race (F2): a concurrent transition moved the ceremony
+        // on to a different state (e.g. a sweep failed it, or another attempt completed the step) between
+        // beginStep's row lock releasing and this write — the guard must reject rather than resurrect the
+        // stale waiting state or silently overwrite the ceremony's real current state.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.FAILED);
+        ceremony.setErrorTitle("KERI_STEP_TIMED_OUT");
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        boolean updated = service.updateWaitingStepData(CEREMONY_ID, 0, CeremonyState.ATTEST_REQUESTED,
+                c -> c.setRequestExnSaid("Eexn123"));
+
+        assertFalse(updated);
+        assertEquals(null, ceremony.getRequestExnSaid());
+        assertEquals(CeremonyState.FAILED, ceremony.getState());
+        assertEquals("KERI_STEP_TIMED_OUT", ceremony.getErrorTitle());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void updateWaitingStepDataOnUnknownCeremonyIsANoOp() {
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.empty());
+
+        boolean updated = service.updateWaitingStepData(CEREMONY_ID, 0, CeremonyState.ATTEST_REQUESTED,
+                c -> c.setRequestExnSaid("Eexn123"));
+
+        assertFalse(updated);
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void updateWaitingStepDataConcurrentTransitionBetweenBeginStepAndUpdateIsRejected() {
+        // Simulates the exact race F2 fixes: beginStep returns a ceremony at generation 0 in
+        // ATTEST_REQUESTED; before the service gets to persist requestExnSaid, a concurrent retry bumps
+        // the generation (simulating a superseding beginStep(retry=true) call). The guarded update must
+        // reject and must not resurrect/overwrite the now-current generation's data.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED);
+        ceremony.setUpdatedAt(LocalDateTime.now().minusSeconds(30));
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = service.beginStep(
+                CEREMONY_ID, USER, CeremonyState.ATTEST_REQUESTED, CeremonyState.ATTEST_REQUESTED, true);
+        assertTrue(begun.isRight());
+        int staleGeneration = 0;
+        assertEquals(1, ceremony.getAttemptGeneration());
+
+        boolean updated = service.updateWaitingStepData(CEREMONY_ID, staleGeneration, CeremonyState.ATTEST_REQUESTED,
+                c -> c.setRequestExnSaid("EstaleExn"));
+
+        assertFalse(updated);
+        assertEquals(null, ceremony.getRequestExnSaid());
+        assertEquals(1, ceremony.getAttemptGeneration());
+    }
+
     // --- validateAndConsume ---
 
     @Test

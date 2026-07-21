@@ -217,6 +217,49 @@ public class CeremonyService implements AttestationConsumptionApi {
     }
 
     /**
+     * Guarded update of step-data fields on a ceremony that is still waiting on the same step (F2 fix):
+     * row-locks the ceremony, verifies it is still at generation {@code expectedGeneration} and state
+     * {@code expectedWaitingState}, applies {@code mutator}, persists, and reports {@code true}. A
+     * mismatch (a concurrent retry bumped the generation, or a concurrent completion/failure/sweep moved
+     * the ceremony out of {@code expectedWaitingState}) leaves the row untouched and reports
+     * {@code false} — exactly {@link #completeStep}/{@link #failStep}'s own CAS discipline, just without
+     * a state transition of its own.
+     *
+     * <p>This exists because services were persisting intermediate step-data fields (e.g.
+     * {@code requestExnSaid}, {@code metadataDigest}/{@code metadataLabel}, {@code authBeginTxHash}) by
+     * saving the detached entity {@link #beginStep} returned, well after that call's own row lock was
+     * released — a concurrent retry or sweep transition landing in between could be silently overwritten
+     * by that later, unguarded save (state/generation resurrection). Routing every such write through
+     * this method instead means it can never observe or clobber a ceremony that has since moved on.
+     *
+     * <p>{@code mutator} must only touch step-data fields (never {@code state} or
+     * {@code attemptGeneration} — this method does not transition the ceremony, callers that need a
+     * transition use {@link #completeStep}/{@link #failStep} instead) and must not itself be the source
+     * of truth for whether the write happened: callers whose flow cannot proceed on a {@code false}
+     * return must treat it like a stale worker — abandon silently in async paths (mirrors
+     * {@link #completeStep}'s "no way to report failure back to it" contract), or return
+     * {@code Either.left(CEREMONY_INVALID_STATE)} in synchronous paths.
+     *
+     * @return {@code true} if the guard matched and the mutator ran and was persisted, {@code false} if
+     *         this call was a stale no-op.
+     */
+    public boolean updateWaitingStepData(String ceremonyId, int expectedGeneration, CeremonyState expectedWaitingState,
+            Consumer<KeriAttestationCeremonyEntity> mutator) {
+        Optional<KeriAttestationCeremonyEntity> found = ceremonyRepository.findByIdForUpdate(ceremonyId);
+        if (found.isEmpty()) {
+            return false;
+        }
+        KeriAttestationCeremonyEntity ceremony = found.get();
+        if (ceremony.getAttemptGeneration() != expectedGeneration || ceremony.getState() != expectedWaitingState) {
+            return false;
+        }
+        mutator.accept(ceremony);
+        ceremony.setUpdatedAt(LocalDateTime.now());
+        ceremonyRepository.save(ceremony);
+        return true;
+    }
+
+    /**
      * CAS step failure: same generation-and-state guard as {@link #completeStep} — the ceremony must
      * still be at generation {@code expectedGeneration} <em>and</em> in {@code expectedWaitingState}, or
      * this silently no-ops. A generation-only check is not safe here: {@code attemptGeneration} only

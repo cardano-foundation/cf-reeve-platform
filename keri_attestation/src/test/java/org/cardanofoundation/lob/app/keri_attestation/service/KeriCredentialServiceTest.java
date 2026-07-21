@@ -149,6 +149,19 @@ class KeriCredentialServiceTest {
 
     // ==================== startPresentation ====================
 
+    /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply the mutator to
+     *  {@code ceremony} — the same object identity {@code startPresentation}'s caller holds — and report
+     *  success, mirroring how {@code CeremonyService}'s real guarded update would behave when the row
+     *  lock still matches. */
+    private void stubGuardedUpdateSuccess(KeriAttestationCeremonyEntity ceremony) {
+        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), any())).thenAnswer(inv -> {
+                    Consumer<KeriAttestationCeremonyEntity> mutator = inv.getArgument(3);
+                    mutator.accept(ceremony);
+                    return true;
+                });
+    }
+
     @Test
     void startPresentationBuildsAndSendsApplyAndPersistsRequestExnSaidBeforeSubmit() throws Exception {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
@@ -156,11 +169,14 @@ class KeriCredentialServiceTest {
         when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
 
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        stubGuardedUpdateSuccess(ceremony);
         Either<ProblemDetail, Void> result = service.startPresentation(ceremony);
 
         assertTrue(result.isRight());
         assertEquals(APPLY_SAID, ceremony.getRequestExnSaid());
-        verify(ceremonyRepository).save(ceremony);
+        verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), any());
+        verify(ceremonyRepository, never()).save(any());
 
         ArgumentCaptor<IpexApplyArgs> captor = ArgumentCaptor.forClass(IpexApplyArgs.class);
         verify(ipex).apply(captor.capture());
@@ -183,7 +199,7 @@ class KeriCredentialServiceTest {
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.IDENTITY_NOT_LINKED, result.getLeft().getTitle());
         verifyNoInteractions(ipex);
-        verifyNoInteractions(ceremonyRepository);
+        verifyNoInteractions(ceremonyRepository, ceremonyService);
     }
 
     @Test
@@ -197,7 +213,7 @@ class KeriCredentialServiceTest {
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
         assertNull(ceremony.getRequestExnSaid());
-        verifyNoInteractions(ceremonyRepository);
+        verifyNoInteractions(ceremonyRepository, ceremonyService);
     }
 
     @Test
@@ -211,12 +227,31 @@ class KeriCredentialServiceTest {
         when(ipex.submitApply(any(), any(), any(), any())).thenThrow(new IOException("network blip"));
 
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        stubGuardedUpdateSuccess(ceremony);
         Either<ProblemDetail, Void> result = service.startPresentation(ceremony);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
         assertEquals(APPLY_SAID, ceremony.getRequestExnSaid());
-        verify(ceremonyRepository).save(ceremony);
+        verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), any());
+    }
+
+    @Test
+    void startPresentationStaleGuardedUpdateReturnsInvalidStateAndNeverSends() throws Exception {
+        // F2 fix: a concurrent retry/sweep transition beat this attempt's guarded update — the apply
+        // must never be sent for a step that has already moved on.
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
+                eq(CeremonyState.CREDENTIAL_REQUESTED), any())).thenReturn(false);
+
+        Either<ProblemDetail, Void> result = service.startPresentation(ceremony(null));
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
+        verify(ipex, never()).submitApply(any(), any(), any(), any());
     }
 
     // ==================== startCredentialRequest ====================
@@ -229,6 +264,7 @@ class KeriCredentialServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
         when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
 
@@ -295,6 +331,7 @@ class KeriCredentialServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
         when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
         org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("pool saturated"))
                 .when(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
 
@@ -334,6 +371,7 @@ class KeriCredentialServiceTest {
                 .thenReturn(Optional.empty());
         Serder exn = serderWithSaid(APPLY_SAID);
         when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, true);
 
