@@ -605,15 +605,19 @@ class KeriAttestServiceTest {
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH),
                 eq("The wallet ref's explicit anchoring-event candidate did not verify (not found, sequence "
-                        + "before the floor, or seal does not contain digest " + DIGEST + ")."));
+                        + "at or before the floor, or seal does not contain digest " + DIGEST + ")."));
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(correlator, never()).markAndDelete(any());
     }
 
     @Test
     void awaitAnchorNoIxnEventOnKelFailsWithAttestSealMismatch() throws Exception {
-        when(ceremonyRepository.findById(CEREMONY_ID))
-                .thenReturn(Optional.of(ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID)));
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        // A floor must be set (F5 residual fix): a null floor short-circuits straight to failure without
+        // ever reaching the key-state query this test wants to exercise -- see the dedicated null-floor
+        // test for that behavior.
+        ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
         when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
@@ -635,8 +639,9 @@ class KeriAttestServiceTest {
 
     @Test
     void awaitAnchorFallsBackToKeyStateQueryWhenRefExnCarriesNoCandidate() throws Exception {
-        when(ceremonyRepository.findById(CEREMONY_ID))
-                .thenReturn(Optional.of(ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID)));
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
         when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
@@ -716,6 +721,84 @@ class KeriAttestServiceTest {
         verify(correlator, never()).markAndDelete(any());
         // No fallback: the explicit-candidate branch never queries key state to bound a scan.
         verifyNoInteractions(keyStates);
+    }
+
+    @Test
+    void awaitAnchorRejectsAnEventAtExactlyTheFloorSequenceViaBoundedScan() throws Exception {
+        // F5 residual fix: the floor comparison must be STRICTLY greater, not "at or after". The floor
+        // is the sequence observed BEFORE the remotesign request was even sent, so the genuine anchoring
+        // event is always strictly newer -- an event at exactly the floor already existed at snapshot
+        // time and must never satisfy a fresh request, even with a matching digest.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        ceremony.setKelFloorSequence("5");
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        Map<String, Object> refExn = refExn(WALLET_AID, null, null);
+        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
+        stubKeyStateSequence("6");
+
+        Object seal = List.of(Map.of("d", DIGEST));
+        // Exactly at the floor (sequence 5 == floor 5) with the matching digest — must still be rejected.
+        Map<String, Object> atFloorEvent = kelEvent("ixn", "5", "EATFLOOREVENT0000000000000000000000000", seal);
+        when(keyEvents.get(WALLET_AID)).thenReturn(List.of(atFloorEvent));
+
+        service.awaitAnchor(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitAnchorRejectsAnExplicitCandidateAtExactlyTheFloorSequence() throws Exception {
+        // Same strict-greater rule, explicit-candidate path this time: the candidate resolves to a real
+        // KEL event with a matching digest, but its sequence equals the floor exactly.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        ceremony.setKelFloorSequence("5");
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        Map<String, Object> refExn = refExn(WALLET_AID, "5", EVENT_SAID);
+        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
+
+        Object seal = List.of(Map.of("d", DIGEST));
+        Map<String, Object> atFloorEvent = kelEvent("ixn", "5", EVENT_SAID, seal);
+        when(keyEvents.get(WALLET_AID)).thenReturn(List.of(atFloorEvent));
+
+        service.awaitAnchor(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitAnchorWithNullFloorAndNoExplicitCandidateRefusesToScanAndFails() throws Exception {
+        // F5 residual fix: a null floor (a pre-upgrade in-flight ceremony that reached ATTEST_REQUESTED
+        // before the kel_floor_sequence column existed) must NOT be treated as "no lower bound" -- that
+        // would silently reopen the unbounded-scan risk F5 closes for exactly the rows that most need
+        // protecting. With no floor and no explicit ref-derived candidate, this must fail outright,
+        // never falling back to the bounded scan (which, without a real floor, would need to run
+        // unbounded).
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        assertNull(ceremony.getKelFloorSequence());
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        Map<String, Object> refExn = refExn(WALLET_AID, null, null);
+        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
+
+        service.awaitAnchor(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(correlator, never()).markAndDelete(any());
+        // No fallback scan attempted: never fetches the KEL or queries key state.
+        verifyNoInteractions(keyEvents, keyStates);
     }
 
     @Test

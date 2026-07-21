@@ -260,24 +260,47 @@ public class KeriAttestService {
      * {@code floorSequence} (F5 fix — see {@link KeriAttestationCeremonyEntity#getKelFloorSequence()}):
      * <ol>
      *   <li>If the ref exn payload yields an explicit candidate ({@link #extractCandidate}), that
-     *       candidate MUST resolve to a KEL event whose sequence is at or after {@code floorSequence}
-     *       AND whose seal contains {@code metadataDigest}. If it doesn't — wrong event, too old, or
-     *       simply not found — this fails immediately with {@code ATTEST_SEAL_MISMATCH}; there is no
-     *       fallback shopping for a different event once an explicit candidate is on the table.</li>
+     *       candidate MUST resolve to a KEL event whose sequence is <b>strictly after</b>
+     *       {@code floorSequence} AND whose seal contains {@code metadataDigest}. If it doesn't — wrong
+     *       event, at-or-before the floor, or simply not found — this fails immediately with
+     *       {@code ATTEST_SEAL_MISMATCH}; there is no fallback shopping for a different event once an
+     *       explicit candidate is on the table. Sequence equal to the floor is rejected, not just
+     *       sequence below it: the floor is the sequence observed <em>before</em> the remotesign request
+     *       was even sent, so the genuine anchoring event is always strictly newer — accepting
+     *       {@code sn == floor} would let an event that already existed at snapshot time (and merely
+     *       happens to carry the same digest) pass.</li>
      *   <li>If the ref exn payload yields no candidate at all, this falls back to a <b>bounded</b> scan
-     *       of {@code ixn} events between {@code floorSequence} and the wallet's current key-state
-     *       sequence (queried via {@link #queryLatestSequenceWithRetries}), looking for one whose seal
-     *       contains {@code metadataDigest}. Unlike the removed unconditional "accept the latest ixn
-     *       event" path, an event outside that bounded window — including one older than the floor —
-     *       can never satisfy the request, regardless of its seal.</li>
+     *       of {@code ixn} events strictly after {@code floorSequence} and at or before the wallet's
+     *       current key-state sequence (queried via {@link #queryLatestSequenceWithRetries}), looking
+     *       for one whose seal contains {@code metadataDigest}. Unlike the removed unconditional "accept
+     *       the latest ixn event" path, an event outside that bounded window can never satisfy the
+     *       request, regardless of its seal.</li>
      * </ol>
-     * The exact ref-exn-payload shape (which yields candidate 1) isn't confirmed against a live wallet
-     * yet (Task 8); both paths are unit-tested independently.
+     * <b>Null floor (F5 residual fix):</b> {@code floorSequence} is only ever {@code null} for a
+     * ceremony that reached {@code ATTEST_REQUESTED} before this column existed (a pre-upgrade in-flight
+     * row) — every ceremony created after this fix always has one persisted before the request is sent.
+     * A {@code null} floor must never be treated as "no lower bound": that would silently reopen the
+     * exact unbounded-scan risk F5 closes for exactly the rows that most need protecting (already
+     * in-flight when the fix landed). Instead, a {@code null} floor disables the bounded-scan fallback
+     * entirely — only an explicit ref-derived candidate can complete such a ceremony; with no candidate
+     * and no floor, this fails outright rather than scanning.
      */
     private void resolveAndComplete(String ceremonyId, int generation, String walletAid, String metadataDigest,
             String floorSequence, CorrelatedNotification ref) {
         try {
             AnchorCandidate candidate = extractCandidate(ref.exn());
+
+            if (candidate.isEmpty() && floorSequence == null) {
+                // F5 residual fix: no floor recorded (pre-upgrade in-flight ceremony) and no explicit
+                // candidate to verify directly -- refuse to fall back to an effectively unbounded scan.
+                // Checked before ever fetching the KEL: there is nothing to look up.
+                ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
+                        KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
+                        "No anchor floor is recorded for this ceremony and the wallet ref carried no "
+                                + "explicit anchoring-event candidate; refusing to scan the KEL without a floor.");
+                return;
+            }
+
             List<Map<String, Object>> kel = fetchKel(walletAid);
             List<Map<String, Object>> ixnEvents = kel.stream().filter(ke -> "ixn".equals(ke.get("t"))).toList();
 
@@ -288,11 +311,13 @@ public class KeriAttestService {
                     ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
                             KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                             "The wallet ref's explicit anchoring-event candidate did not verify (not found, "
-                                    + "sequence before the floor, or seal does not contain digest %s)."
+                                    + "sequence at or before the floor, or seal does not contain digest %s)."
                                             .formatted(metadataDigest));
                     return;
                 }
             } else {
+                // floorSequence is guaranteed non-null here (the candidate.isEmpty() && floorSequence ==
+                // null case already returned above).
                 Optional<String> currentSequence = queryLatestSequenceWithRetries(walletAid);
                 event = currentSequence
                         .map(cs -> scanForSealMatch(ixnEvents, floorSequence, cs, metadataDigest))
@@ -300,8 +325,8 @@ public class KeriAttestService {
                 if (event == null) {
                     ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
                             KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
-                            "No interaction (ixn) event between the floor sequence and the wallet's current "
-                                    + "key state matched digest %s.".formatted(metadataDigest));
+                            "No interaction (ixn) event strictly after the floor sequence and at or before the "
+                                    + "wallet's current key state matched digest %s.".formatted(metadataDigest));
                     return;
                 }
             }
@@ -439,18 +464,21 @@ public class KeriAttestService {
     }
 
     /** Bounded scan (F5 fix) over {@code ixnEvents} whose sequence falls within
-     *  [{@code floorSequence}, {@code currentSequence}] (hex-compared numerically), returning the first
-     *  whose seal contains {@code digestQb64} — or {@code null} if none in that window match. Replaces
-     *  the old unconditional "accept the latest ixn event" fallback: an event outside the window can
-     *  never satisfy the request regardless of its seal, and a {@code null} floor is treated as no lower
-     *  bound (only ceremonies created before this column existed should ever have one). */
+     *  ({@code floorSequence}, {@code currentSequence}] — <b>strictly</b> after the floor, at or before
+     *  the current key-state sequence (hex-compared numerically) — returning the first whose seal
+     *  contains {@code digestQb64}, or {@code null} if none in that window match. Replaces the old
+     *  unconditional "accept the latest ixn event" fallback: an event outside the window can never
+     *  satisfy the request regardless of its seal. {@code floorSequence} must not be {@code null} —
+     *  callers only reach this method once a non-null floor has been confirmed (F5 residual fix: a null
+     *  floor disables this fallback entirely rather than being treated as "no lower bound"; see
+     *  {@link #resolveAndComplete}'s javadoc). */
     private static Map<String, Object> scanForSealMatch(List<Map<String, Object>> ixnEvents, String floorSequence,
             String currentSequence, String digestQb64) {
-        long floor = floorSequence != null ? parseHexSequence(floorSequence) : 0L;
+        long floor = parseHexSequence(floorSequence);
         long current = parseHexSequence(currentSequence);
         for (Map<String, Object> ke : ixnEvents) {
             long sn = parseHexSequence(String.valueOf(ke.get("s")));
-            if (sn < floor || sn > current) {
+            if (sn <= floor || sn > current) {
                 continue;
             }
             if (sealContainsDigest(ke.get("a"), digestQb64)) {
@@ -460,14 +488,17 @@ public class KeriAttestService {
         return null;
     }
 
-    /** {@code event}'s sequence must be at or after {@code floorSequence} (hex-compared numerically; a
-     *  {@code null} floor imposes no lower bound) AND its seal must contain {@code digestQb64} (F5 fix).
-     */
+    /** {@code event}'s sequence must be <b>strictly after</b> {@code floorSequence} (hex-compared
+     *  numerically; a {@code null} floor imposes no lower bound for this explicit-candidate path — see
+     *  {@link #resolveAndComplete}'s javadoc for why that's safe here but not for the bounded-scan
+     *  fallback) AND its seal must contain {@code digestQb64} (F5 fix). Sequence equal to the floor is
+     *  rejected: the floor is the sequence observed before the request was sent, so the genuine
+     *  anchoring event is always strictly newer. */
     private static boolean satisfiesFloorAndDigest(Map<String, Object> event, String floorSequence,
             String digestQb64) {
         if (floorSequence != null) {
             long sn = parseHexSequence(String.valueOf(event.get("s")));
-            if (sn < parseHexSequence(floorSequence)) {
+            if (sn <= parseHexSequence(floorSequence)) {
                 return false;
             }
         }
