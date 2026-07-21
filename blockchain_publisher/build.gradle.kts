@@ -7,6 +7,7 @@ dependencies {
     implementation(project(":blockchain_common"))
     implementation(project(":blockchain_reader"))
     implementation(project(":document_vault"))
+    implementation(project(":keri_attestation"))
 
     implementation("com.bloxbean.cardano:cardano-client-crypto")
     implementation("com.bloxbean.cardano:cardano-client-backend-blockfrost")
