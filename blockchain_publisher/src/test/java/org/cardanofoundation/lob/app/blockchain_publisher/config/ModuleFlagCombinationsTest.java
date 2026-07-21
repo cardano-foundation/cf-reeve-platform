@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
+import org.cardanofoundation.lob.app.blockchain_publisher.job.DocumentAttestationFreezeCleanupJob;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationFreezeGuard;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationLookup;
@@ -143,22 +144,43 @@ class ModuleFlagCombinationsTest {
         });
     }
 
-    // --- keri on, document_vault off: NOT clean per design §3.4's intent. TransactionSubmissionConfig
-    // .documentAttestationTargetProvider(...) takes a REQUIRED (non-Optional) VaultDocumentService
-    // parameter (verified by reading the file directly) - so with keri's gate open and no
-    // VaultDocumentService bean anywhere (document_vault's own ComponentScan never having run),
-    // Spring cannot satisfy that @Bean method and the whole context fails to refresh. This is a real
-    // coupling gap versus "keri ON + document_vault OFF: context loads" - flagged in the Task 16
-    // report rather than silently asserted away or fixed (this task is test-only). ---
+    // --- keri on, document_vault off: fixed per design §3.4 (Task 16 follow-up). Originally this
+    // combination failed context refresh outright, because documentAttestationTargetProvider took a
+    // REQUIRED (non-Optional) VaultDocumentService and was gated only on keri's flag. Of the five
+    // keri-gated beans in TransactionSubmissionConfig, ONLY documentAttestationTargetProvider
+    // actually needs a document_vault bean (verified by reading each one's constructor deps
+    // directly: documentAttestationLookup, cardanoMetadataTxSubmitter, documentAttestationFreezeGuard
+    // and documentAttestationFreezeCleanupJob all depend only on blockchain_publisher/keri_attestation
+    // types, never VaultDocumentService) - so it alone now also requires
+    // lob.document_vault.enabled=true. With keri ON + vault OFF: the attestation module still runs
+    // (dispatch-side lookup, wallet tx submission, freeze guard/cleanup all wired); only
+    // document-target ceremony CREATION is unavailable, rejected at runtime by keri_attestation's
+    // provider-registry lookup (TARGET_MISMATCH, since no DOCUMENT-targeted provider is registered) -
+    // not a context failure. ---
 
     @Test
-    void keriOn_vaultOff_contextFailsOnDocumentAttestationTargetProvidersHardVaultDependency() {
+    void keriOn_vaultOff_contextLoadsCleanly_noVaultDependentBeansOtherKeriSeamsPresent() {
         contextRunner.withPropertyValues(KERI_ENABLED + "=true", VAULT_ENABLED + "=false").run(context -> {
-            assertThat(context).hasFailed();
-            assertThat(context)
-                    .getFailure()
-                    .rootCause()
-                    .hasMessageContaining("VaultDocumentService");
+            assertThat(context).hasNotFailed();
+
+            // keri-only seams: present, unaffected by document_vault being off.
+            assertThat(context).hasSingleBean(DocumentAttestationLookup.class);
+            assertThat(context).hasSingleBean(OrganiserWalletMetadataTxSubmitter.class);
+            assertThat(context).hasSingleBean(DocumentAttestationFreezeGuard.class);
+            assertThat(context).hasSingleBean(DocumentAttestationFreezeCleanupJob.class);
+            assertThat(context).hasSingleBean(AttestationConsumptionApi.class);
+
+            // vault-dependent seam and document_vault itself: absent, no failure.
+            assertThat(context).doesNotHaveBean(DocumentAttestationTargetProvider.class);
+            assertThat(context).doesNotHaveBean(VaultDocumentService.class);
+
+            // dispatch-side lookup (consumption, not ceremony creation) only needs keri, so it's
+            // still wired into the document creator even with document_vault off.
+            DocumentL1TransactionCreator creator = context.getBean(DocumentL1TransactionCreator.class);
+            @SuppressWarnings("unchecked")
+            Optional<DocumentAttestationLookup> lookup = (Optional<DocumentAttestationLookup>)
+                    ReflectionTestUtils.getField(creator, "attestationLookup");
+            assertThat(lookup).isPresent();
         });
     }
 
@@ -172,6 +194,7 @@ class ModuleFlagCombinationsTest {
             assertThat(context).hasSingleBean(OrganiserWalletMetadataTxSubmitter.class);
             assertThat(context).hasSingleBean(DocumentAttestationTargetProvider.class);
             assertThat(context).hasSingleBean(DocumentAttestationFreezeGuard.class);
+            assertThat(context).hasSingleBean(DocumentAttestationFreezeCleanupJob.class);
             assertThat(context).hasSingleBean(AttestationConsumptionApi.class);
             assertThat(context).hasSingleBean(VaultDocumentService.class);
 
@@ -183,13 +206,13 @@ class ModuleFlagCombinationsTest {
         });
     }
 
-    // --- the seam beans TransactionSubmissionConfig owns are gated ONLY on lob.keri-attestation
-    // .enabled, never on lob.keri-attestation.keria.url (that narrower gate lives on keri_attestation's
-    // own SignifyClientConfig, a different config class entirely - confirmed by reading
-    // TransactionSubmissionConfig's five @ConditionalOnProperty-gated @Bean methods directly (the four
-    // asserted below plus documentAttestationFreezeCleanupJob): all five name only
-    // "lob.keri-attestation.enabled"). document_vault is left ON here purely so the context can
-    // refresh at all per the finding above; it is not what this test is about. ---
+    // --- four of the five keri-gated seam beans in TransactionSubmissionConfig are gated ONLY on
+    // lob.keri-attestation.enabled, never on lob.keri-attestation.keria.url (that narrower gate lives
+    // on keri_attestation's own SignifyClientConfig, a different config class entirely). The fifth,
+    // documentAttestationTargetProvider, additionally requires lob.document_vault.enabled (Task 16
+    // follow-up fix, see the keriOn_vaultOff test above) - still never keria.url. document_vault is
+    // left ON here so documentAttestationTargetProvider can be asserted present too; it is not what
+    // this test is about. ---
 
     @Test
     void keriSeamBeans_unaffectedByKeriaUrl_presentWhetherUrlSetOrUnset() {
@@ -212,14 +235,20 @@ class ModuleFlagCombinationsTest {
         assertThat(context).hasSingleBean(OrganiserWalletMetadataTxSubmitter.class);
         assertThat(context).hasSingleBean(DocumentAttestationTargetProvider.class);
         assertThat(context).hasSingleBean(DocumentAttestationFreezeGuard.class);
+        assertThat(context).hasSingleBean(DocumentAttestationFreezeCleanupJob.class);
     }
 
+    // Callers of this helper always have BOTH flags off (or vault off, keri off) - never the
+    // keri-ON+vault-OFF combination, which now leaves documentAttestationTargetProvider absent for a
+    // different reason (missing document_vault, not missing keri) - see
+    // keriOn_vaultOff_contextLoadsCleanly_noVaultDependentBeansOtherKeriSeamsPresent for that case.
     private static void assertNoKeriSeamBeans(
             AssertableApplicationContext context) {
         assertThat(context).doesNotHaveBean(DocumentAttestationLookup.class);
         assertThat(context).doesNotHaveBean(OrganiserWalletMetadataTxSubmitter.class);
         assertThat(context).doesNotHaveBean(DocumentAttestationTargetProvider.class);
         assertThat(context).doesNotHaveBean(DocumentAttestationFreezeGuard.class);
+        assertThat(context).doesNotHaveBean(DocumentAttestationFreezeCleanupJob.class);
         assertThat(context).doesNotHaveBean(AttestationConsumptionApi.class);
     }
 

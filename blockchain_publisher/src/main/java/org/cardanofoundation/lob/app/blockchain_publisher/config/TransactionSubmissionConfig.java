@@ -192,7 +192,16 @@ public class TransactionSubmissionConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
+    // Unlike its four sibling attestation beans below, this one takes a REQUIRED (non-Optional)
+    // VaultDocumentService - document-target ceremony creation genuinely cannot work without
+    // document_vault, so it needs both flags, not just keri's. With keri ON + document_vault OFF the
+    // attestation module itself still runs (future non-document targets); ceremony creation for
+    // DOCUMENT specifically then fails at the provider-registry lookup (TARGET_MISMATCH) rather than
+    // this bean failing context refresh entirely (Task 16 finding).
+    @ConditionalOnProperty(
+            name = {"lob.keri-attestation.enabled", "lob.document_vault.enabled"},
+            havingValue = "true",
+            matchIfMissing = false)
     public DocumentAttestationTargetProvider documentAttestationTargetProvider(
             VaultDocumentService vaultDocumentService,
             DocumentConverter documentConverter,
