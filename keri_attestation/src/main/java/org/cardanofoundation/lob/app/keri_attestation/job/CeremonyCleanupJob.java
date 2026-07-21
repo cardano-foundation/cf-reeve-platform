@@ -39,9 +39,9 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriAttestationPro
  *       WAITING-state ceremony (CREDENTIAL_REQUESTED, AUTH_BEGIN_SUBMITTED, ATTEST_REQUESTED) whose
  *       {@code updatedAt} is older than that step's own timeout plus
  *       {@link KeriAttestationProperties#stepTimeoutGrace()} with
- *       {@code FAILED(KERI_STEP_TIMED_OUT)}. FAILED is retryable by design — a subsequent retry POST
- *       bumps {@code attemptGeneration} and re-enters the same waiting state, so this is a recovery
- *       mechanism, not a dead end.</li>
+ *       {@code FAILED(KERI_STEP_TIMED_OUT)}. FAILED is terminal for this ceremony; recovery means the
+ *       user creates a new ceremony, which fast-forwards past already-completed one-time steps via the
+ *       identity link — so this sweep frees a stuck flow rather than dead-ending the user.</li>
  *   <li>{@code deleteOldTerminalCeremonies()} — terminal rows (CONSUMED/FAILED/EXPIRED) are pure
  *       audit trail once the ceremony is done; this purges anything older than
  *       7 days so the table does not grow unbounded. This only ever deletes
