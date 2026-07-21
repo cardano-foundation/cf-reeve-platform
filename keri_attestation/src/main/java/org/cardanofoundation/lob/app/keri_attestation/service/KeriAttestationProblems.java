@@ -34,6 +34,19 @@ public final class KeriAttestationProblems {
     public static final String ATTESTATION_UNAVAILABLE = "ATTESTATION_UNAVAILABLE";
     public static final String OOBI_INVALID = "OOBI_INVALID";
     public static final String TARGET_MISMATCH = "TARGET_MISMATCH";
+    /** A wallet-confirmed remotesign anchor could not be verified against the ceremony's
+     *  {@code metadataDigest} — no matching interaction event was found on the AID's KEL, or the
+     *  event's seal list did not contain the expected digest (design §4.6 step 5). Also used for an
+     *  unexpected error while performing that verification, since an unsupervised async worker must
+     *  always resolve the ceremony rather than propagate (mirrors {@code KeriCredentialService}'s
+     *  reuse of {@link #CREDENTIAL_REJECTED} for its validator's thrown-exception case). */
+    public static final String ATTEST_SEAL_MISMATCH = "ATTEST_SEAL_MISMATCH";
+    /** The ATTEST remotesign request itself could not be built or sent (no
+     *  {@code AttestationTargetProvider} registered for the ceremony's target type, no local agent
+     *  HabState, transport/protocol failure talking to the KERI agent) — distinct from
+     *  {@link #KERI_WALLET_TIMEOUT} (no reply arrived in time) and {@link #ATTEST_SEAL_MISMATCH} (a
+     *  reply arrived but did not verify). Mirrors {@link #CREDENTIAL_REQUEST_FAILED}'s role for IPEX. */
+    public static final String ATTEST_REQUEST_FAILED = "ATTEST_REQUEST_FAILED";
 
     private KeriAttestationProblems() {
     }

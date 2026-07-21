@@ -17,7 +17,11 @@ public record KeriAttestationProperties(
         @DefaultValue("PT3M") Duration remotesignTimeout,
         @DefaultValue("PT1.5S") Duration notificationPollInterval,
         @DefaultValue("3") int authBeginConfirmations,
-        Limits limits) {
+        Limits limits,
+        @DefaultValue("PT15S") Duration authBeginPollInterval,
+        @DefaultValue("PT30M") Duration authBeginRollbackWindow,
+        @DefaultValue("PT2S") Duration keyStateRetryInitialDelay,
+        @DefaultValue("PT3S") Duration keyStateRetryInterval) {
 
     // Spring's ValueObjectBinder only instantiates a nested record when at least one of its own
     // properties is present in a property source; @DefaultValue alone won't trigger construction

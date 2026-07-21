@@ -107,6 +107,14 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "kel_event_said")
     private String kelEventSaid;
 
+    /** Pending AUTH_BEGIN tx hash while this ceremony is {@code AUTH_BEGIN_SUBMITTED} (Task 9). The
+     *  CONFIRMED hash is persisted separately to {@code KeriIdentityLinkEntity#authBeginTxHash} (one
+     *  per identity, not per ceremony) once {@code KeriAuthBeginService#awaitAuthBeginConfirmation}
+     *  observes enough confirmations. */
+    @Nullable
+    @Column(name = "auth_begin_tx_hash")
+    private String authBeginTxHash;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
