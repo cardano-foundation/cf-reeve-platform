@@ -51,6 +51,8 @@ class KeriNotificationCorrelatorTest {
     private static final String OTHER_SAID = "EOTHEREXNSAID000000000000000000000000";
     private static final String NOTIFICATION_ID = "0ANOTIFICATIONID000000000000000";
     private static final String REFERENCED_EXN_SAID = "EREFERENCEDEXNSAID00000000000000000";
+    private static final String AGENT_PREFIX = "EAGENTPREFIX00000000000000000000000000";
+    private static final String OTHER_AGENT_PREFIX = "EOTHERAGENTPREFIX0000000000000000000000";
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -62,6 +64,8 @@ class KeriNotificationCorrelatorTest {
     private Notifying.Notifications notifications;
     @Mock
     private Exchanging.Exchanges exchanges;
+    @Mock
+    private KeriAgentService agentService;
 
     private KeriNotificationCorrelator correlator;
 
@@ -72,8 +76,9 @@ class KeriNotificationCorrelatorTest {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.notifications()).thenReturn(notifications);
         lenient().when(client.exchanges()).thenReturn(exchanges);
+        lenient().when(agentService.agentPrefix()).thenReturn(AGENT_PREFIX);
 
-        correlator = new KeriNotificationCorrelator(keriClient, properties(Duration.ofMillis(5)));
+        correlator = new KeriNotificationCorrelator(keriClient, properties(Duration.ofMillis(5)), agentService);
     }
 
     private static KeriAttestationProperties properties(Duration pollInterval) {
@@ -138,6 +143,34 @@ class KeriNotificationCorrelatorTest {
                 Map.of("i", sender, "r", route, "p", "", "a", Map.of("ref", payloadSaid), "e", Map.of())));
     }
 
+    private static Optional<Object> exchangeWithRoute(String sender, String route, String prior) {
+        return Optional.of(Map.of("exn",
+                Map.of("i", sender, "r", route, "p", prior, "a", Map.of(), "e", Map.of())));
+    }
+
+    private static Optional<Object> exchangeWithAddressee(String sender, String route, String prior,
+            String addresseeAid) {
+        return Optional.of(Map.of("exn",
+                Map.of("i", sender, "r", route, "p", prior, "a", Map.of("i", addresseeAid), "e", Map.of())));
+    }
+
+    private static Optional<Object> exchangeWithRecipientPrefix(String sender, String route, String prior,
+            String recipientPrefix) {
+        return Optional.of(Map.of("exn",
+                Map.of("i", sender, "r", route, "p", prior, "a", Map.of(), "e", Map.of(), "rp", recipientPrefix)));
+    }
+
+    /** SAID is buried two levels deep inside {@code e}'s child map ({@code grant.acdc.d}) — the F4 fix's
+     *  bounded thread-back check must NOT walk this far; only a direct {@code e} child's own {@code p}/
+     *  {@code d} count. This is the shape one ceremony's crafted response could otherwise use to satisfy
+     *  an unrelated ceremony waiting on the same wallet. */
+    private static Optional<Object> exchangeWithNestedUnrelatedEmbed(String sender, String route,
+            String nestedSaid) {
+        return Optional.of(Map.of("exn",
+                Map.of("i", sender, "r", route, "p", "", "a", Map.of(),
+                        "e", Map.of("grant", Map.of("acdc", Map.of("d", nestedSaid))))));
+    }
+
     // --- claims: both correlation paths ---
 
     @Test
@@ -183,7 +216,98 @@ class KeriNotificationCorrelatorTest {
         assertTrue(result.isPresent());
     }
 
+    // --- claims: recipient checks (F4 fix) ---
+
+    @Test
+    void claimsNotificationWhenAddresseeInPayloadMatchesTheAgentPrefix() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithAddressee(SENDER_AID, ROUTE, REQUEST_EXN_SAID, AGENT_PREFIX));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(2));
+
+        assertTrue(result.isPresent());
+    }
+
+    @Test
+    void claimsNotificationWhenRecipientPrefixFieldMatchesTheAgentPrefix() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, AGENT_PREFIX));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(2));
+
+        assertTrue(result.isPresent());
+    }
+
     // --- rejects: each guard, notification stays unread/unclaimed, times out ---
+
+    @Test
+    void ignoresNotificationWhenTheFetchedExchangesOwnRouteDoesNotMatchEvenIfTheNotificationClaimedAMatchingRoute()
+            throws Exception {
+        // F4 fix: the notification's own claimed route (used as the pre-filter above) is not trusted on
+        // its own — the FETCHED exchange's own r field must also be one of the requested routes.
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithRoute(SENDER_AID, OTHER_ROUTE, REQUEST_EXN_SAID));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void ignoresNotificationWhenAddresseeInPayloadDoesNotMatchTheAgentPrefix() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithAddressee(SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void ignoresNotificationWhenRecipientPrefixFieldDoesNotMatchTheAgentPrefix() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void ignoresACraftedResponseForAnUnrelatedCeremonyThatBuriesOurSaidTwoLevelsDeepInANestedEmbed() throws Exception {
+        // The exact cross-ceremony hijack the F4 fix closes: the same wallet is party to two ceremonies
+        // (ours, waiting on REQUEST_EXN_SAID; an unrelated one, "ceremony B") and a response actually
+        // belonging to ceremony B happens to carry OUR request's SAID buried in an unrelated nested field
+        // two levels down (e.g. inside an embedded ACDC's own "d"). SAIDs are public, so this is easy to
+        // construct, deliberately or not. The bounded thread-back check (only exn.p, exn.a's direct
+        // values, and each direct exn.e child's own p/d) must not walk deep enough to find it.
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithNestedUnrelatedEmbed(SENDER_AID, ROUTE, REQUEST_EXN_SAID));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
 
     @Test
     void ignoresNonMatchingRouteAndTimesOutWithoutTouchingExchanges() throws Exception {
@@ -329,7 +453,7 @@ class KeriNotificationCorrelatorTest {
         // honored, the worker would keep looping all the way out to the 5s timeout below instead of
         // returning within the ~1s join bound this test asserts.
         KeriNotificationCorrelator slowCorrelator =
-                new KeriNotificationCorrelator(keriClient, properties(Duration.ofMillis(200)));
+                new KeriNotificationCorrelator(keriClient, properties(Duration.ofMillis(200)), agentService);
 
         AtomicReference<Optional<KeriNotificationCorrelator.CorrelatedNotification>> resultRef =
                 new AtomicReference<>();

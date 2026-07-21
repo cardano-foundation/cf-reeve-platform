@@ -27,15 +27,30 @@ import org.cardanofoundation.signify.cesr.util.Utils;
  * {@code route} alone is <strong>not</strong> enough to claim a notification, because any wallet the
  * agent is in contact with can raise one on the same route (e.g. two ceremonies waiting on
  * {@code /exn/ipex/grant} at once, or an unrelated party probing the agent). A notification is only
- * claimed if, in addition to the route match, the exchange ({@code exn}) it references was sent by
- * the expected sender <em>and</em> threads back to the exact request {@code exn} SAID this caller is
- * waiting on — either directly via the exn's {@code p} (prior) field, or indirectly via a reference to
- * that SAID buried in the exn's payload/embeds. A notification that fails either check is left exactly
- * as it was found (unread, undeleted) so a legitimate poller can still pick it up.
- *
- * <p>The exact field carrying the prior-exn link depends on which IPEX step produced the notification
- * (offer/agree/grant/admit all shape their {@code p}/{@code e} differently); both paths are checked and
- * unit-tested independently since this hasn't yet been confirmed against a live exchange (Task 8).
+ * claimed if ALL of the following hold (F4 fix — a same-wallet ceremony's own notification is not
+ * automatically safe, since SAIDs are public and one ceremony's response can otherwise be crafted to
+ * satisfy another):
+ * <ol>
+ *   <li>the notification is unread and its own claimed route is one of {@code routes} (a cheap
+ *       pre-filter before ever fetching anything);</li>
+ *   <li>the FETCHED exchange's own route ({@code exn.r}) is <em>also</em> one of {@code routes} — the
+ *       notification's claimed route is not trusted on its own, since nothing forces it to agree with
+ *       the exchange it actually references;</li>
+ *   <li>the exchange was sent by the expected sender ({@code exn.i});</li>
+ *   <li>the exchange's addressee, when the shape carries one ({@code exn.a.i} or {@code exn.rp}), is
+ *       this agent's own prefix — checked defensively (skipped, not rejected, when neither field is
+ *       present) since the exact addressee field hasn't been confirmed against a live exchange
+ *       (Task 8);</li>
+ *   <li>the exchange threads back to the exact request {@code exn} SAID this caller is waiting on
+ *       ({@link #threadsBackToRequest}) — a <em>bounded</em>, protocol-shaped check, not a general
+ *       recursive search: {@code p} equality is primary; failing that, only {@code exn.a}'s direct
+ *       values and each direct child map of {@code exn.e} (checking that child's own {@code p}/
+ *       {@code d}) are examined. A SAID buried deeper than that (e.g. inside a nested embed two levels
+ *       down) does not count — that shape is exactly how one ceremony's crafted response could
+ *       otherwise be made to satisfy an unrelated ceremony waiting on the same wallet.</li>
+ * </ol>
+ * A notification that fails any check is left exactly as it was found (unread, undeleted) so a
+ * legitimate poller can still pick it up.
  */
 @Service
 @RequiredArgsConstructor
@@ -50,6 +65,7 @@ public class KeriNotificationCorrelator {
 
     private final KeriAttestationClient client;
     private final KeriAttestationProperties properties;
+    private final KeriAgentService agentService;
 
     /** A notification that passed correlation: {@code notificationId} is the agent's own notification
      *  identifier (for {@link #markAndDelete}), {@code exnSaid} is the referenced exchange's SAID, and
@@ -178,7 +194,8 @@ public class KeriNotificationCorrelator {
             if (!isUnreadRouteMatch(note, routes)) {
                 continue;
             }
-            Optional<CorrelatedNotification> correlated = tryCorrelate(note, expectedSenderAid, requestExnSaid);
+            Optional<CorrelatedNotification> correlated = tryCorrelate(routes, note, expectedSenderAid,
+                    requestExnSaid);
             if (correlated.isPresent()) {
                 return correlated;
             }
@@ -192,10 +209,11 @@ public class KeriNotificationCorrelator {
         return unread && routeMatches;
     }
 
-    // --- correlation: fetch the referenced exchange and verify sender + thread (design §4.3) ---
+    // --- correlation: fetch the referenced exchange and verify route + sender + recipient + thread
+    //     (design §4.3, F4 fix — see this class's javadoc for the full list of checks) ---
 
-    private Optional<CorrelatedNotification> tryCorrelate(Notification note, String expectedSenderAid,
-            String requestExnSaid) throws InterruptedException {
+    private Optional<CorrelatedNotification> tryCorrelate(List<String> routes, Notification note,
+            String expectedSenderAid, String requestExnSaid) throws InterruptedException {
         String exnSaid = note.a != null ? note.a.d : null;
         if (exnSaid == null) {
             return Optional.empty();
@@ -215,7 +233,12 @@ public class KeriNotificationCorrelator {
             return Optional.empty();
         }
 
-        if (exn == null || !expectedSenderAid.equals(exn.get("i")) || !threadsBackToRequest(exn, requestExnSaid)) {
+        if (exn == null
+                // (F4 fix) the FETCHED exchange's own route, not just the notification's claimed one.
+                || !routes.contains(exn.get("r"))
+                || !expectedSenderAid.equals(exn.get("i"))
+                || !addresseeMatchesAgent(exn)
+                || !threadsBackToRequest(exn, requestExnSaid)) {
             return Optional.empty();
         }
         return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn));
@@ -230,36 +253,61 @@ public class KeriNotificationCorrelator {
         return exnObj instanceof Map<?, ?> ? (Map<String, Object>) exnObj : null;
     }
 
-    /** Direct path: the exn's own {@code p} (prior) field names {@code requestExnSaid}. Fallback path:
-     *  {@code requestExnSaid} is buried somewhere in the exn's payload ({@code a}) or embeds
-     *  ({@code e}) — the shape of that reference varies by IPEX step and isn't pinned down until the
-     *  Task 8 live spike, so this walks the whole subtree rather than a single fixed key. */
+    /**
+     * Recipient check (F4 fix): the exn's addressee, when the shape carries one, must be this agent's
+     * own prefix — a notification for a request the agent never sent to this wallet, or a reply misrouted
+     * to a different agent, must not be claimed. Checked defensively: the exact field carrying the
+     * addressee (an {@code i} inside the payload map {@code a}, or a top-level {@code rp} "recipient
+     * prefix") hasn't been confirmed against a live exchange (Task 8), and different exn shapes may carry
+     * neither — a shape with no addressee field at all is not evidence of a wrong recipient, so this
+     * skips (returns {@code true}) rather than rejects when neither is present.
+     */
+    private boolean addresseeMatchesAgent(Map<String, Object> exn) {
+        String agentPrefix = agentService.agentPrefix();
+        Object a = exn.get("a");
+        if (a instanceof Map<?, ?> aMap && aMap.get("i") != null) {
+            return agentPrefix.equals(aMap.get("i"));
+        }
+        Object rp = exn.get("rp");
+        if (rp != null) {
+            return agentPrefix.equals(rp);
+        }
+        return true;
+    }
+
+    /**
+     * Bounded, protocol-shaped thread-back check (F4 fix — replaces an earlier unbounded recursive
+     * search over the whole exn subtree, which let a SAID buried anywhere — including deep inside an
+     * unrelated ceremony's own embeds — satisfy correlation). Primary path: the exn's own {@code p}
+     * (prior) field names {@code requestExnSaid} directly. Otherwise, only these specific locations are
+     * examined, matching the shapes IPEX/remotesign exchanges are actually known to use:
+     * <ul>
+     *   <li>{@code exn.a}'s direct values (not nested further);</li>
+     *   <li>each direct child map of {@code exn.e}, checking only that child's own {@code p} and
+     *       {@code d} values (not walking further into it).</li>
+     * </ul>
+     * No general recursion beyond that — a reference nested any deeper does not count.
+     */
     private static boolean threadsBackToRequest(Map<String, Object> exn, String requestExnSaid) {
         if (requestExnSaid.equals(exn.get("p"))) {
             return true;
         }
-        return referencesSaid(exn.get("a"), requestExnSaid) || referencesSaid(exn.get("e"), requestExnSaid);
-    }
-
-    private static boolean referencesSaid(Object node, String said) {
-        if (node instanceof String s) {
-            return s.equals(said);
-        }
-        if (node instanceof Map<?, ?> map) {
-            for (Object value : map.values()) {
-                if (referencesSaid(value, said)) {
+        Object a = exn.get("a");
+        if (a instanceof Map<?, ?> aMap) {
+            for (Object value : aMap.values()) {
+                if (requestExnSaid.equals(value)) {
                     return true;
                 }
             }
-            return false;
         }
-        if (node instanceof Iterable<?> iterable) {
-            for (Object value : iterable) {
-                if (referencesSaid(value, said)) {
+        Object e = exn.get("e");
+        if (e instanceof Map<?, ?> eMap) {
+            for (Object child : eMap.values()) {
+                if (child instanceof Map<?, ?> childMap
+                        && (requestExnSaid.equals(childMap.get("p")) || requestExnSaid.equals(childMap.get("d")))) {
                     return true;
                 }
             }
-            return false;
         }
         return false;
     }
