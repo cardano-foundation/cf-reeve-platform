@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -161,6 +163,7 @@ class KeriOobiServiceTest {
 
     @Test
     void happyPathWithNoExistingLinkExtractsAidAndPersistsAtBindingVersion1() throws Exception {
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
@@ -185,6 +188,7 @@ class KeriOobiServiceTest {
     @Test
     void reResolvingSameAidRefreshesOobiUrlWithoutBumpingBindingVersion() {
         KeriIdentityLinkEntity existing = link(3, AID, "https://old.example.org/oobi/EAID12345");
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
@@ -202,7 +206,7 @@ class KeriOobiServiceTest {
     @Test
     void differentAidWithoutRelinkIsIdentityRelinkedConflictAndLeavesLinkUntouched() {
         KeriIdentityLinkEntity existing = link(1, "EOLDAID000", "https://old.example.org/oobi/EOLDAID000");
-        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI_OTHER_AID, false);
 
@@ -213,6 +217,9 @@ class KeriOobiServiceTest {
         assertEquals("EOLDAID000", existing.getAid());
         verify(identityLinkRepository, never()).save(any());
         verifyNoInteractions(ceremonyRepository);
+        // item 4 round-2 fix: rejected from the plain (unlocked) read alone -- the link row is never
+        // even locked for a call that's going to be rejected anyway.
+        verify(identityLinkRepository, never()).findByUserIdForUpdate(any());
     }
 
     // --- different AID, relink=true: version bump, dependent fields cleared, ceremonies invalidated ---
@@ -225,6 +232,7 @@ class KeriOobiServiceTest {
         existing.setAuthBeginTxHash("a".repeat(64));
         existing.setAuthBeginBlock(999L);
         existing.setAuthBeginAt(Instant.parse("2026-01-01T00:00:00Z"));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
 
         KeriAttestationCeremonyEntity openCeremony = new KeriAttestationCeremonyEntity();
@@ -256,6 +264,35 @@ class KeriOobiServiceTest {
         assertEquals(CeremonyState.FAILED, openCeremony.getState());
         assertEquals(KeriAttestationProblems.IDENTITY_RELINKED, openCeremony.getErrorTitle());
         verify(ceremonyRepository).save(openCeremony);
+
+        // item 4 round-2 fix (lock-order inversion): the ceremony row lock (findByIdForUpdate, inside
+        // invalidateOpenCeremonies) must be taken and released BEFORE the link row is ever locked
+        // (findByUserIdForUpdate) -- the same order completion paths use (ceremony, then link).
+        InOrder lockOrder = inOrder(ceremonyRepository, identityLinkRepository);
+        lockOrder.verify(ceremonyRepository).findByIdForUpdate("cer-1");
+        lockOrder.verify(identityLinkRepository).findByUserIdForUpdate(USER);
+    }
+
+    @Test
+    void residualRaceWherePlainReadMissesAConcurrentAidChangeStillRejectsWithoutRelinkGranted() {
+        // Regression guard for the residual race persistLink's javadoc documents: the plain (unlocked)
+        // read sees the SAME aid being requested (looks like a simple refresh, no relink needed and
+        // relink=false is fine), but a concurrent request already changed the AID by the time the link
+        // row is actually locked. Even though relink was never requested, lockAndUpsertLink's own
+        // under-lock check must still reject with IDENTITY_RELINKED rather than silently performing an
+        // unrequested relink.
+        KeriIdentityLinkEntity plainReadView = link(1, AID, "https://old.example.org/oobi/" + AID);
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(plainReadView));
+        KeriIdentityLinkEntity lockedView = link(1, OTHER_AID, "https://concurrent.example.org/oobi/" + OTHER_AID);
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(lockedView));
+
+        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.IDENTITY_RELINKED, result.getLeft().getTitle());
+        assertEquals(OTHER_AID, lockedView.getAid());
+        verify(identityLinkRepository, never()).save(any());
+        verifyNoInteractions(ceremonyRepository);
     }
 
     @Test
@@ -266,6 +303,7 @@ class KeriOobiServiceTest {
         // has already legitimately moved to CONSUMED. The stale in-memory candidate must not be used
         // to overwrite that outcome back to FAILED.
         KeriIdentityLinkEntity existing = link(1, "EOLDAID000", "https://old.example.org/oobi/EOLDAID000");
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
 
         KeriAttestationCeremonyEntity staleCandidate = new KeriAttestationCeremonyEntity();

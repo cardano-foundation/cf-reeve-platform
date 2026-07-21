@@ -374,6 +374,113 @@ class CeremonyRepositoryTest {
         }
     }
 
+    /**
+     * Item 4 (round 2) fix: proves the lock-order-inversion deadlock risk is closed. Before this fix,
+     * completion paths ({@code CeremonyService#completeStep} invoking a {@code persist*IfIdentityStillCurrent}
+     * mutator) locked ceremony-then-link, while {@code KeriOobiService}'s relink locked link-then-ceremony
+     * — two transactions taking the same two locks in opposite orders is a textbook Postgres deadlock.
+     * After the fix, both paths lock ceremony before link (see {@code KeriOobiService#persistLink}'s and
+     * {@code CeremonyService#completeStep}'s javadoc for the full rule).
+     *
+     * <p>This test has two threads contend for the SAME ceremony row AND the SAME link row, each
+     * acquiring in ceremony-then-link order (mirroring the real completion and relink-invalidation
+     * paths) — with the same lock order on both sides, one thread simply blocks the other at the
+     * ceremony-lock step until it commits and releases; a deadlock is structurally impossible. Asserting
+     * both threads complete within a bounded join timeout (rather than hanging, or one being aborted with
+     * a Postgres deadlock error) is the proof.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void relinkAndACompletionPathBothLockCeremonyBeforeLinkSoNoDeadlockIsPossible() throws Exception {
+        String userId = "user-lock-order";
+        String ceremonyId = "cer-lock-order";
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+
+        try {
+            tx.executeWithoutResult(status -> {
+                KeriIdentityLinkEntity link = new KeriIdentityLinkEntity();
+                link.setUserId(userId);
+                link.setBindingVersion(1);
+                link.setAid("EoldAid");
+                identityLinkRepository.save(link);
+
+                ceremonyRepository.save(ceremony(ceremonyId, userId, CeremonyState.CREDENTIAL_REQUESTED));
+            });
+
+            CountDownLatch threadAHoldsCeremonyLock = new CountDownLatch(1);
+            CountDownLatch releaseThreadA = new CountDownLatch(1);
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+
+            // Thread A simulates a completion path: locks the ceremony row first, holds it, then locks
+            // the link row.
+            Thread threadA = new Thread(() -> {
+                try {
+                    tx.executeWithoutResult(status -> {
+                        ceremonyRepository.findByIdForUpdate(ceremonyId).orElseThrow();
+                        threadAHoldsCeremonyLock.countDown();
+                        awaitQuietly(releaseThreadA);
+                        KeriIdentityLinkEntity link = identityLinkRepository.findByUserIdForUpdate(userId)
+                                .orElseThrow();
+                        link.setCredentialSaid("EfromThreadA");
+                        identityLinkRepository.save(link);
+                    });
+                } catch (Throwable t) {
+                    failure.set(t);
+                }
+            });
+            threadA.start();
+            assertTrue(threadAHoldsCeremonyLock.await(5, TimeUnit.SECONDS),
+                    "thread A should have taken the ceremony lock");
+
+            // Thread B simulates the relink path's ceremony-invalidation step racing the SAME ceremony:
+            // it must acquire the ceremony lock FIRST too (blocking on thread A), only then the link
+            // lock -- exactly the order KeriOobiService#persistLink now uses.
+            AtomicBoolean threadBAcquiredCeremonyLock = new AtomicBoolean(false);
+            Thread threadB = new Thread(() -> {
+                try {
+                    tx.executeWithoutResult(status -> {
+                        ceremonyRepository.findByIdForUpdate(ceremonyId).orElseThrow();
+                        threadBAcquiredCeremonyLock.set(true);
+                        KeriIdentityLinkEntity link = identityLinkRepository.findByUserIdForUpdate(userId)
+                                .orElseThrow();
+                        link.setAid("EnewAidFromThreadB");
+                        link.setBindingVersion(link.getBindingVersion() + 1);
+                        identityLinkRepository.save(link);
+                    });
+                } catch (Throwable t) {
+                    failure.set(t);
+                }
+            });
+            threadB.start();
+            // Give thread B a moment to attempt (and block on) the ceremony lock thread A is holding --
+            // exactly the window where the OLD (link-then-ceremony) relink order could deadlock against
+            // thread A's (ceremony-then-link) order.
+            Thread.sleep(300);
+            releaseThreadA.countDown();
+
+            threadA.join(5_000);
+            threadB.join(5_000);
+
+            assertFalse(threadA.isAlive(), "thread A must complete -- no deadlock");
+            assertFalse(threadB.isAlive(), "thread B must complete -- no deadlock");
+            assertTrue(failure.get() == null,
+                    "no thread should have thrown (e.g. a Postgres deadlock error): " + failure.get());
+            assertTrue(threadBAcquiredCeremonyLock.get(),
+                    "thread B must have eventually acquired the ceremony lock after thread A released it");
+
+            KeriIdentityLinkEntity finalLink = identityLinkRepository.findById(userId).orElseThrow();
+            // Thread B ran after thread A committed, so its write is the final, consistent state -- built
+            // on top of thread A's own commit, not interleaved with it.
+            assertEquals("EnewAidFromThreadB", finalLink.getAid());
+            assertEquals(2, finalLink.getBindingVersion());
+        } finally {
+            tx.executeWithoutResult(status -> {
+                identityLinkRepository.deleteById(userId);
+                ceremonyRepository.deleteById(ceremonyId);
+            });
+        }
+    }
+
     private static void awaitQuietly(CountDownLatch latch) {
         try {
             latch.await(5, TimeUnit.SECONDS);

@@ -129,15 +129,81 @@ public class KeriOobiService {
     // --- persist the identity link (design §4.7) ---
 
     /**
-     * Row-locked (F3 fix): this read decides whether to create, no-op-refresh, or relink the row, and
-     * the async {@code persist*IfIdentityStillCurrent} mutators in {@code KeriCredentialService}/
-     * {@code KeriAuthBeginService} write the same row concurrently (a completed credential/auth-begin
-     * step landing mid-relink). {@link KeriIdentityLinkRepository#findByUserIdForUpdate} serializes this
-     * whole read-decide-write against those writers instead of {@link #identityLinkRepository}'s plain
-     * {@code findById}, so a relink can never race a credential/auth-begin write into a row that mixes
-     * fields from the old and new identity.
+     * Decides whether this call is a create, a no-op-refresh, or a genuine relink, and dispatches
+     * accordingly (F3 fix / item 4 round-2 fix — lock-order inversion).
+     *
+     * <p><b>Global lock order: ceremony before link</b> (see {@code CeremonyService#completeStep}'s
+     * javadoc for the full statement of the rule and why it exists). Completion paths
+     * ({@code CeremonyService#completeStep} invoking {@code KeriCredentialService}'s or
+     * {@code KeriAuthBeginService}'s {@code persist*IfIdentityStillCurrent} mutators) always lock the
+     * ceremony row first and the identity-link row second. A relink here needs BOTH locks too — it
+     * writes the link and, when it's a genuine relink, also row-locks every one of the user's open
+     * ceremonies to invalidate them — so it must acquire them in the very same order, or two
+     * transactions taking the same two locks in opposite orders can deadlock. The original
+     * implementation locked the link first (to decide create/refresh/relink) and only then locked
+     * ceremonies (to invalidate them) — exactly the inverted order.
+     *
+     * <p>Fixed by splitting the decision from the write:
+     * <ol>
+     *   <li>a plain, <b>unlocked</b> read of the link decides which kind of write this looks like,
+     *       without taking the link lock yet;</li>
+     *   <li>if that looks like a genuine relink (a different AID, {@code relink=true}), open ceremonies
+     *       are invalidated FIRST — ceremony row locks only, the link lock is not held during this
+     *       step;</li>
+     *   <li>only then is the link row locked, via {@link #lockAndUpsertLink}, which re-derives the
+     *       create/refresh/relink decision fresh under the lock (a concurrent write could have changed
+     *       the link between the plain read and this lock) and performs the atomic write.</li>
+     * </ol>
+     * A create or same-AID refresh never touches a ceremony lock at all in the transaction, so those
+     * paths go straight to {@link #lockAndUpsertLink} — there is no ordering hazard to avoid when only
+     * one of the two lock types is ever taken.
+     *
+     * <p><b>Residual narrow race, accepted:</b> if the plain read (step 1) sees no relink needed but the
+     * locked re-read (step 3) discovers the link actually changed AID out from under it (a genuinely
+     * concurrent relink of the very same user racing this call), {@link #lockAndUpsertLink} still
+     * re-decides correctly using the {@code relink} flag this call was given (rejecting with
+     * {@code IDENTITY_RELINKED} if it wasn't granted, exactly as if the plain read had seen it coming) —
+     * but if it WAS granted, it completes the write (bumping {@code bindingVersion} etc.) without
+     * invalidating open ceremonies at that point: doing so would require taking a ceremony lock while the
+     * link lock is already held, reintroducing the exact inversion this fix removes. Correctness is not
+     * at risk either way: {@code CeremonyService#validateAndConsume}'s own {@code bindingVersion} check
+     * still refuses to consume a ceremony created under a since-superseded binding; the only cost is that
+     * such a ceremony fails lazily (at consume time, or via the TTL/stale-step sweep) rather than being
+     * proactively invalidated. This race requires the same user to be relinking concurrently from two
+     * places at once and is not expected in practice.
      */
     private Either<ProblemDetail, String> persistLink(String userId, String aid, String oobiUrl, boolean relink) {
+        Optional<KeriIdentityLinkEntity> plainRead = identityLinkRepository.findById(userId);
+        boolean looksLikeRelink = plainRead.isPresent() && !aid.equals(plainRead.get().getAid());
+
+        if (!looksLikeRelink) {
+            return lockAndUpsertLink(userId, aid, oobiUrl, relink);
+        }
+
+        if (!relink) {
+            return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.IDENTITY_RELINKED,
+                    "User %s is already linked to AID %s; retry with relink=true to switch to %s."
+                            .formatted(userId, plainRead.get().getAid(), aid)));
+        }
+
+        // Ceremony locks only, taken and released before the link lock is ever acquired below.
+        invalidateOpenCeremonies(userId);
+
+        return lockAndUpsertLink(userId, aid, oobiUrl, relink);
+    }
+
+    /**
+     * Locks the link row and performs the actual create/refresh/relink write — the authoritative
+     * decision, re-derived fresh under the lock regardless of what {@link #persistLink} inferred from
+     * its earlier plain read. {@code relink} is threaded through (not just inferred from the lock) so
+     * that a locked re-read revealing a genuine AID change this call was never granted {@code relink=true}
+     * for is still rejected with {@code IDENTITY_RELINKED}, not silently performed. This is always the
+     * LAST thing a relink does in {@link #persistLink}: never follow this call with a ceremony lock while
+     * still inside the same transaction (see {@link #persistLink}'s javadoc for the lock-order rule this
+     * preserves).
+     */
+    private Either<ProblemDetail, String> lockAndUpsertLink(String userId, String aid, String oobiUrl,
+            boolean relink) {
         Optional<KeriIdentityLinkEntity> existing = identityLinkRepository.findByUserIdForUpdate(userId);
         if (existing.isEmpty()) {
             KeriIdentityLinkEntity link = new KeriIdentityLinkEntity();
@@ -151,12 +217,18 @@ public class KeriOobiService {
 
         KeriIdentityLinkEntity link = existing.get();
         if (aid.equals(link.getAid())) {
+            // Same AID under the lock: either this always was a refresh, or a concurrent request already
+            // relinked to this exact AID between persistLink's plain read and this lock — either way,
+            // no version bump, no further ceremony invalidation needed here.
             link.setOobiUrl(oobiUrl);
             identityLinkRepository.save(link);
             return Either.right(aid);
         }
 
         if (!relink) {
+            // Only reachable via the residual race documented on persistLink's javadoc: the plain read
+            // saw no relink needed, but the link actually changed AID out from under it before this lock
+            // was acquired. Must still reject -- this call was never granted relink=true.
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.IDENTITY_RELINKED,
                     "User %s is already linked to AID %s; retry with relink=true to switch to %s."
                             .formatted(userId, link.getAid(), aid)));
@@ -171,8 +243,6 @@ public class KeriOobiService {
         link.setAid(aid);
         link.setOobiUrl(oobiUrl);
         identityLinkRepository.save(link);
-
-        invalidateOpenCeremonies(userId);
         return Either.right(aid);
     }
 
@@ -185,7 +255,13 @@ public class KeriOobiService {
      *  {@link KeriAttestationCeremonyRepository#findByIdForUpdate} and re-checked before being
      *  mutated — otherwise a concurrent legitimate transition (e.g. {@link CeremonyService
      *  #validateAndConsume} finishing the same ceremony between the discovery read and this write)
-     *  could be silently clobbered back to FAILED. */
+     *  could be silently clobbered back to FAILED.
+     *
+     *  <p><b>Global lock order: ceremony before link</b> (item 4 round-2 fix — see
+     *  {@code CeremonyService#completeStep}'s javadoc for the full rule). {@link #persistLink} calls
+     *  this method BEFORE ever locking the identity-link row, precisely so the ceremony row locks taken
+     *  here are never held at the same time as the link lock — callers must preserve that ordering; do
+     *  not call this method (or otherwise lock a ceremony row) while the link row is already locked. */
     private void invalidateOpenCeremonies(String userId) {
         List<KeriAttestationCeremonyEntity> candidates = ceremonyRepository.findByUserIdAndStateNotIn(userId, TERMINAL_STATES);
         for (KeriAttestationCeremonyEntity candidate : candidates) {
