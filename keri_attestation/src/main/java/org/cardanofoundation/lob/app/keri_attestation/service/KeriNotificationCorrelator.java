@@ -37,17 +37,26 @@ import org.cardanofoundation.signify.cesr.util.Utils;
  *       notification's claimed route is not trusted on its own, since nothing forces it to agree with
  *       the exchange it actually references;</li>
  *   <li>the exchange was sent by the expected sender ({@code exn.i});</li>
- *   <li>the exchange's addressee, when the shape carries one ({@code exn.a.i} or {@code exn.rp}), is
- *       this agent's own prefix — checked defensively (skipped, not rejected, when neither field is
- *       present) since the exact addressee field hasn't been confirmed against a live exchange
- *       (Task 8);</li>
+ *   <li>the exchange's {@code rp} ("recipient prefix"), when present, equals this agent's own prefix —
+ *       {@code rp} is the signed addressee and is authoritative when it exists; a mismatch rejects
+ *       outright. {@code exn.a.i} is deliberately <b>not</b> consulted for this check at all (F4
+ *       residual fix) — it is ordinary payload data fully controlled by the sender, not a signed
+ *       routing field, so trusting it would let a forged or misdirected notification's own payload
+ *       simply claim to be addressed to us. Checked defensively for absence only: the exact field
+ *       carrying the addressee hasn't been confirmed against a live exchange (Task 8), so this skips
+ *       (does not reject) only when {@code rp} is genuinely absent;</li>
  *   <li>the exchange threads back to the exact request {@code exn} SAID this caller is waiting on
  *       ({@link #threadsBackToRequest}) — a <em>bounded</em>, protocol-shaped check, not a general
- *       recursive search: {@code p} equality is primary; failing that, only {@code exn.a}'s direct
- *       values and each direct child map of {@code exn.e} (checking that child's own {@code p}/
- *       {@code d}) are examined. A SAID buried deeper than that (e.g. inside a nested embed two levels
- *       down) does not count — that shape is exactly how one ceremony's crafted response could
- *       otherwise be made to satisfy an unrelated ceremony waiting on the same wallet.</li>
+ *       recursive search. {@code p}, when present and non-blank, is authoritative (F4 residual fix):
+ *       only {@code p == requestExnSaid} is accepted, and payload/embed values are never consulted as a
+ *       fallback for a present-but-different {@code p} — a coincidental or crafted match buried in
+ *       {@code a}/{@code e} must never rescue an exn that already explicitly names a different (or no)
+ *       prior via {@code p}. Only when {@code p} is absent (or blank, KERI's own "no prior" convention)
+ *       does the bounded check run: {@code exn.a}'s direct values and each direct child map of
+ *       {@code exn.e} (checking that child's own {@code p}/{@code d}). A SAID buried deeper than that
+ *       (e.g. inside a nested embed two levels down) does not count — that shape is exactly how one
+ *       ceremony's crafted response could otherwise be made to satisfy an unrelated ceremony waiting on
+ *       the same wallet.</li>
  * </ol>
  * A notification that fails any check is left exactly as it was found (unread, undeleted) so a
  * legitimate poller can still pick it up.
@@ -254,33 +263,39 @@ public class KeriNotificationCorrelator {
     }
 
     /**
-     * Recipient check (F4 fix): the exn's addressee, when the shape carries one, must be this agent's
-     * own prefix — a notification for a request the agent never sent to this wallet, or a reply misrouted
-     * to a different agent, must not be claimed. Checked defensively: the exact field carrying the
-     * addressee (an {@code i} inside the payload map {@code a}, or a top-level {@code rp} "recipient
-     * prefix") hasn't been confirmed against a live exchange (Task 8), and different exn shapes may carry
-     * neither — a shape with no addressee field at all is not evidence of a wrong recipient, so this
-     * skips (returns {@code true}) rather than rejects when neither is present.
+     * Recipient check (F4 fix, tightened by the F4 residual fix): the exn's {@code rp} ("recipient
+     * prefix"), when present, is the signed addressee and MUST equal this agent's own prefix — a
+     * notification whose {@code rp} names a different agent must never be claimed. {@code exn.a.i} (an
+     * {@code i} key nested inside the payload map {@code a}) is deliberately <b>not</b> consulted here at
+     * all, and must never substitute for {@code rp}: {@code a} is ordinary payload data the sender fully
+     * controls, not a signed/authoritative routing field, so trusting it would let a forged or
+     * misdirected notification's own payload simply claim to be addressed to us regardless of what
+     * {@code rp} actually says. Checked defensively for absence only: the exact field carrying the
+     * addressee hasn't been confirmed against a live exchange (Task 8), so this skips (returns
+     * {@code true}) only when {@code rp} is genuinely absent — never as a fallback to checking something
+     * else instead.
      */
     private boolean addresseeMatchesAgent(Map<String, Object> exn) {
-        String agentPrefix = agentService.agentPrefix();
-        Object a = exn.get("a");
-        if (a instanceof Map<?, ?> aMap && aMap.get("i") != null) {
-            return agentPrefix.equals(aMap.get("i"));
-        }
         Object rp = exn.get("rp");
-        if (rp != null) {
-            return agentPrefix.equals(rp);
+        if (rp == null) {
+            return true;
         }
-        return true;
+        return agentService.agentPrefix().equals(rp);
     }
 
     /**
      * Bounded, protocol-shaped thread-back check (F4 fix — replaces an earlier unbounded recursive
      * search over the whole exn subtree, which let a SAID buried anywhere — including deep inside an
-     * unrelated ceremony's own embeds — satisfy correlation). Primary path: the exn's own {@code p}
-     * (prior) field names {@code requestExnSaid} directly. Otherwise, only these specific locations are
-     * examined, matching the shapes IPEX/remotesign exchanges are actually known to use:
+     * unrelated ceremony's own embeds — satisfy correlation).
+     *
+     * <p><b>{@code p} precedence (F4 residual fix):</b> when the exn's own {@code p} (prior) field is
+     * present and non-blank, it is authoritative — this returns exactly
+     * {@code requestExnSaid.equals(p)}, full stop. Payload ({@code a}) and embed ({@code e}) values are
+     * <em>never</em> consulted when {@code p} is present, even if it doesn't match: falling through to
+     * them in that case would let a coincidental or deliberately crafted value elsewhere in the exn
+     * rescue a reply that already explicitly names a different (or no) prior. Only when {@code p} is
+     * absent, or blank (KERI's own "no prior" convention — an empty string in a structurally-required
+     * field), does the bounded check below run, examining only:
      * <ul>
      *   <li>{@code exn.a}'s direct values (not nested further);</li>
      *   <li>each direct child map of {@code exn.e}, checking only that child's own {@code p} and
@@ -289,8 +304,9 @@ public class KeriNotificationCorrelator {
      * No general recursion beyond that — a reference nested any deeper does not count.
      */
     private static boolean threadsBackToRequest(Map<String, Object> exn, String requestExnSaid) {
-        if (requestExnSaid.equals(exn.get("p"))) {
-            return true;
+        Object p = exn.get("p");
+        if (p instanceof String priorSaid && !priorSaid.isEmpty()) {
+            return requestExnSaid.equals(priorSaid);
         }
         Object a = exn.get("a");
         if (a instanceof Map<?, ?> aMap) {

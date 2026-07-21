@@ -160,6 +160,26 @@ class KeriNotificationCorrelatorTest {
                 Map.of("i", sender, "r", route, "p", prior, "a", Map.of(), "e", Map.of(), "rp", recipientPrefix)));
     }
 
+    /** Both {@code rp} and payload {@code a.i} set independently — for proving {@code rp} is
+     *  authoritative and {@code a.i} never substitutes for it either way (item 2 round-2 fix). */
+    private static Optional<Object> exchangeWithRecipientPrefixAndPayloadAddressee(String sender, String route,
+            String prior, String recipientPrefix, String payloadAddressee) {
+        return Optional.of(Map.of("exn",
+                Map.of("i", sender, "r", route, "p", prior, "a", Map.of("i", payloadAddressee), "e", Map.of(),
+                        "rp", recipientPrefix)));
+    }
+
+    /** {@code p} present and non-blank but different from the requested SAID, with the requested SAID
+     *  ALSO present (coincidentally or by crafting) as an unrelated payload value — for proving a
+     *  present-but-different {@code p} is authoritative and rejects outright, never falling through to
+     *  consult {@code a} (item 2 round-2 fix). */
+    private static Optional<Object> exchangeWithMismatchedPriorButMatchingPayloadValue(String sender, String route,
+            String differentPrior, String saidBuriedInPayloadAnyway) {
+        return Optional.of(Map.of("exn",
+                Map.of("i", sender, "r", route, "p", differentPrior,
+                        "a", Map.of("unrelated", saidBuriedInPayloadAnyway), "e", Map.of())));
+    }
+
     /** SAID is buried two levels deep inside {@code e}'s child map ({@code grant.acdc.d}) — the F4 fix's
      *  bounded thread-back check must NOT walk this far; only a direct {@code e} child's own {@code p}/
      *  {@code d} count. This is the shape one ceremony's crafted response could otherwise use to satisfy
@@ -216,13 +236,16 @@ class KeriNotificationCorrelatorTest {
         assertTrue(result.isPresent());
     }
 
-    // --- claims: recipient checks (F4 fix) ---
+    // --- claims: recipient checks (F4 fix, tightened by item 2 round-2 fix) ---
 
     @Test
-    void claimsNotificationWhenAddresseeInPayloadMatchesTheAgentPrefix() throws Exception {
+    void claimsNotificationEvenWhenPayloadAddresseeMismatchesTheAgentPrefixSinceRpIsAbsentAndAiIsNeverConsulted()
+            throws Exception {
+        // item 2(a) round-2 fix: a.i is ordinary payload data, never consulted for the recipient check
+        // at all. With no rp field present, the check must skip (claim), regardless of what a.i says.
         when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID))
-                .thenReturn(exchangeWithAddressee(SENDER_AID, ROUTE, REQUEST_EXN_SAID, AGENT_PREFIX));
+                .thenReturn(exchangeWithAddressee(SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
                 correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(2));
@@ -235,6 +258,20 @@ class KeriNotificationCorrelatorTest {
         when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID))
                 .thenReturn(exchangeWithRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, AGENT_PREFIX));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(2));
+
+        assertTrue(result.isPresent());
+    }
+
+    @Test
+    void claimsNotificationWhenRpMatchesEvenIfPayloadAddresseeMismatches() throws Exception {
+        // item 2(a) round-2 fix: rp is authoritative when present; a mismatching a.i must not cause a
+        // false rejection when rp itself is correct.
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID)).thenReturn(exchangeWithRecipientPrefixAndPayloadAddressee(
+                SENDER_AID, ROUTE, REQUEST_EXN_SAID, AGENT_PREFIX, OTHER_AGENT_PREFIX));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
                 correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(2));
@@ -262,10 +299,10 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void ignoresNotificationWhenAddresseeInPayloadDoesNotMatchTheAgentPrefix() throws Exception {
+    void ignoresNotificationWhenRecipientPrefixFieldDoesNotMatchTheAgentPrefix() throws Exception {
         when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID))
-                .thenReturn(exchangeWithAddressee(SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX));
+                .thenReturn(exchangeWithRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
                 correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
@@ -276,10 +313,32 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void ignoresNotificationWhenRecipientPrefixFieldDoesNotMatchTheAgentPrefix() throws Exception {
+    void ignoresNotificationWhenRpMismatchesEvenIfPayloadAddresseeHappensToMatch() throws Exception {
+        // item 2(a) round-2 fix, the core vulnerability closed: a.i must never rescue a notification
+        // whose signed rp names a different agent. Without this, a forged/misdirected notification could
+        // set a.i to our prefix to bypass the recipient check even though rp says otherwise.
         when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
-        when(exchanges.get(REFERENCED_EXN_SAID))
-                .thenReturn(exchangeWithRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX));
+        when(exchanges.get(REFERENCED_EXN_SAID)).thenReturn(exchangeWithRecipientPrefixAndPayloadAddressee(
+                SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX, AGENT_PREFIX));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void ignoresNotificationWhenPriorIsPresentButDifferentEvenIfPayloadHappensToContainTheRequestSaid()
+            throws Exception {
+        // item 2(b) round-2 fix: p, when present and non-blank, is authoritative -- a mismatching p must
+        // reject outright, never falling through to consult a/e as a fallback (which could otherwise let
+        // a coincidental or crafted payload value rescue an exn that already explicitly names a
+        // different prior).
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID)).thenReturn(
+                exchangeWithMismatchedPriorButMatchingPayloadValue(SENDER_AID, ROUTE, OTHER_SAID, REQUEST_EXN_SAID));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
                 correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
