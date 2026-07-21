@@ -34,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Notifying;
@@ -56,6 +57,8 @@ class KeriNotificationCorrelatorTest {
     @Mock
     private SignifyClient client;
     @Mock
+    private KeriAttestationClient keriClient;
+    @Mock
     private Notifying.Notifications notifications;
     @Mock
     private Exchanging.Exchanges exchanges;
@@ -66,10 +69,11 @@ class KeriNotificationCorrelatorTest {
     void setUp() {
         // Not every test reaches both sub-APIs (a route/read mismatch never touches exchanges()), so
         // these are lenient the same way KeriOobiServiceTest's shared client stubs are.
+        lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.notifications()).thenReturn(notifications);
         lenient().when(client.exchanges()).thenReturn(exchanges);
 
-        correlator = new KeriNotificationCorrelator(client, properties(Duration.ofMillis(5)));
+        correlator = new KeriNotificationCorrelator(keriClient, properties(Duration.ofMillis(5)));
     }
 
     private static KeriAttestationProperties properties(Duration pollInterval) {
@@ -325,7 +329,7 @@ class KeriNotificationCorrelatorTest {
         // honored, the worker would keep looping all the way out to the 5s timeout below instead of
         // returning within the ~1s join bound this test asserts.
         KeriNotificationCorrelator slowCorrelator =
-                new KeriNotificationCorrelator(client, properties(Duration.ofMillis(200)));
+                new KeriNotificationCorrelator(keriClient, properties(Duration.ofMillis(200)));
 
         AtomicReference<Optional<KeriNotificationCorrelator.CorrelatedNotification>> resultRef =
                 new AtomicReference<>();

@@ -9,6 +9,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.config.KeriAttestationModuleConfig;
+import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 class KeriAttestationModuleFlagTest {
 
@@ -52,6 +53,26 @@ class KeriAttestationModuleFlagTest {
             assertThat(properties.stepTimeoutGrace()).isEqualTo(Duration.parse("PT2M"));
             assertThat(properties.executor().walletPoolSize()).isEqualTo(4);
             assertThat(properties.executor().confirmationPoolSize()).isEqualTo(2);
+        });
+    }
+
+    /**
+     * F1 fix: this module must never expose a bare {@link SignifyClient} bean — legacy
+     * {@code blockchain_publisher} (a module this now depends on it) injects an <em>unqualified</em>
+     * {@code SignifyClient} of its own, and a second unqualified bean of the same type would make an
+     * application context wiring both modules together fail at startup with
+     * {@code NoUniqueBeanDefinitionException}. With the module enabled (component-scanning every class
+     * in the package, {@code SignifyClientConfig} included) but no {@code lob.keri-attestation.keria.url}
+     * configured, {@code SignifyClientConfig}'s own narrower conditional gate keeps its {@code @Bean}
+     * methods from registering at all — the same precondition {@code CeremonyRepositoryTest} relies on
+     * to avoid a live KERIA connection during this test — so this assertion holds without a real KERIA
+     * agent. {@link KeriAttestationClient} is the only bean this module ever exposes for KERIA access.
+     */
+    @Test
+    void moduleEnabled_exposesNoBareSignifyClientBean() {
+        contextRunner.withPropertyValues("lob.keri-attestation.enabled=true").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).doesNotHaveBean(SignifyClient.class);
         });
     }
 }

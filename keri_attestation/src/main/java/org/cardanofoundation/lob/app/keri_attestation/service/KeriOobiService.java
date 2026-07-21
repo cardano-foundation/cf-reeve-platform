@@ -12,7 +12,6 @@ import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
@@ -20,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
@@ -58,8 +58,7 @@ public class KeriOobiService {
     private static final Set<CeremonyState> TERMINAL_STATES =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
 
-    @Qualifier("keriAttestationSignifyClient")
-    private final SignifyClient client;
+    private final KeriAttestationClient client;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationCeremonyRepository ceremonyRepository;
 
@@ -109,13 +108,13 @@ public class KeriOobiService {
 
     private Either<ProblemDetail, Void> resolveAndVerify(String userId, String oobiUrl, String aid) {
         try {
-            Object resolveResult = client.oobis().resolve(oobiUrl, userId);
+            Object resolveResult = client.client().oobis().resolve(oobiUrl, userId);
             Operations.WaitOptions waitOptions = Operations.WaitOptions.builder()
                     .abortSignal(Operations.AbortSignal.builder().timeout(RESOLVE_TIMEOUT_MILLIS).build())
                     .build();
-            client.operations().wait(Operation.fromObject(resolveResult), waitOptions);
+            client.client().operations().wait(Operation.fromObject(resolveResult), waitOptions);
 
-            Optional<Object> contact = client.contacts().get(aid);
+            Optional<Object> contact = client.client().contacts().get(aid);
             if (contact.isEmpty()) {
                 return Either.left(invalid(
                         "AID %s could not be verified via contacts after resolving the OOBI.".formatted(aid)));

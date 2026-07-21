@@ -10,10 +10,10 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 /**
  * A focused Spring-wiring smoke test for the {@link KeriAttestService} &lt;-&gt;
@@ -35,7 +35,7 @@ class CeremonyAsyncRunnerWiringTest {
                 // context.getBean(CeremonyAsyncRunner.class) throws NoSuchBeanDefinitionException
                 // (nothing to do with the @Lazy cycle this test actually targets).
                 .withPropertyValues("lob.keri-attestation.keria.url=https://example.org")
-                .withBean("keriAttestationSignifyClient", SignifyClient.class, () -> mock(SignifyClient.class))
+                .withBean(KeriAttestationClient.class, () -> mock(KeriAttestationClient.class))
                 .withBean(KeriAttestationProperties.class, CeremonyAsyncRunnerWiringTest::properties)
                 .withBean(KeriAgentService.class, () -> mock(KeriAgentService.class))
                 .withBean(RemotesignRequestFactory.class, () -> mock(RemotesignRequestFactory.class))

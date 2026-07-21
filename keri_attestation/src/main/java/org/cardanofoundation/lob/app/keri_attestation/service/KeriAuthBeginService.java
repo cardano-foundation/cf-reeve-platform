@@ -9,7 +9,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
@@ -17,13 +16,13 @@ import org.springframework.stereotype.Service;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 /**
  * Drives the AUTH_BEGIN step (design §4.5): either verifies a user-supplied external tx hash already
@@ -52,8 +51,7 @@ public class KeriAuthBeginService {
     private static final List<Long> AUTH_BEGIN_AUTHORIZED_LABELS = List.of(1447L);
     private static final long AUTH_BEGIN_METADATA_LABEL = 170L;
 
-    @Qualifier("keriAttestationSignifyClient")
-    private final SignifyClient client;
+    private final KeriAttestationClient client;
     private final CesrChainReducer cesrChainReducer;
     private final Cip170MetadataFactory metadataFactory;
     private final CardanoMetadataTxSubmitter submitter;
@@ -174,7 +172,7 @@ public class KeriAuthBeginService {
 
         String txHash;
         try {
-            Optional<String> cesrOpt = client.credentials().get(link.getCredentialSaid());
+            Optional<String> cesrOpt = client.client().credentials().get(link.getCredentialSaid());
             if (cesrOpt.isEmpty()) {
                 ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
                         KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,

@@ -9,13 +9,13 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationDigest;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
@@ -25,7 +25,6 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.core.States.HabState;
@@ -64,8 +63,7 @@ public class KeriAttestService {
     private static final int KEY_STATE_QUERY_ATTEMPTS = 5;
     private static final long KEY_STATE_QUERY_WAIT_MILLIS = 10_000L;
 
-    @Qualifier("keriAttestationSignifyClient")
-    private final SignifyClient client;
+    private final KeriAttestationClient client;
     private final KeriAgentService agentService;
     private final RemotesignRequestFactory kedFactory;
     private final AttestationTargetProviderRegistry providerRegistry;
@@ -147,14 +145,14 @@ public class KeriAttestService {
         ceremonyRepository.save(ceremony);
 
         try {
-            Optional<HabState> senderOpt = client.identifiers().get(agentService.agentName());
+            Optional<HabState> senderOpt = client.client().identifiers().get(agentService.agentName());
             if (senderOpt.isEmpty()) {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
                         "No local HabState found for agent identifier %s.".formatted(agentService.agentName()));
             }
 
             Map<String, Object> ked = kedFactory.anchorRequestKed(walletAid, digest.digestQb64());
-            ExchangeMessageResult built = client.exchanges().createExchangeMessage(senderOpt.get(),
+            ExchangeMessageResult built = client.client().exchanges().createExchangeMessage(senderOpt.get(),
                     REMOTESIGN_REQUEST_ROUTE, ked, Map.of(), walletAid, null, null);
 
             // Persist BEFORE the send completes (design §4.6 step 3): the SAID is deterministic from
@@ -163,7 +161,7 @@ public class KeriAttestService {
             ceremony.setRequestExnSaid(requestExnSaid);
             ceremonyRepository.save(ceremony);
 
-            client.exchanges().sendFromEvents(agentService.agentName(), REMOTESIGN_TOPIC, built.exn(), built.sigs(),
+            client.client().exchanges().sendFromEvents(agentService.agentName(), REMOTESIGN_TOPIC, built.exn(), built.sigs(),
                     built.atc(), List.of(walletAid));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -300,8 +298,8 @@ public class KeriAttestService {
         Duration delay = properties.keyStateRetryInitialDelay();
         for (int attempt = 1; attempt <= KEY_STATE_QUERY_ATTEMPTS; attempt++) {
             try {
-                Object raw = client.keyStates().query(aid, null);
-                Operation<Object> op = client.operations().wait(Operation.fromObject(raw), boundedKeyStateWait());
+                Object raw = client.client().keyStates().query(aid, null);
+                Operation<Object> op = client.client().operations().wait(Operation.fromObject(raw), boundedKeyStateWait());
                 Object response = op.getResponse();
                 if (response instanceof Map<?, ?> map) {
                     Object sn = map.get("s");
@@ -337,7 +335,7 @@ public class KeriAttestService {
     //     see docs/keri/spike/RemotesignAnchorSpike.java for the confirmed field names to expect) ---
 
     private List<Map<String, Object>> fetchKel(String aid) throws Exception {
-        Object raw = client.keyEvents().get(aid);
+        Object raw = client.client().keyEvents().get(aid);
         if (!(raw instanceof List<?> rawList)) {
             return List.of();
         }

@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
@@ -51,6 +52,8 @@ class KeriOobiServiceTest {
     @Mock
     private SignifyClient client;
     @Mock
+    private KeriAttestationClient keriClient;
+    @Mock
     private Oobis oobis;
     @Mock
     private Operations operations;
@@ -67,6 +70,7 @@ class KeriOobiServiceTest {
     void setUp() throws Exception {
         // Shared "happy path" client stubs — not every test reaches the client (invalid-URL tests
         // must never touch it at all), so these are lenient and simply unused in those cases.
+        lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.oobis()).thenReturn(oobis);
         lenient().when(client.operations()).thenReturn(operations);
         lenient().when(client.contacts()).thenReturn(contacts);
@@ -74,7 +78,7 @@ class KeriOobiServiceTest {
         lenient().when(operations.wait(any(), any())).thenReturn(null);
         lenient().when(contacts.get(anyString())).thenReturn(Optional.of(new Object()));
 
-        service = new KeriOobiService(client, identityLinkRepository, ceremonyRepository);
+        service = new KeriOobiService(keriClient, identityLinkRepository, ceremonyRepository);
     }
 
     private KeriIdentityLinkEntity link(int bindingVersion, String aid, String oobiUrl) {

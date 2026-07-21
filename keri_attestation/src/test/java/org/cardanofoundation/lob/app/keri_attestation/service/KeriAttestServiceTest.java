@@ -36,6 +36,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationDigest;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
@@ -80,6 +81,8 @@ class KeriAttestServiceTest {
     @Mock
     private SignifyClient client;
     @Mock
+    private KeriAttestationClient keriClient;
+    @Mock
     private Identifier identifiers;
     @Mock
     private Exchanging.Exchanges exchanges;
@@ -112,6 +115,7 @@ class KeriAttestServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.identifiers()).thenReturn(identifiers);
         lenient().when(client.exchanges()).thenReturn(exchanges);
         lenient().when(client.keyStates()).thenReturn(keyStates);
@@ -119,7 +123,7 @@ class KeriAttestServiceTest {
         lenient().when(client.operations()).thenReturn(operations);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
 
-        service = new KeriAttestService(client, agentService, kedFactory, providerRegistry, correlator,
+        service = new KeriAttestService(keriClient, agentService, kedFactory, providerRegistry, correlator,
                 ceremonyService, ceremonyRepository, identityLinkRepository, properties(), asyncRunner);
     }
 

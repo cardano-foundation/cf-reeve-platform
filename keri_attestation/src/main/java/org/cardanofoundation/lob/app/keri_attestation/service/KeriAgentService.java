@@ -8,12 +8,11 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.SignifyClientConfig.IdentifierRecord;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 /**
  * Exposes the platform's own KERI agent identity to the rest of the module (design §4.3). The
@@ -33,8 +32,7 @@ public class KeriAgentService {
 
     private static final String AGENT_ROLE = "agent";
 
-    @Qualifier("keriAttestationSignifyClient")
-    private final SignifyClient client;
+    private final KeriAttestationClient client;
     private final IdentifierRecord identifier;
 
     private volatile String cachedAgentOobi;
@@ -66,7 +64,7 @@ public class KeriAgentService {
      * for the common single-entry case, and well-defined (rather than mangled) when there are several.
      */
     private String fetchAgentOobi() throws Exception {
-        Object oobi = client.oobis().get(identifier.name(), AGENT_ROLE)
+        Object oobi = client.client().oobis().get(identifier.name(), AGENT_ROLE)
                 .orElseThrow(() -> new IllegalStateException(
                         "No OOBI available for KERI agent identifier " + identifier.name()));
         Object oobisValue = ((LinkedHashMap<?, ?>) oobi).get("oobis");

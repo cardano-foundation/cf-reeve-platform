@@ -9,15 +9,14 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.signify.app.Notifying;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.cesr.exceptions.serialize.SerializeException;
 import org.cardanofoundation.signify.cesr.util.Utils;
 
@@ -49,8 +48,7 @@ public class KeriNotificationCorrelator {
      *  javadoc. */
     private static final int MAX_CONSECUTIVE_PARSE_FAILURES = 3;
 
-    @Qualifier("keriAttestationSignifyClient")
-    private final SignifyClient client;
+    private final KeriAttestationClient client;
     private final KeriAttestationProperties properties;
 
     /** A notification that passed correlation: {@code notificationId} is the agent's own notification
@@ -132,8 +130,8 @@ public class KeriNotificationCorrelator {
      */
     public void markAndDelete(String notificationId) {
         try {
-            client.notifications().mark(notificationId);
-            client.notifications().delete(notificationId);
+            client.client().notifications().mark(notificationId);
+            client.client().notifications().delete(notificationId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(
@@ -149,7 +147,7 @@ public class KeriNotificationCorrelator {
             String requestExnSaid) throws InterruptedException {
         Notifying.Notifications.NotificationListResponse response;
         try {
-            response = client.notifications().list();
+            response = client.client().notifications().list();
         } catch (InterruptedException e) {
             throw e;
         } catch (Exception e) {
@@ -205,7 +203,7 @@ public class KeriNotificationCorrelator {
 
         Map<String, Object> exn;
         try {
-            Optional<Object> exchange = client.exchanges().get(exnSaid);
+            Optional<Object> exchange = client.client().exchanges().get(exnSaid);
             if (exchange.isEmpty()) {
                 return Optional.empty();
             }

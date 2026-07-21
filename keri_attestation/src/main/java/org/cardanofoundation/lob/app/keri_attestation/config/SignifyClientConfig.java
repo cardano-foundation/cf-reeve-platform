@@ -29,19 +29,19 @@ import org.cardanofoundation.signify.core.States;
  * Wires this module's own KERIA {@link SignifyClient} and ensures the platform's KERI agent AID
  * exists at startup. This mirrors blockchain_publisher's {@code KeriConfig} idiom — connect with a
  * boot fallback, get-or-create the identifier, pick witnesses from the agent's own config — but is
- * reimplemented locally (no import from blockchain_publisher) with bean names
- * ({@code keriAttestationSignifyClient}, {@code keriAttestationAgentIdentifier}) chosen so they
- * cannot collide, by name, with legacy {@code KeriConfig}'s {@code signifyClient} /
- * {@code createIdentifier} beans if both modules ever end up registered in the same application
- * context. That only prevents a bean-definition clash, not by-type autowiring ambiguity: this
- * module's own {@code SignifyClient} consumers ({@code KeriAgentService}, {@code KeriOobiService})
- * qualify their injection points with {@code @Qualifier("keriAttestationSignifyClient")} for that
- * reason. blockchain_publisher's own unqualified consumers ({@code KeriService},
- * {@code PublisherHealth}) are outside this module's control — as of this writing no build module in
- * this repo depends on both {@code blockchain_publisher} and {@code keri_attestation} at once, so the
- * two {@code SignifyClient} beans can't yet collide in practice, but whichever future change first
- * wires both modules into one application needs to qualify blockchain_publisher's injection points
- * too.
+ * reimplemented locally (no import from blockchain_publisher).
+ *
+ * <p><b>F1 fix:</b> the constructed {@link SignifyClient} is never itself exposed as a Spring bean —
+ * legacy {@code blockchain_publisher} (its {@code KeriConfig}/{@code KeriService}/
+ * {@code PublisherHealth}) injects an <em>unqualified</em> {@code SignifyClient}, and now depends on
+ * this module; a second unqualified {@code SignifyClient} bean here would make an application context
+ * wiring both modules together fail at startup with {@code NoUniqueBeanDefinitionException}, and this
+ * module may not touch the legacy files to add a qualifier there. Instead, {@link #keriAttestationClient}
+ * is the ONLY bean this class (or this module) exposes for KERIA access — a
+ * {@link KeriAttestationClient} holder wrapping the connected {@code SignifyClient}. Every consumer in
+ * this module injects {@code KeriAttestationClient} and calls {@link KeriAttestationClient#client()};
+ * there is no by-type ambiguity for Spring to resolve, so no {@code @Qualifier} plumbing is needed
+ * anywhere in this module.
  *
  * <p>Gated on {@code lob.keri-attestation.keria.url} being configured — deliberately a narrower
  * condition than the module's own {@code lob.keri-attestation.enabled} flag, which some
@@ -67,8 +67,12 @@ public class SignifyClientConfig {
     public record IdentifierRecord(String prefix, String name) {
     }
 
+    /**
+     * The ONLY bean this class (or this module) exposes for KERIA access — see this class's javadoc
+     * (F1 fix) for why the underlying {@link SignifyClient} is never itself a bean.
+     */
     @Bean
-    public SignifyClient keriAttestationSignifyClient(KeriAttestationProperties properties) throws Exception {
+    public KeriAttestationClient keriAttestationClient(KeriAttestationProperties properties) throws Exception {
         KeriAttestationProperties.Keria keria = properties.keria();
         SignifyClient client = new SignifyClient(keria.url(), keria.bran(), Salter.Tier.low, keria.bootUrl(), null);
         try {
@@ -77,21 +81,22 @@ public class SignifyClientConfig {
             client.boot();
             client.connect();
         }
-        return client;
+        return new KeriAttestationClient(client);
     }
 
     @Bean
-    public IdentifierRecord keriAttestationAgentIdentifier(SignifyClient keriAttestationSignifyClient,
+    public IdentifierRecord keriAttestationAgentIdentifier(KeriAttestationClient keriAttestationClient,
             KeriAttestationProperties properties) throws Exception {
+        SignifyClient client = keriAttestationClient.client();
         String identifierName = properties.identifierName();
         String prefix;
 
-        Optional<States.HabState> habState = keriAttestationSignifyClient.identifiers().get(identifierName);
+        Optional<States.HabState> habState = client.identifiers().get(identifierName);
         if (habState.isPresent()) {
             prefix = habState.get().getPrefix();
         } else {
             log.info("KERI agent identifier {} not found, creating a new one", identifierName);
-            prefix = createAid(keriAttestationSignifyClient, identifierName);
+            prefix = createAid(client, identifierName);
         }
         log.info("Using KERI agent identifier {} with prefix {}", identifierName, prefix);
         return new IdentifierRecord(prefix, identifierName);

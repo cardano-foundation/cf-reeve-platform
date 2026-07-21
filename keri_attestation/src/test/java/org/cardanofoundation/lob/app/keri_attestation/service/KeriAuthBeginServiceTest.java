@@ -30,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
@@ -54,6 +55,8 @@ class KeriAuthBeginServiceTest {
     @Mock
     private SignifyClient client;
     @Mock
+    private KeriAttestationClient keriClient;
+    @Mock
     private Credentials credentials;
     @Mock
     private CesrChainReducer cesrChainReducer;
@@ -74,8 +77,9 @@ class KeriAuthBeginServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.credentials()).thenReturn(credentials);
-        service = new KeriAuthBeginService(client, cesrChainReducer, metadataFactory, submitter, ceremonyService,
+        service = new KeriAuthBeginService(keriClient, cesrChainReducer, metadataFactory, submitter, ceremonyService,
                 ceremonyRepository, identityLinkRepository, properties(), asyncRunner);
     }
 

@@ -8,13 +8,13 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
@@ -24,7 +24,6 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAgreeArgs;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexApplyArgs;
@@ -57,8 +56,7 @@ public class KeriCredentialService {
      *  timeout, applied here to the credential-presentation step instead of the ATTEST anchor. */
     private static final Duration RETRY_PRECHECK_TIMEOUT = Duration.ofSeconds(2);
 
-    @Qualifier("keriAttestationSignifyClient")
-    private final SignifyClient client;
+    private final KeriAttestationClient client;
     private final KeriAgentService agentService;
     private final KeriNotificationCorrelator correlator;
     private final CredentialChainValidator validator;
@@ -167,7 +165,7 @@ public class KeriCredentialService {
                     .schemaSaid(schemaSaid)
                     .attributes(Map.of("oobiUrl", agentService.agentOobi()))
                     .build();
-            ExchangeMessageResult applyResult = client.ipex().apply(applyArgs);
+            ExchangeMessageResult applyResult = client.client().ipex().apply(applyArgs);
             String exnSaid = (String) applyResult.exn().getKed().get("d");
 
             // Persist BEFORE the send completes (design §4.6 pattern applied here too): the SAID is
@@ -177,7 +175,7 @@ public class KeriCredentialService {
             ceremony.setRequestExnSaid(exnSaid);
             ceremonyRepository.save(ceremony);
 
-            client.ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(), List.of(linkedAid));
+            client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(), List.of(linkedAid));
             return Either.right(null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -224,11 +222,11 @@ public class KeriCredentialService {
 
         String agreeSaid;
         try {
-            ExchangeMessageResult agreeResult = client.ipex().agree(IpexAgreeArgs.builder()
+            ExchangeMessageResult agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
                     .senderName(agentName).recipient(linkedAid).message("")
                     .offerSaid(offer.get().exnSaid()).build());
             agreeSaid = (String) agreeResult.exn().getKed().get("d");
-            client.ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(), List.of(linkedAid));
+            client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(), List.of(linkedAid));
         } catch (Exception e) {
             interruptIfNeeded(e);
             failRequest(ceremonyId, expectedGeneration, "Failed to send IPEX agree: " + e.getMessage());
@@ -250,10 +248,10 @@ public class KeriCredentialService {
         }
 
         try {
-            ExchangeMessageResult admitResult = client.ipex().admit(IpexAdmitArgs.builder()
+            ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
                     .senderName(agentName).recipient(linkedAid).message("")
                     .grantSaid(grant.get().exnSaid()).build());
-            client.ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(), admitResult.atc(),
+            client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(), admitResult.atc(),
                     List.of(linkedAid));
         } catch (Exception e) {
             interruptIfNeeded(e);
@@ -263,7 +261,7 @@ public class KeriCredentialService {
 
         String fullCesr;
         try {
-            Optional<String> cesrOpt = client.credentials().get(credentialSaid);
+            Optional<String> cesrOpt = client.client().credentials().get(credentialSaid);
             if (cesrOpt.isEmpty()) {
                 failRequest(ceremonyId, expectedGeneration,
                         "Credential %s was not found in the store after admit.".formatted(credentialSaid));
