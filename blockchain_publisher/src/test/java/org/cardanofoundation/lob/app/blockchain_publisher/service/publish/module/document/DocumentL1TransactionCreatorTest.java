@@ -111,6 +111,7 @@ class DocumentL1TransactionCreatorTest {
                 jsonSchemaMetadataChecker,
                 organiserWallet,
                 ipfsPublisher,
+                Optional.empty(),
                 1447,
                 false);
     }

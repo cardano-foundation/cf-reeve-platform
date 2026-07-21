@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.http.ProblemDetail;
 
@@ -36,5 +37,28 @@ public interface AttestationConsumptionApi {
      * is the one mistake this API must never enable.
      */
     List<String> findTerminalNonConsumedCeremonyIds(Collection<String> ceremonyIds);
+
+    /**
+     * Read-only re-lookup of a ceremony's {@link ConsumedAttestation} for a caller that already knows
+     * it was consumed (design §5.3): {@code blockchain_publisher}'s dispatch hook needs the AID /
+     * digest / KEL sequence a document's frozen ceremony id attested, well after {@link
+     * #validateAndConsume} already ran — that method returns its result once, at publish time, and
+     * cannot be called again (it CASes the ceremony to {@code CONSUMED} and rejects any state other
+     * than {@code ATTEST_ANCHORED} on a second call).
+     *
+     * <p>Deliberately performs NO ownership/authorization check, unlike every other method on this
+     * interface: dispatch is a system path (a scheduled job re-reading its own persisted dispatch
+     * record), not an authenticated user request, so there is no caller identity to check against —
+     * the ceremony id alone is the only input, and it was already authorized once, by {@link
+     * #validateAndConsume}, before the document's dispatch record was ever written.
+     *
+     * @return the {@link ConsumedAttestation} if {@code ceremonyId} is currently in state {@code
+     *         CONSUMED} and its owning identity link can still be resolved; {@link Optional#empty()}
+     *         for any other state (including {@code ATTEST_ANCHORED} and the terminal {@code FAILED}/
+     *         {@code EXPIRED}), an unknown ceremony id, or a since-deleted identity link. Callers must
+     *         treat empty as "dispatch cannot proceed" and fail closed, never falling back to a plain
+     *         publish.
+     */
+    Optional<ConsumedAttestation> findConsumed(String ceremonyId);
 
 }

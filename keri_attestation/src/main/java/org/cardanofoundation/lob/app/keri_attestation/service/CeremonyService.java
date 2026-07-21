@@ -369,6 +369,22 @@ public class CeremonyService implements AttestationConsumptionApi {
         return ceremonyRepository.findIdsByIdInAndStateIn(ceremonyIds, TERMINAL_NON_CONSUMED_STATES);
     }
 
+    /**
+     * Deliberately a plain (unlocked) {@code findById}, not {@link
+     * KeriAttestationCeremonyRepository#findByIdForUpdate} — this never writes to the ceremony (or the
+     * link), it only re-derives the {@link ConsumedAttestation} a prior, already-committed {@link
+     * #validateAndConsume} call produced, so there is nothing here to serialize against a concurrent
+     * writer.
+     */
+    @Override
+    public Optional<ConsumedAttestation> findConsumed(String ceremonyId) {
+        return ceremonyRepository.findById(ceremonyId)
+                .filter(ceremony -> ceremony.getState() == CeremonyState.CONSUMED)
+                .flatMap(ceremony -> identityLinkRepository.findById(ceremony.getUserId())
+                        .map(link -> new ConsumedAttestation(ceremony.getId(), link.getAid(),
+                                ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence())));
+    }
+
     // --- internals ---
 
     /**

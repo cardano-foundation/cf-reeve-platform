@@ -782,4 +782,73 @@ class CeremonyServiceTest {
         assertTrue(result.isEmpty());
         verifyNoInteractions(ceremonyRepository, identityLinkRepository, targetProviderRegistry);
     }
+
+    // --- findConsumed (Task 15: blockchain_publisher's dispatch-time attestation lookup) ---
+
+    @Test
+    void findConsumedReturnsTheAttestationWhenTheCeremonyIsConsumed() {
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CONSUMED);
+        ceremony.setMetadataDigest("Edigest");
+        ceremony.setMetadataLabel("1447");
+        ceremony.setKelSequence("3");
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", "a".repeat(64))));
+
+        Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
+
+        assertTrue(result.isPresent());
+        ConsumedAttestation consumed = result.get();
+        assertEquals(CEREMONY_ID, consumed.ceremonyId());
+        assertEquals("Eaid", consumed.aid());
+        assertEquals("Edigest", consumed.digestQb64());
+        assertEquals("1447", consumed.metadataLabel());
+        assertEquals("3", consumed.kelSequence());
+        // Read-only: no row lock, no state mutation, no write.
+        verify(ceremonyRepository, never()).findByIdForUpdate(anyString());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void findConsumedIsEmptyWhenTheCeremonyIsOnlyAttestAnchored() {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.ATTEST_ANCHORED)));
+
+        Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
+
+        assertFalse(result.isPresent());
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void findConsumedIsEmptyWhenTheCeremonyFailed() {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.FAILED)));
+
+        Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
+
+        assertFalse(result.isPresent());
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void findConsumedIsEmptyWhenTheCeremonyDoesNotExist() {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.empty());
+
+        Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
+
+        assertFalse(result.isPresent());
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void findConsumedIsEmptyWhenTheIdentityLinkIsGone() {
+        // Reaching CONSUMED requires a link to have existed at every prior step (mirrors
+        // validateAndConsume's own reasoning) - a missing link here means it was deleted since
+        // (e.g. GDPR removal, design §4.1), so the AID this ceremony attested with can no longer be
+        // resolved. The dispatch caller must fail closed rather than build a transaction without one.
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.CONSUMED)));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
+
+        Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
+
+        assertFalse(result.isPresent());
+    }
 }

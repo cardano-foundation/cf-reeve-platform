@@ -37,7 +37,9 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3Blockc
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationLookup;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 
 /**
  * L1 transaction creator for documents. Standalone (NOT
@@ -59,9 +61,14 @@ public class DocumentL1TransactionCreator {
     private final MetadataChecker jsonSchemaMetadataChecker;
     private final Account organiserWallet;
     private final Optional<IpfsPublisher> ipfsPublisher;
+    private final Optional<DocumentAttestationLookup> attestationLookup;
 
     private final int metadataTag;
     private final boolean debugStoreOutputTx;
+
+    /** CIP-170 metadata label the ATTEST map (design §4.4) is published under - fixed by the CIP, not
+     *  configurable (unlike {@link #metadataTag}, which is the document's own 1447-by-default label). */
+    private static final long CIP170_ATTEST_METADATA_TAG = 170L;
 
     private String runId;
 
@@ -78,6 +85,11 @@ public class DocumentL1TransactionCreator {
 
     public Either<ProblemDetail, API3BlockchainTransaction> pullBlockchainTransaction(
             String organisationId, DocumentEntity document) {
+        String ceremonyId = document.getAttestationCeremonyId();
+        if (ceremonyId != null) {
+            return pullAttestedBlockchainTransaction(document, ceremonyId);
+        }
+
         if (ipfsPublisher.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                     "Document publishing requires IPFS; no IpfsPublisher is configured in this deployment.");
@@ -99,7 +111,60 @@ public class DocumentL1TransactionCreator {
         });
     }
 
+    /**
+     * KERI wallet-attestation dispatch (design §5.3): a dispatch record carrying a non-null
+     * {@code attestationCeremonyId} MUST publish the exact frozen metadata the user attested,
+     * alongside a CIP-170 {@code ATTEST} map (label 170) - and MUST fail closed, never falling back to
+     * the plain-publish path above, at every step. {@link DocumentAttestationLookup} does the actual
+     * gatekeeping (missing freeze / non-consumed ceremony / digest mismatch); this method's own extra
+     * responsibility is requiring the lookup collaborator to even be present - a {@code null} lookup
+     * (the {@code keri_attestation} module disabled while a document somehow still carries a ceremony
+     * id) is itself a fail-closed condition, not a silent skip to plain publish.
+     *
+     * <p>Never touches IPFS (the frozen {@code ipfsCid} is reused verbatim - no re-upload) and never
+     * re-serialises the envelope (the frozen 1447 map is reused verbatim). The chain tip IS fetched
+     * fresh here, though: the frozen {@code metadata_creation_slot} lives only inside the 1447 map
+     * itself, while {@link API3BlockchainTransaction}'s own {@code creationSlot} drives the
+     * dispatcher's rollback-aging bookkeeping and must reflect a fresh tip per submission attempt, or
+     * retries would look immediately stale.
+     */
+    private Either<ProblemDetail, API3BlockchainTransaction> pullAttestedBlockchainTransaction(
+            DocumentEntity document, String ceremonyId) {
+        if (attestationLookup.isEmpty()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Document %s carries attestation ceremony %s but keri_attestation is not enabled in this deployment."
+                            .formatted(document.getId(), ceremonyId));
+            problem.setTitle(VaultProblems.ATTESTATION_UNAVAILABLE);
+            return Either.left(problem);
+        }
+
+        DocumentAttestationLookup lookup = attestationLookup.get();
+        return lookup.loadForDispatch(document.getId(), ceremonyId).flatMap(data -> {
+            document.setIpfsCid(data.ipfsCid());
+
+            return blockchainReaderPublicApi.getChainTip().flatMap(chainTip -> {
+                long creationSlot = chainTip.getAbsoluteSlot();
+                MetadataMap attestMap170 = lookup.attestMap(data.consumed());
+
+                return handleTransactionCreation(data.frozenMetadataMap(), attestMap170, creationSlot);
+            });
+        });
+    }
+
     private Either<ProblemDetail, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,
+                                                                                        long creationSlot) {
+        return handleTransactionCreation(metadataMap, null, creationSlot);
+    }
+
+    /**
+     * @param attestMap170OrNull the CIP-170 {@code ATTEST} map to attach under label 170 alongside the
+     *                            document's own {@code metadataTag} map, or {@code null} for a plain
+     *                            (non-attested) publish - the JSON-schema check below validates ONLY
+     *                            the {@code metadataMap} (label {@link #metadataTag}), exactly as it
+     *                            did before this parameter existed; label 170 is never schema-checked.
+     */
+    private Either<ProblemDetail, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,
+                                                                                        MetadataMap attestMap170OrNull,
                                                                                         long creationSlot) {
         try {
             Map data = metadataMap.getMap();
@@ -112,6 +177,9 @@ public class DocumentL1TransactionCreator {
             CBORMetadataMap cborMetadataMap = new CBORMetadataMap(data);
 
             metadata.put(metadataTag, cborMetadataMap);
+            if (attestMap170OrNull != null) {
+                metadata.put(CIP170_ATTEST_METADATA_TAG, attestMap170OrNull);
+            }
 
             boolean isValid = jsonSchemaMetadataChecker.checkTransactionMetadata(json);
             if (!isValid) {

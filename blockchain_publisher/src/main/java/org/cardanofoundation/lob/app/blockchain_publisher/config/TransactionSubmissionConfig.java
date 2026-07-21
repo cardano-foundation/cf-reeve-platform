@@ -23,6 +23,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAtt
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationFreezeGuard;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationLookup;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationTargetProvider;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
@@ -154,6 +155,7 @@ public class TransactionSubmissionConfig {
                                                                       @Qualifier("documentJsonSchemaMetadataChecker") MetadataChecker metadataChecker,
                                                                       Account organiserAccount,
                                                                       Optional<IpfsPublisher> ipfsPublisher,
+                                                                      Optional<DocumentAttestationLookup> attestationLookup,
                                                                       @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
                                                                       @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
     ) {
@@ -164,9 +166,20 @@ public class TransactionSubmissionConfig {
                 metadataChecker,
                 organiserAccount,
                 ipfsPublisher,
+                attestationLookup,
                 metadataLabel,
                 debugStoreOutputTx
         );
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
+    public DocumentAttestationLookup documentAttestationLookup(
+            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
+            AttestationConsumptionApi attestationConsumptionApi,
+            Cip170MetadataFactory cip170MetadataFactory
+    ) {
+        return new DocumentAttestationLookup(documentAttestationFreezeRepository, attestationConsumptionApi, cip170MetadataFactory);
     }
 
     @Bean
