@@ -1,0 +1,263 @@
+package org.cardanofoundation.lob.app.keri_attestation.service;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
+import com.bloxbean.cardano.client.metadata.MetadataBuilder;
+import com.bloxbean.cardano.client.metadata.MetadataList;
+import com.bloxbean.cardano.client.metadata.MetadataMap;
+
+import org.cardanofoundation.signify.cesr.Diger;
+import org.cardanofoundation.signify.cesr.args.RawArgs;
+import org.cardanofoundation.signify.cesr.util.CoreUtil;
+
+/**
+ * Golden-vector tests for {@link Cip170MetadataFactory}. Expected field names/order/shapes are
+ * taken verbatim from the in-repo reference implementations:
+ * {@code docs/keri/AttestTransaction.java:188-198} (ATTEST) and
+ * {@code docs/keri/advanced/PublishExistingCredential.java:219-258} (AUTH_BEGIN + chunking).
+ */
+class Cip170MetadataFactoryTest {
+
+    private final Cip170MetadataFactory factory = new Cip170MetadataFactory();
+
+    private static final String AID = "EAID_9x8y7z6w5v4u3t2s1r0q_ABCDEFGHIJK";
+    private static final String DIGEST = "EDIGEST_1234567890abcdefghijklmnop";
+    private static final String KEL_SEQUENCE = "3";
+    private static final String LEAF_SCHEMA_SAID = "ESCHEMA_1234567890abcdefghijklmno";
+
+    // --- attestMap: verbatim from AttestTransaction.java:188-198 ---
+
+    @Test
+    void attestMapHasExactFieldsFromReference() {
+        MetadataMap map = factory.attestMap(AID, DIGEST, KEL_SEQUENCE);
+
+        assertEquals("ATTEST", map.get("t"));
+        assertEquals(KEL_SEQUENCE, map.get("s"));
+        assertEquals(AID, map.get("i"));
+        assertEquals(DIGEST, map.get("d"));
+
+        MetadataMap v = (MetadataMap) map.get("v");
+        assertEquals("1.0", v.get("v"));
+        assertEquals(1, v.keys().size());
+    }
+
+    @Test
+    void attestMapSerializesToTheExactSameCborBytesAsTheReferenceInsertionOrder() throws Exception {
+        // map.get(key) assertions above are order-insensitive; this pins the actual byte-for-byte
+        // requirement (this metadata is CBOR-encoded on-chain) by reproducing
+        // AttestTransaction.buildTransaction's put() calls in its exact order and comparing serialized
+        // bytes -- a silent reordering of attestMap's puts would fail this test even though it would
+        // still pass every get()-based assertion above.
+        MetadataMap reference = MetadataBuilder.createMap();
+        reference.put("t", "ATTEST");
+        reference.put("s", KEL_SEQUENCE);
+        reference.put("i", AID);
+        reference.put("d", DIGEST);
+        MetadataMap referenceV = MetadataBuilder.createMap();
+        referenceV.put("v", "1.0");
+        reference.put("v", referenceV);
+
+        MetadataMap map = factory.attestMap(AID, DIGEST, KEL_SEQUENCE);
+
+        assertArrayEquals(CborSerializationUtil.serialize(reference.getMap()), CborSerializationUtil.serialize(map.getMap()));
+    }
+
+    // --- authBeginMap: verbatim from PublishExistingCredential.java:219-246 ---
+
+    @Test
+    void authBeginMapHasExactFieldsFromReferenceWithOptionalMEntries() {
+        byte[] chain = sequentialBytes(150);
+        Map<String, Object> optionalM = new LinkedHashMap<>();
+        optionalM.put("LEI", "5299000WN3W1WHOZL256");
+        optionalM.put("epoch", 42L); // non-String value must be toString'd
+
+        MetadataMap map = factory.authBeginMap(AID, LEAF_SCHEMA_SAID, chain, optionalM, List.of(1447L));
+
+        assertEquals("AUTH_BEGIN", map.get("t"));
+        assertEquals(LEAF_SCHEMA_SAID, map.get("s"));
+        assertEquals(AID, map.get("i"));
+
+        MetadataList c = (MetadataList) map.get("c");
+        assertChunkReassemblyEquals(chain, c);
+
+        MetadataMap v = (MetadataMap) map.get("v");
+        assertEquals("1.0", v.get("v"));
+        assertEquals("KERI10", v.get("k"));
+        assertEquals("ACDC10", v.get("a"));
+
+        MetadataMap m = (MetadataMap) map.get("m");
+        MetadataList l = (MetadataList) m.get("l");
+        assertEquals(1, l.size());
+        assertEquals(BigInteger.valueOf(1447), l.getValueAt(0));
+        assertEquals("5299000WN3W1WHOZL256", m.get("LEI"));
+        assertEquals("42", m.get("epoch"));
+    }
+
+    @Test
+    void authBeginMapSerializesToTheExactSameCborBytesAsTheReferenceInsertionOrder() throws Exception {
+        // Same rationale as the attestMap byte-order test above: reproduces
+        // PublishExistingCredential.buildTransaction's put() calls verbatim (single "LEI" entry,
+        // single authorized label 1447, exactly as the reference hardcodes) and compares serialized
+        // bytes, so a silent reordering of authBeginMap's puts is caught even though it would still
+        // pass every get()-based assertion elsewhere in this file.
+        byte[] chain = sequentialBytes(70);
+        String lei = "5299000WN3W1WHOZL256";
+
+        MetadataMap reference = MetadataBuilder.createMap();
+        reference.put("t", "AUTH_BEGIN");
+        reference.put("s", LEAF_SCHEMA_SAID);
+        reference.put("i", AID);
+        MetadataList referenceChunks = MetadataBuilder.createList();
+        for (byte[] chunk : referenceSplitIntoChunks(chain, 64)) {
+            referenceChunks.add(chunk);
+        }
+        reference.put("c", referenceChunks);
+        MetadataMap referenceV = MetadataBuilder.createMap();
+        referenceV.put("v", "1.0");
+        referenceV.put("k", "KERI10");
+        referenceV.put("a", "ACDC10");
+        reference.put("v", referenceV);
+        MetadataMap referenceM = MetadataBuilder.createMap();
+        MetadataList referenceL = MetadataBuilder.createList();
+        referenceL.add(BigInteger.valueOf(1447));
+        referenceM.put("l", referenceL);
+        referenceM.put("LEI", lei);
+        reference.put("m", referenceM);
+
+        MetadataMap map = factory.authBeginMap(AID, LEAF_SCHEMA_SAID, chain,
+                new LinkedHashMap<>(Map.of("LEI", lei)), List.of(1447L));
+
+        assertArrayEquals(CborSerializationUtil.serialize(reference.getMap()), CborSerializationUtil.serialize(map.getMap()));
+    }
+
+    @Test
+    void authBeginMapAcceptsMultipleAuthorizedLabelsInOrder() {
+        MetadataMap map = factory.authBeginMap(AID, LEAF_SCHEMA_SAID, new byte[0], null, List.of(1447L, 9999L));
+
+        MetadataMap m = (MetadataMap) map.get("m");
+        MetadataList l = (MetadataList) m.get("l");
+        assertEquals(2, l.size());
+        assertEquals(BigInteger.valueOf(1447), l.getValueAt(0));
+        assertEquals(BigInteger.valueOf(9999), l.getValueAt(1));
+    }
+
+    @Test
+    void authBeginMapWithNullOptionalMStillHasLLabelOnly() {
+        MetadataMap map = factory.authBeginMap(AID, LEAF_SCHEMA_SAID, new byte[0], null, List.of(1447L));
+
+        MetadataMap m = (MetadataMap) map.get("m");
+        MetadataList l = (MetadataList) m.get("l");
+        assertEquals(1, l.size());
+        assertEquals(BigInteger.valueOf(1447), l.getValueAt(0));
+    }
+
+    // --- chunking edge cases: empty chain, exactly 64 bytes, 65 bytes ---
+
+    @Test
+    void emptyChainProducesZeroChunks() {
+        MetadataMap map = factory.authBeginMap(AID, LEAF_SCHEMA_SAID, new byte[0], null, List.of(1447L));
+
+        MetadataList c = (MetadataList) map.get("c");
+        assertEquals(0, c.size());
+    }
+
+    @Test
+    void exactly64ByteChainProducesOneFullChunk() {
+        byte[] chain = sequentialBytes(64);
+        MetadataMap map = factory.authBeginMap(AID, LEAF_SCHEMA_SAID, chain, null, List.of(1447L));
+
+        MetadataList c = (MetadataList) map.get("c");
+        assertEquals(1, c.size());
+        assertArrayEquals(chain, (byte[]) c.getValueAt(0));
+    }
+
+    @Test
+    void sixtyFiveByteChainProducesTwoChunksWithShorterLastOne() {
+        byte[] chain = sequentialBytes(65);
+        MetadataMap map = factory.authBeginMap(AID, LEAF_SCHEMA_SAID, chain, null, List.of(1447L));
+
+        MetadataList c = (MetadataList) map.get("c");
+        assertEquals(2, c.size());
+        assertEquals(64, ((byte[]) c.getValueAt(0)).length);
+        assertEquals(1, ((byte[]) c.getValueAt(1)).length);
+        assertChunkReassemblyEquals(chain, c);
+    }
+
+    // --- digestOf ---
+
+    @Test
+    void digestOfMatchesTheAttestTransactionTwoArgDigerIdiomAndStartsWithE() throws Exception {
+        MetadataMap map = MetadataBuilder.createMap();
+        map.put("foo", "bar");
+        map.put("count", BigInteger.valueOf(7));
+
+        String expected = new Diger(new RawArgs(), CborSerializationUtil.serialize(map.getMap())).getQb64();
+
+        String actual = factory.digestOf(map);
+
+        assertEquals(expected, actual);
+        assertTrue(actual.startsWith("E"));
+    }
+
+    @Test
+    void digestOfIsEquivalentToTheLegacyComputeThenWrapIdiom() throws Exception {
+        // Pins the choice of Diger idiom by evidence: AttestTransaction.java computes the digest
+        // directly via the two-arg constructor (new Diger(new RawArgs(), bytes)); the legacy
+        // blockchain_publisher KeriService instead pre-computes blake3_256 and wraps the already
+        // -computed digest via RawArgs.builder().raw(...).build(). Both idioms must agree for
+        // digestOf's two-arg choice to be safe.
+        MetadataMap map = MetadataBuilder.createMap();
+        map.put("foo", "bar");
+        map.put("count", BigInteger.valueOf(7));
+
+        byte[] cbor = CborSerializationUtil.serialize(map.getMap());
+        byte[] blake3 = CoreUtil.blake3_256(cbor, 32);
+        String legacy = new Diger(RawArgs.builder().raw(blake3).build()).getQb64();
+
+        assertEquals(legacy, factory.digestOf(map));
+    }
+
+    // --- helpers ---
+
+    private static void assertChunkReassemblyEquals(byte[] expected, MetadataList chunks) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (int i = 0; i < chunks.size(); i++) {
+            out.writeBytes((byte[]) chunks.getValueAt(i));
+        }
+        assertArrayEquals(expected, out.toByteArray());
+    }
+
+    private static byte[] sequentialBytes(int length) {
+        byte[] bytes = new byte[length];
+        for (int i = 0; i < length; i++) {
+            bytes[i] = (byte) i;
+        }
+        return bytes;
+    }
+
+    /** Verbatim copy of {@code PublishExistingCredential.splitIntoChunks}, kept independent of
+     *  {@code Cip170MetadataFactory}'s own chunking so the byte-order golden test above is not just
+     *  checking the factory against itself. */
+    private static byte[][] referenceSplitIntoChunks(byte[] data, int chunkSize) {
+        int numChunks = (data.length + chunkSize - 1) / chunkSize;
+        byte[][] chunks = new byte[numChunks][];
+        for (int i = 0; i < numChunks; i++) {
+            int start = i * chunkSize;
+            int end = Math.min(start + chunkSize, data.length);
+            chunks[i] = Arrays.copyOfRange(data, start, end);
+        }
+        return chunks;
+    }
+}
