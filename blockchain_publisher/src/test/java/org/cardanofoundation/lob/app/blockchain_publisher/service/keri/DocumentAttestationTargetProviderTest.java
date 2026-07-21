@@ -19,6 +19,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
@@ -255,6 +256,36 @@ class DocumentAttestationTargetProviderTest {
 
         verifyNoInteractions(vaultDocumentService, ipfsPublisher, blockchainReaderPublicApi);
         verify(freezeRepository, never()).save(any());
+    }
+
+    /**
+     * Coordinator review finding 2 (Task 13 fix round 1): the find-then-save in {@code
+     * prepareDigest} is check-then-act, not atomic — a concurrent caller can win the unique
+     * {@code (document_id, ceremony_id)} constraint race between this call's own (empty) existence
+     * check and its {@code save}. This simulates exactly that: the first {@code
+     * findByDocumentIdAndCeremonyId} call (the idempotency pre-check) finds nothing, {@code save}
+     * throws {@link DataIntegrityViolationException} (the concurrent winner's row landed first), and
+     * the provider must re-read and return THAT row's digest rather than propagate the exception.
+     */
+    @Test
+    void prepareDigestRecoversFromAConcurrentUniqueConstraintRaceByReturningTheWinnersDigest() {
+        DocumentAttestationFreezeEntity winner = new DocumentAttestationFreezeEntity();
+        winner.setDigestQb64("Ewinner-digest-from-concurrent-caller");
+        when(freezeRepository.findByDocumentIdAndCeremonyId("doc-1", "cer-1"))
+                .thenReturn(Optional.empty())  // this call's own idempotency pre-check: nothing yet
+                .thenReturn(Optional.of(winner)); // re-read after losing the save race: the winner's row
+        when(vaultDocumentService.loadForAttestation("doc-1", "user-1")).thenReturn(Either.right(vaultDocumentFixture()));
+        when(securityHelper.getCurrentUserId()).thenReturn("user-1");
+        when(ipfsPublisher.publish(anyString())).thenReturn(Either.right("bafy-cid-1"));
+        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(CHAIN_TIP));
+        when(freezeRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        Either<ProblemDetail, AttestationDigest> result = provider().prepareDigest("doc-1", "cer-1");
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().digestQb64()).isEqualTo("Ewinner-digest-from-concurrent-caller");
+        assertThat(result.get().metadataLabel()).isEqualTo("1447");
+        verify(freezeRepository, org.mockito.Mockito.times(2)).findByDocumentIdAndCeremonyId("doc-1", "cer-1");
     }
 
     @Test

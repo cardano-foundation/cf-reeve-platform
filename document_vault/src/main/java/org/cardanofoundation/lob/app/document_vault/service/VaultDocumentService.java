@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
+import org.hibernate.Hibernate;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
@@ -227,6 +228,17 @@ public class VaultDocumentService {
      * current {@code SecurityContextHolder} JWT rather than an arbitrary caller-supplied id — correct
      * here because both call sites (ceremony creation and the ATTEST step's synchronous
      * authorize-then-freeze) run in the same request thread as the user identified by that JWT.
+     *
+     * <p><b>Contract: the returned entity is fully initialized.</b> {@code blockchain_publisher}'s
+     * {@code DocumentAttestationTargetProvider} maps this entity (via {@link #toPublishCommand}) well
+     * after this method's own {@code @Transactional(readOnly = true)} boundary has committed and
+     * closed - a cross-module method call, not an HTTP request, so Spring Boot's
+     * {@code open-in-view} default (which only keeps a session open for the life of a servlet
+     * request) does not help here. {@code VaultDocumentEntity#getSlots()} is a
+     * {@code LAZY @ElementCollection}; it is eagerly touched below, inside this method's own
+     * transaction, precisely so callers may safely read it after this method returns - without that,
+     * the lazy collection would be a detached, uninitialized proxy the moment this transaction closes,
+     * throwing {@code LazyInitializationException} on first access outside a session.
      */
     @Transactional(readOnly = true)
     public Either<ProblemDetail, VaultDocumentEntity> loadForAttestation(String documentId, String userId) {
@@ -244,6 +256,10 @@ public class VaultDocumentService {
             return Either.left(VaultProblems.conflict(VaultProblems.ALREADY_PUBLISHED,
                     "Document %s is already published.".formatted(documentId)));
         }
+        // Eagerly initialize the LAZY slots collection inside this transaction - see the contract
+        // note above. Hibernate.initialize is a no-op for an already-initialized/non-proxy collection
+        // (e.g. in unit tests that stub the repository with a plain List), so this is always safe.
+        Hibernate.initialize(document.getSlots());
         return Either.right(document);
     }
 

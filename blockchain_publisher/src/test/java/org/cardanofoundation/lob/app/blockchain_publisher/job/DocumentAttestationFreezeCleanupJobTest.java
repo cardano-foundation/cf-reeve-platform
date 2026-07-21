@@ -57,6 +57,19 @@ class DocumentAttestationFreezeCleanupJobTest {
         verify(freezeRepository, never()).deleteAll(anyCollection());
     }
 
+    /** Coordinator review minor (Task 13 fix round 1): pins the retention window itself, not just
+     *  the delete behaviour around it — a future edit widening/narrowing the 7-day cutoff (or
+     *  reading from the wrong clock) would otherwise pass every other test in this class unnoticed. */
+    @Test
+    void sweepQueriesExactlySevenDaysBeforeNowAccordingToTheInjectedClock() {
+        ArgumentCaptor<LocalDateTime> cutoffCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        when(freezeRepository.findByCreatedAtBefore(cutoffCaptor.capture())).thenReturn(List.of());
+
+        job.sweep();
+
+        assertThat(cutoffCaptor.getValue()).isEqualTo(LocalDateTime.now(FIXED_CLOCK).minusDays(7));
+    }
+
     @Test
     void sweepDeletesOnlyFreezeRowsOfFailedOrExpiredCeremonies() {
         DocumentAttestationFreezeEntity failedCeremonyFreeze = freeze("f1", "doc-1", "cer-failed");

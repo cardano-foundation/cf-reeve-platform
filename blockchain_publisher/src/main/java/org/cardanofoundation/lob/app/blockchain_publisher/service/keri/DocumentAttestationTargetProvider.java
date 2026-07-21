@@ -12,6 +12,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
@@ -60,6 +61,21 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
  * recomputing (design §5.3) - the only non-deterministic input ({@code
  * DocumentMetadataSerialiser}'s wall-clock {@code metadata.timestamp}) is captured once here and
  * never regenerated.
+ *
+ * <p><b>Idempotency under concurrency</b> (coordinator review, Task 13 fix round 1): {@link
+ * #prepareDigest}'s existing-row check, then IPFS/chain work, then {@link
+ * DocumentAttestationFreezeRepository#save save} is check-then-act, not atomic. In today's only
+ * caller this is serialized upstream: {@code keri_attestation}'s {@code CeremonyService#beginStep}
+ * takes a {@code PESSIMISTIC_WRITE} lock on the ceremony row (via {@code
+ * KeriAttestationCeremonyRepository#findByIdForUpdate}) before {@code KeriAttestService#startAttest}
+ * ever calls {@link #prepareDigest}, so two concurrent attest requests for the SAME ceremony cannot
+ * both reach this method at once. That is an undocumented cross-module invariant this class does not
+ * itself enforce or control, so a local defense also exists: the unique constraint on {@code
+ * (document_id, ceremony_id)} is the actual source of truth, and a {@link
+ * DataIntegrityViolationException} on save (a concurrent caller — via a future caller of this method,
+ * a retry path outside the upstream lock, or the lock invariant simply changing — won the race first)
+ * is caught and turned into a re-read of the winner's row, so this method is genuinely idempotent
+ * rather than merely idempotent-when-nothing-races.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -144,18 +160,41 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
                         freeze.setEnvelopeSha256(envelopeSha256);
                         freeze.setCreatedAt(LocalDateTime.now(clock));
 
-                        freezeRepository.save(freeze);
-
-                        log.info("Froze DOCUMENT attestation metadata for ceremony:{}, document:{}, cid:{}",
-                                ceremonyId, vaultDocument.getId(), cid);
-
-                        return Either.right(new AttestationDigest(digestQb64, METADATA_LABEL));
+                        return saveFreeze(freeze, digestQb64);
                     } catch (CborException e) {
                         log.error("Error CBOR-serialising frozen document attestation metadata for ceremony:{}, document:{}",
                                 ceremonyId, vaultDocument.getId(), e);
                         return Either.left(cborSerialisationErrorProblem(e));
                     }
                 }));
+    }
+
+    /**
+     * Local idempotency defense (class javadoc): the unique {@code (document_id, ceremony_id)}
+     * constraint is the actual source of truth, not the upstream ceremony-row lock. A {@link
+     * DataIntegrityViolationException} here means a concurrent call already committed the freeze
+     * this call was about to insert — re-read and return THAT row's digest rather than propagating,
+     * so a caller never sees an exception for a condition this method's own contract says is
+     * idempotent.
+     */
+    private Either<ProblemDetail, AttestationDigest> saveFreeze(DocumentAttestationFreezeEntity freeze, String digestQb64) {
+        try {
+            freezeRepository.save(freeze);
+
+            log.info("Froze DOCUMENT attestation metadata for ceremony:{}, document:{}, cid:{}",
+                    freeze.getCeremonyId(), freeze.getDocumentId(), freeze.getIpfsCid());
+
+            return Either.right(new AttestationDigest(digestQb64, METADATA_LABEL));
+        } catch (DataIntegrityViolationException e) {
+            log.info("Lost the freeze unique-constraint race for document:{}, ceremony:{} - "
+                            + "returning the concurrent winner's digest instead",
+                    freeze.getDocumentId(), freeze.getCeremonyId());
+
+            return freezeRepository.findByDocumentIdAndCeremonyId(freeze.getDocumentId(), freeze.getCeremonyId())
+                    .<Either<ProblemDetail, AttestationDigest>>map(winner ->
+                            Either.right(new AttestationDigest(winner.getDigestQb64(), METADATA_LABEL)))
+                    .orElseGet(() -> Either.left(concurrentFreezeRaceProblem(freeze.getDocumentId(), freeze.getCeremonyId())));
+        }
     }
 
     private static String sha256Hex(String content) {
@@ -177,6 +216,16 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
     private static ProblemDetail cborSerialisationErrorProblem(CborException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Error serialising frozen document metadata to cbor: %s".formatted(e.getMessage()));
+        problem.setTitle(ERROR_FREEZING_DOCUMENT_METADATA);
+        return problem;
+    }
+
+    /** Only reachable if the unique-constraint race (see {@link #saveFreeze}) somehow leaves no row
+     *  behind to re-read - not expected in practice, kept as a safe, non-throwing fallback. */
+    private static ProblemDetail concurrentFreezeRaceProblem(String documentId, String ceremonyId) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "A concurrent attestation freeze for document %s / ceremony %s was detected but could not be re-read."
+                        .formatted(documentId, ceremonyId));
         problem.setTitle(ERROR_FREEZING_DOCUMENT_METADATA);
         return problem;
     }
