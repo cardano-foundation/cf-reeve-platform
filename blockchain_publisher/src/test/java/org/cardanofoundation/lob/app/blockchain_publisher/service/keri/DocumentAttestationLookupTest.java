@@ -142,6 +142,25 @@ class DocumentAttestationLookupTest {
     }
 
     @Test
+    void loadForDispatchFailsClosedWhenTheFreezeDigestDisagreesButTheConsumedDigestAgrees() {
+        MetadataMap map = sampleMap();
+        byte[] frozenBytes = frozenBytesFor(map);
+        String digest = cip170MetadataFactory.digestOf(map);
+        // The freeze row's own stored digest disagrees with the recomputed one, even though the
+        // ceremony's consumed digest (what the wallet actually anchored) agrees - the recomputed
+        // digest must equal BOTH, not just one of them.
+        when(freezeRepository.findByDocumentIdAndCeremonyId(DOCUMENT_ID, CEREMONY_ID))
+                .thenReturn(Optional.of(freeze(frozenBytes, "Ewrong-freeze-digest", "bafy-cid-1")));
+        when(attestationConsumptionApi.findConsumed(CEREMONY_ID)).thenReturn(Optional.of(consumed(digest)));
+
+        Either<ProblemDetail, AttestedDispatchData> result = lookup().loadForDispatch(DOCUMENT_ID, CEREMONY_ID);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(VaultProblems.ATTESTED_METADATA_MISMATCH);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY.value());
+    }
+
+    @Test
     void loadForDispatchFailsClosedWhenTheConsumedDigestDisagreesWithTheFreeze() {
         MetadataMap map = sampleMap();
         byte[] frozenBytes = frozenBytesFor(map);

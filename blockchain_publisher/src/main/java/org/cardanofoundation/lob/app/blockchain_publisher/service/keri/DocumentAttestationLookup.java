@@ -66,6 +66,26 @@ public class DocumentAttestationLookup {
     public record AttestedDispatchData(MetadataMap frozenMetadataMap, String ipfsCid, ConsumedAttestation consumed) {
     }
 
+    /**
+     * Runs the three checks in the class javadoc's ordered list (missing freeze, non-consumed
+     * ceremony, digest mismatch) and nothing else.
+     *
+     * <p><b>Deliberately no freeze-age check here.</b> {@code DocumentAttestationFreezeGuard} (Task
+     * 14, design §5.2) is the ONLY place a freeze's age is ever checked - once, synchronously, inside
+     * {@code VaultDocumentService#publish}'s row-locked transaction, immediately before {@code
+     * validateAndConsume} flips the ceremony to {@code CONSUMED} (and the document to {@code
+     * PUBLISHED}). By the time a dispatch record reaches this method, that check has already run and
+     * passed; re-running it here would be redundant at best. Worse, it would be actively wrong: design
+     * §5.2's own retention rule (the F10 fix - {@code CeremonyCleanupJob}'s sweep excludes {@code
+     * CONSUMED} ceremonies from purge specifically so a late dispatch retry can still read them) means
+     * a freeze backing a {@code CONSUMED} ceremony is kept forever on purpose. A dispatcher that falls
+     * behind, or a retry sweep that fires after {@code keri-attestation.freeze-max-age} has elapsed,
+     * must still be able to publish an already-committed attestation - an age check here would turn a
+     * transient dispatch delay into a permanently stuck document (already {@code PUBLISHED}
+     * user-side, never actually reaching L1). Freeze age is therefore a one-time, consume-time gate on
+     * whether an attestation may be *accepted*, never a recurring gate on whether an already-accepted
+     * one may still be *dispatched*.
+     */
     public Either<ProblemDetail, AttestedDispatchData> loadForDispatch(String documentId, String ceremonyId) {
         Optional<DocumentAttestationFreezeEntity> freezeM =
                 freezeRepository.findByDocumentIdAndCeremonyId(documentId, ceremonyId);

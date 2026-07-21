@@ -405,7 +405,8 @@ public record RequiredSteps(boolean oobi, boolean credential, boolean authBegin)
 // 2. lookup.findConsumed(ceremonyId): not CONSUMED → Left(ATTESTATION_FREEZE_MISSING)
 // 3. MetadataMap frozen = deserialize(freeze.frozenMetadataCbor)   // CBORMetadataMap over CborSerializationUtil.deserialize
 // 4. recomputed = cip170MetadataFactory.digestOf(frozen); if (!recomputed.equals(freeze.digestQb64)) → Left(ATTESTED_METADATA_MISMATCH)
-// 5. freeze age > freezeMaxAge → Left(ATTESTED_METADATA_MISMATCH with age detail)
+// 5. NO age check at dispatch (adjudicated): age is enforced once at consume time (§5.2, Task 14's
+//    guard); a CONSUMED attestation must remain dispatchable indefinitely (Codex F10 retention decision)
 // 6. skip IPFS re-upload (reuse freeze.ipfsCid), skip fresh serialiseToMetadataMap;
 //    metadata.put(1447, frozen); metadata.put(170, cip170MetadataFactory.attestMap(att.aid(), att.digestQb64(), att.kelSequence()))
 // 7. creationSlot for API3BlockchainTransaction = FRESH chain tip (dispatcher aging), not freeze.metadataCreationSlot
