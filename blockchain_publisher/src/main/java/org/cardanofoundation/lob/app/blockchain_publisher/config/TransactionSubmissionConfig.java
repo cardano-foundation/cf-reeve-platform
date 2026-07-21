@@ -22,6 +22,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.job.DocumentAttestatio
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationFreezeGuard;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationTargetProvider;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
@@ -38,6 +39,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
@@ -200,6 +202,24 @@ public class TransactionSubmissionConfig {
                 cip170MetadataFactory,
                 documentAttestationFreezeRepository,
                 securityHelper,
+                clock
+        );
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
+    public DocumentAttestationFreezeGuard documentAttestationFreezeGuard(
+            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
+            DocumentConverter documentConverter,
+            DocumentIpfsSerialiser documentIpfsSerialiser,
+            KeriAttestationProperties keriAttestationProperties,
+            Clock clock
+    ) {
+        return new DocumentAttestationFreezeGuard(
+                documentAttestationFreezeRepository,
+                documentConverter,
+                documentIpfsSerialiser,
+                keriAttestationProperties,
                 clock
         );
     }

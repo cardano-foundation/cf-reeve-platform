@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,7 +31,18 @@ public class DocumentVaultContextIntegrationTest {
     @EnableAutoConfiguration
     @EnableJpaRepositories("org.cardanofoundation.lob")
     @EntityScan("org.cardanofoundation.lob")
-    @ComponentScan(basePackages = "org.cardanofoundation.lob")
+    // Task 14: document_vault now depends on keri_attestation (compile-time, for the
+    // AttestationConsumptionApi port) but must keep working with that module fully "disabled" (design
+    // §3.4) - this test context never sets lob.keri-attestation.enabled, so keri_attestation's own
+    // KeriAttestationModuleConfig stays inert (its @ConditionalOnProperty gate never opens). Excluding
+    // the package here too keeps this broad, test-only scan from reaching directly into
+    // keri_attestation's plain (unconditional) @Component classes (e.g. CeremonyCleanupJob) the way a
+    // properly-scoped composing application never would - it only ever picks up a module's
+    // XxxModuleConfig entry point (org.cardanofoundation.lob.app.config), never the module's internals
+    // directly, and lets that module's own nested conditional @ComponentScan be the sole gate.
+    @ComponentScan(basePackages = "org.cardanofoundation.lob",
+            excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX,
+                    pattern = "org\\.cardanofoundation\\.lob\\.app\\.keri_attestation\\..*"))
     @Import({TestContainerConfig.class})
     public static class TestConfig {
 

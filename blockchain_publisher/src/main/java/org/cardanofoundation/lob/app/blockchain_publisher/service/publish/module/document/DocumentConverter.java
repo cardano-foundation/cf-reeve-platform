@@ -29,6 +29,7 @@ public class DocumentConverter {
         entity.setPayloadNonce(command.payloadNonce());
         entity.setCiphertextBase64(command.ciphertextBase64());
         entity.setSlots(convertSlots(command.slots()));
+        entity.setAttestationCeremonyId(command.attestationCeremonyId());
         entity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
                 .publishStatus(BlockchainPublishStatus.STORED)
                 .build()));

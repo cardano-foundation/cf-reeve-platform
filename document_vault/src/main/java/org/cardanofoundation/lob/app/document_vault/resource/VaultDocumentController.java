@@ -27,6 +27,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
+import org.cardanofoundation.lob.app.document_vault.domain.request.PublishDocumentRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 
@@ -87,10 +88,14 @@ public class VaultDocumentController {
         return Responses.respondDelete(documentService.delete(documentId));
     }
 
-    @Operation(description = "Publish a draft document: encrypted envelope to IPFS, manifest to Cardano L1 (label 1447, type DOCUMENT). Requires IPFS; locks the document forever. Manager or admin only.")
+    @Operation(description = "Publish a draft document: encrypted envelope to IPFS, manifest to Cardano L1 (label 1447, type DOCUMENT). "
+            + "Requires IPFS; locks the document forever. Manager or admin only. Optional body may carry a completed KERI "
+            + "wallet-attestation ceremony id to consume as part of the publish (design §5.1); omit the body (or the field) for a plain publish.")
     @PostMapping(value = "/documents/{documentId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
-    public ResponseEntity<Object> publish(@PathVariable String documentId) {
-        return Responses.respond(documentService.publish(documentId), HttpStatus.OK);
+    public ResponseEntity<Object> publish(@PathVariable String documentId,
+                                          @Valid @RequestBody(required = false) PublishDocumentRequest request) {
+        String attestationCeremonyId = request == null ? null : request.getAttestationCeremonyId();
+        return Responses.respond(documentService.publish(documentId, attestationCeremonyId), HttpStatus.OK);
     }
 }

@@ -93,6 +93,13 @@ public class DocumentEntity extends CommonDateOnlyLockableEntity implements Pers
     @Column(name = "ipfs_cid")
     private String ipfsCid;
 
+    /** The KERI wallet-attestation ceremony consumed by document_vault's publish (design §5.1, Task
+     *  14), carried here via {@code DocumentPublishCommand#attestationCeremonyId}. NULL for every
+     *  plain (non-attested) publish, which remains the default and overwhelmingly common path. */
+    @Nullable
+    @Column(name = "attestation_ceremony_id", length = 64)
+    private String attestationCeremonyId;
+
     /** Recipient slots - crypto material only, no identifiers of any kind (spec B5 #3). */
     @Builder.Default
     @ElementCollection(fetch = FetchType.LAZY)

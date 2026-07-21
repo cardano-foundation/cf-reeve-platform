@@ -46,6 +46,8 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentUploaded
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
+import org.cardanofoundation.lob.app.keri_attestation.domain.core.ConsumedAttestation;
+import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -73,6 +75,23 @@ public class VaultDocumentService {
     private final ApplicationEventPublisher eventPublisher;
     /** Optional: only present when blockchain_publisher is wired up with an IPFS publisher in this deployment. */
     private final ObjectProvider<IpfsAvailability> ipfsAvailability;
+    /**
+     * Optional: only present when blockchain_publisher implements it (conditional on
+     * {@code lob.keri-attestation.enabled}, design §5.1, Task 14). A plain (bodiless) publish never
+     * consults this — it is read only when {@code publish} is called with an attestationCeremonyId.
+     */
+    private final ObjectProvider<AttestationFreezeGuard> attestationFreezeGuardProvider;
+    /**
+     * Optional: only present when keri_attestation is enabled (design §5.1, Task 14). Same
+     * bodiless-publish-never-touches-this rule as {@link #attestationFreezeGuardProvider}.
+     */
+    private final ObjectProvider<AttestationConsumptionApi> attestationConsumptionApiProvider;
+
+    /** {@code AttestationTargetProvider#targetType()} for documents (blockchain_publisher's
+     *  {@code DocumentAttestationTargetProvider.TARGET_TYPE}) — duplicated as a literal rather than
+     *  imported: document_vault must not depend on blockchain_publisher (it is the other way around),
+     *  so this string is the one place the two modules must be kept in sync by convention. */
+    private static final String ATTESTATION_TARGET_TYPE_DOCUMENT = "DOCUMENT";
 
     @Value("${lob.document_vault.max-document-bytes:10485760}")
     private long maxDocumentBytes;
@@ -167,6 +186,39 @@ public class VaultDocumentService {
     }
 
     public Either<ProblemDetail, DocumentView> publish(String documentId) {
+        return publish(documentId, null);
+    }
+
+    /**
+     * Design §5.1 (Task 14): with a null (or blank — normalized to null, same treatment
+     * {@link #list} gives its free-text {@code q} parameter) {@code attestationCeremonyId} this is
+     * byte-for-byte the pre-Task-14 {@code publish(String)} — the attested branch below is skipped
+     * entirely, so a bodiless publish never touches {@link #attestationFreezeGuardProvider} or
+     * {@link #attestationConsumptionApiProvider}, not even to probe whether they are wired up.
+     *
+     * <p>With a non-null ceremony id, all of the following run INSIDE this same row-locked
+     * transaction, after the existing org/DRAFT/IPFS checks and before the document is flipped to
+     * {@code PUBLISHED} — any failure returns left with the document left untouched (still DRAFT,
+     * no event fired):
+     * <ol>
+     *   <li>Both {@link AttestationFreezeGuard} and {@link AttestationConsumptionApi} must be wired
+     *       up (module enabled) — otherwise {@code ATTESTATION_UNAVAILABLE} (422).</li>
+     *   <li>{@link AttestationFreezeGuard#verifyFreshness} — the frozen envelope fingerprint (and
+     *       its age) must still be valid (design §5.2).</li>
+     *   <li>{@link AttestationConsumptionApi#validateAndConsume} — ceremony ownership/state/target/
+     *       binding-version checks plus the compare-and-set to {@code CONSUMED}.</li>
+     * </ol>
+     * Only once all three pass is {@code attestationCeremonyId} persisted on the document row and
+     * carried into the emitted {@link DocumentPublishCommand} (which
+     * {@code DocumentDispatchRetryJob}'s re-emission automatically carries forward too, via the same
+     * {@link #toPublishCommand} factory).
+     */
+    public Either<ProblemDetail, DocumentView> publish(String documentId, @Nullable String attestationCeremonyIdOrBlank) {
+        // A blank string (e.g. a client sending {"attestationCeremonyId": ""}) is treated exactly like
+        // an omitted field, not like a real ceremony id to look up — same normalization VaultDocumentService
+        // already applies to list()'s free-text q parameter.
+        String attestationCeremonyId = (attestationCeremonyIdOrBlank == null || attestationCeremonyIdOrBlank.isBlank())
+                ? null : attestationCeremonyIdOrBlank;
         // Row lock FIRST (findByIdForUpdate, not findById): two concurrent publish calls must not
         // both observe DRAFT and both fire the irreversible DocumentPublishCommand. Under the
         // class-level @Transactional, a second concurrent caller blocks here until the first commits,
@@ -194,6 +246,14 @@ public class VaultDocumentService {
                     "Document publishing requires a configured IPFS publisher; none is available in this deployment."));
         }
 
+        if (attestationCeremonyId != null) {
+            Either<ProblemDetail, Void> attestation = consumeAttestation(document, attestationCeremonyId);
+            if (attestation.isLeft()) {
+                return Either.left(attestation.getLeft());
+            }
+            document.setAttestationCeremonyId(attestationCeremonyId);
+        }
+
         document.setStatus(VaultDocumentStatus.PUBLISHED);
         document.setPublishedAt(LocalDateTime.now());
         document.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
@@ -202,6 +262,35 @@ public class VaultDocumentService {
         eventPublisher.publishEvent(toPublishCommand(saved));
 
         return Either.right(toView(saved));
+    }
+
+    /**
+     * The fail-closed attested-publish gate (design §5.1 step 2, Task 14): freshness guard, then
+     * ceremony consumption. Neither the document nor the ceremony is touched on any left path — the
+     * document is still DRAFT (its status flip happens only after this returns right, back in
+     * {@link #publish(String, String)}), and {@code validateAndConsume}'s compare-and-set means the
+     * ceremony itself only ever advances to {@code CONSUMED} on the right path.
+     */
+    private Either<ProblemDetail, Void> consumeAttestation(VaultDocumentEntity document, String attestationCeremonyId) {
+        AttestationFreezeGuard freezeGuard = attestationFreezeGuardProvider.getIfAvailable();
+        AttestationConsumptionApi consumptionApi = attestationConsumptionApiProvider.getIfAvailable();
+        if (freezeGuard == null || consumptionApi == null) {
+            return Either.left(VaultProblems.unprocessable(VaultProblems.ATTESTATION_UNAVAILABLE,
+                    "Attested publish requires the keri_attestation module; it is not available in this deployment."));
+        }
+
+        Optional<ProblemDetail> freshnessProblem = freezeGuard.verifyFreshness(document, attestationCeremonyId);
+        if (freshnessProblem.isPresent()) {
+            return Either.left(freshnessProblem.get());
+        }
+
+        Either<ProblemDetail, ConsumedAttestation> consumed = consumptionApi.validateAndConsume(
+                attestationCeremonyId, ATTESTATION_TARGET_TYPE_DOCUMENT, document.getId(), securityHelper.getCurrentUserId());
+        if (consumed.isLeft()) {
+            return Either.left(consumed.getLeft());
+        }
+
+        return Either.right(null);
     }
 
     /**
@@ -283,7 +372,8 @@ public class VaultDocumentService {
                 Base64.getEncoder().encodeToString(document.getCiphertext()),
                 document.getSlots().stream()
                         .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek()))
-                        .toList());
+                        .toList(),
+                document.getAttestationCeremonyId());
     }
 
     /**

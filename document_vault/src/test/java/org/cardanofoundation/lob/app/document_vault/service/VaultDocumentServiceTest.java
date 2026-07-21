@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
@@ -33,7 +34,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -58,6 +58,8 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentEnvelope
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentUploadedView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
+import org.cardanofoundation.lob.app.keri_attestation.domain.core.ConsumedAttestation;
+import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
@@ -85,12 +87,27 @@ class VaultDocumentServiceTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private ObjectProvider<IpfsAvailability> ipfsAvailability;
+    @Mock
+    private ObjectProvider<AttestationFreezeGuard> attestationFreezeGuardProvider;
+    @Mock
+    private ObjectProvider<AttestationConsumptionApi> attestationConsumptionApiProvider;
+    @Mock
+    private AttestationFreezeGuard attestationFreezeGuard;
+    @Mock
+    private AttestationConsumptionApi attestationConsumptionApi;
 
-    @InjectMocks
+    // Deliberately NOT @InjectMocks: three ObjectProvider<...> fields erase to the same raw
+    // ObjectProvider type, and letting Mockito's ambiguous same-type constructor matching pick which
+    // mock goes where is exactly the kind of "worked by accident" this codebase avoids elsewhere
+    // (see VaultDocumentService#loadForAttestation's javadoc on a similar theme). Explicit
+    // construction removes the ambiguity entirely.
     private VaultDocumentService service;
 
     @BeforeEach
     void setUp() {
+        service = new VaultDocumentService(documentRepository, keyLookupService, securityHelper,
+                organisationPublicApi, eventPublisher, ipfsAvailability,
+                attestationFreezeGuardProvider, attestationConsumptionApiProvider);
         ReflectionTestUtils.setField(service, "maxDocumentBytes", 10_485_760L);
         ReflectionTestUtils.setField(service, "maxSlots", 64);
         // lenient: STRICT_STUBS would fail early-return tests that never consume these
@@ -485,6 +502,142 @@ class VaultDocumentServiceTest {
         assertTrue(result.isLeft());
         assertEquals(403, result.getLeft().getStatus());
         verify(ipfsAvailability, never()).getIfAvailable();
+    }
+
+    // ==================== attested publish (design §5.1, Task 14) ====================
+
+    /** Bodiless publish (the pre-Task-14 overload) must never even probe whether the attestation
+     *  providers are wired up — the ceremony branch is skipped entirely when the id is null. */
+    @Test
+    void publishWithoutCeremonyIdNeverTouchesAttestationProviders() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+
+        assertTrue(result.isRight());
+        verifyNoInteractions(attestationFreezeGuardProvider, attestationConsumptionApiProvider);
+        assertNull(doc.getAttestationCeremonyId());
+    }
+
+    /** A blank ceremony id (e.g. a client sending {"attestationCeremonyId": ""}) must be treated
+     *  exactly like an omitted one, not routed into the attested-publish gate. */
+    @Test
+    void publishWithBlankCeremonyIdBehavesLikeNoCeremonyId() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "   ");
+
+        assertTrue(result.isRight());
+        verifyNoInteractions(attestationFreezeGuardProvider, attestationConsumptionApiProvider);
+        assertNull(doc.getAttestationCeremonyId());
+    }
+
+    @Test
+    void publishWithCeremonyIdAndNoAttestationProvidersReturnsAttestationUnavailableAndStaysDraft() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        // attestationFreezeGuardProvider/attestationConsumptionApiProvider.getIfAvailable() unstubbed -> null
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isLeft());
+        assertEquals(422, result.getLeft().getStatus());
+        assertEquals(VaultProblems.ATTESTATION_UNAVAILABLE, result.getLeft().getTitle());
+        assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void publishWithCeremonyIdWhenOnlyFreezeGuardIsAvailableStillReturnsAttestationUnavailable() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
+        // attestationConsumptionApiProvider.getIfAvailable() unstubbed -> null
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ATTESTATION_UNAVAILABLE, result.getLeft().getTitle());
+        verifyNoInteractions(attestationFreezeGuard);
+        assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void publishWithCeremonyIdWhenFreezeGuardRejectsPropagatesProblemAndStaysDraft() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
+        when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
+        ProblemDetail contentChanged = VaultProblems.unprocessable(VaultProblems.ATTESTED_CONTENT_CHANGED,
+                "Document doc1 content changed since ceremony cer-1 attested it.");
+        when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.of(contentChanged));
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ATTESTED_CONTENT_CHANGED, result.getLeft().getTitle());
+        assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
+        assertNull(doc.getAttestationCeremonyId());
+        verifyNoInteractions(attestationConsumptionApi);
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void publishWithCeremonyIdWhenConsumptionFailsPropagatesProblemAndStaysDraft() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
+        when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
+        when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
+        ProblemDetail ceremonyExpired = VaultProblems.unprocessable("CEREMONY_EXPIRED", "Ceremony cer-1 has expired.");
+        when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
+                .thenReturn(Either.left(ceremonyExpired));
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isLeft());
+        assertEquals("CEREMONY_EXPIRED", result.getLeft().getTitle());
+        assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
+        assertNull(doc.getAttestationCeremonyId());
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void publishWithCeremonyIdHappyPathPersistsCeremonyIdAndEmitsCommand() {
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
+        when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
+        when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
+        when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
+                .thenReturn(Either.right(new ConsumedAttestation("cer-1", "aid-1", "Edigest", "1447", "0")));
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isRight());
+        assertEquals(VaultDocumentStatus.PUBLISHED, result.get().status());
+        assertEquals("cer-1", doc.getAttestationCeremonyId());
+
+        ArgumentCaptor<DocumentPublishCommand> command = ArgumentCaptor.forClass(DocumentPublishCommand.class);
+        verify(eventPublisher).publishEvent(command.capture());
+        assertEquals("cer-1", command.getValue().attestationCeremonyId());
     }
 
     @Test

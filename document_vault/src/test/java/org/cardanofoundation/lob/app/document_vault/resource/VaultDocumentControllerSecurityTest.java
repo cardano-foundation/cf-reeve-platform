@@ -7,6 +7,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.document_vault.domain.request.PublishDocumentRequest;
+
 /**
  * Why reflection and not a live 403: method security is switched on by support's SecurityConfig,
  * which is @ConditionalOnProperty(keycloak.enabled=true). The module's tests run with Keycloak
@@ -21,7 +23,7 @@ class VaultDocumentControllerSecurityTest {
     @Test
     void publishIsRestrictedToManagerAndAdmin() throws NoSuchMethodException {
         PreAuthorize annotation = VaultDocumentController.class
-                .getMethod("publish", String.class)
+                .getMethod("publish", String.class, PublishDocumentRequest.class)
                 .getAnnotation(PreAuthorize.class);
 
         assertNotNull(annotation, "publish must be role-gated: anchoring on-chain is irreversible");

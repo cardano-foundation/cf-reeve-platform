@@ -128,6 +128,16 @@ public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<
     @Column(name = "ipfs_cid")
     private String ipfsCid;
 
+    /**
+     * The KERI wallet-attestation ceremony consumed by {@code VaultDocumentService#publish} (design
+     * §5.1, Task 14) — set only when publish was called with an {@code attestationCeremonyId} and
+     * every check (freshness guard, {@code AttestationConsumptionApi#validateAndConsume}) passed.
+     * NULL for every plain publish, which remains the default and overwhelmingly common path.
+     */
+    @Nullable
+    @Column(name = "attestation_ceremony_id", length = 64)
+    private String attestationCeremonyId;
+
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "document_vault_document_slot", joinColumns = @JoinColumn(name = "document_id"))
     @OrderColumn(name = "slot_index")

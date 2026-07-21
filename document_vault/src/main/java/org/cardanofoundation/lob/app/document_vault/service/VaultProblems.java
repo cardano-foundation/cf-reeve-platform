@@ -26,6 +26,21 @@ public final class VaultProblems {
     public static final String DOCUMENT_PUBLISHED_IMMUTABLE = "DOCUMENT_PUBLISHED_IMMUTABLE";
     public static final String ALREADY_PUBLISHED = "ALREADY_PUBLISHED";
     public static final String DOCUMENT_PUBLISHING_UNAVAILABLE = "DOCUMENT_PUBLISHING_UNAVAILABLE";
+    // KERI wallet-attestation (design §5.1/§5.2, Task 14): an attested publish (a request body
+    // carrying attestationCeremonyId) fails closed on any of these.
+    /** keri_attestation's consumption/freeze-guard ports are not wired up in this deployment
+     *  (module disabled) — a plain (bodiless) publish never reaches this check. */
+    public static final String ATTESTATION_UNAVAILABLE = "ATTESTATION_UNAVAILABLE";
+    /** No {@code document_attestation_freeze} row for this (document, ceremony) pair — impossible
+     *  by construction unless the ceremony never reached ATTEST, so this should never be reachable
+     *  in practice; still fails closed rather than falling back to a plain publish. */
+    public static final String ATTESTATION_FREEZE_MISSING = "ATTESTATION_FREEZE_MISSING";
+    /** The envelope's re-serialised SHA-256 no longer matches the freeze's snapshot fingerprint —
+     *  the document changed after ATTEST; re-attest required. */
+    public static final String ATTESTED_CONTENT_CHANGED = "ATTESTED_CONTENT_CHANGED";
+    /** The freeze is older than keri_attestation's configured {@code freeze-max-age} — the chain tip
+     *  and IPFS upload it captured are considered too stale to publish against; re-attest required. */
+    public static final String ATTESTED_METADATA_MISMATCH = "ATTESTED_METADATA_MISMATCH";
     // Key cards
     public static final String CARD_CONTAINS_PRIVATE_KEY = "CARD_CONTAINS_PRIVATE_KEY";
     public static final String UNSUPPORTED_CARD_VERSION = "UNSUPPORTED_CARD_VERSION";
