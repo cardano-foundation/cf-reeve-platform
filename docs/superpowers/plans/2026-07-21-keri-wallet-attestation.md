@@ -143,7 +143,8 @@ public record RequiredSteps(boolean oobi, boolean credential, boolean authBegin)
 //        CeremonyState expectedState, CeremonyState waitingState, boolean retry)   // CAS + cooldown + generation bump on retry
 //   void completeStep(String ceremonyId, int expectedGeneration, CeremonyState from, CeremonyState to,
 //        java.util.function.Consumer<KeriAttestationCeremonyEntity> mutator)        // CAS; drops silently on stale generation
-//   void failStep(String ceremonyId, int expectedGeneration, String errorTitle, String errorDetail)
+//   void failStep(String ceremonyId, int expectedGeneration, CeremonyState expectedWaitingState,
+//        String errorTitle, String errorDetail)   // CAS on (state, generation), same as completeStep
 // KeriAttestationProblems: titles CEREMONY_NOT_FOUND, CEREMONY_FORBIDDEN, CEREMONY_INVALID_STATE,
 //   CEREMONY_EXPIRED, CEREMONY_LIMIT_REACHED, STEP_COOLDOWN, IDENTITY_NOT_LINKED, IDENTITY_RELINKED,
 //   KERI_WALLET_TIMEOUT, KERI_STEP_TIMED_OUT, CREDENTIAL_REJECTED, AUTH_BEGIN_ROLLED_BACK,
