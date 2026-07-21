@@ -318,6 +318,14 @@ public class CeremonyService implements AttestationConsumptionApi {
         // (or the identity has otherwise dropped its binding entirely) since this ceremony was created,
         // which is the same "you're no longer the identity this ceremony was created for" problem as an
         // outright relink, just without a binding_version left to compare against.
+        //
+        // Deliberately a plain (unlocked) read, not KeriIdentityLinkRepository#findByUserIdForUpdate
+        // (F3 fix, design §4.7): this method never writes to the identity link, only reads its
+        // bindingVersion/aid to decide the CEREMONY's own transition — the ceremony row itself is
+        // already row-locked above, and the write this method performs is entirely on that ceremony row,
+        // never on the link. The lock exists to serialize concurrent WRITERS of the link row (relink vs.
+        // the async persist*IfIdentityStillCurrent mutators); a read-only consumer of the link's current
+        // value has nothing to serialize against and doesn't need it.
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
         if (linkOpt.isEmpty() || linkOpt.get().getBindingVersion() != ceremony.getBindingVersion()) {
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.IDENTITY_RELINKED,
@@ -344,6 +352,13 @@ public class CeremonyService implements AttestationConsumptionApi {
      * about to be) is never advanced using the new identity's progress either. Never touches
      * {@code attemptGeneration} — this is not a step transition, just catching the ceremony's resting
      * state up to what the identity link already reflects.
+     *
+     * <p>The link read below is deliberately a plain (unlocked) {@code findById}, not
+     * {@code KeriIdentityLinkRepository#findByUserIdForUpdate} (F3 fix, design §4.7): like
+     * {@link #validateAndConsume}, this method only ever reads the link to derive a floor for the
+     * CEREMONY row (already row-locked by every caller of this private method) — it never writes to the
+     * link, so it has nothing to serialize against the link row's actual writers (relink, and the async
+     * {@code persist*IfIdentityStillCurrent} mutators).
      */
     private void advanceToLinkDerivedFloor(KeriAttestationCeremonyEntity ceremony) {
         if (!LINK_ADVANCEABLE_STATES.contains(ceremony.getState())) {

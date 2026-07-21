@@ -387,7 +387,10 @@ class KeriCredentialServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         KeriIdentityLinkEntity initialLink = link(LINKED_AID);
         KeriIdentityLinkEntity freshLink = link(LINKED_AID);
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(freshLink));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink));
+        // F3 fix: persistCredentialIfIdentityStillCurrent's re-fetch is row-locked, a different mocked
+        // method than awaitPresentation's own initial (plain) lookup above.
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(freshLink));
 
         when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
@@ -673,7 +676,10 @@ class KeriCredentialServiceTest {
         initialLink.setBindingVersion(1);
         KeriIdentityLinkEntity relinkedLink = link(OTHER_AID);
         relinkedLink.setBindingVersion(2);
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(relinkedLink));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink));
+        // F3 fix: persistCredentialIfIdentityStillCurrent's re-fetch is row-locked, a different mocked
+        // method than awaitPresentation's own initial (plain) lookup above.
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(relinkedLink));
 
         when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));

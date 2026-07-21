@@ -323,10 +323,16 @@ public class KeriAuthBeginService {
      * {@code KeriCredentialService#awaitPresentation} uses for the identical race (a relink landing
      * mid-flight must never let a stale write re-attach authority data to what is now a different
      * identity).
+     *
+     * <p>The re-fetch is row-locked (F3 fix) via
+     * {@link org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository#findByUserIdForUpdate}
+     * rather than a plain {@code findById}: this write and {@code KeriOobiService}'s relink write race
+     * the same row, and without the lock the two could interleave into a row that is a mix of the old
+     * and new identity.
      */
     private void persistAuthBeginIfIdentityStillCurrent(String userId, int expectedBindingVersion, String txHash,
             Long blockNumber) {
-        identityLinkRepository.findById(userId).ifPresent(freshLink -> {
+        identityLinkRepository.findByUserIdForUpdate(userId).ifPresent(freshLink -> {
             if (freshLink.getBindingVersion() != expectedBindingVersion) {
                 log.warn("Skipping AUTH_BEGIN link write for user {}: identity was relinked (expected binding "
                         + "version {}, now {}).", userId, expectedBindingVersion, freshLink.getBindingVersion());

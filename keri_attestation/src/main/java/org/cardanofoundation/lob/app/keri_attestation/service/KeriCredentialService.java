@@ -361,10 +361,16 @@ public class KeriCredentialService {
      * the ceremony step itself still completes (the CAS on {@code (state, attemptGeneration)} has no
      * way to know about the relink); {@link CeremonyService#validateAndConsume}'s own bindingVersion
      * check is the final safety net at consumption time.
+     *
+     * <p>The re-fetch is row-locked (F3 fix) via
+     * {@link org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository#findByUserIdForUpdate}
+     * rather than a plain {@code findById}: this write and {@code KeriOobiService}'s relink write race
+     * the same row, and without the lock the two could interleave into a row that is a mix of the old
+     * and new identity (e.g. a relinked {@code aid} with a credential that belongs to the old AID).
      */
     private void persistCredentialIfIdentityStillCurrent(String userId, int expectedBindingVersion,
             String credentialSaid, String credentialSchemaSaid) {
-        identityLinkRepository.findById(userId).ifPresent(freshLink -> {
+        identityLinkRepository.findByUserIdForUpdate(userId).ifPresent(freshLink -> {
             if (freshLink.getBindingVersion() != expectedBindingVersion) {
                 log.warn("Skipping credential link write for user {}: identity was relinked (expected binding "
                         + "version {}, now {}).", userId, expectedBindingVersion, freshLink.getBindingVersion());

@@ -128,8 +128,17 @@ public class KeriOobiService {
 
     // --- persist the identity link (design §4.7) ---
 
+    /**
+     * Row-locked (F3 fix): this read decides whether to create, no-op-refresh, or relink the row, and
+     * the async {@code persist*IfIdentityStillCurrent} mutators in {@code KeriCredentialService}/
+     * {@code KeriAuthBeginService} write the same row concurrently (a completed credential/auth-begin
+     * step landing mid-relink). {@link KeriIdentityLinkRepository#findByUserIdForUpdate} serializes this
+     * whole read-decide-write against those writers instead of {@link #identityLinkRepository}'s plain
+     * {@code findById}, so a relink can never race a credential/auth-begin write into a row that mixes
+     * fields from the old and new identity.
+     */
     private Either<ProblemDetail, String> persistLink(String userId, String aid, String oobiUrl, boolean relink) {
-        Optional<KeriIdentityLinkEntity> existing = identityLinkRepository.findById(userId);
+        Optional<KeriIdentityLinkEntity> existing = identityLinkRepository.findByUserIdForUpdate(userId);
         if (existing.isEmpty()) {
             KeriIdentityLinkEntity link = new KeriIdentityLinkEntity();
             link.setUserId(userId);

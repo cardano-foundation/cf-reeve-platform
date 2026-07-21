@@ -161,7 +161,7 @@ class KeriOobiServiceTest {
 
     @Test
     void happyPathWithNoExistingLinkExtractsAidAndPersistsAtBindingVersion1() throws Exception {
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 
@@ -185,7 +185,7 @@ class KeriOobiServiceTest {
     @Test
     void reResolvingSameAidRefreshesOobiUrlWithoutBumpingBindingVersion() {
         KeriIdentityLinkEntity existing = link(3, AID, "https://old.example.org/oobi/EAID12345");
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 
@@ -202,7 +202,7 @@ class KeriOobiServiceTest {
     @Test
     void differentAidWithoutRelinkIsIdentityRelinkedConflictAndLeavesLinkUntouched() {
         KeriIdentityLinkEntity existing = link(1, "EOLDAID000", "https://old.example.org/oobi/EOLDAID000");
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI_OTHER_AID, false);
 
@@ -225,7 +225,7 @@ class KeriOobiServiceTest {
         existing.setAuthBeginTxHash("a".repeat(64));
         existing.setAuthBeginBlock(999L);
         existing.setAuthBeginAt(Instant.parse("2026-01-01T00:00:00Z"));
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
 
         KeriAttestationCeremonyEntity openCeremony = new KeriAttestationCeremonyEntity();
         openCeremony.setId("cer-1");
@@ -266,7 +266,7 @@ class KeriOobiServiceTest {
         // has already legitimately moved to CONSUMED. The stale in-memory candidate must not be used
         // to overwrite that outcome back to FAILED.
         KeriIdentityLinkEntity existing = link(1, "EOLDAID000", "https://old.example.org/oobi/EOLDAID000");
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(existing));
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
 
         KeriAttestationCeremonyEntity staleCandidate = new KeriAttestationCeremonyEntity();
         staleCandidate.setId("cer-2");

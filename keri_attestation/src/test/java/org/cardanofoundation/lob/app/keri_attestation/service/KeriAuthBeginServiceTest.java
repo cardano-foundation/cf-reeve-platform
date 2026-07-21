@@ -146,13 +146,14 @@ class KeriAuthBeginServiceTest {
     @Test
     void submitAuthBeginExternalVerifiedPersistsLinkAndCompletesStep() {
         // The link write happens inside completeStep's mutator (only runs once the ceremony's own CAS
-        // has confirmed this attempt is current) — findById is stubbed with two separate lookups
-        // (the guard at the top of submitAuthBegin, and the fresh re-fetch inside the mutator) since
-        // the production code performs both.
+        // has confirmed this attempt is current) — the guard at the top of submitAuthBegin uses the
+        // plain findById; the fresh re-fetch inside the mutator uses the row-locked
+        // findByUserIdForUpdate (F3 fix) — a different mocked method, stubbed separately.
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         KeriIdentityLinkEntity link = linkedWithCredential();
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(link));
         when(submitter.readCip170Metadata(TX_HASH)).thenReturn(
                 Optional.of(Map.of("t", "AUTH_BEGIN", "i", WALLET_AID, "s", SCHEMA_SAID, "block", 12345L)));
 
@@ -188,7 +189,9 @@ class KeriAuthBeginServiceTest {
         initialLink.setBindingVersion(1);
         KeriIdentityLinkEntity relinkedLink = linkedWithCredential();
         relinkedLink.setBindingVersion(2);
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(relinkedLink));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink));
+        // F3 fix: the mutator's re-fetch is row-locked, a different mocked method.
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(relinkedLink));
         when(submitter.readCip170Metadata(TX_HASH)).thenReturn(
                 Optional.of(Map.of("t", "AUTH_BEGIN", "i", WALLET_AID, "s", SCHEMA_SAID)));
 
@@ -465,7 +468,9 @@ class KeriAuthBeginServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
         when(submitter.confirmations(TX_HASH)).thenReturn(Optional.of(3L));
         KeriIdentityLinkEntity link = linkedWithCredential();
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
+        // awaitAuthBeginConfirmation itself never touches identityLinkRepository — only the mutator
+        // (invoked manually below) does, via the row-locked findByUserIdForUpdate (F3 fix).
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(link));
 
         service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
 
@@ -490,7 +495,7 @@ class KeriAuthBeginServiceTest {
         when(submitter.confirmations(TX_HASH)).thenReturn(Optional.of(3L));
         KeriIdentityLinkEntity relinkedLink = linkedWithCredential();
         relinkedLink.setBindingVersion(2);
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(relinkedLink));
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(relinkedLink));
 
         service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
 

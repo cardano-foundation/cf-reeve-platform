@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.keri_attestation.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -9,6 +10,10 @@ import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.persistence.EntityManager;
 
@@ -23,7 +28,10 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +69,8 @@ class CeremonyRepositoryTest {
     private KeriIdentityLinkRepository identityLinkRepository;
     @Autowired
     private EntityManager em;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private KeriAttestationCeremonyEntity ceremony(String id, String userId, CeremonyState state) {
         KeriAttestationCeremonyEntity ceremony = new KeriAttestationCeremonyEntity();
@@ -257,5 +267,119 @@ class CeremonyRepositoryTest {
         assertFalse(reloadedBare.getAid() != null);
         assertFalse(reloadedBare.getAuthBeginBlock() != null);
         assertFalse(reloadedBare.getAuthBeginAt() != null);
+    }
+
+    /**
+     * Proves the F3 fix's pessimistic lock actually serializes concurrent writers of the same
+     * identity-link row — the race F3 exists to close: {@code KeriOobiService}'s relink and the async
+     * {@code persist*IfIdentityStillCurrent} mutators ({@code KeriCredentialService}/
+     * {@code KeriAuthBeginService}) all read-then-write {@code keri_identity_link} unlocked before this
+     * fix, so a relink and a concurrent credential/auth-begin write could interleave into a row that
+     * mixes fields from the old and new identity.
+     *
+     * <p>{@code NOT_SUPPORTED} at the method level (overriding the class-level {@code @Transactional}):
+     * a true lock-contention test needs two independent, uncommitted-to-each-other database transactions
+     * racing on the same row, which requires each worker thread to own its own transaction (via
+     * {@link TransactionTemplate}) rather than sharing the single test-method transaction the class-level
+     * annotation would otherwise wrap this method in (and roll back — these threads need to actually
+     * commit for the other to observe their write).
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void findByUserIdForUpdateSerializesRelinkAgainstAConcurrentCredentialWriteSoNoRowIsAMix() throws Exception {
+        String userId = "user-race";
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        try {
+            tx.executeWithoutResult(status -> {
+                KeriIdentityLinkEntity seed = new KeriIdentityLinkEntity();
+                seed.setUserId(userId);
+                seed.setBindingVersion(1);
+                seed.setAid("EoldAid");
+                seed.setCredentialSaid(null);
+                identityLinkRepository.save(seed);
+            });
+
+            CountDownLatch relinkHoldsLock = new CountDownLatch(1);
+            CountDownLatch releaseRelink = new CountDownLatch(1);
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+
+            // Simulates KeriOobiService's relink: locks the row, holds it while "doing work" (the window
+            // the real relink spends validating/deciding), then bumps bindingVersion, clears the
+            // credential field, sets the new AID, and commits.
+            Thread relinkThread = new Thread(() -> {
+                try {
+                    tx.executeWithoutResult(status -> {
+                        KeriIdentityLinkEntity link = identityLinkRepository.findByUserIdForUpdate(userId)
+                                .orElseThrow();
+                        relinkHoldsLock.countDown();
+                        awaitQuietly(releaseRelink);
+                        link.setBindingVersion(link.getBindingVersion() + 1);
+                        link.setAid("EnewAid");
+                        link.setCredentialSaid(null);
+                        identityLinkRepository.save(link);
+                    });
+                } catch (Throwable t) {
+                    failure.set(t);
+                }
+            });
+            relinkThread.start();
+            assertTrue(relinkHoldsLock.await(5, TimeUnit.SECONDS), "relink thread should have taken the row lock");
+
+            // Simulates KeriCredentialService#persistCredentialIfIdentityStillCurrent racing the relink:
+            // its own locked read must BLOCK until the relink thread's transaction commits — proving the
+            // lock serializes them — and must then observe the already-relinked bindingVersion (2, not
+            // 1), so its real guard (bindingVersion mismatch -> skip) would correctly refuse to write a
+            // credential onto what is now a different identity.
+            AtomicBoolean sawRelinkedBindingVersion = new AtomicBoolean(false);
+            Thread credentialWriterThread = new Thread(() -> {
+                try {
+                    tx.executeWithoutResult(status -> {
+                        KeriIdentityLinkEntity freshLink = identityLinkRepository.findByUserIdForUpdate(userId)
+                                .orElseThrow();
+                        sawRelinkedBindingVersion.set(freshLink.getBindingVersion() == 2);
+                        // Mirrors the real guard in persistCredentialIfIdentityStillCurrent: only write if
+                        // the binding version this attempt was authorized under (1, the pre-relink value)
+                        // still matches. It must not — proving the lock prevented the interleave that
+                        // would otherwise let this stale write land between the relink's read and write.
+                        if (freshLink.getBindingVersion() == 1) {
+                            freshLink.setCredentialSaid("EshouldNeverLand");
+                            identityLinkRepository.save(freshLink);
+                        }
+                    });
+                } catch (Throwable t) {
+                    failure.set(t);
+                }
+            });
+            credentialWriterThread.start();
+            // Give the credential-writer thread time to attempt (and block on) the lock before releasing
+            // it — without the lock, this sleep window is exactly where the old, unguarded interleave
+            // would occur.
+            Thread.sleep(300);
+            releaseRelink.countDown();
+
+            relinkThread.join(5_000);
+            credentialWriterThread.join(5_000);
+
+            assertTrue(failure.get() == null, "no thread should have thrown: " + failure.get());
+            assertTrue(sawRelinkedBindingVersion.get(), "the credential-writer's locked read must observe the "
+                    + "already-committed relink, not an interleaved value");
+
+            KeriIdentityLinkEntity finalState = identityLinkRepository.findById(userId).orElseThrow();
+            assertEquals(2, finalState.getBindingVersion());
+            assertEquals("EnewAid", finalState.getAid());
+            assertNull(finalState.getCredentialSaid(),
+                    "the stale credential write must never have landed on the relinked row");
+        } finally {
+            tx.executeWithoutResult(status -> identityLinkRepository.deleteById(userId));
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 }
