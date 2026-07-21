@@ -125,4 +125,6 @@ deleted, if a given run did not get far enough to answer them.)*
 
 - `SEAL_MATCHES_DIGEST`:
 - If `false` for all three variants: **hard blocker — spec §4.4**. Escalation notes:
-- Pinned CIP-170 commit used for this run (fill in the placeholder above once confirmed):
+- Pinned CIP-170 commit used for this run: see "Pinned commit" under [CIP-170 reference](#cip-170-reference)
+  above — confirm it is still the latest commit touching `CIP-0170` at the time this spike is actually
+  run, and re-pin (with a fresh cross-check of the field tables) if not.
