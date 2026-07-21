@@ -248,8 +248,15 @@ public class KeriCredentialService {
         link.setCredentialSchemaSaid(vc.schemaSaid());
         identityLinkRepository.save(link);
 
-        ceremonyService.completeStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                CeremonyState.CREDENTIAL_RECEIVED, c -> { /* nothing extra to persist on the ceremony row */ });
+        boolean completed = ceremonyService.completeStep(ceremonyId, expectedGeneration,
+                CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED,
+                c -> { /* nothing extra to persist on the ceremony row */ });
+        if (!completed) {
+            // Stale CAS (a retry superseded this attempt) — the notifications must be left alone: the
+            // winning attempt's own correlator wait is (or will be) matching against the same requests
+            // and needs to find them still unread/undeleted.
+            return;
+        }
 
         // Only after both the link and the ceremony transition are durably committed: an earlier
         // mark-and-delete would let a crash between the two silently lose the wallet's replies, exactly

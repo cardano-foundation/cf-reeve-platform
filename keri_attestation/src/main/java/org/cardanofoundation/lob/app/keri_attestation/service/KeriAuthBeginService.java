@@ -116,9 +116,21 @@ public class KeriAuthBeginService {
         String userId = link.getUserId();
         int bindingVersion = ceremony.getBindingVersion();
         Long blockNumber = blockNumberOf(metadataOpt.get());
-        ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                CeremonyState.AUTH_BEGIN_CONFIRMED,
-                c -> persistAuthBeginIfIdentityStillCurrent(userId, bindingVersion, txHash, blockNumber));
+        try {
+            ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    CeremonyState.AUTH_BEGIN_CONFIRMED,
+                    c -> persistAuthBeginIfIdentityStillCurrent(userId, bindingVersion, txHash, blockNumber));
+        } catch (Exception e) {
+            // The mutator does real JPA work (findById + save) that can throw — unlike every other
+            // external-boundary call in this class, completeStep itself has no checked-exception
+            // contract to remind us of that. An escaped exception here must not propagate out of
+            // submitAuthBegin as an unhandled failure; it must still resolve the ceremony.
+            log.warn("Failed to complete AUTH_BEGIN external verification for ceremony {}: {}", ceremonyId,
+                    e.getMessage());
+            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED,
+                    "Failed to persist the AUTH_BEGIN confirmation: " + e.getMessage());
+        }
     }
 
     private static Long blockNumberOf(Map<String, Object> metadata) {
@@ -249,9 +261,21 @@ public class KeriAuthBeginService {
             if (confirmations.isPresent() && confirmations.get() >= properties.authBeginConfirmations()) {
                 String userId = ceremony.getUserId();
                 int bindingVersion = ceremony.getBindingVersion();
-                ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                        CeremonyState.AUTH_BEGIN_CONFIRMED,
-                        c -> persistAuthBeginIfIdentityStillCurrent(userId, bindingVersion, txHash, null));
+                try {
+                    ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                            CeremonyState.AUTH_BEGIN_CONFIRMED,
+                            c -> persistAuthBeginIfIdentityStillCurrent(userId, bindingVersion, txHash, null));
+                } catch (Exception e) {
+                    // Same rationale as verifyExternal's guard: the mutator's JPA work can throw, and
+                    // this is an unsupervised async worker — it must resolve the ceremony, never
+                    // propagate and leave it stuck at AUTH_BEGIN_SUBMITTED for the TTL sweep alone to
+                    // eventually catch.
+                    log.warn("Failed to complete AUTH_BEGIN confirmation for ceremony {}: {}", ceremonyId,
+                            e.getMessage());
+                    ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                            KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
+                            "Failed to persist the AUTH_BEGIN confirmation: " + e.getMessage());
+                }
                 return;
             }
 

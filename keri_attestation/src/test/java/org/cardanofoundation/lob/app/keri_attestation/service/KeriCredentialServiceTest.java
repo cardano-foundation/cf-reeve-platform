@@ -239,6 +239,8 @@ class KeriCredentialServiceTest {
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
                 .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
 
         service.awaitPresentation(CEREMONY_ID, GENERATION);
 
@@ -521,6 +523,36 @@ class KeriCredentialServiceTest {
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         assertNull(relinkedLink.getCredentialSaid());
         verify(identityLinkRepository, never()).save(any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationStaleCompleteStepNeverMarksNotificationsAsClaimed() throws Exception {
+        // completeStep returning false means a retry's generation bump superseded this attempt's CAS —
+        // the winning attempt's own correlator wait still needs these notifications unread/undeleted,
+        // so this attempt must not claim them despite having otherwise "succeeded" up to this point.
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        KeriIdentityLinkEntity initialLink = link(LINKED_AID);
+        KeriIdentityLinkEntity freshLink = link(LINKED_AID);
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(freshLink));
+
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(false);
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
         verify(correlator, never()).markAndDelete(any());
     }
 }

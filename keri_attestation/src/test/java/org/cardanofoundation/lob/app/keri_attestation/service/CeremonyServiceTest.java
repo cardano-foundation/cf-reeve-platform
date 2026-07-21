@@ -283,8 +283,10 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         Consumer<KeriAttestationCeremonyEntity> mutator = org.mockito.Mockito.mock(Consumer.class);
 
-        service.completeStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED, mutator);
+        boolean completed = service.completeStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED,
+                CeremonyState.CREDENTIAL_RECEIVED, mutator);
 
+        assertFalse(completed);
         assertEquals(CeremonyState.CREDENTIAL_REQUESTED, ceremony.getState());
         assertEquals(1, ceremony.getAttemptGeneration());
         verify(mutator, never()).accept(any());
@@ -298,8 +300,10 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         Consumer<KeriAttestationCeremonyEntity> mutator = org.mockito.Mockito.mock(Consumer.class);
 
-        service.completeStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED, mutator);
+        boolean completed = service.completeStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED,
+                CeremonyState.CREDENTIAL_RECEIVED, mutator);
 
+        assertFalse(completed);
         assertEquals(CeremonyState.CREDENTIAL_RECEIVED, ceremony.getState());
         verify(mutator, never()).accept(any());
     }
@@ -309,9 +313,10 @@ class CeremonyServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREDENTIAL_REQUESTED);
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
-        service.completeStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED,
-                c -> c.setKelSequence("5"));
+        boolean completed = service.completeStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED,
+                CeremonyState.CREDENTIAL_RECEIVED, c -> c.setKelSequence("5"));
 
+        assertTrue(completed);
         assertEquals(CeremonyState.CREDENTIAL_RECEIVED, ceremony.getState());
         assertEquals("5", ceremony.getKelSequence());
         verify(ceremonyRepository, times(1)).save(ceremony);
@@ -321,8 +326,10 @@ class CeremonyServiceTest {
     void completeStepOnUnknownCeremonyIsANoOp() {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.empty());
 
-        service.completeStep(CEREMONY_ID, 0, CeremonyState.CREATED, CeremonyState.OOBI_RESOLVED, c -> { });
+        boolean completed = service.completeStep(CEREMONY_ID, 0, CeremonyState.CREATED, CeremonyState.OOBI_RESOLVED,
+                c -> { });
 
+        assertFalse(completed);
         verify(ceremonyRepository, never()).save(any());
     }
 

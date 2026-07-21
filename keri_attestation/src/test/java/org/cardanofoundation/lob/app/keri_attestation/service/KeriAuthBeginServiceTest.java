@@ -202,6 +202,27 @@ class KeriAuthBeginServiceTest {
     }
 
     @Test
+    void submitAuthBeginExternalVerifiedButCompleteStepThrowsFailsWithAuthBeginUnverifiedInsteadOfPropagating() {
+        // completeStep's mutator does real JPA work (findById + save) that can throw — unlike every
+        // other external-boundary call in this class, completeStep itself has no checked-exception
+        // contract to remind us of that. An escaped exception here must not propagate out of
+        // submitAuthBegin as an unhandled failure; it must still resolve the ceremony via failStep.
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
+        when(submitter.readCip170Metadata(TX_HASH)).thenReturn(
+                Optional.of(Map.of("t", "AUTH_BEGIN", "i", WALLET_AID, "s", SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any())).thenThrow(new RuntimeException("db down"));
+
+        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+
+        assertTrue(result.isRight());
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED), any());
+    }
+
+    @Test
     void submitAuthBeginExternalNoMetadataFoundFailsWithAuthBeginUnverified() {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
@@ -435,6 +456,24 @@ class KeriAuthBeginServiceTest {
 
         assertTrue(relinkedLink.getAuthBeginTxHash() == null);
         verify(identityLinkRepository, never()).save(any());
+    }
+
+    @Test
+    void awaitAuthBeginConfirmationCompleteStepThrowsFailsWithAuthBeginRolledBackInsteadOfPropagating() {
+        // Same rationale as the external-verify path's equivalent test: this is an unsupervised async
+        // worker — an escaped exception from completeStep's mutator must not propagate out of
+        // awaitAuthBeginConfirmation, it must still resolve the ceremony via failStep.
+        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
+        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
+        when(submitter.confirmations(TX_HASH)).thenReturn(Optional.of(3L));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any())).thenThrow(new RuntimeException("db down"));
+
+        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK), any());
     }
 
     @Test

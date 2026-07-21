@@ -383,6 +383,8 @@ class KeriAttestServiceTest {
         Object seal = List.of(Map.of("d", DIGEST));
         when(keyEvents.get(WALLET_AID))
                 .thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(true);
 
         Either<ProblemDetail, Void> result = service.startAttest(CEREMONY_ID, USER_ID, true);
 
@@ -436,6 +438,8 @@ class KeriAttestServiceTest {
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", DIGEST));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(true);
 
         service.awaitAnchor(CEREMONY_ID, GENERATION);
 
@@ -450,6 +454,27 @@ class KeriAttestServiceTest {
         inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
         inOrder.verify(correlator).markAndDelete(NOTIF_ID);
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void awaitAnchorStaleCompleteStepNeverMarksTheNotificationAsClaimed() throws Exception {
+        // completeStep returning false means a retry's generation bump superseded this attempt's CAS —
+        // a concurrent, winning attempt still needs this notification unread/undeleted, so a stale
+        // attempt must not claim it despite otherwise verifying the seal correctly.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
+        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
+        Object seal = List.of(Map.of("d", DIGEST));
+        when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(false);
+
+        service.awaitAnchor(CEREMONY_ID, GENERATION);
+
+        verify(correlator, never()).markAndDelete(any());
     }
 
     @Test
@@ -547,12 +572,15 @@ class KeriAttestServiceTest {
 
         Object seal = List.of(Map.of("d", DIGEST));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(true);
 
         service.awaitAnchor(CEREMONY_ID, GENERATION);
 
         verify(keyStates, times(1)).query(eq(WALLET_AID), any());
         verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(CeremonyState.ATTEST_ANCHORED), any());
+        verify(correlator).markAndDelete(NOTIF_ID);
     }
 
     @Test

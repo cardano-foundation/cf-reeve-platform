@@ -260,12 +260,17 @@ public class KeriAttestService {
 
             String sequence = String.valueOf(event.get("s"));
             String eventSaid = String.valueOf(event.get("d"));
-            ceremonyService.completeStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
+            boolean completed = ceremonyService.completeStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
                     CeremonyState.ATTEST_ANCHORED, c -> {
                         c.setKelSequence(sequence);
                         c.setKelEventSaid(eventSaid);
                     });
-            correlator.markAndDelete(ref.notificationId());
+            if (completed) {
+                // Only claim the notification for the attempt the CAS actually accepted — a stale
+                // (superseded) generation's markAndDelete would delete a signal a concurrent, winning
+                // retry pre-check or awaitAnchor still needs to find.
+                correlator.markAndDelete(ref.notificationId());
+            }
         } catch (Exception e) {
             interruptIfNeeded(e);
             log.warn("Failed to resolve ATTEST anchor for ceremony {}: {}", ceremonyId, e.getMessage());
@@ -331,7 +336,6 @@ public class KeriAttestService {
     //     shapes (Task 8 spike's typed KeyEventRecord/KeyEvent aren't available at this jar version;
     //     see docs/keri/spike/RemotesignAnchorSpike.java for the confirmed field names to expect) ---
 
-    @SuppressWarnings("unchecked")
     private List<Map<String, Object>> fetchKel(String aid) throws Exception {
         Object raw = client.keyEvents().get(aid);
         if (!(raw instanceof List<?> rawList)) {

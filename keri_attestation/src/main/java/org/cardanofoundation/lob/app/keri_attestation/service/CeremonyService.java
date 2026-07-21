@@ -154,21 +154,29 @@ public class CeremonyService implements AttestationConsumptionApi {
      * is still at generation {@code expectedGeneration} and state {@code from}. A superseded worker
      * (its step was retried, or the ceremony moved on for some other reason) silently no-ops instead
      * of corrupting newer state — there is no way to report failure back to it, by design.
+     *
+     * @return {@code true} if the CAS matched and the transition (and mutator) actually ran,
+     *         {@code false} if this call was a stale no-op. Callers that do something <em>after</em>
+     *         a successful completion which must never happen for a discarded, superseded attempt —
+     *         e.g. {@link KeriNotificationCorrelator#markAndDelete} — must gate that on this return
+     *         value: claiming/deleting a wallet notification on behalf of a call that the CAS just
+     *         discarded could delete a signal a concurrent (winning) attempt still needs.
      */
-    public void completeStep(String ceremonyId, int expectedGeneration, CeremonyState from, CeremonyState to,
+    public boolean completeStep(String ceremonyId, int expectedGeneration, CeremonyState from, CeremonyState to,
             Consumer<KeriAttestationCeremonyEntity> mutator) {
         Optional<KeriAttestationCeremonyEntity> found = ceremonyRepository.findByIdForUpdate(ceremonyId);
         if (found.isEmpty()) {
-            return;
+            return false;
         }
         KeriAttestationCeremonyEntity ceremony = found.get();
         if (ceremony.getAttemptGeneration() != expectedGeneration || ceremony.getState() != from) {
-            return;
+            return false;
         }
         mutator.accept(ceremony);
         ceremony.setState(to);
         ceremony.setUpdatedAt(LocalDateTime.now());
         ceremonyRepository.save(ceremony);
+        return true;
     }
 
     /**
