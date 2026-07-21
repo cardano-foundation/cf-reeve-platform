@@ -331,9 +331,23 @@ class CeremonyServiceTest {
         ceremony.setAttemptGeneration(1);
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
-        service.failStep(CEREMONY_ID, 0, "SOME_TITLE", "detail");
+        service.failStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, "SOME_TITLE", "detail");
 
         assertEquals(CeremonyState.CREDENTIAL_REQUESTED, ceremony.getState());
+        assertEquals(null, ceremony.getErrorTitle());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void failStepWithWrongCurrentStateMutatesNothing() {
+        // Same generation, but the ceremony has since moved on to a different waiting state — the
+        // failure signal is for a step that is no longer the one in flight.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREDENTIAL_RECEIVED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        service.failStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, "SOME_TITLE", "detail");
+
+        assertEquals(CeremonyState.CREDENTIAL_RECEIVED, ceremony.getState());
         assertEquals(null, ceremony.getErrorTitle());
         verify(ceremonyRepository, never()).save(any());
     }
@@ -343,11 +357,45 @@ class CeremonyServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREDENTIAL_REQUESTED);
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
-        service.failStep(CEREMONY_ID, 0, "KERI_WALLET_TIMEOUT", "wallet did not respond");
+        service.failStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, "KERI_WALLET_TIMEOUT",
+                "wallet did not respond");
 
         assertEquals(CeremonyState.FAILED, ceremony.getState());
         assertEquals("KERI_WALLET_TIMEOUT", ceremony.getErrorTitle());
         assertEquals("wallet did not respond", ceremony.getErrorDetail());
+    }
+
+    @Test
+    void lateFailureForACompletedStepDoesNotClobberTheNextStepsWaitingState() {
+        // Regression for the reported race: step A (CREDENTIAL_REQUESTED) begins and completes at
+        // generation 0, moving the ceremony into CREDENTIAL_RECEIVED. beginStep for step B then moves it
+        // into AUTH_BEGIN_SUBMITTED, still at generation 0 (no retry occurred, so no bump). A late
+        // failure signal for step A then arrives and calls failStep with A's own waiting state
+        // (CREDENTIAL_REQUESTED) and generation 0. A generation-only CAS would match and incorrectly
+        // fail the ceremony while it is legitimately waiting on step B; the state guard must reject it.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREDENTIAL_REQUESTED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        // Step A completes: CREDENTIAL_REQUESTED -> CREDENTIAL_RECEIVED, generation stays 0.
+        service.completeStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED,
+                c -> { });
+        assertEquals(CeremonyState.CREDENTIAL_RECEIVED, ceremony.getState());
+        assertEquals(0, ceremony.getAttemptGeneration());
+
+        // Step B begins: CREDENTIAL_RECEIVED -> AUTH_BEGIN_SUBMITTED, still generation 0 (non-retry).
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> beginResult = service.beginStep(
+                CEREMONY_ID, USER, CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, false);
+        assertTrue(beginResult.isRight());
+        assertEquals(CeremonyState.AUTH_BEGIN_SUBMITTED, ceremony.getState());
+        assertEquals(0, ceremony.getAttemptGeneration());
+
+        // Late failure for step A arrives: same generation (0), but A's waiting state
+        // (CREDENTIAL_REQUESTED) no longer matches the ceremony's actual state.
+        service.failStep(CEREMONY_ID, 0, CeremonyState.CREDENTIAL_REQUESTED, "STALE_TITLE", "stale detail");
+
+        assertEquals(CeremonyState.AUTH_BEGIN_SUBMITTED, ceremony.getState());
+        assertEquals(null, ceremony.getErrorTitle());
+        assertEquals(null, ceremony.getErrorDetail());
     }
 
     // --- validateAndConsume ---

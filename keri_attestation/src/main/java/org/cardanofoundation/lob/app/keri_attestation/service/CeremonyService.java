@@ -56,6 +56,9 @@ public class CeremonyService implements AttestationConsumptionApi {
      * ({@link #validateAndConsume} checks it — design §4.7).
      */
     public Either<ProblemDetail, CeremonyView> create(String userId, String targetType, String targetId) {
+        // Unlocked read-then-write: two concurrent create() calls for the same user can both pass this
+        // check before either inserts, so the limit can be briefly exceeded by one. Accepted (design
+        // §4.2) — not worth a row lock on every create for a soft per-user cap.
         long activeCount = ceremonyRepository.countByUserIdAndStateNotIn(userId, TERMINAL_STATES);
         if (activeCount >= properties.limits().maxActiveCeremoniesPerUser()) {
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_LIMIT_REACHED,
@@ -169,16 +172,20 @@ public class CeremonyService implements AttestationConsumptionApi {
     }
 
     /**
-     * CAS step failure: same generation guard as {@link #completeStep}, but no expected {@code from}
-     * state — a step can fail from whatever state it is currently waiting in.
+     * CAS step failure: same generation-and-state guard as {@link #completeStep} — the ceremony must
+     * still be at generation {@code expectedGeneration} <em>and</em> in {@code expectedWaitingState}, or
+     * this silently no-ops. A generation-only check is not safe here: {@code attemptGeneration} only
+     * bumps on retry, so a late failure signal for a step that already completed (generation unchanged)
+     * would otherwise pass the CAS and clobber whatever later step the ceremony has since moved on to.
      */
-    public void failStep(String ceremonyId, int expectedGeneration, String errorTitle, String errorDetail) {
+    public void failStep(String ceremonyId, int expectedGeneration, CeremonyState expectedWaitingState,
+            String errorTitle, String errorDetail) {
         Optional<KeriAttestationCeremonyEntity> found = ceremonyRepository.findByIdForUpdate(ceremonyId);
         if (found.isEmpty()) {
             return;
         }
         KeriAttestationCeremonyEntity ceremony = found.get();
-        if (ceremony.getAttemptGeneration() != expectedGeneration) {
+        if (ceremony.getAttemptGeneration() != expectedGeneration || ceremony.getState() != expectedWaitingState) {
             return;
         }
         ceremony.setErrorTitle(errorTitle);
@@ -212,10 +219,9 @@ public class CeremonyService implements AttestationConsumptionApi {
         if (ceremony.getState() != CeremonyState.ATTEST_ANCHORED) {
             return Either.left(invalidStateProblem(ceremonyId, CeremonyState.ATTEST_ANCHORED, ceremony.getState()));
         }
-        if (!ceremony.getExpiresAt().isAfter(LocalDateTime.now())) {
-            ceremony.setState(CeremonyState.EXPIRED);
-            ceremony.setUpdatedAt(LocalDateTime.now());
-            ceremonyRepository.save(ceremony);
+        // ATTEST_ANCHORED is never a terminal state, so this always falls through to the same
+        // expiry-mutate-and-persist behavior the inline check used to spell out directly.
+        if (lazilyExpireIfNeeded(ceremony)) {
             return Either.left(expiredProblem(ceremonyId));
         }
 
