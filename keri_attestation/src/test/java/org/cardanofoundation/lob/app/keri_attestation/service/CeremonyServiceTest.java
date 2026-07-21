@@ -413,6 +413,46 @@ class CeremonyServiceTest {
         verify(ceremonyRepository, never()).save(any());
     }
 
+    // --- initial-link adoption (F6 fix): a ceremony created before any link existed (bindingVersion=0)
+    //     must adopt the first-linked binding version rather than being permanently stuck at CREATED ---
+
+    @Test
+    void getAdoptsTheLinksBindingVersionForACeremonyCreatedBeforeAnyLinkExisted() {
+        // create() captured bindingVersion=0 (the "no link yet" marker) when this ceremony was made; the
+        // user has since resolved their first OOBI, creating the link at bindingVersion=1. Without F6,
+        // the plain version-match guard (0 != 1) would reject this forever.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREATED);
+        ceremony.setBindingVersion(0);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", null, null)));
+
+        Either<ProblemDetail, CeremonyView> result = service.get(CEREMONY_ID, USER);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.OOBI_RESOLVED, result.get().state());
+        assertEquals(CeremonyState.OOBI_RESOLVED, ceremony.getState());
+        assertEquals(1, ceremony.getBindingVersion());
+        verify(ceremonyRepository).save(ceremony);
+    }
+
+    @Test
+    void getStillRejectsARealRelinkEvenWhenTheCeremonyWasCreatedUnderAnAlreadyLinkedBinding() {
+        // Distinguishes initial-link adoption from a genuine relink: this ceremony was created under a
+        // REAL binding (v2, not the bindingVersion=0 "no link yet" marker) and the link has since moved
+        // to v3 — that is relink semantics, which must still reject exactly as before F6.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREATED);
+        ceremony.setBindingVersion(2);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(3, "Eaid-new", null, null)));
+
+        Either<ProblemDetail, CeremonyView> result = service.get(CEREMONY_ID, USER);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.CREATED, result.get().state());
+        assertEquals(2, ceremony.getBindingVersion());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
     // --- completeStep / failStep: CAS on (attemptGeneration, state) ---
 
     @SuppressWarnings("unchecked")

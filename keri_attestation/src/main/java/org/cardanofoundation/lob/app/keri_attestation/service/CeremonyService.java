@@ -353,6 +353,20 @@ public class CeremonyService implements AttestationConsumptionApi {
      * {@code attemptGeneration} — this is not a step transition, just catching the ceremony's resting
      * state up to what the identity link already reflects.
      *
+     * <p><b>Initial-link adoption (F6 fix):</b> {@code create}'s bindingVersion capture
+     * (({@link KeriIdentityLinkEntity#getBindingVersion()} of a lookup that came back empty) defaults
+     * to {@code 0} — the "created before any identity link existed" marker. A persisted link's own
+     * {@code bindingVersion} is never {@code 0} (it starts at {@code 1} on first persist and only ever
+     * increments on relink), so a ceremony still carrying {@code bindingVersion == 0} in {@code CREATED}
+     * has never been fast-forwarded against ANY link — the version-match guard below would otherwise
+     * reject the very first OOBI resolve after such a ceremony was created (link now at
+     * {@code bindingVersion == 1}, ceremony still at {@code 0}), leaving it stuck at {@code CREATED}
+     * forever. That specific combination — {@code CREATED} and {@code bindingVersion == 0} — instead
+     * adopts the link's current {@code bindingVersion} onto the ceremony while advancing. Every other
+     * mismatch (a ceremony created under a real, already-linked binding that has since moved to a
+     * <em>different</em> version) still rejects — that is a genuine relink, not an initial link, and
+     * {@code KeriOobiService} is already responsible for invalidating it.
+     *
      * <p>The link read below is deliberately a plain (unlocked) {@code findById}, not
      * {@code KeriIdentityLinkRepository#findByUserIdForUpdate} (F3 fix, design §4.7): like
      * {@link #validateAndConsume}, this method only ever reads the link to derive a floor for the
@@ -365,11 +379,22 @@ public class CeremonyService implements AttestationConsumptionApi {
             return;
         }
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(ceremony.getUserId());
-        if (linkOpt.isEmpty() || linkOpt.get().getBindingVersion() != ceremony.getBindingVersion()) {
+        if (linkOpt.isEmpty()) {
             return;
         }
+        KeriIdentityLinkEntity link = linkOpt.get();
+
+        boolean initialLinkAdoption = ceremony.getState() == CeremonyState.CREATED && ceremony.getBindingVersion() == 0;
+        if (!initialLinkAdoption && link.getBindingVersion() != ceremony.getBindingVersion()) {
+            return;
+        }
+
         CeremonyState floor = fastForwardState(linkOpt);
-        if (floor.ordinal() > ceremony.getState().ordinal()) {
+        boolean adoptsBindingVersion = initialLinkAdoption && link.getBindingVersion() != ceremony.getBindingVersion();
+        if (floor.ordinal() > ceremony.getState().ordinal() || adoptsBindingVersion) {
+            if (adoptsBindingVersion) {
+                ceremony.setBindingVersion(link.getBindingVersion());
+            }
             ceremony.setState(floor);
             ceremony.setUpdatedAt(LocalDateTime.now());
             ceremonyRepository.save(ceremony);
