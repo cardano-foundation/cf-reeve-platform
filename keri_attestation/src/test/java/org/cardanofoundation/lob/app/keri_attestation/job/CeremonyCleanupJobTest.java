@@ -124,6 +124,26 @@ class CeremonyCleanupJobTest {
                 "cutoff should be ~7 days before now, was " + cutoffCaptor.getValue());
     }
 
+    /** F10 fix: CONSUMED rows are the durable attestation record blockchain_publisher's dispatch retry
+     *  reloads on every attempt, well past any reasonable ceremony-completion age -- purging them would
+     *  make late dispatch impossible. Only FAILED/EXPIRED may be purged. */
+    @Test
+    void sweepPurgesOnlyFailedAndExpiredNeverConsumed() {
+        when(ceremonyRepository.deleteByStateInAndUpdatedAtBefore(anyCollection(), any())).thenReturn(0L);
+
+        job.sweep();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Collection<CeremonyState>> statesCaptor = ArgumentCaptor.forClass(java.util.Collection.class);
+        verify(ceremonyRepository).deleteByStateInAndUpdatedAtBefore(statesCaptor.capture(), any());
+
+        java.util.Collection<CeremonyState> purgedStates = statesCaptor.getValue();
+        assertTrue(purgedStates.contains(CeremonyState.FAILED));
+        assertTrue(purgedStates.contains(CeremonyState.EXPIRED));
+        assertTrue(!purgedStates.contains(CeremonyState.CONSUMED),
+                "CONSUMED must never be included in the purge -- it's the durable record dispatch retry reloads");
+    }
+
     // --- step-level stale detection (F4 fix, design §4.2/§7) ---
 
     @Test

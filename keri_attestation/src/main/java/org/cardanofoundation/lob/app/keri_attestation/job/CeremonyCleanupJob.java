@@ -42,11 +42,12 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriAttestationPro
  *       {@code FAILED(KERI_STEP_TIMED_OUT)}. FAILED is terminal for this ceremony; recovery means the
  *       user creates a new ceremony, which fast-forwards past already-completed one-time steps via the
  *       identity link — so this sweep frees a stuck flow rather than dead-ending the user.</li>
- *   <li>{@code deleteOldTerminalCeremonies()} — terminal rows (CONSUMED/FAILED/EXPIRED) are pure
- *       audit trail once the ceremony is done; this purges anything older than
- *       7 days so the table does not grow unbounded. This only ever deletes
- *       ceremony rows in this module — {@code blockchain_publisher}'s own freeze-row cleanup for
- *       terminal ceremonies is a separate job (Task 13), not cascaded from here.</li>
+ *   <li>{@code deleteOldTerminalCeremonies()} (F10 fix) — FAILED/EXPIRED rows are pure audit trail
+ *       once the ceremony is done; this purges anything older than 7 days so the table does not grow
+ *       unbounded. {@code CONSUMED} rows are deliberately excluded from this purge — see the method's
+ *       own javadoc. This only ever deletes ceremony rows in this module —
+ *       {@code blockchain_publisher}'s own freeze-row cleanup for terminal ceremonies is a separate job
+ *       (Task 13), not cascaded from here.</li>
  * </ol>
  */
 @Component
@@ -56,6 +57,10 @@ public class CeremonyCleanupJob {
 
     private static final Set<CeremonyState> TERMINAL =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
+    /** F10 fix: the subset of {@link #TERMINAL} eligible for {@link #deleteOldTerminalCeremonies}'s
+     *  purge — see that method's javadoc for why {@code CONSUMED} is excluded. */
+    private static final Set<CeremonyState> PURGEABLE_TERMINAL =
+            EnumSet.of(CeremonyState.FAILED, CeremonyState.EXPIRED);
     private static final Set<CeremonyState> WAITING =
             EnumSet.of(CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.AUTH_BEGIN_SUBMITTED,
                     CeremonyState.ATTEST_REQUESTED);
@@ -163,9 +168,18 @@ public class CeremonyCleanupJob {
         };
     }
 
+    /**
+     * Purges FAILED/EXPIRED rows older than the retention window (F10 fix). {@code CONSUMED} rows are
+     * deliberately excluded: they are the durable attestation record that {@code blockchain_publisher}'s
+     * dispatch (M3) reloads on every retry to build label-170 metadata — the dispatcher can legitimately
+     * retry a stuck publish well past 7 days after the ceremony itself was consumed, and a purged row
+     * would make that late dispatch impossible (it has nothing left to read the attestation from). One
+     * {@code CONSUMED} row persists per published document; that growth is accepted as the cost of the
+     * dispatch retry sweep always having what it needs.
+     */
     private void deleteOldTerminalCeremonies() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(RETENTION_DAYS);
-        long deleted = ceremonyRepository.deleteByStateInAndUpdatedAtBefore(TERMINAL, cutoff);
+        long deleted = ceremonyRepository.deleteByStateInAndUpdatedAtBefore(PURGEABLE_TERMINAL, cutoff);
         if (deleted > 0) {
             log.info("keri_attestation cleanup deleted {} terminal ceremony(ies) older than {} days",
                     deleted, RETENTION_DAYS);
