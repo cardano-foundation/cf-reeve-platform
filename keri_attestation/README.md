@@ -15,10 +15,24 @@ demo/reference repo behavior (see design §3, "protocol deviations caught in rev
 
 - Upstream repo: [`cardano-foundation/CIPs`](https://github.com/cardano-foundation/CIPs), path
   `CIP-0170/README.md`.
-- **Pinned commit: TBD-at-spike-run** — fill in the exact commit SHA of `CIP-0170/README.md` that
-  was used as the normative reference, at the time the remotesign spike below is run. Until this
-  is filled in, no field name, value, or verification rule in this module should be treated as
-  final.
+- **Pinned commit:
+  [`86b89208d3b2aabb5dcc5b778dfbe09096b4e114`](https://github.com/cardano-foundation/CIPs/blob/86b89208d3b2aabb5dcc5b778dfbe09096b4e114/CIP-0170/README.md)**
+  — the latest commit touching `CIP-0170` as of 2026-06-04. CIP status at this revision:
+  **Proposed**.
+- `Cip170MetadataFactory`'s field set was cross-checked against this revision's field tables and
+  matches exactly:
+  - `ATTEST`: `{t, s, i, d, v:{v:"1.0"}}` — matches the CIP's "Creation of verifiable records"
+    field list (`t`, `i`, `d`, `s`, `v`) and its worked vLEI example (`v:{v:"1.0"}`). Map key
+    insertion order differs from the CIP's JSON examples in a few fields, but this is immaterial:
+    canonical CBOR (RFC 7049 §3.9) sorts keys deterministically regardless of insertion order, so
+    on-chain byte identity comes from the field *set*, not example ordering.
+  - `AUTH_BEGIN`: `{t, s, i, c, v:{v:"1.0", k:"KERI10", a:"ACDC10"}, m:{l:[...]}}` — matches the
+    CIP's "Establishment of signing authority" field list (`t`, `i`, `s`, `c`, `v`, `m`) and its
+    worked vLEI example (`v:{v:"1.0", k:"KERI10", a:"ACDC10"}`, `m:{l:[1447], LEI:"..."}` — this
+    module generalizes the reference's hardcoded `l:[1447]`/`LEI` pair to caller-supplied labels
+    and extra entries, per `Cip170MetadataFactory#authBeginMap`'s own javadoc).
+  - Golden vectors in `Cip170MetadataFactoryTest` additionally match the in-repo reference scripts
+    (`docs/keri/AttestTransaction.java`, `docs/keri/advanced/PublishExistingCredential.java`).
 
 ## Remotesign spike
 
