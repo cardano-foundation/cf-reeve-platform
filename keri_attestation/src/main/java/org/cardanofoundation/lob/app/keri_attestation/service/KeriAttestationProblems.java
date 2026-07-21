@@ -24,6 +24,11 @@ public final class KeriAttestationProblems {
     public static final String KERI_WALLET_TIMEOUT = "KERI_WALLET_TIMEOUT";
     public static final String KERI_STEP_TIMED_OUT = "KERI_STEP_TIMED_OUT";
     public static final String CREDENTIAL_REJECTED = "CREDENTIAL_REJECTED";
+    /** An IPEX exchange (apply/agree/admit) could not be built or sent to the linked AID — a
+     *  transport/protocol failure talking to the KERI agent, distinct from {@link #KERI_WALLET_TIMEOUT}
+     *  (no reply arrived in time) and {@link #CREDENTIAL_REJECTED} (a reply arrived but failed content
+     *  validation). Added for {@code KeriCredentialService} (design §4.3). */
+    public static final String CREDENTIAL_REQUEST_FAILED = "CREDENTIAL_REQUEST_FAILED";
     public static final String AUTH_BEGIN_ROLLED_BACK = "AUTH_BEGIN_ROLLED_BACK";
     public static final String AUTH_BEGIN_UNVERIFIED = "AUTH_BEGIN_UNVERIFIED";
     public static final String ATTESTATION_UNAVAILABLE = "ATTESTATION_UNAVAILABLE";

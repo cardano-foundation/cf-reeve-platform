@@ -1,0 +1,456 @@
+package org.cardanofoundation.lob.app.keri_attestation.service;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.RETURNS_DEFAULTS;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.http.ProblemDetail;
+
+import io.vavr.control.Either;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
+import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
+import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
+import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
+import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
+import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
+import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
+import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
+import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
+import org.cardanofoundation.signify.app.credentialing.ipex.Ipex;
+import org.cardanofoundation.signify.app.credentialing.ipex.IpexApplyArgs;
+import org.cardanofoundation.signify.cesr.Serder;
+
+@ExtendWith(MockitoExtension.class)
+class KeriCredentialServiceTest {
+
+    private static final String CEREMONY_ID = "cer-1";
+    private static final String USER_ID = "user-1";
+    private static final int GENERATION = 2;
+    private static final String LINKED_AID = "ELINKEDAID000000000000000000000000000";
+    private static final String OTHER_AID = "EOTHERAID000000000000000000000000000A";
+    private static final String AGENT_NAME = "keriAttestationAgent";
+    private static final String AGENT_OOBI = "https://agent.example.org/oobi/EAGENT/agent/EAGENT";
+    private static final String SCHEMA_SAID = "ESCHEMA00000000000000000000000000000000";
+    private static final String ROOT_AID = "EROOT00000000000000000000000000000000A";
+    private static final String APPLY_SAID = "EAPPLYSAID00000000000000000000000000000";
+    private static final String AGREE_SAID = "EAGREESAID00000000000000000000000000000";
+    private static final String OFFER_SAID = "EOFFERSAID00000000000000000000000000000";
+    private static final String GRANT_SAID = "EGRANTSAID00000000000000000000000000000";
+    private static final String ADMIT_SAID = "EADMITSAID00000000000000000000000000000";
+    private static final String CREDENTIAL_SAID = "ECREDSAID000000000000000000000000000000";
+    private static final String RESULT_SCHEMA_SAID = "ELEAFSCHEMA0000000000000000000000000000";
+    private static final String OFFER_NOTIF_ID = "0AOFFERNOTIFID0000000000000000000";
+    private static final String GRANT_NOTIF_ID = "0AGRANTNOTIFID0000000000000000000";
+    private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer");
+    private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant");
+
+    @Mock
+    private SignifyClient client;
+    @Mock
+    private Ipex ipex;
+    @Mock
+    private Credentials credentials;
+    @Mock
+    private KeriAgentService agentService;
+    @Mock
+    private KeriNotificationCorrelator correlator;
+    @Mock
+    private CredentialChainValidator validator;
+    @Mock
+    private CeremonyService ceremonyService;
+    @Mock
+    private KeriAttestationCeremonyRepository ceremonyRepository;
+    @Mock
+    private KeriIdentityLinkRepository identityLinkRepository;
+
+    private KeriCredentialService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(client.ipex()).thenReturn(ipex);
+        lenient().when(client.credentials()).thenReturn(credentials);
+        lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
+        lenient().when(agentService.agentOobi()).thenReturn(AGENT_OOBI);
+
+        service = new KeriCredentialService(client, agentService, correlator, validator, ceremonyService,
+                ceremonyRepository, identityLinkRepository, properties());
+    }
+
+    private static KeriAttestationProperties properties() {
+        return new KeriAttestationProperties(
+                true, null, "identifier",
+                new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(ROOT_AID)),
+                Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
+                3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")));
+    }
+
+    private static KeriAttestationCeremonyEntity ceremony(String requestExnSaid) {
+        KeriAttestationCeremonyEntity ceremony = new KeriAttestationCeremonyEntity();
+        ceremony.setId(CEREMONY_ID);
+        ceremony.setUserId(USER_ID);
+        ceremony.setState(CeremonyState.CREDENTIAL_REQUESTED);
+        ceremony.setAttemptGeneration(GENERATION);
+        ceremony.setRequestExnSaid(requestExnSaid);
+        return ceremony;
+    }
+
+    private static KeriIdentityLinkEntity link(String aid) {
+        KeriIdentityLinkEntity link = new KeriIdentityLinkEntity();
+        link.setUserId(USER_ID);
+        link.setAid(aid);
+        return link;
+    }
+
+    private static Serder serderWithSaid(String said) {
+        Serder serder = mock(Serder.class, RETURNS_DEFAULTS);
+        lenient().when(serder.getKed()).thenReturn(Map.of("d", said));
+        return serder;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> grantExn(String senderAid, String credentialSaid) {
+        return Map.of("i", senderAid, "e", Map.of("acdc", Map.of("d", credentialSaid)));
+    }
+
+    // ==================== startPresentation ====================
+
+    @Test
+    void startPresentationBuildsAndSendsApplyAndPersistsRequestExnSaidBeforeSubmit() throws Exception {
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        Either<ProblemDetail, Void> result = service.startPresentation(ceremony);
+
+        assertTrue(result.isRight());
+        assertEquals(APPLY_SAID, ceremony.getRequestExnSaid());
+        verify(ceremonyRepository).save(ceremony);
+
+        ArgumentCaptor<IpexApplyArgs> captor = ArgumentCaptor.forClass(IpexApplyArgs.class);
+        verify(ipex).apply(captor.capture());
+        IpexApplyArgs args = captor.getValue();
+        assertEquals(AGENT_NAME, args.getSenderName());
+        assertEquals(LINKED_AID, args.getRecipient());
+        assertEquals("", args.getMessage());
+        assertEquals(SCHEMA_SAID, args.getSchemaSaid());
+        assertEquals(Map.of("oobiUrl", AGENT_OOBI), args.getAttributes());
+
+        verify(ipex).submitApply(AGENT_NAME, exn, List.of("sig1"), List.of(LINKED_AID));
+    }
+
+    @Test
+    void startPresentationWithNoIdentityLinkFailsWithIdentityNotLinkedAndNeverTouchesIpex() {
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, Void> result = service.startPresentation(ceremony(null));
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.IDENTITY_NOT_LINKED, result.getLeft().getTitle());
+        verifyNoInteractions(ipex);
+        verifyNoInteractions(ceremonyRepository);
+    }
+
+    @Test
+    void startPresentationApplyBuildFailureReturnsLeftWithoutPersistingRequestExnSaid() throws Exception {
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(ipex.apply(any())).thenThrow(new IOException("agent unreachable"));
+
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        Either<ProblemDetail, Void> result = service.startPresentation(ceremony);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
+        assertNull(ceremony.getRequestExnSaid());
+        verifyNoInteractions(ceremonyRepository);
+    }
+
+    @Test
+    void startPresentationSubmitApplyFailureStillPersistsRequestExnSaidBeforeReturningLeft() throws Exception {
+        // Demonstrates the persist-before-send ordering: the SAID is computed locally (deterministic
+        // from the built, not-yet-sent exn) and saved before the network call, so a transport failure
+        // in the send itself does not lose track of what was about to go out.
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(ipex.submitApply(any(), any(), any(), any())).thenThrow(new IOException("network blip"));
+
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        Either<ProblemDetail, Void> result = service.startPresentation(ceremony);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
+        assertEquals(APPLY_SAID, ceremony.getRequestExnSaid());
+        verify(ceremonyRepository).save(ceremony);
+    }
+
+    // ==================== awaitPresentation ====================
+
+    @Test
+    void awaitPresentationHappyPathWalksOfferAgreeGrantAdmitValidatesAndCompletesInOrder() throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        KeriIdentityLinkEntity initialLink = link(LINKED_AID);
+        KeriIdentityLinkEntity freshLink = link(LINKED_AID);
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(freshLink));
+
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ipex).submitAgree(AGENT_NAME, agreeExn, List.of("sig2"), List.of(LINKED_AID));
+        verify(ipex).submitAdmit(AGENT_NAME, admitExn, List.of("sig3"), "atc3", List.of(LINKED_AID));
+
+        assertEquals(CREDENTIAL_SAID, freshLink.getCredentialSaid());
+        assertEquals(RESULT_SCHEMA_SAID, freshLink.getCredentialSchemaSaid());
+        verify(identityLinkRepository).save(freshLink);
+        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+
+        // Notifications are only claimed (marked+deleted) after both the link and the ceremony
+        // transition are durably committed.
+        InOrder inOrder = inOrder(identityLinkRepository, ceremonyService, correlator);
+        inOrder.verify(identityLinkRepository).save(freshLink);
+        inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
+        inOrder.verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        inOrder.verify(correlator).markAndDelete(GRANT_NOTIF_ID);
+    }
+
+    @Test
+    void awaitPresentationCeremonyNotFoundNoOps() {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.empty());
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verifyNoInteractions(identityLinkRepository, correlator, ceremonyService, ipex);
+    }
+
+    @Test
+    void awaitPresentationWithNoIdentityLinkFailsWithIdentityNotLinked() {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.IDENTITY_NOT_LINKED), any());
+        verifyNoInteractions(correlator, ipex);
+    }
+
+    @Test
+    void awaitPresentationOfferTimeoutFailsWithKeriWalletTimeoutAndNeverBuildsAgree() {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.empty());
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/offer.");
+        verifyNoInteractions(ipex);
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationGrantTimeoutFailsWithKeriWalletTimeoutAndNeverAdmits() throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.empty());
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/grant.");
+        verify(ipex, never()).admit(any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationAgreeSendFailureFailsWithCredentialRequestFailed() throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        when(ipex.agree(any())).thenThrow(new IOException("agent unreachable"));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
+        verifyNoInteractions(credentials);
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationMissingAcdcInGrantExnFailsWithCredentialRequestFailed() throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID, Map.of("i", LINKED_AID))));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
+        verify(ipex, never()).admit(any());
+    }
+
+    @Test
+    void awaitPresentationAdmitSendFailureFailsWithCredentialRequestFailed() throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        when(ipex.admit(any())).thenThrow(new IOException("agent unreachable"));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
+        verifyNoInteractions(credentials);
+    }
+
+    @Test
+    void awaitPresentationCredentialNotFoundAfterAdmitFailsWithCredentialRequestFailed() throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.empty());
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
+        verifyNoInteractions(validator);
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationValidatorRejectionFailsWithCredentialRejectedAndDoesNotPersistOrMarkNotifications()
+            throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+
+        ProblemDetail rejection = KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REJECTED,
+                "issuee mismatch");
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.left(rejection));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.CREDENTIAL_REJECTED, "issuee mismatch");
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        // Only one identityLinkRepository.findById call (the initial linkedAid lookup) — rejection
+        // returns before the fresh-link re-fetch, and nothing is ever persisted to the link.
+        verify(identityLinkRepository, never()).save(any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void awaitPresentationRelinkMidFlightFailsWithIdentityRelinkedAndDoesNotPersistStaleCredential() throws Exception {
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
+        KeriIdentityLinkEntity initialLink = link(LINKED_AID);
+        KeriIdentityLinkEntity relinkedLink = link(OTHER_AID);
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink), Optional.of(relinkedLink));
+
+        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
+        Serder agreeExn = serderWithSaid(AGREE_SAID);
+        when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
+        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID))));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+
+        service.awaitPresentation(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.IDENTITY_RELINKED,
+                "Identity for user user-1 changed while awaiting the credential presentation.");
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        assertNull(relinkedLink.getCredentialSaid());
+        verify(identityLinkRepository, never()).save(any());
+        verify(correlator, never()).markAndDelete(any());
+    }
+}
