@@ -5,6 +5,7 @@ import java.security.DigestException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.stereotype.Service;
 
@@ -19,11 +20,18 @@ import org.cardanofoundation.signify.cesr.args.RawArgs;
 
 /**
  * Builds CIP-170 label-170 metadata maps byte-for-byte compatible with the in-repo reference
- * publishing scripts — same field names, same insertion order, same chunking — so anything this
- * factory produces is safe to anchor on-chain under metadata label 170:
+ * publishing scripts — same field names, same {@code put()} call order, same chunking — so
+ * anything this factory produces is safe to anchor on-chain under metadata label 170:
  * {@code docs/keri/AttestTransaction.java} (ATTEST, lines 188-198) and
  * {@code docs/keri/advanced/PublishExistingCredential.java} (AUTH_BEGIN + chunking, lines
  * 219-286).
+ *
+ * <p><b>Note on "byte-for-byte":</b> {@link CborSerializationUtil}'s serialization defaults to
+ * canonical CBOR (RFC 7049 §3.9), which sorts map keys deterministically regardless of
+ * {@code put()} insertion order — so the on-chain byte identity with the reference scripts actually
+ * comes from matching their exact key/value <em>set</em>, not from mirroring their insertion order.
+ * The {@code put()} calls below still follow the reference's order anyway, purely so this class
+ * reads as a direct, diffable port of the reference scripts.
  *
  * <p>Pure and stateless: every method is a deterministic function of its arguments, with no
  * dependency on the rest of this module (no repository, no KERI agent, no clock).
@@ -64,7 +72,11 @@ public class Cip170MetadataFactory {
      * -supplied labels and extra entries.
      *
      * <p>{@code optionalM} may be {@code null} or empty. Its values are written as-is if already a
-     * {@link String}, otherwise converted with {@link String#valueOf(Object)}.
+     * {@link String}, otherwise converted with {@link String#valueOf(Object)}. {@code "l"} is
+     * reserved for {@code authorizedLabels}: an {@code optionalM} entry keyed {@code "l"} would
+     * otherwise silently overwrite the authorization-labels list in the underlying CBOR map (repeated
+     * keys are same-slot overwrites), so it is rejected outright rather than allowed to corrupt
+     * on-chain data. {@code authorizedLabels} itself must not be {@code null}.
      */
     public MetadataMap authBeginMap(String aid, String leafSchemaSaid, byte[] reducedCesrChain,
             Map<String, Object> optionalM, List<Long> authorizedLabels) {
@@ -106,6 +118,8 @@ public class Cip170MetadataFactory {
     // --- internals ---
 
     private static MetadataMap authorizationMap(Map<String, Object> optionalM, List<Long> authorizedLabels) {
+        Objects.requireNonNull(authorizedLabels, "authorizedLabels must not be null");
+
         MetadataMap m = MetadataBuilder.createMap();
         MetadataList l = MetadataBuilder.createList();
         for (Long label : authorizedLabels) {
@@ -114,6 +128,11 @@ public class Cip170MetadataFactory {
         m.put("l", l);
         if (optionalM != null) {
             for (Map.Entry<String, Object> entry : optionalM.entrySet()) {
+                if ("l".equals(entry.getKey())) {
+                    throw new IllegalArgumentException(
+                            "optionalM must not contain the reserved key \"l\" -- it would silently"
+                                    + " overwrite the authorized-labels list built from authorizedLabels.");
+                }
                 Object value = entry.getValue();
                 m.put(entry.getKey(), value instanceof String stringValue ? stringValue : String.valueOf(value));
             }

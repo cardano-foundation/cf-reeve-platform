@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -54,12 +55,15 @@ class Cip170MetadataFactoryTest {
     }
 
     @Test
-    void attestMapSerializesToTheExactSameCborBytesAsTheReferenceInsertionOrder() throws Exception {
-        // map.get(key) assertions above are order-insensitive; this pins the actual byte-for-byte
-        // requirement (this metadata is CBOR-encoded on-chain) by reproducing
-        // AttestTransaction.buildTransaction's put() calls in its exact order and comparing serialized
-        // bytes -- a silent reordering of attestMap's puts would fail this test even though it would
-        // still pass every get()-based assertion above.
+    void attestMapProducesTheSameCanonicalCborBytesAsTheReferenceKeySet() throws Exception {
+        // NOTE: CborSerializationUtil.serialize(DataItem) defaults to canonical=true (RFC 7049
+        // Section 3.9), which sorts map keys deterministically regardless of put() insertion order --
+        // so this test cannot and does not catch a reordering of attestMap's puts (insertion order
+        // does not affect the serialized bytes at all here). What it DOES pin: the exact key/value
+        // SET matches the reference byte-for-byte -- an extra, missing, renamed, or wrong-type/wrong
+        // -value key would change the canonical CBOR bytes and fail this test, even though the
+        // get()-based assertions above wouldn't necessarily catch every such change (e.g. an extra
+        // key with no corresponding get() assertion).
         MetadataMap reference = MetadataBuilder.createMap();
         reference.put("t", "ATTEST");
         reference.put("s", KEL_SEQUENCE);
@@ -106,12 +110,13 @@ class Cip170MetadataFactoryTest {
     }
 
     @Test
-    void authBeginMapSerializesToTheExactSameCborBytesAsTheReferenceInsertionOrder() throws Exception {
-        // Same rationale as the attestMap byte-order test above: reproduces
-        // PublishExistingCredential.buildTransaction's put() calls verbatim (single "LEI" entry,
-        // single authorized label 1447, exactly as the reference hardcodes) and compares serialized
-        // bytes, so a silent reordering of authBeginMap's puts is caught even though it would still
-        // pass every get()-based assertion elsewhere in this file.
+    void authBeginMapProducesTheSameCanonicalCborBytesAsTheReferenceKeySet() throws Exception {
+        // Same rationale/caveat as the attestMap canonical-CBOR test above: canonical CBOR (default
+        // for CborSerializationUtil.serialize) sorts map keys, so this does NOT catch a reordering of
+        // authBeginMap's puts. It reproduces PublishExistingCredential.buildTransaction's key/value
+        // SET verbatim (single "LEI" entry, single authorized label 1447, exactly as the reference
+        // hardcodes) and pins the exact serialized bytes -- an extra/missing/wrong-value key would
+        // fail this test.
         byte[] chain = sequentialBytes(70);
         String lei = "5299000WN3W1WHOZL256";
 
@@ -161,6 +166,29 @@ class Cip170MetadataFactoryTest {
         MetadataList l = (MetadataList) m.get("l");
         assertEquals(1, l.size());
         assertEquals(BigInteger.valueOf(1447), l.getValueAt(0));
+    }
+
+    // --- optionalM must never be able to corrupt m.l: "l" is a reserved key ---
+
+    @Test
+    void authBeginMapRejectsAnOptionalMEntryThatWouldClobberTheReservedLKey() {
+        // The underlying co.nstant.in.cbor Map treats repeated keys as same-slot overwrites, so an
+        // optionalM entry keyed "l" would otherwise silently replace the authorized-labels
+        // MetadataList built from authorizedLabels with a plain string -- corrupting the on-chain
+        // authorization-labels field. authBeginMap must reject this outright (fail fast) rather than
+        // ever construct a map where m.get("l") is anything but the MetadataList of authorizedLabels.
+        Map<String, Object> optionalM = new LinkedHashMap<>();
+        optionalM.put("l", "attacker-controlled value");
+
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
+                () -> factory.authBeginMap(AID, LEAF_SCHEMA_SAID, new byte[0], optionalM, List.of(1447L)));
+        assertTrue(thrown.getMessage().contains("\"l\""));
+    }
+
+    @Test
+    void authBeginMapRejectsNullAuthorizedLabels() {
+        assertThrows(NullPointerException.class,
+                () -> factory.authBeginMap(AID, LEAF_SCHEMA_SAID, new byte[0], null, null));
     }
 
     // --- chunking edge cases: empty chain, exactly 64 bytes, 65 bytes ---
@@ -248,8 +276,8 @@ class Cip170MetadataFactoryTest {
     }
 
     /** Verbatim copy of {@code PublishExistingCredential.splitIntoChunks}, kept independent of
-     *  {@code Cip170MetadataFactory}'s own chunking so the byte-order golden test above is not just
-     *  checking the factory against itself. */
+     *  {@code Cip170MetadataFactory}'s own chunking so the canonical-CBOR golden test above is not
+     *  just checking the factory against itself. */
     private static byte[][] referenceSplitIntoChunks(byte[] data, int chunkSize) {
         int numChunks = (data.length + chunkSize - 1) / chunkSize;
         byte[][] chunks = new byte[numChunks][];
