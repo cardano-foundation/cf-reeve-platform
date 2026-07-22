@@ -86,12 +86,12 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
     @Nullable
-    @Column(name = "currency")
-    private String currency;
+    @Column(name = "currency_rcy")
+    private String currencyRcy;
 
     @Nullable
-    @Column(name = "currency_id")
-    private String currencyId;
+    @Column(name = "currency_rcy_id")
+    private String currencyRcyId;
 
     // --- Spend detail: the event's single spend record. SPENDING events only. ---
 
@@ -112,12 +112,12 @@ public class SpendingEventEntity extends CommonDateOnlyLockableEntity implements
     private BigDecimal amountRcy;
 
     @Nullable
-    @Column(name = "spend_currency")
-    private String spendCurrency;
+    @Column(name = "currency_fcy")
+    private String currencyFcy;
 
     @Nullable
-    @Column(name = "spend_currency_id")
-    private String spendCurrencyId;
+    @Column(name = "currency_fcy_id")
+    private String currencyFcyId;
 
     @Nullable
     @Column(name = "fx_rate")

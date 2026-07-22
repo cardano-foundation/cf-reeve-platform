@@ -50,7 +50,7 @@ public class SpendingEventCreateRequest extends BaseRequest {
 
     @NotBlank
     @Schema(example = "USD", description = "Reporting currency of the event.")
-    private String currency;
+    private String currencyRcy;
 
     @Nullable
     @JsonFormat(pattern = "yyyy-MM-dd")
@@ -73,7 +73,7 @@ public class SpendingEventCreateRequest extends BaseRequest {
 
     @Nullable
     @Schema(example = "EUR", description = "Foreign currency of the spend. SPENDING events only.")
-    private String spendCurrency;
+    private String currencyFcy;
 
     @Nullable
     @Schema(example = "1.176470", description = "FX rate such that amountFcy = amountRcy * fxRate. SPENDING events only.")

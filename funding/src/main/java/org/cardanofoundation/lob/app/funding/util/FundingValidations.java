@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -133,10 +134,10 @@ public final class FundingValidations {
     public static Optional<ProblemDetail> spendDetail(
             EventType eventType,
             String category, String vendor,
-            BigDecimal amountFcy, String spendCurrency, BigDecimal fxRate, BigDecimal amountRcy,
+            BigDecimal amountFcy, String currencyFcy, BigDecimal fxRate, BigDecimal amountRcy, String currencyRcy,
             String hash, String notes) {
 
-        boolean anySpendField = category != null || vendor != null || amountFcy != null || spendCurrency != null
+        boolean anySpendField = category != null || vendor != null || amountFcy != null || currencyFcy != null
                 || fxRate != null || amountRcy != null || hash != null || notes != null;
 
         if (eventType != EventType.SPENDING) {
@@ -149,16 +150,12 @@ public final class FundingValidations {
         }
 
         // SPENDING: the amount fields are required to record the spend.
-        if (amountFcy == null || amountRcy == null || fxRate == null) {
+        if (amountFcy == null || amountRcy == null || fxRate == null || currencyRcy == null || currencyFcy == null) {
             return Optional.of(Problems.badRequest(
-                    "amountFcy, amountRcy and fxRate are required for SPENDING events",
+                    "amountFcy, amountRcy, currencyRcy, currencyFcy and fxRate are required for SPENDING events",
                     ErrorTitleConstants.SPEND_FIELDS_REQUIRED));
         }
-        if (amountRcy.multiply(fxRate).subtract(amountFcy).abs().compareTo(FX_TOLERANCE) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "fxRate %s does not convert amountRcy %s to amountFcy %s".formatted(fxRate, amountRcy, amountFcy),
-                    ErrorTitleConstants.FX_RATE_MISMATCH));
-        }
+
         return Optional.empty();
     }
 
@@ -320,6 +317,19 @@ public final class FundingValidations {
             return Optional.of(Problems.badRequest(
                     "fundingEntity is required for FUNDING events",
                     ErrorTitleConstants.FUNDING_ENTITY_REQUIRED));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * An event's date (funding date, spending date or refund date, depending on {@code eventType})
+     * may not be in the future.
+     */
+    public static Optional<ProblemDetail> eventDateNotInFuture(LocalDate eventDate) {
+        if (eventDate != null && eventDate.isAfter(LocalDate.now())) {
+            return Optional.of(Problems.badRequest(
+                    "eventDate %s must not be in the future".formatted(eventDate),
+                    ErrorTitleConstants.EVENT_DATE_IN_FUTURE));
         }
         return Optional.empty();
     }

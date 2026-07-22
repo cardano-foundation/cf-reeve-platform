@@ -43,7 +43,7 @@ class SpendingEventControllerTest {
 
     private SpendingEventView eventView() {
         return SpendingEventView.builder().eventId("e1").organisationId("org1").eventType(EventType.SPENDING)
-                .status(EventStatus.DRAFT).fundingId("GRANT-2025-001").totalAmount(BigDecimal.ZERO).currency("USD").build();
+                .status(EventStatus.DRAFT).fundingId("GRANT-2025-001").totalAmount(BigDecimal.ZERO).currencyRcy("USD").build();
     }
 
     private ProblemDetail problem(HttpStatus status, String title) {

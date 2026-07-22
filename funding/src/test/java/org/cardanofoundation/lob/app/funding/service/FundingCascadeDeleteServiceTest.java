@@ -184,7 +184,7 @@ class FundingCascadeDeleteServiceTest {
 
     private FundingEventEntity fundingEvent(String id, EventType type, EventMilestoneAllocationEntity... allocations) {
         return FundingEventEntity.builder()
-                .id(id).eventType(type).status(EventStatus.DRAFT).organisationId("org1").fundingId("GRANT-1").currency("USD")
+                .id(id).eventType(type).status(EventStatus.DRAFT).organisationId("org1").fundingId("GRANT-1").currencyRcy("USD")
                 .totalAmount(BigDecimal.ZERO)
                 .milestoneAllocations(new ArrayList<>(List.of(allocations)))
                 .build();

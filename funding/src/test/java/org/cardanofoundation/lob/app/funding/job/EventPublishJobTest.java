@@ -85,7 +85,7 @@ class EventPublishJobTest {
 
         FundingEventEntity event = FundingEventEntity.builder()
                 .id("e1").eventType(EventType.SPENDING).status(EventStatus.PUBLISHED)
-                .organisationId("org1").fundingId("GRANT-001").currency("USD")
+                .organisationId("org1").fundingId("GRANT-001").currencyRcy("USD")
                 .totalAmount(BigDecimal.ZERO).build();
         event.setCreatedAt(LocalDateTime.now());
 
@@ -154,7 +154,7 @@ class EventPublishJobTest {
     private FundingEventEntity buildEvent(String id) {
         FundingEventEntity event = FundingEventEntity.builder()
                 .id(id).eventType(EventType.SPENDING).status(EventStatus.PUBLISHED)
-                .organisationId("org1").fundingId("GRANT-001").currency("USD")
+                .organisationId("org1").fundingId("GRANT-001").currencyRcy("USD")
                 .totalAmount(BigDecimal.ZERO).build();
         event.setCreatedAt(LocalDateTime.now());
         return event;
