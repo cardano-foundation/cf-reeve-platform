@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +30,8 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
+import org.cardanofoundation.signify.app.coring.Operation;
+import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAgreeArgs;
 import org.cardanofoundation.signify.core.States.HabState;
@@ -43,8 +47,16 @@ import org.cardanofoundation.signify.core.States.HabState;
  * {@link #awaitPresentation} is the async continuation (offer → agree → grant → admit → fetch → validate
  * → persist → complete/fail the ceremony step) that a background worker runs after the synchronous part
  * returns. {@link #startCredentialRequest} (Task 10) is the orchestrating entry point the controller
- * actually calls: {@code beginStep} + a retry pre-check + {@link #startPresentation} +
- * {@link CeremonyAsyncRunner} dispatch, mirroring {@link KeriAttestService#startAttest}'s shape exactly.
+ * actually calls: {@link #ensureSchemasResolved} + {@code beginStep} + a retry pre-check +
+ * {@link #startPresentation} + {@link CeremonyAsyncRunner} dispatch, mirroring
+ * {@link KeriAttestService#startAttest}'s shape exactly.
+ *
+ * <p><b>Live-testing fix:</b> {@link #ensureSchemasResolved} resolves every configured schema SAID as
+ * an OOBI on OUR OWN agent before the first apply that references it is ever sent — KERIA silently
+ * drops an IPEX exchange referencing a schema SAID the receiving agent has never itself resolved, so
+ * without this a real wallet's "present" action does nothing observable (no error, no notification).
+ * See that method's javadoc for the full rationale, mirrored from cip113's reference
+ * {@code resolveSchemas} flow ({@code docs/keri/advanced/PublishExistingCredential.java}).
  */
 @Service
 @RequiredArgsConstructor
@@ -76,6 +88,11 @@ public class KeriCredentialService {
      *  timeout, applied here to the credential-presentation step instead of the ATTEST anchor. */
     private static final Duration RETRY_PRECHECK_TIMEOUT = Duration.ofSeconds(2);
 
+    /** Bounded wait for a single schema-OOBI resolve ({@link #ensureSchemasResolved}) — mirrors
+     *  {@code KeriOobiService#RESOLVE_TIMEOUT_MILLIS}'s own bound on the same underlying
+     *  {@code operations().wait} call, applied here to a schema OOBI instead of a wallet's identity OOBI. */
+    private static final long SCHEMA_RESOLVE_TIMEOUT_MILLIS = 15_000L;
+
     private final KeriAttestationClient client;
     private final KeriAgentService agentService;
     private final KeriNotificationCorrelator correlator;
@@ -85,6 +102,11 @@ public class KeriCredentialService {
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
     private final CeremonyAsyncRunner asyncRunner;
+
+    /** In-memory cache of schema SAIDs already resolved as an OOBI on our agent this process
+     *  ({@link #ensureSchemasResolved}) — a schema, once resolved, stays resolved for the life of the
+     *  agent, so this avoids re-resolving (and re-waiting on) the same SAID on every presentation. */
+    private final Set<String> resolvedSchemaSaids = ConcurrentHashMap.newKeySet();
 
     // --- orchestration (Task 10): begin the step, avoid a redundant apply if a reply already arrived,
     //     dispatch the async continuation. The controller calls only this method. ---
@@ -97,6 +119,15 @@ public class KeriCredentialService {
      * the previous attempt's apply before resending one.
      */
     public Either<ProblemDetail, Void> startCredentialRequest(String ceremonyId, String userId, boolean retry) {
+        // Live-testing fix: resolved BEFORE beginStep, i.e. before any ceremony state is touched at
+        // all — a resolution failure here must surface as a plain problem, not a failed/rolled-back
+        // ceremony step. See ensureSchemasResolved's javadoc for why this has to happen at all.
+        Either<ProblemDetail, Void> schemasResolved =
+                ensureSchemasResolved(properties.credentialPolicy().schemaSaids());
+        if (schemasResolved.isLeft()) {
+            return Either.left(schemasResolved.getLeft());
+        }
+
         Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
                 CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, retry);
         if (begun.isLeft()) {
@@ -144,6 +175,54 @@ public class KeriCredentialService {
         }
 
         return dispatchAwaitPresentation(ceremonyId, generation);
+    }
+
+    /**
+     * Live-testing fix: resolves every one of {@code schemaSaids} as an OOBI on OUR OWN agent — not
+     * just recognized by the wallet — before an IPEX apply referencing any of them is ever sent.
+     *
+     * <p>Discovered during real-wallet testing: presenting a credential from a real Veridian wallet did
+     * nothing observable when clicked — no error surfaced anywhere, the apply reached the wallet fine,
+     * but no notification for its reply ever arrived back on our side. Root cause: our KERIA agent had
+     * never resolved the credential schema's OOBI itself. KERIA silently drops an IPEX exchange
+     * referencing a schema SAID the receiving agent doesn't already know, so the wallet's offer — sent
+     * in response to a perfectly valid apply — is dropped before it ever becomes a notification here.
+     * cip113's reference flow avoids this by resolving every schema OOBI up front (see
+     * {@code docs/keri/advanced/PublishExistingCredential.java}'s {@code resolveSchemas}: for each
+     * schema, {@code client.oobis().resolve(schemaBaseUrl + "/" + said, null)} followed by
+     * {@code client.operations().wait(...)}); this mirrors that, but lazily — once per SAID per
+     * process, cached in {@link #resolvedSchemaSaids} — rather than eagerly at startup.
+     *
+     * <p>Called at the very top of {@link #startCredentialRequest}, before {@code beginStep} touches
+     * any ceremony state at all: a resolution failure must surface as a plain problem, never a
+     * failed/rolled-back ceremony step.
+     */
+    private Either<ProblemDetail, Void> ensureSchemasResolved(List<String> schemaSaids) {
+        if (schemaSaids == null || schemaSaids.isEmpty()) {
+            return Either.right(null);
+        }
+        String baseUrl = withoutTrailingSlash(properties.credentialPolicy().schemaBaseUrl());
+        for (String said : schemaSaids) {
+            if (resolvedSchemaSaids.contains(said)) {
+                continue;
+            }
+            String schemaUrl = baseUrl + "/" + said;
+            try {
+                Object resolveResult = client.client().oobis().resolve(schemaUrl, null);
+                Operations.WaitOptions waitOptions = Operations.WaitOptions.builder()
+                        .abortSignal(Operations.AbortSignal.builder().timeout(SCHEMA_RESOLVE_TIMEOUT_MILLIS).build())
+                        .build();
+                client.client().operations().wait(Operation.fromObject(resolveResult), waitOptions);
+                resolvedSchemaSaids.add(said);
+            } catch (Exception e) {
+                interruptIfNeeded(e);
+                log.warn("Failed to resolve schema OOBI {} on the agent: {}", schemaUrl, e.getMessage());
+                return Either.left(KeriAttestationProblems.serviceUnavailable(
+                        KeriAttestationProblems.KERI_AGENT_UNAVAILABLE,
+                        "Failed to resolve schema OOBI %s on the agent: %s".formatted(schemaUrl, e.getMessage())));
+            }
+        }
+        return Either.right(null);
     }
 
     private Either<ProblemDetail, Void> dispatchAwaitPresentation(String ceremonyId, int generation) {
@@ -206,16 +285,20 @@ public class KeriCredentialService {
 
             // cip113 wallet contract (design §4.3/§4.4 rev 3, KeriService#presentCredential): build
             // /ipex/apply directly via createExchangeMessage, with oobiUrl at the TOP level of the
-            // payload (exn.a.oobiUrl), OUR agent's own OOBI — where the wallet's schema-OOBI
-            // resolution actually reads it. IpexApplyArgs#attributes (the old approach) lands under
-            // exn.a.a instead: Ipex#apply puts args.getAttributes() at data["a"], and
-            // createExchangeMessage's payload becomes exn.a as a whole, so oobiUrl ends up doubly
-            // nested at exn.a.a.oobiUrl, which the wallet never finds.
+            // payload (exn.a.oobiUrl). IpexApplyArgs#attributes (the old approach) lands under exn.a.a
+            // instead: Ipex#apply puts args.getAttributes() at data["a"], and createExchangeMessage's
+            // payload becomes exn.a as a whole, so oobiUrl ends up doubly nested at exn.a.a.oobiUrl,
+            // which the wallet never finds.
+            //
+            // Live-testing fix: oobiUrl must be the CREDENTIAL SCHEMA SERVER's base URL (configured as
+            // lob.keri-attestation.credential-policy.schema-base-url), NOT our agent's own OOBI — this
+            // is where a Veridian-style wallet actually resolves the schema behind the apply's SAID
+            // from, with a trailing slash (proven working against a real wallet during live testing).
             Map<String, Object> applyData = new LinkedHashMap<>();
             applyData.put("m", "");
             applyData.put("s", schemaSaid);
             applyData.put("a", new LinkedHashMap<>());
-            applyData.put("oobiUrl", agentService.agentOobi());
+            applyData.put("oobiUrl", withTrailingSlash(properties.credentialPolicy().schemaBaseUrl()));
             ExchangeMessageResult applyResult = client.client().exchanges().createExchangeMessage(
                     senderOpt.get(), "/ipex/apply", applyData, new LinkedHashMap<>(), linkedAid,
                     nowKeriTimestamp(), null);
@@ -533,6 +616,20 @@ public class KeriCredentialService {
     /** See {@link #KERI_DATETIME}'s javadoc. */
     private static String nowKeriTimestamp() {
         return KERI_DATETIME.format(LocalDateTime.now(ZoneOffset.UTC));
+    }
+
+    /** Normalizes {@code schemaBaseUrl} to end with exactly one trailing slash — the apply payload's
+     *  {@code oobiUrl} (live-testing fix) needs one; accepts either input form (configured with or
+     *  without one). */
+    private static String withTrailingSlash(String url) {
+        return url.endsWith("/") ? url : url + "/";
+    }
+
+    /** Normalizes {@code schemaBaseUrl} to end with NO trailing slash — {@link #ensureSchemasResolved}
+     *  builds each schema OOBI URL as {@code baseUrl + "/" + said}, which would double up the slash if
+     *  {@code schemaBaseUrl} was itself configured with a trailing one. */
+    private static String withoutTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     private static ProblemDetail identityNotLinked(String userId) {

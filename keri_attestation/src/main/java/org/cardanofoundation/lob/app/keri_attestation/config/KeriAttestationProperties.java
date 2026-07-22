@@ -46,7 +46,20 @@ public record KeriAttestationProperties(
     public record Keria(String url, String bootUrl, String bran) {
     }
 
-    public record CredentialPolicy(List<String> schemaSaids, List<String> trustedRootAids) {
+    /**
+     * {@code schemaBaseUrl} (live-testing fix): the credential SCHEMA SERVER's base OOBI URL — e.g.
+     * {@code https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi}, no trailing slash. Two
+     * independent uses in {@code KeriCredentialService}: (1) the IPEX apply's top-level {@code oobiUrl}
+     * (with a trailing slash appended), which is where a Veridian-style wallet actually resolves the
+     * credential schema from — NOT our agent's own OOBI; (2) as the base for resolving each of
+     * {@link #schemaSaids()} as an OOBI on OUR OWN agent ({@code baseUrl + "/" + said}) before ever
+     * sending an apply, mirroring cip113's reference {@code resolveSchemas} flow — KERIA silently drops
+     * an exchange referencing a schema SAID the receiving agent has never itself resolved.
+     */
+    public record CredentialPolicy(
+            List<String> schemaSaids,
+            List<String> trustedRootAids,
+            @DefaultValue("https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi") String schemaBaseUrl) {
     }
 
     public record Limits(

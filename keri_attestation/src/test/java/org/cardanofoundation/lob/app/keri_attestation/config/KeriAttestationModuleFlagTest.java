@@ -56,6 +56,53 @@ class KeriAttestationModuleFlagTest {
         });
     }
 
+    /** Live-testing fix: adding {@code @DefaultValue} to {@code CredentialPolicy}'s third field must
+     *  NOT change Spring's "construct only if at least one own property is present" threshold for the
+     *  whole nested record -- a fully-absent {@code credential-policy} block must still leave
+     *  {@code credentialPolicy()} {@code null}, exactly as it did with the original two-field record
+     *  (mirrors code-review verification requested for this change). */
+    @Test
+    void credentialPolicy_fullyAbsentBlockStaysNull() {
+        contextRunner.withPropertyValues("lob.keri-attestation.enabled=true").run(context -> {
+            assertThat(context).hasNotFailed();
+            KeriAttestationProperties properties = context.getBean(KeriAttestationProperties.class);
+            assertThat(properties.credentialPolicy()).isNull();
+        });
+    }
+
+    /** Live-testing fix: {@code CredentialPolicy#schemaBaseUrl} must bind to its documented default
+     *  when the property itself is absent (as long as the enclosing {@code credential-policy} block is
+     *  constructed at all -- forced here via {@code schema-saids}, since Spring's {@code
+     *  ValueObjectBinder} only instantiates a nested record when at least one of its own properties is
+     *  present). */
+    @Test
+    void credentialPolicySchemaBaseUrl_defaultsWhenUnset() {
+        contextRunner.withPropertyValues(
+                "lob.keri-attestation.enabled=true",
+                "lob.keri-attestation.credential-policy.schema-saids[0]=ESCHEMA00000000000000000000000000000000")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    KeriAttestationProperties properties = context.getBean(KeriAttestationProperties.class);
+                    assertThat(properties.credentialPolicy().schemaBaseUrl())
+                            .isEqualTo("https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi");
+                });
+    }
+
+    /** Live-testing fix: an explicitly configured {@code schema-base-url} overrides the default. */
+    @Test
+    void credentialPolicySchemaBaseUrl_explicitValueBinds() {
+        contextRunner.withPropertyValues(
+                "lob.keri-attestation.enabled=true",
+                "lob.keri-attestation.credential-policy.schema-saids[0]=ESCHEMA00000000000000000000000000000000",
+                "lob.keri-attestation.credential-policy.schema-base-url=https://custom.example.org/oobi")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    KeriAttestationProperties properties = context.getBean(KeriAttestationProperties.class);
+                    assertThat(properties.credentialPolicy().schemaBaseUrl())
+                            .isEqualTo("https://custom.example.org/oobi");
+                });
+    }
+
     /**
      * F1 fix: this module must never expose a bare {@link SignifyClient} bean — legacy
      * {@code blockchain_publisher} (a module this now depends on it) injects an <em>unqualified</em>

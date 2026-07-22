@@ -440,7 +440,7 @@ class ModuleFlagCombinationsTest {
                     true,
                     new KeriAttestationProperties.Keria("https://keria.example.org", null, "bran"),
                     "reeve",
-                    new KeriAttestationProperties.CredentialPolicy(List.of(), List.of()),
+                    new KeriAttestationProperties.CredentialPolicy(List.of(), List.of(), null),
                     Duration.ofHours(1),
                     Duration.ofHours(24),
                     Duration.ofMinutes(3),

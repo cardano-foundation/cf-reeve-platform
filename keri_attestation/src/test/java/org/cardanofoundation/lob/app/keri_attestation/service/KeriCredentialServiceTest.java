@@ -49,6 +49,8 @@ import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
 import org.cardanofoundation.signify.app.aiding.Identifier;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import org.cardanofoundation.signify.app.coring.Oobis;
+import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
 import org.cardanofoundation.signify.app.credentialing.ipex.Ipex;
 import org.cardanofoundation.signify.cesr.Serder;
@@ -65,6 +67,10 @@ class KeriCredentialServiceTest {
     private static final String AGENT_NAME = "keriAttestationAgent";
     private static final String AGENT_OOBI = "https://agent.example.org/oobi/EAGENT/agent/EAGENT";
     private static final String SCHEMA_SAID = "ESCHEMA00000000000000000000000000000000";
+    // Deliberately distinct from the record's own @DefaultValue -- proves the apply payload and the
+    // schema-resolution URL are actually built from the CONFIGURED value, not a coincidentally-matching
+    // default.
+    private static final String SCHEMA_BASE_URL = "https://schema.example.org/oobi";
     private static final String ROOT_AID = "EROOT00000000000000000000000000000000A";
     private static final String APPLY_SAID = "EAPPLYSAID00000000000000000000000000000";
     private static final String AGREE_SAID = "EAGREESAID00000000000000000000000000000";
@@ -91,6 +97,10 @@ class KeriCredentialServiceTest {
     @Mock
     private Credentials credentials;
     @Mock
+    private Oobis oobis;
+    @Mock
+    private Operations operations;
+    @Mock
     private KeriAgentService agentService;
     @Mock
     private KeriNotificationCorrelator correlator;
@@ -114,8 +124,16 @@ class KeriCredentialServiceTest {
         lenient().when(client.exchanges()).thenReturn(exchanges);
         lenient().when(client.identifiers()).thenReturn(identifiers);
         lenient().when(client.credentials()).thenReturn(credentials);
+        lenient().when(client.oobis()).thenReturn(oobis);
+        lenient().when(client.operations()).thenReturn(operations);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
         lenient().when(agentService.agentOobi()).thenReturn(AGENT_OOBI);
+        // Live-testing fix: startCredentialRequest resolves every configured schema SAID as an OOBI on
+        // our own agent before beginStep. Defaulted here to succeed so every test not specifically about
+        // schema resolution can still reach the rest of the flow; the schema-resolution tests themselves
+        // override oobis.resolve to assert on call counts / simulate a failure.
+        lenient().when(oobis.resolve(any(), any())).thenReturn(Map.of("done", true));
+        lenient().when(operations.wait(any(), any())).thenReturn(null);
         // Every startPresentation call now fetches the agent's own HabState first (cip113 wallet
         // contract, design §4.4 rev 3 — the hand-built /ipex/apply createExchangeMessage call needs it
         // as the signing sender). Defaulted here so individual tests only override it when the missing-
@@ -136,7 +154,8 @@ class KeriCredentialServiceTest {
     private static KeriAttestationProperties properties() {
         return new KeriAttestationProperties(
                 true, null, "identifier",
-                new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(ROOT_AID)),
+                new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(ROOT_AID),
+                        SCHEMA_BASE_URL),
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
                 Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),
@@ -211,15 +230,50 @@ class KeriCredentialServiceTest {
 
         // cip113 wallet contract (design §4.4 rev 3): the apply payload is hand-built and passed
         // directly to createExchangeMessage, with oobiUrl at the TOP level — not nested under IpexApplyArgs
-        // #attributes (exn.a.a), which the wallet's schema-OOBI resolution never finds.
+        // #attributes (exn.a.a), which the wallet's schema-OOBI resolution never finds. Live-testing
+        // fix: oobiUrl is the CONFIGURED schema server base URL (schema-base-url), with a trailing slash
+        // appended -- not our agent's own OOBI.
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
         verify(exchanges).createExchangeMessage(any(), eq("/ipex/apply"), payloadCaptor.capture(), anyMap(),
                 eq(LINKED_AID), any(), any());
-        assertEquals(Map.of("m", "", "s", SCHEMA_SAID, "a", Map.of(), "oobiUrl", AGENT_OOBI),
+        assertEquals(Map.of("m", "", "s", SCHEMA_SAID, "a", Map.of(), "oobiUrl", SCHEMA_BASE_URL + "/"),
                 payloadCaptor.getValue());
 
         verify(ipex).submitApply(AGENT_NAME, exn, List.of("sig1"), List.of(LINKED_AID));
+    }
+
+    @Test
+    void startPresentationNormalizesSchemaBaseUrlAlreadyEndingInSlashWithoutDoublingIt() throws Exception {
+        // Fix 2 (live-testing): the configured schema-base-url may itself already end with a trailing
+        // slash (the user's original proven-working hardcode did) -- normalization must not double it up.
+        KeriAttestationProperties propsWithTrailingSlash = new KeriAttestationProperties(
+                true, null, "identifier",
+                new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(ROOT_AID),
+                        SCHEMA_BASE_URL + "/"),
+                Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
+                3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
+                Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),
+                Duration.parse("PT0.01S"), Duration.parse("PT2M"), null);
+        KeriCredentialService serviceWithTrailingSlash = new KeriCredentialService(keriClient, agentService,
+                correlator, validator, ceremonyService, ceremonyRepository, identityLinkRepository,
+                propsWithTrailingSlash, asyncRunner);
+
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        stubGuardedUpdateSuccess(ceremony);
+
+        Either<ProblemDetail, Void> result = serviceWithTrailingSlash.startPresentation(ceremony);
+
+        assertTrue(result.isRight());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(exchanges).createExchangeMessage(any(), eq("/ipex/apply"), payloadCaptor.capture(), anyMap(),
+                eq(LINKED_AID), any(), any());
+        assertEquals(SCHEMA_BASE_URL + "/", payloadCaptor.getValue().get("oobiUrl"));
     }
 
     @Test
@@ -442,6 +496,84 @@ class KeriCredentialServiceTest {
         assertTrue(result.isRight());
         verify(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
         verifyNoInteractions(correlator, ipex);
+    }
+
+    // ==================== schema OOBI resolution (Fix 3, live-testing) ====================
+
+    @Test
+    void startCredentialRequestResolvesEachSchemaSaidOnOurAgentOnceThenCacheIsWarmOnASecondRequest()
+            throws Exception {
+        // Live-testing fix: KERIA silently drops an IPEX exchange referencing a schema SAID our own
+        // agent has never resolved -- ensureSchemasResolved must resolve it once per SAID per process
+        // (cached), not on every presentation. Two full startCredentialRequest calls prove both halves:
+        // the resolve actually runs, and a second call finds the cache warm and skips it.
+        String schemaUrl = SCHEMA_BASE_URL + "/" + SCHEMA_SAID;
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
+
+        Either<ProblemDetail, Void> first = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, Void> second = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(first.isRight());
+        assertTrue(second.isRight());
+        verify(oobis, times(1)).resolve(schemaUrl, null);
+        verify(operations, times(1)).wait(any(), any());
+    }
+
+    @Test
+    void startCredentialRequestSchemaResolutionFailureReturnsKeriAgentUnavailableBeforeAnyCeremonyStateIsTouched()
+            throws Exception {
+        // Resolution failure must surface as a plain problem BEFORE beginStep is ever called -- no
+        // ceremony is left stuck in a non-terminal state, because none was ever begun in the first place.
+        String schemaUrl = SCHEMA_BASE_URL + "/" + SCHEMA_SAID;
+        when(oobis.resolve(schemaUrl, null)).thenThrow(new RuntimeException("agent unreachable"));
+
+        Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.KERI_AGENT_UNAVAILABLE, result.getLeft().getTitle());
+        assertTrue(result.getLeft().getDetail().contains(schemaUrl));
+        verifyNoInteractions(ceremonyService, identityLinkRepository, ipex, asyncRunner);
+    }
+
+    @Test
+    void startCredentialRequestNormalizesSchemaBaseUrlAlreadyEndingInSlashWithoutDoublingItInTheSchemaUrl()
+            throws Exception {
+        // Mirrors startPresentationNormalizesSchemaBaseUrlAlreadyEndingInSlashWithoutDoublingIt, but for
+        // ensureSchemasResolved's OWN url-building (baseUrl + "/" + said) rather than the apply payload's
+        // oobiUrl -- the two call sites normalize independently (withoutTrailingSlash vs withTrailingSlash).
+        KeriAttestationProperties propsWithTrailingSlash = new KeriAttestationProperties(
+                true, null, "identifier",
+                new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(ROOT_AID),
+                        SCHEMA_BASE_URL + "/"),
+                Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
+                3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
+                Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),
+                Duration.parse("PT0.01S"), Duration.parse("PT2M"), null);
+        KeriCredentialService serviceWithTrailingSlash = new KeriCredentialService(keriClient, agentService,
+                correlator, validator, ceremonyService, ceremonyRepository, identityLinkRepository,
+                propsWithTrailingSlash, asyncRunner);
+
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
+
+        Either<ProblemDetail, Void> result = serviceWithTrailingSlash.startCredentialRequest(CEREMONY_ID, USER_ID,
+                false);
+
+        assertTrue(result.isRight());
+        verify(oobis).resolve(SCHEMA_BASE_URL + "/" + SCHEMA_SAID, null);
     }
 
     // ==================== awaitPresentation ====================

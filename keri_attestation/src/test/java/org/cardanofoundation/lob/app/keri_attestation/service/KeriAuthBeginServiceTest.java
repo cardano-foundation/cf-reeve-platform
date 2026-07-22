@@ -91,7 +91,7 @@ class KeriAuthBeginServiceTest {
     private static KeriAttestationProperties properties() {
         return new KeriAttestationProperties(
                 true, null, "identifier",
-                new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of()),
+                new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(), null),
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
                 Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),

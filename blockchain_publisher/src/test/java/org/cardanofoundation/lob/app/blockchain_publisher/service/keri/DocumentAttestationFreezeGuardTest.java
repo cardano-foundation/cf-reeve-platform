@@ -61,7 +61,7 @@ class DocumentAttestationFreezeGuardTest {
                 true,
                 new KeriAttestationProperties.Keria("https://keria.example", "https://keria.example/boot", "bran-secret"),
                 "reeve-agent",
-                new KeriAttestationProperties.CredentialPolicy(List.of(), List.of()),
+                new KeriAttestationProperties.CredentialPolicy(List.of(), List.of(), null),
                 Duration.parse("PT1H"),
                 freezeMaxAge,
                 Duration.parse("PT3M"),
