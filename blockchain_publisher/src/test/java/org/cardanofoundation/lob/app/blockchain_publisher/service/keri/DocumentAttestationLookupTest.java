@@ -94,8 +94,13 @@ class DocumentAttestationLookupTest {
         return freeze;
     }
 
+    /** {@code payloadSaid} is fixed to a placeholder distinct from {@code digestQb64} here — these
+     *  callers only exercise the freeze/1447-digest matching path ({@link #digestQb64}), which never
+     *  reads {@code payloadSaid}. {@link #attestMapDelegatesToTheFactoryWithTheConsumedAttestationsFields}
+     *  below constructs its own {@link ConsumedAttestation} directly to exercise {@code payloadSaid}
+     *  specifically. */
     private static ConsumedAttestation consumed(String digestQb64) {
-        return new ConsumedAttestation(CEREMONY_ID, "Eaid-1", digestQb64, "1447", "3");
+        return new ConsumedAttestation(CEREMONY_ID, "Eaid-1", digestQb64, "Eplaceholder-payload-said", "1447", "3");
     }
 
     // --- loadForDispatch: missing freeze ---
@@ -244,13 +249,16 @@ class DocumentAttestationLookupTest {
 
     @Test
     void attestMapDelegatesToTheFactoryWithTheConsumedAttestationsFields() {
-        ConsumedAttestation consumedAttestation = new ConsumedAttestation(CEREMONY_ID, "Eaid-1", "Edigest-1", "1447", "7");
+        // digestQb64 and payloadSaid are deliberately distinct here (design §4.4 rev 3): attestMap must
+        // use payloadSaid as the on-chain "d", never digestQb64 (the raw 1447/freeze digest).
+        ConsumedAttestation consumedAttestation =
+                new ConsumedAttestation(CEREMONY_ID, "Eaid-1", "Edigest-1", "Epayloadsaid-1", "1447", "7");
 
         MetadataMap attestMap = lookup().attestMap(consumedAttestation);
 
         assertThat(attestMap.get("t")).isEqualTo("ATTEST");
         assertThat(attestMap.get("i")).isEqualTo("Eaid-1");
-        assertThat(attestMap.get("d")).isEqualTo("Edigest-1");
+        assertThat(attestMap.get("d")).isEqualTo("Epayloadsaid-1");
         assertThat(attestMap.get("s")).isEqualTo("7");
         verify(freezeRepository, never()).findByDocumentIdAndCeremonyId(any(), any());
     }

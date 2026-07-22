@@ -1,6 +1,10 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,7 +30,7 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCo
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAgreeArgs;
-import org.cardanofoundation.signify.app.credentialing.ipex.IpexApplyArgs;
+import org.cardanofoundation.signify.core.States.HabState;
 
 /**
  * Drives IPEX credential presentation (design §4.3): the platform's agent AID requests a credential
@@ -50,6 +54,16 @@ public class KeriCredentialService {
 
     private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer");
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant");
+
+    /** cip113's exact {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6): passed
+     *  explicitly to every exn this class builds rather than relying on the pinned signify jar's own
+     *  null-datetime fallback ({@code Exchanging.exchange}), which derives its timestamp from
+     *  {@code java.util.Date} and can render withOUT a fractional-seconds separator at all
+     *  (e.g. {@code "...T00:00:00000+00:00"}, missing the {@code "."}) on the rare timestamp that lands
+     *  on an exact whole second — a malformed {@code dt} a strict wallet-side schema check could reject
+     *  outright. This formatter always renders exactly six fractional digits. */
+    private static final DateTimeFormatter KERI_DATETIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'+00:00'");
 
     /** F8 fix: {@code step_phase} values marking which half of the two-phase CREDENTIAL_REQUESTED wait
      *  (apply/offer, then agree/grant) an attempt last reached — see
@@ -184,14 +198,27 @@ public class KeriCredentialService {
             }
             String schemaSaid = schemaSaids.get(0);
 
-            IpexApplyArgs applyArgs = IpexApplyArgs.builder()
-                    .senderName(agentName)
-                    .recipient(linkedAid)
-                    .message("")
-                    .schemaSaid(schemaSaid)
-                    .attributes(Map.of("oobiUrl", agentService.agentOobi()))
-                    .build();
-            ExchangeMessageResult applyResult = client.client().ipex().apply(applyArgs);
+            Optional<HabState> senderOpt = client.client().identifiers().get(agentName);
+            if (senderOpt.isEmpty()) {
+                return Either.left(requestFailed(
+                        "No local HabState found for agent identifier %s.".formatted(agentName)));
+            }
+
+            // cip113 wallet contract (design §4.3/§4.4 rev 3, KeriService#presentCredential): build
+            // /ipex/apply directly via createExchangeMessage, with oobiUrl at the TOP level of the
+            // payload (exn.a.oobiUrl), OUR agent's own OOBI — where the wallet's schema-OOBI
+            // resolution actually reads it. IpexApplyArgs#attributes (the old approach) lands under
+            // exn.a.a instead: Ipex#apply puts args.getAttributes() at data["a"], and
+            // createExchangeMessage's payload becomes exn.a as a whole, so oobiUrl ends up doubly
+            // nested at exn.a.a.oobiUrl, which the wallet never finds.
+            Map<String, Object> applyData = new LinkedHashMap<>();
+            applyData.put("m", "");
+            applyData.put("s", schemaSaid);
+            applyData.put("a", new LinkedHashMap<>());
+            applyData.put("oobiUrl", agentService.agentOobi());
+            ExchangeMessageResult applyResult = client.client().exchanges().createExchangeMessage(
+                    senderOpt.get(), "/ipex/apply", applyData, new LinkedHashMap<>(), linkedAid,
+                    nowKeriTimestamp(), null);
             String exnSaid = (String) applyResult.exn().getKed().get("d");
 
             // Persist BEFORE the send completes (design §4.6 pattern applied here too): the SAID is
@@ -275,7 +302,7 @@ public class KeriCredentialService {
             try {
                 agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
                         .senderName(agentName).recipient(linkedAid).message("")
-                        .offerSaid(offerNotification.exnSaid()).build());
+                        .offerSaid(offerNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
             } catch (Exception e) {
                 interruptIfNeeded(e);
                 failRequest(ceremonyId, expectedGeneration, "Failed to build IPEX agree: " + e.getMessage());
@@ -337,7 +364,7 @@ public class KeriCredentialService {
         try {
             ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
                     .senderName(agentName).recipient(linkedAid).message("")
-                    .grantSaid(grant.get().exnSaid()).build());
+                    .grantSaid(grant.get().exnSaid()).datetime(nowKeriTimestamp()).build());
             client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(), admitResult.atc(),
                     List.of(linkedAid));
         } catch (Exception e) {
@@ -501,6 +528,11 @@ public class KeriCredentialService {
         if (e instanceof InterruptedException) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /** See {@link #KERI_DATETIME}'s javadoc. */
+    private static String nowKeriTimestamp() {
+        return KERI_DATETIME.format(LocalDateTime.now(ZoneOffset.UTC));
     }
 
     private static ProblemDetail identityNotLinked(String userId) {

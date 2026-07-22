@@ -166,6 +166,14 @@ class KeriNotificationCorrelatorTest {
                 Map.of("i", sender, "r", route, "p", prior, "a", Map.of(), "e", Map.of(), "rp", recipientPrefix)));
     }
 
+    /** {@code rp} set to a non-{@code String} value — a malformed/unexpected wire shape, distinct from
+     *  a genuinely absent {@code rp} key. */
+    private static Optional<Object> exchangeWithNonStringRecipientPrefix(String sender, String route, String prior,
+            Object recipientPrefix) {
+        return Optional.of(Map.of("exn",
+                Map.of("i", sender, "r", route, "p", prior, "a", Map.of(), "e", Map.of(), "rp", recipientPrefix)));
+    }
+
     /** Both {@code rp} and payload {@code a.i} set independently — for proving {@code rp} is
      *  authoritative and {@code a.i} never substitutes for it either way (item 2 round-2 fix). */
     private static Optional<Object> exchangeWithRecipientPrefixAndPayloadAddressee(String sender, String route,
@@ -270,40 +278,45 @@ class KeriNotificationCorrelatorTest {
         assertTrue(result.isPresent());
     }
 
-    // --- rejects: each guard, notification stays unread/unclaimed, times out ---
-
     @Test
-    void ignoresNotificationWhenRpIsAbsentEvenIfPayloadAddresseeMatchesTheAgentPrefix() throws Exception {
-        // M3 cross-review F2 fix: the pinned signify exchange builder always includes a signed rp on
-        // every exchange this class correlates against, so an exn with no rp at all is no longer treated
-        // as "genuinely absent, skip the check" — it is rejected outright, exactly like a mismatch. a.i
-        // is still never consulted (F4 residual fix), including as a fallback for a missing rp.
+    void claimsNotificationWhenRpIsAbsentAndOtherChecksPass() throws Exception {
+        // Rev 3 (2026-07-22, design §4.4): relaxed from the M3 cross-review F2 fix's unconditional
+        // "no rp at all -> reject". cip113's own notification helper never inspects rp at all; real
+        // Veridian wallet replies were found not to reliably carry a signed rp the way that fix assumed,
+        // and the unconditional-reject behavior would silently discard a legitimate reply. Sender + route
+        // + thread-back (all present and matching here) remain the actual safeguard. a.i is still never
+        // consulted (F4 residual fix) — this passes despite a.i deliberately mismatching nothing here
+        // (exchangeWithAddressee sets a.i, which addresseeMatchesAgent must NOT read either way).
         when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID))
                 .thenReturn(exchangeWithAddressee(SENDER_AID, ROUTE, REQUEST_EXN_SAID, AGENT_PREFIX));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
-                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(2));
 
-        assertTrue(result.isEmpty());
+        assertTrue(result.isPresent());
+        // awaitCorrelated never marks/deletes itself regardless of outcome — see the class javadoc.
         verify(notifications, never()).mark(anyString());
         verify(notifications, never()).delete(anyString());
     }
 
     @Test
-    void ignoresNotificationWhenRpIsBlank() throws Exception {
-        // M3 cross-review F2 fix: a blank rp ("") is treated the same as absent or mismatched — reject.
+    void claimsNotificationWhenRpIsBlank() throws Exception {
+        // Rev 3 (2026-07-22, design §4.4): a blank rp ("") is treated the same as absent — see
+        // claimsNotificationWhenRpIsAbsentAndOtherChecksPass's javadoc for why this relaxation is safe.
         when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID))
                 .thenReturn(exchangeWithRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, ""));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
-                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofSeconds(2));
 
-        assertTrue(result.isEmpty());
+        assertTrue(result.isPresent());
         verify(notifications, never()).mark(anyString());
         verify(notifications, never()).delete(anyString());
     }
+
+    // --- rejects: each guard, notification stays unread/unclaimed, times out ---
 
     @Test
     void ignoresNotificationWhenTheFetchedExchangesOwnRouteDoesNotMatchEvenIfTheNotificationClaimedAMatchingRoute()
@@ -327,6 +340,23 @@ class KeriNotificationCorrelatorTest {
         when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID))
                 .thenReturn(exchangeWithRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, OTHER_AGENT_PREFIX));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void ignoresNotificationWhenRpIsPresentButNotAString() throws Exception {
+        // A non-string rp is a malformed/unexpected wire shape, not KERI's "no value" convention for a
+        // string field (that's a blank string, which claimsNotificationWhenRpIsBlank covers) — must not
+        // be silently treated the same as a genuinely absent rp.
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithNonStringRecipientPrefix(SENDER_AID, ROUTE, REQUEST_EXN_SAID, 12345));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
                 correlator.awaitCorrelated(List.of(ROUTE), SENDER_AID, REQUEST_EXN_SAID, Duration.ofMillis(40));

@@ -114,7 +114,9 @@ class DocumentL1TransactionCreatorAttestationTest {
     }
 
     private static ConsumedAttestation consumedFixture() {
-        return new ConsumedAttestation("cer-1", "Eaid-user-1", "Edigest-1", "1447", "5");
+        // digestQb64 (1447/freeze digest) and payloadSaid (the value attestMap actually publishes as
+        // the on-chain 170.d, design §4.4 rev 3) are deliberately distinct here.
+        return new ConsumedAttestation("cer-1", "Eaid-user-1", "Edigest-1", "Epayloadsaid-1", "1447", "5");
     }
 
     // --- lookup absent (module disabled) - fail closed, never plain-publish ---
@@ -160,7 +162,7 @@ class DocumentL1TransactionCreatorAttestationTest {
             attestMap.put("t", "ATTEST");
             attestMap.put("s", consumed.kelSequence());
             attestMap.put("i", consumed.aid());
-            attestMap.put("d", consumed.digestQb64());
+            attestMap.put("d", consumed.payloadSaid());
             return attestMap;
         });
         when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(CHAIN_TIP));
@@ -189,7 +191,7 @@ class DocumentL1TransactionCreatorAttestationTest {
         MetadataMap label170 = (MetadataMap) metadata.get(java.math.BigInteger.valueOf(170));
         assertThat(label170.get("t")).isEqualTo("ATTEST");
         assertThat(label170.get("i")).isEqualTo("Eaid-user-1");
-        assertThat(label170.get("d")).isEqualTo("Edigest-1");
+        assertThat(label170.get("d")).isEqualTo("Epayloadsaid-1");
         assertThat(label170.get("s")).isEqualTo("5");
 
         // Frozen cid reused verbatim - IPFS is NEVER touched on the attested path.

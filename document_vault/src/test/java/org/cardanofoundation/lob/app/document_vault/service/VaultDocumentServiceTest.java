@@ -719,7 +719,8 @@ class VaultDocumentServiceTest {
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
         when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
-                .thenReturn(Either.right(new ConsumedAttestation("cer-1", "aid-1", "Edigest", "1447", "0")));
+                .thenReturn(Either.right(
+                        new ConsumedAttestation("cer-1", "aid-1", "Edigest", "Epayloadsaid", "1447", "0")));
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
 

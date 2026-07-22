@@ -390,7 +390,8 @@ public class CeremonyService implements AttestationConsumptionApi {
         ceremonyRepository.save(ceremony);
 
         return Either.right(new ConsumedAttestation(ceremony.getId(), ceremony.getAttesterAid(),
-                ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
+                ceremony.getMetadataDigest(), ceremony.getPayloadSaid(), ceremony.getMetadataLabel(),
+                ceremony.getKelSequence()));
     }
 
     @Override
@@ -424,7 +425,8 @@ public class CeremonyService implements AttestationConsumptionApi {
                 .filter(ceremony -> ceremony.getState() == CeremonyState.CONSUMED)
                 .filter(ceremony -> ceremony.getAttesterAid() != null)
                 .map(ceremony -> new ConsumedAttestation(ceremony.getId(), ceremony.getAttesterAid(),
-                        ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
+                        ceremony.getMetadataDigest(), ceremony.getPayloadSaid(), ceremony.getMetadataLabel(),
+                        ceremony.getKelSequence()));
     }
 
     // --- internals ---

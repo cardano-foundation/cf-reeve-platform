@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEFAULTS;
 import static org.mockito.Mockito.inOrder;
@@ -44,12 +45,14 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
+import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
+import org.cardanofoundation.signify.app.aiding.Identifier;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
 import org.cardanofoundation.signify.app.credentialing.ipex.Ipex;
-import org.cardanofoundation.signify.app.credentialing.ipex.IpexApplyArgs;
 import org.cardanofoundation.signify.cesr.Serder;
+import org.cardanofoundation.signify.core.States;
 
 @ExtendWith(MockitoExtension.class)
 class KeriCredentialServiceTest {
@@ -82,6 +85,10 @@ class KeriCredentialServiceTest {
     @Mock
     private Ipex ipex;
     @Mock
+    private Exchanging.Exchanges exchanges;
+    @Mock
+    private Identifier identifiers;
+    @Mock
     private Credentials credentials;
     @Mock
     private KeriAgentService agentService;
@@ -101,12 +108,19 @@ class KeriCredentialServiceTest {
     private KeriCredentialService service;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.ipex()).thenReturn(ipex);
+        lenient().when(client.exchanges()).thenReturn(exchanges);
+        lenient().when(client.identifiers()).thenReturn(identifiers);
         lenient().when(client.credentials()).thenReturn(credentials);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
         lenient().when(agentService.agentOobi()).thenReturn(AGENT_OOBI);
+        // Every startPresentation call now fetches the agent's own HabState first (cip113 wallet
+        // contract, design §4.4 rev 3 — the hand-built /ipex/apply createExchangeMessage call needs it
+        // as the signing sender). Defaulted here so individual tests only override it when the missing-
+        // HabState path itself is under test.
+        lenient().when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_NAME)));
         // F8 fix: awaitPresentation's normal (non-resumed) flow persists the AGREE_SENT phase transition
         // via a guarded update after sending the agree, before waiting for the grant. Default this to
         // succeed (without applying the mutator) so every test not specifically about that persist can
@@ -146,6 +160,12 @@ class KeriCredentialServiceTest {
         return link;
     }
 
+    private static States.HabState habState(String name) {
+        States.HabState hab = new States.HabState();
+        hab.setName(name);
+        return hab;
+    }
+
     private static Serder serderWithSaid(String said) {
         Serder serder = mock(Serder.class, RETURNS_DEFAULTS);
         lenient().when(serder.getKed()).thenReturn(Map.of("d", said));
@@ -176,7 +196,8 @@ class KeriCredentialServiceTest {
     void startPresentationBuildsAndSendsApplyAndPersistsRequestExnSaidBeforeSubmit() throws Exception {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
-        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
 
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         stubGuardedUpdateSuccess(ceremony);
@@ -188,14 +209,15 @@ class KeriCredentialServiceTest {
                 eq(CeremonyState.CREDENTIAL_REQUESTED), any());
         verify(ceremonyRepository, never()).save(any());
 
-        ArgumentCaptor<IpexApplyArgs> captor = ArgumentCaptor.forClass(IpexApplyArgs.class);
-        verify(ipex).apply(captor.capture());
-        IpexApplyArgs args = captor.getValue();
-        assertEquals(AGENT_NAME, args.getSenderName());
-        assertEquals(LINKED_AID, args.getRecipient());
-        assertEquals("", args.getMessage());
-        assertEquals(SCHEMA_SAID, args.getSchemaSaid());
-        assertEquals(Map.of("oobiUrl", AGENT_OOBI), args.getAttributes());
+        // cip113 wallet contract (design §4.4 rev 3): the apply payload is hand-built and passed
+        // directly to createExchangeMessage, with oobiUrl at the TOP level — not nested under IpexApplyArgs
+        // #attributes (exn.a.a), which the wallet's schema-OOBI resolution never finds.
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(exchanges).createExchangeMessage(any(), eq("/ipex/apply"), payloadCaptor.capture(), anyMap(),
+                eq(LINKED_AID), any(), any());
+        assertEquals(Map.of("m", "", "s", SCHEMA_SAID, "a", Map.of(), "oobiUrl", AGENT_OOBI),
+                payloadCaptor.getValue());
 
         verify(ipex).submitApply(AGENT_NAME, exn, List.of("sig1"), List.of(LINKED_AID));
     }
@@ -215,7 +237,12 @@ class KeriCredentialServiceTest {
     @Test
     void startPresentationApplyBuildFailureReturnsLeftWithoutPersistingRequestExnSaid() throws Exception {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(ipex.apply(any())).thenThrow(new IOException("agent unreachable"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                // createExchangeMessage's throws clause is DigestException/LibsodiumException, not
+                // IOException (unlike Ipex#apply, which used to be mocked here) — a RuntimeException
+                // exercises the same generic-failure catch block in startPresentation without tripping
+                // Mockito's checked-exception validation.
+                .thenThrow(new RuntimeException("agent unreachable"));
 
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         Either<ProblemDetail, Void> result = service.startPresentation(ceremony);
@@ -233,7 +260,8 @@ class KeriCredentialServiceTest {
         // in the send itself does not lose track of what was about to go out.
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
-        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
         when(ipex.submitApply(any(), any(), any(), any())).thenThrow(new IOException("network blip"));
 
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
@@ -253,7 +281,8 @@ class KeriCredentialServiceTest {
         // must never be sent for a step that has already moved on.
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
-        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
         when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
                 eq(CeremonyState.CREDENTIAL_REQUESTED), any())).thenReturn(false);
 
@@ -273,7 +302,8 @@ class KeriCredentialServiceTest {
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
-        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
         stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
@@ -319,7 +349,12 @@ class KeriCredentialServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(ipex.apply(any())).thenThrow(new IOException("agent unreachable"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                // createExchangeMessage's throws clause is DigestException/LibsodiumException, not
+                // IOException (unlike Ipex#apply, which used to be mocked here) — a RuntimeException
+                // exercises the same generic-failure catch block in startPresentation without tripping
+                // Mockito's checked-exception validation.
+                .thenThrow(new RuntimeException("agent unreachable"));
 
         Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, false);
 
@@ -340,7 +375,8 @@ class KeriCredentialServiceTest {
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
-        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
         stubGuardedUpdateSuccess(ceremony);
         org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("pool saturated"))
                 .when(asyncRunner).awaitPresentation(CEREMONY_ID, GENERATION);
@@ -380,7 +416,8 @@ class KeriCredentialServiceTest {
         when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(oldApplySaid), any()))
                 .thenReturn(Optional.empty());
         Serder exn = serderWithSaid(APPLY_SAID);
-        when(ipex.apply(any())).thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
         stubGuardedUpdateSuccess(ceremony);
 
         Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, true);

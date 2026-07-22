@@ -1,6 +1,9 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +66,12 @@ public class KeriAttestService {
     private static final int KEY_STATE_QUERY_ATTEMPTS = 5;
     private static final long KEY_STATE_QUERY_WAIT_MILLIS = 10_000L;
 
+    /** cip113's exact {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6) — see
+     *  {@link KeriCredentialService#KERI_DATETIME}'s javadoc for why this is passed explicitly rather
+     *  than left to the pinned signify jar's own null-datetime fallback. */
+    private static final DateTimeFormatter KERI_DATETIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'+00:00'");
+
     private final KeriAttestationClient client;
     private final KeriAgentService agentService;
     private final RemotesignRequestFactory kedFactory;
@@ -110,7 +119,7 @@ public class KeriAttestService {
             Optional<CorrelatedNotification> lateRef = correlator.awaitCorrelated(REMOTESIGN_REF_ROUTES, walletAid,
                     ceremony.getRequestExnSaid(), RETRY_PRECHECK_TIMEOUT);
             if (lateRef.isPresent()) {
-                resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getMetadataDigest(),
+                resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getPayloadSaid(),
                         ceremony.getKelFloorSequence(), lateRef.get());
                 return Either.right(null);
             }
@@ -176,16 +185,25 @@ public class KeriAttestService {
                         "No local HabState found for agent identifier %s.".formatted(agentService.agentName()));
             }
 
-            Map<String, Object> ked = kedFactory.anchorRequestKed(walletAid, digest.digestQb64());
+            // cip113 wallet contract (design §4.4 rev 3): the payload itself is saidified before it is
+            // ever sent, and that payload SAID (not the raw metadataDigest) is what the wallet is
+            // expected to anchor as the interaction-event seal — see RemotesignRequestFactory's javadoc.
+            Map<String, Object> ked = kedFactory.anchorRequestKed(walletAid, digest.metadataLabel(), digest.digestQb64());
+            String payloadSaid = (String) ked.get("d");
             ExchangeMessageResult built = client.client().exchanges().createExchangeMessage(senderOpt.get(),
-                    REMOTESIGN_REQUEST_ROUTE, ked, Map.of(), walletAid, null, null);
+                    REMOTESIGN_REQUEST_ROUTE, ked, Map.of(), walletAid, nowKeriTimestamp(), null);
 
             // Persist BEFORE the send completes (design §4.6 step 3): the SAID is deterministic from
             // the built (not-yet-sent) exn, matching KeriCredentialService#startPresentation's idiom.
-            // Guarded (F2 fix) for the same reason as the digest write above.
+            // Guarded (F2 fix) for the same reason as the digest write above. payloadSaid is persisted
+            // alongside requestExnSaid in the same guarded write — both are deterministic from the
+            // not-yet-sent request, so there is no reason to split them into two writes/CAS checks.
             String requestExnSaid = (String) built.exn().getKed().get("d");
             boolean exnPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
-                    CeremonyState.ATTEST_REQUESTED, c -> c.setRequestExnSaid(requestExnSaid));
+                    CeremonyState.ATTEST_REQUESTED, c -> {
+                        c.setRequestExnSaid(requestExnSaid);
+                        c.setPayloadSaid(payloadSaid);
+                    });
             if (!exnPersisted) {
                 return Either.left(staleCeremonyProblem(ceremonyId));
             }
@@ -249,7 +267,7 @@ public class KeriAttestService {
             return;
         }
 
-        resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getMetadataDigest(),
+        resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getPayloadSaid(),
                 ceremony.getKelFloorSequence(), ref.get());
     }
 
@@ -261,7 +279,7 @@ public class KeriAttestService {
      * <ol>
      *   <li>If the ref exn payload yields an explicit candidate ({@link #extractCandidate}), that
      *       candidate MUST resolve to a KEL event whose sequence is <b>strictly after</b>
-     *       {@code floorSequence} AND whose seal contains {@code metadataDigest}. If it doesn't — wrong
+     *       {@code floorSequence} AND whose seal contains {@code payloadSaid}. If it doesn't — wrong
      *       event, at-or-before the floor, or simply not found — this fails immediately with
      *       {@code ATTEST_SEAL_MISMATCH}; there is no fallback shopping for a different event once an
      *       explicit candidate is on the table. Sequence equal to the floor is rejected, not just
@@ -272,10 +290,16 @@ public class KeriAttestService {
      *   <li>If the ref exn payload yields no candidate at all, this falls back to a <b>bounded</b> scan
      *       of {@code ixn} events strictly after {@code floorSequence} and at or before the wallet's
      *       current key-state sequence (queried via {@link #queryLatestSequenceWithRetries}), looking
-     *       for one whose seal contains {@code metadataDigest}. Unlike the removed unconditional "accept
+     *       for one whose seal contains {@code payloadSaid}. Unlike the removed unconditional "accept
      *       the latest ixn event" path, an event outside that bounded window can never satisfy the
      *       request, regardless of its seal.</li>
      * </ol>
+     * <b>{@code payloadSaid}, not {@code metadataDigest} (design §4.4 rev 3):</b> the wallet anchors the
+     * SAID of the whole saidified remotesign request payload ({@link RemotesignRequestFactory}), not the
+     * raw {@code metadataDigest} directly — that direct-digest shape was tried first and never produced
+     * a wallet notification at all in live testing. {@code metadataDigest} remains on the ceremony
+     * purely for 1447/freeze-digest matching (see {@code DocumentAttestationLookup}); it is never compared
+     * against the KEL seal anymore.
      * <b>Null floor hard-fails, no candidate acceptance at all (F4 fix):</b> {@code floorSequence} is
      * only ever {@code null} for a ceremony that reached {@code ATTEST_REQUESTED} before this column
      * existed (a pre-upgrade in-flight row) — every ceremony created after this fix always has one
@@ -287,7 +311,7 @@ public class KeriAttestService {
      * with no lower bound at all); that is exactly the unbounded-scan risk F5 closes, reopened for a
      * single event instead of a range, so it is no longer accepted either.
      */
-    private void resolveAndComplete(String ceremonyId, int generation, String walletAid, String metadataDigest,
+    private void resolveAndComplete(String ceremonyId, int generation, String walletAid, String payloadSaid,
             String floorSequence, CorrelatedNotification ref) {
         try {
             if (floorSequence == null) {
@@ -307,12 +331,12 @@ public class KeriAttestService {
             Map<String, Object> event;
             if (!candidate.isEmpty()) {
                 event = locateExplicitCandidate(ixnEvents, candidate);
-                if (event == null || !satisfiesFloorAndDigest(event, floorSequence, metadataDigest)) {
+                if (event == null || !satisfiesFloorAndDigest(event, floorSequence, payloadSaid)) {
                     ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
                             KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                             "The wallet ref's explicit anchoring-event candidate did not verify (not found, "
-                                    + "sequence at or before the floor, or seal does not contain digest %s)."
-                                            .formatted(metadataDigest));
+                                    + "sequence at or before the floor, or seal does not contain payload SAID %s)."
+                                            .formatted(payloadSaid));
                     return;
                 }
             } else {
@@ -320,13 +344,13 @@ public class KeriAttestService {
                 // already returned above, before candidate extraction even ran).
                 Optional<String> currentSequence = queryLatestSequenceWithRetries(walletAid);
                 event = currentSequence
-                        .map(cs -> scanForSealMatch(ixnEvents, floorSequence, cs, metadataDigest))
+                        .map(cs -> scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid))
                         .orElse(null);
                 if (event == null) {
                     ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
                             KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                             "No interaction (ixn) event strictly after the floor sequence and at or before the "
-                                    + "wallet's current key state matched digest %s.".formatted(metadataDigest));
+                                    + "wallet's current key state matched payload SAID %s.".formatted(payloadSaid));
                     return;
                 }
             }
@@ -473,14 +497,15 @@ public class KeriAttestService {
     /** Bounded scan (F5 fix) over {@code ixnEvents} whose sequence falls within
      *  ({@code floorSequence}, {@code currentSequence}] — <b>strictly</b> after the floor, at or before
      *  the current key-state sequence (hex-compared numerically) — returning the first whose seal
-     *  contains {@code digestQb64}, or {@code null} if none in that window match. Replaces the old
-     *  unconditional "accept the latest ixn event" fallback: an event outside the window can never
-     *  satisfy the request regardless of its seal. {@code floorSequence} must not be {@code null} —
-     *  callers only reach this method once a non-null floor has been confirmed ({@link
-     *  #resolveAndComplete}'s javadoc: F4 fix, a {@code null} floor now fails the ceremony outright
-     *  before this method is ever reached, rather than disabling just this one fallback). */
+     *  contains {@code payloadSaid} (design §4.4 rev 3 — the seal target is the remotesign request
+     *  payload's own SAID, not the raw {@code metadataDigest}), or {@code null} if none in that window
+     *  match. Replaces the old unconditional "accept the latest ixn event" fallback: an event outside
+     *  the window can never satisfy the request regardless of its seal. {@code floorSequence} must not
+     *  be {@code null} — callers only reach this method once a non-null floor has been confirmed
+     *  ({@link #resolveAndComplete}'s javadoc: F4 fix, a {@code null} floor now fails the ceremony
+     *  outright before this method is ever reached, rather than disabling just this one fallback). */
     private static Map<String, Object> scanForSealMatch(List<Map<String, Object>> ixnEvents, String floorSequence,
-            String currentSequence, String digestQb64) {
+            String currentSequence, String payloadSaid) {
         long floor = parseHexSequence(floorSequence);
         long current = parseHexSequence(currentSequence);
         for (Map<String, Object> ke : ixnEvents) {
@@ -488,7 +513,7 @@ public class KeriAttestService {
             if (sn <= floor || sn > current) {
                 continue;
             }
-            if (sealContainsDigest(ke.get("a"), digestQb64)) {
+            if (sealContainsDigest(ke.get("a"), payloadSaid)) {
                 return ke;
             }
         }
@@ -498,16 +523,17 @@ public class KeriAttestService {
     /** {@code event}'s sequence must be <b>strictly after</b> {@code floorSequence} (hex-compared
      *  numerically — {@code floorSequence} is never {@code null} here: {@link #resolveAndComplete}'s
      *  F4 fix fails the ceremony outright, before extracting a candidate at all, whenever the floor is
-     *  {@code null}) AND its seal must contain {@code digestQb64} (F5 fix). Sequence equal to the floor
-     *  is rejected: the floor is the sequence observed before the request was sent, so the genuine
-     *  anchoring event is always strictly newer. */
+     *  {@code null}) AND its seal must contain {@code payloadSaid} (F5 fix; design §4.4 rev 3 — see
+     *  {@link #scanForSealMatch}'s javadoc). Sequence equal to the floor is rejected: the floor is the
+     *  sequence observed before the request was sent, so the genuine anchoring event is always strictly
+     *  newer. */
     private static boolean satisfiesFloorAndDigest(Map<String, Object> event, String floorSequence,
-            String digestQb64) {
+            String payloadSaid) {
         long sn = parseHexSequence(String.valueOf(event.get("s")));
         if (sn <= parseHexSequence(floorSequence)) {
             return false;
         }
-        return sealContainsDigest(event.get("a"), digestQb64);
+        return sealContainsDigest(event.get("a"), payloadSaid);
     }
 
     private static long parseHexSequence(String hexSequence) {
@@ -537,6 +563,11 @@ public class KeriAttestService {
         if (e instanceof InterruptedException) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /** See {@link #KERI_DATETIME}'s javadoc. */
+    private static String nowKeriTimestamp() {
+        return KERI_DATETIME.format(LocalDateTime.now(ZoneOffset.UTC));
     }
 
     /** F2 fix: a sync-path guarded update ({@link CeremonyService#updateWaitingStepData}) found the

@@ -699,6 +699,11 @@ class CeremonyServiceTest {
     void validateAndConsumeHappyPathFlipsAttestAnchoredToConsumed() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
         ceremony.setMetadataDigest("Edigest");
+        // Deliberately distinct from metadataDigest (design §4.4 rev 3): payloadSaid is the value the
+        // wallet's KEL seal actually anchors / the on-chain 170.d, digestQb64 is the raw 1447/freeze
+        // digest — a swap of the two in validateAndConsume's ConsumedAttestation construction must fail
+        // this test.
+        ceremony.setPayloadSaid("Epayloadsaid");
         ceremony.setMetadataLabel("1447");
         ceremony.setKelSequence("3");
         ceremony.setAttesterAid("Eaid");
@@ -713,6 +718,7 @@ class CeremonyServiceTest {
         assertEquals(CEREMONY_ID, consumed.ceremonyId());
         assertEquals("Eaid", consumed.aid());
         assertEquals("Edigest", consumed.digestQb64());
+        assertEquals("Epayloadsaid", consumed.payloadSaid());
         assertEquals("1447", consumed.metadataLabel());
         assertEquals("3", consumed.kelSequence());
         assertEquals(CeremonyState.CONSUMED, ceremony.getState());
@@ -887,6 +893,9 @@ class CeremonyServiceTest {
         // link cannot influence this result no matter what it changes to.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CONSUMED);
         ceremony.setMetadataDigest("Edigest");
+        // Deliberately distinct from metadataDigest — see validateAndConsumeHappyPathFlipsAttestAnchoredToConsumed's
+        // comment for why a swap here must fail this test.
+        ceremony.setPayloadSaid("Epayloadsaid");
         ceremony.setMetadataLabel("1447");
         ceremony.setKelSequence("3");
         ceremony.setAttesterAid("Eoriginal-attester-aid");
@@ -896,6 +905,8 @@ class CeremonyServiceTest {
 
         assertTrue(result.isPresent());
         assertEquals("Eoriginal-attester-aid", result.get().aid());
+        assertEquals("Edigest", result.get().digestQb64());
+        assertEquals("Epayloadsaid", result.get().payloadSaid());
         verifyNoInteractions(identityLinkRepository);
     }
 

@@ -158,9 +158,15 @@ public class DocumentAttestationLookup {
     }
 
     /** Delegates to {@link Cip170MetadataFactory#attestMap} - the creator's dependency surface stays
-     *  limited to this class rather than needing its own {@code Cip170MetadataFactory} import. */
+     *  limited to this class rather than needing its own {@code Cip170MetadataFactory} import.
+     *
+     *  <p>Passes {@link ConsumedAttestation#payloadSaid()}, NOT {@link ConsumedAttestation#digestQb64()},
+     *  as the on-chain {@code 170.d} (design §4.4 rev 3): the wallet's KEL interaction event anchors the
+     *  SAID of the saidified remotesign request payload, not the raw 1447 digest directly - see
+     *  {@code ConsumedAttestation}'s javadoc. {@code digestQb64} is used elsewhere in this class only
+     *  for the freeze/1447-digest match in {@link #loadForDispatch} - never for the on-chain map. */
     public MetadataMap attestMap(ConsumedAttestation consumed) {
-        return cip170MetadataFactory.attestMap(consumed.aid(), consumed.digestQb64(), consumed.kelSequence());
+        return cip170MetadataFactory.attestMap(consumed.aid(), consumed.payloadSaid(), consumed.kelSequence());
     }
 
     /** Inverts {@code CborSerializationUtil.serialize(metadataMap.getMap())}, the exact call {@code

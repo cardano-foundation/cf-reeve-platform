@@ -69,6 +69,7 @@ class KeriAttestServiceTest {
     private static final String TARGET_ID = "doc-1";
     private static final String DIGEST = "Edigest0000000000000000000000000000000000000";
     private static final String METADATA_LABEL = "1447";
+    private static final String PAYLOAD_SAID = "Epayloadsaid00000000000000000000000000000000";
     private static final String OLD_REQUEST_EXN_SAID = "EOLDREQ0000000000000000000000000000000";
     private static final String NEW_REQUEST_EXN_SAID = "ENEWREQ0000000000000000000000000000000";
     private static final String REF_EXN_SAID = "EREFEXN0000000000000000000000000000000";
@@ -147,6 +148,10 @@ class KeriAttestServiceTest {
         ceremony.setAttemptGeneration(GENERATION);
         ceremony.setRequestExnSaid(requestExnSaid);
         ceremony.setMetadataDigest(DIGEST);
+        // payloadSaid deliberately NOT preset here (unlike metadataDigest): resolveAndComplete tests
+        // that need it as an input set it explicitly (mirroring kelFloorSequence's own per-test pattern
+        // below), so a test that's actually supposed to prove startAttest WRITES payloadSaid from the
+        // built KED can't pass vacuously against a value the fixture already carried.
         return ceremony;
     }
 
@@ -246,7 +251,7 @@ class KeriAttestServiceTest {
         when(provider.authorize(TARGET_ID, USER_ID)).thenReturn(Optional.empty());
         when(provider.prepareDigest(TARGET_ID, CEREMONY_ID))
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
-        when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
+        when(kedFactory.anchorRequestKed(WALLET_AID, METADATA_LABEL, DIGEST)).thenReturn(Map.of("d", PAYLOAD_SAID));
         Serder builtExn = stubHappySend();
         stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
@@ -256,12 +261,16 @@ class KeriAttestServiceTest {
         assertTrue(result.isRight());
         assertEquals(METADATA_LABEL, ceremony.getMetadataLabel());
         assertEquals(NEW_REQUEST_EXN_SAID, ceremony.getRequestExnSaid());
+        // design §4.4 rev 3: payloadSaid is extracted from the built KED's own "d" and persisted
+        // alongside requestExnSaid — ceremony() deliberately never presets this field, so this proves
+        // startAttest actually wrote it (not that it was already there).
+        assertEquals(PAYLOAD_SAID, ceremony.getPayloadSaid());
         // F5 fix: digest, floor sequence, and requestExnSaid — three guarded updates per attempt now.
         assertEquals(FLOOR_SEQUENCE, ceremony.getKelFloorSequence());
         verify(ceremonyService, times(3)).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
                 eq(CeremonyState.ATTEST_REQUESTED), any());
         verify(ceremonyRepository, never()).save(any());
-        verify(exchanges).createExchangeMessage(any(), eq("/remotesign/ixn/req"), eq(Map.of("d", DIGEST)),
+        verify(exchanges).createExchangeMessage(any(), eq("/remotesign/ixn/req"), eq(Map.of("d", PAYLOAD_SAID)),
                 eq(Map.of()), eq(WALLET_AID), any(), any());
         verify(exchanges).sendFromEvents(AGENT_NAME, "remotesign", builtExn, List.of("sig1"), "atc1",
                 List.of(WALLET_AID));
@@ -282,7 +291,7 @@ class KeriAttestServiceTest {
         when(provider.authorize(TARGET_ID, USER_ID)).thenReturn(Optional.empty());
         when(provider.prepareDigest(TARGET_ID, CEREMONY_ID))
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
-        when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
+        when(kedFactory.anchorRequestKed(WALLET_AID, METADATA_LABEL, DIGEST)).thenReturn(Map.of("d", PAYLOAD_SAID));
         stubHappySend();
         stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
@@ -417,7 +426,7 @@ class KeriAttestServiceTest {
         when(provider.authorize(TARGET_ID, USER_ID)).thenReturn(Optional.empty());
         when(provider.prepareDigest(TARGET_ID, CEREMONY_ID))
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
-        when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
+        when(kedFactory.anchorRequestKed(WALLET_AID, METADATA_LABEL, DIGEST)).thenReturn(Map.of("d", PAYLOAD_SAID));
         when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_PREFIX)));
         when(exchanges.createExchangeMessage(any(), anyString(), anyMap(), anyMap(), anyString(), any(), any()))
                 .thenThrow(new RuntimeException("agent unreachable"));
@@ -446,6 +455,7 @@ class KeriAttestServiceTest {
         // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
         // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
@@ -453,7 +463,7 @@ class KeriAttestServiceTest {
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
         when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID))
                 .thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
@@ -490,7 +500,7 @@ class KeriAttestServiceTest {
         when(provider.authorize(TARGET_ID, USER_ID)).thenReturn(Optional.empty());
         when(provider.prepareDigest(TARGET_ID, CEREMONY_ID))
                 .thenReturn(Either.right(new AttestationDigest(DIGEST, METADATA_LABEL)));
-        when(kedFactory.anchorRequestKed(WALLET_AID, DIGEST)).thenReturn(Map.of("d", DIGEST));
+        when(kedFactory.anchorRequestKed(WALLET_AID, METADATA_LABEL, DIGEST)).thenReturn(Map.of("d", PAYLOAD_SAID));
         stubHappySend();
         stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
@@ -511,13 +521,14 @@ class KeriAttestServiceTest {
         // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
         // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
 
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
         when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(true);
@@ -549,12 +560,13 @@ class KeriAttestServiceTest {
         // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
         // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
         when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(false);
@@ -607,6 +619,7 @@ class KeriAttestServiceTest {
         // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
         // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
@@ -623,7 +636,7 @@ class KeriAttestServiceTest {
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH),
                 eq("The wallet ref's explicit anchoring-event candidate did not verify (not found, sequence "
-                        + "at or before the floor, or seal does not contain digest " + DIGEST + ")."));
+                        + "at or before the floor, or seal does not contain payload SAID " + PAYLOAD_SAID + ")."));
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(correlator, never()).markAndDelete(any());
     }
@@ -635,6 +648,7 @@ class KeriAttestServiceTest {
         // ever reaching the key-state query this test wants to exercise -- see the dedicated null-floor
         // test for that behavior.
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
@@ -659,6 +673,7 @@ class KeriAttestServiceTest {
     void awaitAnchorFallsBackToKeyStateQueryWhenRefExnCarriesNoCandidate() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
@@ -669,7 +684,7 @@ class KeriAttestServiceTest {
         Operation<Object> op = Operation.builder().response(Map.of("s", SEQUENCE)).build();
         when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(op);
 
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(true);
@@ -691,6 +706,7 @@ class KeriAttestServiceTest {
         // matches — it must also be at or after the floor sequence queried before this request was sent.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence("5");
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         // No explicit candidate on the ref exn — goes through the bounded-scan fallback.
@@ -699,7 +715,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         stubKeyStateSequence("6");
 
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         // Below the floor (sequence 2 < floor 5) but carries the matching digest — must be rejected.
         Map<String, Object> oldEvent = kelEvent("ixn", "2", "EOLDEVENT00000000000000000000000000000", seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(oldEvent));
@@ -719,6 +735,7 @@ class KeriAttestServiceTest {
         // ever looked at it.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence("1");
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         // Explicit candidate naming a SAID/sequence that doesn't exist in the KEL at all.
@@ -727,7 +744,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         // A different event that WOULD satisfy digest+floor if a scan ever considered it.
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         Map<String, Object> otherEvent = kelEvent("ixn", SEQUENCE, EVENT_SAID, seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(otherEvent));
 
@@ -749,6 +766,7 @@ class KeriAttestServiceTest {
         // time and must never satisfy a fresh request, even with a matching digest.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence("5");
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
@@ -756,7 +774,7 @@ class KeriAttestServiceTest {
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         stubKeyStateSequence("6");
 
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         // Exactly at the floor (sequence 5 == floor 5) with the matching digest — must still be rejected.
         Map<String, Object> atFloorEvent = kelEvent("ixn", "5", "EATFLOOREVENT0000000000000000000000000", seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(atFloorEvent));
@@ -775,13 +793,14 @@ class KeriAttestServiceTest {
         // KEL event with a matching digest, but its sequence equals the floor exactly.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence("5");
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, "5", EVENT_SAID);
         when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
-        Object seal = List.of(Map.of("d", DIGEST));
+        Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         Map<String, Object> atFloorEvent = kelEvent("ixn", "5", EVENT_SAID, seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(atFloorEvent));
 

@@ -1,6 +1,8 @@
 # KERI/Veridian Wallet Attestation for document_vault Publishes — Design
 
-**Date:** 2026-07-21 (rev 2 — after Codex cross-review, verdict on rev 1: needs-changes)
+**Date:** 2026-07-21 (rev 2 — after Codex cross-review, verdict on rev 1: needs-changes); **updated
+2026-07-22 (rev 3 — user-directed, after live Veridian wallet testing of rev 2's ATTEST semantics
+produced no wallet notification at all; see §4.4)**
 **Status:** Draft — pending user review
 **Repos:**
 - Backend: `cf-reeve-platform` (branch `feat/document-module`)
@@ -25,7 +27,7 @@ The KERI orchestration services must be **reusable** for other transaction types
 
 ### Normative reference
 
-CIP-170 is **Proposed**, not Active. Implementation pins a specific commit of `cardano-foundation/CIPs` CIP-0170/README.md (recorded in the module README at implementation time) and follows its exact field names, values (including the `v` version object contents), and verification rules. The cip113 platform and `cf-reeve-document-demo` are treated as *mechanical* references (how to drive signify/Veridian), **not** as normative sources — rev 1 of this spec inherited two protocol deviations from them, caught in review (§4.4, §4.6).
+CIP-170 is **Proposed**, not Active. Implementation pins a specific commit of `cardano-foundation/CIPs` CIP-0170/README.md (recorded in the module README at implementation time) and follows its exact field names, values (including the `v` version object contents), and verification rules. The cip113 platform and `cf-reeve-document-demo` are treated as *mechanical* references (how to drive signify/Veridian), **not** as normative sources for the on-chain CIP-170 field shapes — rev 1 of this spec inherited two protocol deviations from them, caught in review (§4.4, §4.6). **Rev 3 partially reverses that call for the wallet-anchoring KED shape specifically** (§4.4): rev 2's "correction" (a direct, un-wrapped digest as the KEL seal) was verified against a real Veridian wallet and produced no notification at all — cip113's mechanical pattern (a saidified wrapper payload) is what Veridian actually implements, so it is now treated as normative for *that one question* (what shape the wallet will anchor), while the on-chain CIP-170 field set/values themselves are unchanged and still sourced from the pinned CIP commit, not from cip113.
 
 ## 2. Background
 
@@ -159,8 +161,9 @@ Spring context tests assert clean startup and correct degradation for every enab
 | `attempt_generation` | integer; every retry increments it; async completions CAS on (state, generation) |
 | `error_title`, `error_detail` | populated on FAILED |
 | `request_exn_said` | SAID of the last sent exchange (IPEX apply / remotesign req) for notification correlation |
-| `metadata_digest`, `metadata_label` | digest handed to the wallet (= on-chain `170.d`) |
-| `kel_sequence`, `kel_event_said` | anchoring event: sequence (hex, = on-chain `170.s`) + event SAID (audit) |
+| `metadata_digest`, `metadata_label` | raw CESR digest of the label-`metadata_label` metadata value (e.g. 1447) — used for freeze/digest matching only (rev 3); **no longer the on-chain `170.d`**, see `payload_said` |
+| `payload_said` (rev 3) | SAID of the saidified remotesign request payload `{i, d, metadataLabel, metadataDigest}` sent to the wallet (§4.4) — the value the wallet's KEL seal is expected to equal, and therefore **the on-chain `170.d`** |
+| `kel_sequence`, `kel_event_said` | anchoring event: sequence (hex, = on-chain `170.s`) + event SAID (audit; the event's own `d`, distinct from `payload_said`, which lives inside that event's seal) |
 | `created_at`, `updated_at`, `expires_at` | TTL from config |
 
 Data note: these tables hold **pseudonymous personal data** (Keycloak subject linked to AID, OOBI URL, credential identifiers) — not "no PII". They are covered by the platform's GDPR data-subject processes; deleting a user's link removes the linkage (on-chain data is immutable by nature and disclosed to the user in the wizard, §6).
@@ -188,7 +191,7 @@ Any non-terminal state ─▶ FAILED (retryable) or EXPIRED (TTL sweep / lazy ch
 
 - **`KeriAgentService`** — builds the `SignifyClient` (connect, boot-fallback), ensures the agent AID exists (alias lookup or create, mirroring the existing `KeriConfig.createIdentifier` logic — reimplemented here, not imported, to keep zero coupling to the old code), exposes the agent OOBI.
 - **`KeriOobiService`** — `resolveUserOobi(userId, oobiUrl)`: URL shape validation (https, syntactically valid, length-capped), then `client.oobis().resolve(oobi, alias)` + operation wait, AID extraction, contact verification, persist to `keri_identity_link` (with relink semantics, §4.7). Synchronous, ~15s timeout. SSRF note: resolution is performed by the KERIA agent, which must be deployed egress-restricted (documented ops requirement); the app server never fetches the URL itself.
-- **`KeriNotificationCorrelator`** — polls `notifications().list()` and claims a notification **only if** route matches AND the referenced exchange's sender is the linked AID, recipient is the agent AID, and its thread/prior links back to `request_exn_said`. Mark-and-delete only after the ceremony transition is durably committed.
+- **`KeriNotificationCorrelator`** — polls `notifications().list()` and claims a notification **only if** route matches AND the referenced exchange's sender is the linked AID, its thread/prior links back to `request_exn_said`, and (when the exchange's `rp` field is present and non-blank) the recipient is the agent AID. Rev 3 (2026-07-22): the `rp` check was relaxed from an unconditional requirement to "checked only when present" — cip113's own notification helper never inspects `rp` at all, and a strict requirement risked silently rejecting a legitimate wallet reply that omits it; sender + thread-back remain the primary safeguard against cross-ceremony hijacking. Mark-and-delete only after the ceremony transition is durably committed.
 - **`KeriCredentialService`** — IPEX presentation: `apply` (schema SAIDs from `credential-policy`) → wait offer → `agree` → wait grant → `admit` (all correlated per above); fetch full CESR chain (`Accept: application/json+cesr`). Then **`CredentialChainValidator`** (see below) must pass before the credential is persisted to the link.
 - **`CredentialChainValidator`** — validates the presented chain before it is accepted or published: parses the full CESR stream; verifies the ACDC chain edge-by-edge up to a **trusted root AID** (`credential-policy.trusted-root-aids`); verifies TEL state (issued, not revoked) for every link; asserts the leaf credential's **issuee equals the linked AID** and its **schema SAID is allowlisted**. Rejection reasons map to distinct problem titles.
 - **`CesrChainReducer`** — reduces the full CESR stream to the minimal on-chain chain (registry inception + issuance + ACDC per link, canonical order). Acceptance criterion: the reduced stream must **round-trip through the validator** (parse + verify) — a reduction that drops needed events or attachments fails the build, not the verifier.
@@ -197,15 +200,16 @@ Any non-terminal state ─▶ FAILED (retryable) or EXPIRED (TTL sweep / lazy ch
 - **`CeremonyService`** — state machine guards, ownership checks, expiry, rate limits (`limits.*`), `validateAndConsume` (§5.1).
 - **`Cip170MetadataFactory`** — pure builders for the label-170 `AUTH_BEGIN` and `ATTEST` `MetadataMap`s, field-for-field per the pinned CIP-170 commit (including the exact `v` object contents and the 64-byte chunk encoding of `c` — chunks are the byte-slices of the reduced CESR stream in order; a verifier reassembles by concatenation).
 
-### 4.4 ATTEST semantics (corrected in rev 2)
+### 4.4 ATTEST semantics (corrected in rev 2, reverted to the cip113 wallet contract in rev 3)
 
-**`170.d` is the CESR digest of the label-1447 metadata value itself** — not the SAID of any wrapper payload — and the KEL seal anchored by the wallet must be **that same digest**. (Rev 1 followed the demo's wrapper-SAID pattern; review confirmed CIP-170 and the repo's own `docs/keri/AttestTransaction.java` require the direct digest.)
+**Rev 3 (2026-07-22, user-directed after live wallet testing):** rev 2's direct-digest design — send the raw `metadata_digest` for the wallet to anchor as-is — was implemented and tested against a real Veridian wallet. Sending the remotesign request produced **no notification in the wallet at all**: Veridian's `processRemoteSignReq` silently drops a request whose payload doesn't look like a self-addressing SAID envelope. Rev 2's own hard-blocker clause anticipated exactly this outcome ("If Veridian's remotesign can only anchor a request-payload SAID... this is a hard blocker to escalate") — that is what live testing found. Per user direction, the ATTEST semantics revert to cip113's proven wallet contract:
 
-- Digest: `CborSerializationUtil.serialize(metadataMap.getMap())` → CESR `Diger` Blake3-256, qb64 (`E…`) — same algorithm as the existing report-path implementation.
-- The remotesign request to the wallet must therefore result in an interaction event whose seal digest **equals `metadata_digest`**. The exact request KED shape is verified against Veridian behavior in an **M2 spike** (first implementation task): send the request, approve in a real wallet, fetch the KEL event, assert the seal. If Veridian's remotesign can only anchor a request-payload SAID (not a caller-chosen digest), this is a **hard blocker to escalate** — a transport-envelope SAID is not interchangeable with the CIP digest, and we would need wallet-side or spec-side coordination before proceeding.
-- On-chain map: `{t:"ATTEST", i:<userAid>, d:<metadata_digest>, s:<kel_sequence hex>, v:{…pinned…}}`.
+- **`170.d` is the SAID of the saidified remotesign request payload**, not the raw label-1447 metadata digest directly. The payload — built by `RemotesignRequestFactory`, insertion-ordered `{i:<userAid>, d:"", metadataLabel:<label>, metadataDigest:<metadata_digest>}` — is run through `Saider.saidify(...)` (`i` present *before* saidifying, matching cip113's `KeriService#requestAttestation`: signify's exchange-building code reads `i` from the payload as-sent, so the SAID must already reflect it) before it is ever sent. The resulting SAID (`payload_said`, a new ceremony column, §4.1) is what the wallet's KEL interaction event anchors as its seal, and therefore what `170.d` equals on-chain.
+- `metadata_digest` (`CborSerializationUtil.serialize(metadataMap.getMap())` → CESR `Diger` Blake3-256, qb64, same algorithm as the existing report-path implementation) is **kept, unchanged, as one of the fields inside the saidified payload**, and separately for 1447/freeze-digest matching (`DocumentAttestationLookup`) — it is no longer compared against the KEL seal directly.
+- On-chain map: `{t:"ATTEST", i:<userAid>, d:<payload_said>, s:<kel_sequence hex>, v:{…pinned…}}`.
+- The M2 spike (`docs/keri/spike/RemotesignAnchorSpike.java`) already modeled this exact question via its "variant C" (saidified envelope) — see the module README's spike-findings scaffold; live app testing reached the same conclusion the spike was designed to reach, just via the deployed module rather than the standalone spike script.
 
-**Verifier story:** read the tx; digest the label-1447 value bytes (Blake3-256 Diger qb64); compare with `170.d`; resolve the signer's KEL; fetch the event at sequence `170.s`; assert its seal equals `170.d`; check authority via the AUTH_BEGIN chain.
+**Verifier story (rev 3):** read the tx; rebuild the payload from on-chain data `{i:170.i, d:"", metadataLabel:"1447", metadataDigest:<recomputed Blake3-256 Diger qb64 of the label-1447 value bytes>}`; saidify it; compare the result with `170.d`; resolve the signer's KEL; fetch the event at sequence `170.s`; assert its seal equals `170.d`; check authority via the AUTH_BEGIN chain.
 
 ### 4.5 AUTH_BEGIN (hardened in rev 2)
 
@@ -218,9 +222,9 @@ Any non-terminal state ─▶ FAILED (retryable) or EXPIRED (TTL sweep / lazy ch
 
 1. Re-run `authorize` (target may have changed since ceremony creation).
 2. `prepareDigest(targetId, ceremonyId)` → freeze + `metadata_digest` (§5.2).
-3. Build the remotesign request KED for anchoring `metadata_digest` (shape per M2 spike, §4.4); persist `request_exn_said` **before** sending; send `/remotesign/ixn/req` to the linked AID.
+3. Build the remotesign request KED (`RemotesignRequestFactory`): insertion-ordered `{i:<userAid>, d:"", metadataLabel:<label>, metadataDigest:<metadata_digest>}`, saidified (§4.4 rev 3) — the saidified payload's own `d` is `payload_said`. Persist `request_exn_said` **and** `payload_said` **before** sending; send `/remotesign/ixn/req` to the linked AID.
 4. Await the correlated `/remotesign/ixn/ref` (≤ `remotesign-timeout`) via `KeriNotificationCorrelator`.
-5. From the correlated ref (not from "latest key state"): obtain the anchoring interaction event — sequence and SAID; **fetch that exact KEL event and assert its seal equals `metadata_digest`**. (Rev 1 read the latest key-state sequence, which races with unrelated wallet events.) Key-state query is used only to confirm KEL availability, with bounded retries.
+5. From the correlated ref (not from "latest key state"): obtain the anchoring interaction event — sequence and SAID; **fetch that exact KEL event and assert its seal equals `payload_said`** (rev 3 — was `metadata_digest` in rev 2, which no live wallet ever anchored; see §4.4). (Rev 1 read the latest key-state sequence, which races with unrelated wallet events.) Key-state query is used only to confirm KEL availability, with bounded retries.
 6. Persist `kel_sequence` + `kel_event_said`; CAS state (with generation) → `ATTEST_ANCHORED`.
 
 ### 4.7 Relinking

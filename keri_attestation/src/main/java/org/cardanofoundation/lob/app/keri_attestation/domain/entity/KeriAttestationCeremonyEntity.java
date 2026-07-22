@@ -88,7 +88,12 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "request_exn_said")
     private String requestExnSaid;
 
-    /** The digest handed to the wallet to anchor — equals the on-chain {@code 170.d} once ATTEST_ANCHORED. */
+    /** The CESR digest of the raw label-{@link #metadataLabel} metadata value (e.g. the 1447 document
+     *  metadata) — used for freeze/digest matching only ({@code DocumentAttestationLookup}). <b>No
+     *  longer equals the on-chain {@code 170.d}</b> (design §4.4 rev 3, user-directed 2026-07-22 after
+     *  live wallet testing): Veridian's remotesign flow anchors the SAID of the whole
+     *  {@link RemotesignRequestFactory}-built request payload, not this raw digest directly — see
+     *  {@link #payloadSaid}, which IS the on-chain {@code 170.d}. */
     @Nullable
     @Column(name = "metadata_digest")
     private String metadataDigest;
@@ -96,6 +101,17 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Nullable
     @Column(name = "metadata_label")
     private String metadataLabel;
+
+    /** SAID of the saidified remotesign request payload {@code {i, d, metadataLabel, metadataDigest}}
+     *  sent to the wallet ({@link RemotesignRequestFactory#anchorRequestKed}) — the value the wallet's
+     *  KEL interaction-event seal is expected to equal, and therefore the on-chain {@code 170.d} once
+     *  ATTEST_ANCHORED (design §4.4 rev 3). Persisted before the request is sent, alongside
+     *  {@link #requestExnSaid}. Distinct from {@link #metadataDigest} (the raw 1447/freeze digest) and
+     *  from {@link #kelEventSaid} (the anchoring KEL event's OWN SAID, i.e. its {@code d} — not the
+     *  SAID inside its seal). */
+    @Nullable
+    @Column(name = "payload_said")
+    private String payloadSaid;
 
     /** KEL sequence (hex) of the anchoring event — equals the on-chain {@code 170.s}. */
     @Nullable

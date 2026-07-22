@@ -37,14 +37,14 @@ import org.cardanofoundation.signify.cesr.util.Utils;
  *       notification's claimed route is not trusted on its own, since nothing forces it to agree with
  *       the exchange it actually references;</li>
  *   <li>the exchange was sent by the expected sender ({@code exn.i});</li>
- *   <li>the exchange's {@code rp} ("recipient prefix") MUST be present, non-blank, and equal this
- *       agent's own prefix (M3 cross-review F2 fix) — {@code rp} is the signed addressee, and the
- *       pinned signify exchange builder always includes one on every exchange this class correlates
- *       against, so absent or blank is treated exactly like a mismatch: reject, not claimable.
- *       {@code exn.a.i} is deliberately <b>not</b> consulted for this check at all (F4 residual fix) —
- *       it is ordinary payload data fully controlled by the sender, not a signed routing field, so
- *       trusting it would let a forged or misdirected notification's own payload simply claim to be
- *       addressed to us;</li>
+ *   <li>the exchange's {@code rp} ("recipient prefix"), <b>when present and non-blank</b>, must equal
+ *       this agent's own prefix ({@link #addresseeMatchesAgent}) — relaxed 2026-07-22 (design §4.4
+ *       rev 3) from an unconditional presence requirement to match cip113's proven wallet contract,
+ *       whose own notification helper never inspects {@code rp} at all; see that method's javadoc for
+ *       why this is still safe. {@code exn.a.i} is deliberately <b>not</b> consulted for this check at
+ *       all (F4 residual fix) — it is ordinary payload data fully controlled by the sender, not a
+ *       signed routing field, so trusting it would let a forged or misdirected notification's own
+ *       payload simply claim to be addressed to us;</li>
  *   <li>the exchange threads back to the exact request {@code exn} SAID this caller is waiting on
  *       ({@link #threadsBackToRequest}) — a <em>bounded</em>, protocol-shaped check, not a general
  *       recursive search. {@code p}, when present and non-blank, is authoritative (F4 residual fix):
@@ -263,24 +263,51 @@ public class KeriNotificationCorrelator {
     }
 
     /**
-     * Recipient check (F4 fix, tightened by the F4 residual fix, now made unconditional by the M3
-     * cross-review F2 fix): the exn's {@code rp} ("recipient prefix") is the signed addressee and MUST
-     * be present, non-blank, AND equal this agent's own prefix — absent, blank, or mismatched all reject
-     * outright; there is no longer a "genuinely absent" carve-out. The pinned signify exchange builder
-     * always includes a signed {@code rp} on every exchange this class correlates against, so an exn
-     * missing one is never a legitimate reply this agent itself could have received — treating it as
-     * unaddressed (and therefore not claimable) is strictly safer than the old skip-when-absent
-     * behavior. (If a future wallet build is ever found to omit {@code rp} on an otherwise-legitimate
-     * exchange, that is a spike to revisit deliberately, not a silent carve-out here.) {@code exn.a.i}
-     * (an {@code i} key nested inside the payload map {@code a}) is still deliberately <b>not</b>
-     * consulted here at all, and must never substitute for {@code rp}: {@code a} is ordinary payload
-     * data the sender fully controls, not a signed/authoritative routing field, so trusting it would let
-     * a forged or misdirected notification's own payload simply claim to be addressed to us regardless
-     * of what {@code rp} actually says (or whether it's there at all).
+     * Recipient check (F4 fix, tightened by the F4 residual fix; <b>relaxed 2026-07-22, design §4.4
+     * rev 3, to match the proven cip113 wallet contract</b>): when the exn's {@code rp} ("recipient
+     * prefix") is present and non-blank, it must equal this agent's own prefix — a present-but-wrong
+     * {@code rp} still rejects outright. An <em>absent or blank</em> {@code rp}, however, no longer
+     * rejects: {@code cip113-programmable-tokens-platform}'s {@code IpexNotificationHelper} — the
+     * reference this module's wallet flow is aligned against, proven against real Veridian wallets —
+     * never inspects {@code rp} at all, correlating purely by route; real wallet replies were found not
+     * to reliably carry a signed {@code rp} the way the (never-deployed) M3 cross-review assumed. The
+     * unconditional-reject behavior that assumption produced would silently discard a legitimate reply
+     * that lacks {@code rp} — a secondary bug independent of, but compounding, the payload-shape defect
+     * design §4.4 rev 3 fixes.
+     *
+     * <p>This relaxation is safe because {@code rp} was never the only check standing between a claimed
+     * notification and correlation to the wrong ceremony: {@link #tryCorrelate} still requires the
+     * exchange's sender ({@code exn.i}) to equal the linked wallet AID this specific ceremony is
+     * waiting on, and {@link #threadsBackToRequest} still requires the exchange to thread back to this
+     * ceremony's own {@code requestExnSaid}. Those two checks — not {@code rp} — are what actually
+     * prevent a different wallet's (or a different ceremony's) reply from being claimed here; {@code rp}
+     * was always defense-in-depth on top of them, not the primary guard. {@code exn.a.i} (an {@code i}
+     * key nested inside the payload map {@code a}) is still deliberately <b>not</b> consulted here at
+     * all, and must never substitute for {@code rp}: {@code a} is ordinary payload data the sender fully
+     * controls, not a signed/authoritative routing field, so trusting it would let a forged or
+     * misdirected notification's own payload simply claim to be addressed to us.
+     *
+     * <p>"Absent" means the key itself is missing ({@code null}) or maps to a blank string — KERI's own
+     * convention for "no value" on a required string field. A present {@code rp} that isn't a string at
+     * all (a malformed/unexpected wire shape) is <b>not</b> treated as absent — it rejects, same as a
+     * mismatch.
      */
     private boolean addresseeMatchesAgent(Map<String, Object> exn) {
         Object rp = exn.get("rp");
-        return rp instanceof String rpString && !rpString.isBlank() && agentService.agentPrefix().equals(rpString);
+        if (rp == null) {
+            return true;
+        }
+        if (!(rp instanceof String rpString)) {
+            // Present but not a string at all: not KERI's "no value" convention for a string field
+            // (that's specifically a blank string, handled below) — an unexpected shape here is a
+            // malformed/hostile exn, not a legitimate "no addressee", so this rejects rather than
+            // silently treating it the same as absent.
+            return false;
+        }
+        if (rpString.isBlank()) {
+            return true;
+        }
+        return agentService.agentPrefix().equals(rpString);
     }
 
     /**
