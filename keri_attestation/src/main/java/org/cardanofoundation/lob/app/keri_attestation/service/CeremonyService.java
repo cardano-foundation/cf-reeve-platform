@@ -324,8 +324,8 @@ public class CeremonyService implements AttestationConsumptionApi {
 
     /**
      * The sole entry point other modules use (design §4.6). Guard order matches the design exactly:
-     * existence, ownership, target match, ceremony state, expiry, then the binding-version check that
-     * catches a relink that happened after this ceremony was created.
+     * existence, ownership, target match, ceremony state, expiry, attesterAid presence, then the
+     * binding-version check that catches a relink that happened after this ceremony was created.
      */
     @Override
     public Either<ProblemDetail, ConsumedAttestation> validateAndConsume(String ceremonyId, String targetType,
@@ -352,6 +352,20 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(expiredProblem(ceremonyId));
         }
 
+        // R1 fix (Codex re-verification): attesterAid is written by KeriAttestService#resolveAndComplete
+        // the moment this ceremony reaches ATTEST_ANCHORED (see KeriAttestationCeremonyEntity
+        // #getAttesterAid()'s javadoc), so a null here on an otherwise-valid ATTEST_ANCHORED row is not
+        // a normal case to recover from — it indicates data corruption. This module has never been
+        // deployed, so no CONSUMED row anywhere can lack an attesterAid; still, fail closed rather than
+        // resurrect the CURRENT-identity-link fallback that used to sit here, which reopened exactly the
+        // relink-misattribution hole {@code KeriAttestationCeremonyEntity#getAttesterAid()} exists to
+        // close (a consume racing a relink of the same user must never emit the NEW aid alongside a
+        // digest/kelSequence anchored under the OLD one).
+        if (ceremony.getAttesterAid() == null) {
+            return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
+                    "Ceremony %s has no recorded attester AID.".formatted(ceremonyId)));
+        }
+
         // Reaching ATTEST_ANCHORED requires an identity link to have existed at every prior step, so an
         // empty link here is not a normal "never linked" case — it means the link row itself is gone
         // (or the identity has otherwise dropped its binding entirely) since this ceremony was created,
@@ -370,13 +384,12 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.IDENTITY_RELINKED,
                     "The identity behind ceremony %s has been relinked since it was created.".formatted(ceremonyId)));
         }
-        KeriIdentityLinkEntity link = linkOpt.get();
 
         ceremony.setState(CeremonyState.CONSUMED);
         ceremony.setUpdatedAt(LocalDateTime.now());
         ceremonyRepository.save(ceremony);
 
-        return Either.right(new ConsumedAttestation(ceremony.getId(), resolveAttesterAid(ceremony, link),
+        return Either.right(new ConsumedAttestation(ceremony.getId(), ceremony.getAttesterAid(),
                 ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
     }
 
@@ -395,38 +408,23 @@ public class CeremonyService implements AttestationConsumptionApi {
      * #validateAndConsume} call produced, so there is nothing here to serialize against a concurrent
      * writer.
      *
-     * <p>F1 fix: the returned {@code aid} comes from the ceremony's own persisted {@code
-     * KeriAttestationCeremonyEntity#getAttesterAid()} whenever it is set — never from the CURRENT
-     * identity link — so a consume that is followed by a relink of the same user cannot make a later
-     * (e.g. delayed dispatch retry) reader of this ceremony see the NEW aid alongside the digest/
-     * kelSequence that were actually anchored under the OLD one. The identity link is looked up only
-     * as a fallback, and only for a pre-upgrade row that reached {@code CONSUMED} before {@code
-     * attesterAid} existed (see {@code KeriAttestationCeremonyEntity#getAttesterAid()}'s javadoc).
+     * <p>F1 fix, hardened by R1 (Codex re-verification): the returned {@code aid} comes from the
+     * ceremony's own persisted {@code KeriAttestationCeremonyEntity#getAttesterAid()} — never from the
+     * CURRENT identity link — so a consume that is followed by a relink of the same user cannot make a
+     * later (e.g. delayed dispatch retry) reader of this ceremony see the NEW aid alongside the digest/
+     * kelSequence that were actually anchored under the OLD one. A {@code CONSUMED} row with no
+     * {@code attesterAid} recorded is treated as fail-closed corruption rather than falling back to the
+     * current link's AID — this module has never been deployed, so no such row can exist in a real
+     * database (see {@code KeriAttestationCeremonyEntity#getAttesterAid()}'s javadoc); {@link
+     * #validateAndConsume} itself never lets a ceremony reach {@code CONSUMED} without one.
      */
     @Override
     public Optional<ConsumedAttestation> findConsumed(String ceremonyId) {
         return ceremonyRepository.findById(ceremonyId)
                 .filter(ceremony -> ceremony.getState() == CeremonyState.CONSUMED)
-                .flatMap(this::toConsumedAttestation);
-    }
-
-    private Optional<ConsumedAttestation> toConsumedAttestation(KeriAttestationCeremonyEntity ceremony) {
-        if (ceremony.getAttesterAid() != null) {
-            return Optional.of(new ConsumedAttestation(ceremony.getId(), ceremony.getAttesterAid(),
-                    ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
-        }
-        // Pre-upgrade fallback (F1 fix): no attesterAid was ever persisted for this ceremony — fall
-        // back to the CURRENT identity link exactly like every caller did before this fix.
-        return identityLinkRepository.findById(ceremony.getUserId())
-                .map(link -> new ConsumedAttestation(ceremony.getId(), link.getAid(),
+                .filter(ceremony -> ceremony.getAttesterAid() != null)
+                .map(ceremony -> new ConsumedAttestation(ceremony.getId(), ceremony.getAttesterAid(),
                         ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
-    }
-
-    /** F1 fix: {@code ceremony}'s own persisted {@code KeriAttestationCeremonyEntity#getAttesterAid()}
-     *  is authoritative whenever set; {@code link} (the caller's already-loaded, current identity link)
-     *  is consulted only as the pre-upgrade fallback — see {@link #findConsumed}'s javadoc. */
-    private static String resolveAttesterAid(KeriAttestationCeremonyEntity ceremony, KeriIdentityLinkEntity link) {
-        return ceremony.getAttesterAid() != null ? ceremony.getAttesterAid() : link.getAid();
     }
 
     // --- internals ---

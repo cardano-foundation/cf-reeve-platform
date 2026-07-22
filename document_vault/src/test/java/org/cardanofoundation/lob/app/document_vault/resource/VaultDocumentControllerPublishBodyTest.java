@@ -112,6 +112,28 @@ class VaultDocumentControllerPublishBodyTest {
         verifyNoInteractions(documentService);
     }
 
+    /** R4 fix (Codex re-verification): a body that NAMES {@code attestationCeremonyId} but sets it to
+     *  JSON {@code null} is ambiguous intent - the controller must not silently collapse it to a
+     *  plain publish the way a genuinely absent field (bodiless, or {@code {}}) does. It is rejected
+     *  by translating it into the SAME blank-ceremony-id guard the service already runs (title
+     *  {@code ATTESTATION_CEREMONY_ID_BLANK}), proven here by verifying the service is called with
+     *  {@code ""}, not {@code null}. */
+    @Test
+    void publishWithExplicitNullCeremonyIdInBodyIsRejectedAsBlank() throws Exception {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                "attestationCeremonyId must not be blank; omit the field entirely for a plain publish.");
+        problem.setTitle("ATTESTATION_CEREMONY_ID_BLANK");
+        when(documentService.publish("doc1", "")).thenReturn(Either.left(problem));
+
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"attestationCeremonyId\":null}"))
+                .andExpect(status().isUnprocessableEntity());
+
+        verify(documentService).publish("doc1", "");
+    }
+
     /** M3 cross-review F6 fix: a present-but-blank ceremony id is rejected by the service (not
      *  normalized to null) - this only proves the controller propagates whatever status the service
      *  returns for it, unaffected by the request-shape change above. */

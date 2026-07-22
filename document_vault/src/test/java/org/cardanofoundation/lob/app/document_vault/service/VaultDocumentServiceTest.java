@@ -654,6 +654,62 @@ class VaultDocumentServiceTest {
     }
 
     @Test
+    void publishWithCeremonyIdWhenFreezeGuardFailsWith503PropagatesThe503Unchanged() {
+        // R5 fix (Codex re-verification): a 5xx Left is NOT the caller's fault (e.g. a downstream KERI
+        // agent outage) - forcing it to 422 like every 4xx would mislead a retrying client into
+        // treating a transient platform failure as "fix your request and resubmit". Must pass through
+        // with its original status, title and detail untouched.
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
+        when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
+        ProblemDetail agentUnavailable = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "The KERI agent is temporarily unreachable.");
+        agentUnavailable.setTitle("KERI_AGENT_UNAVAILABLE");
+        when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.of(agentUnavailable));
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isLeft());
+        assertEquals("KERI_AGENT_UNAVAILABLE", result.getLeft().getTitle());
+        assertEquals("The KERI agent is temporarily unreachable.", result.getLeft().getDetail());
+        assertEquals(503, result.getLeft().getStatus());
+        assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
+        verifyNoInteractions(attestationConsumptionApi);
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void publishWithCeremonyIdWhenConsumptionFailsWith503PropagatesThe503Unchanged() {
+        // R5 fix: same guard as the freeze-guard case above, exercised on the consumeAttestation
+        // (validateAndConsume) call site instead.
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
+        when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
+        when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
+        ProblemDetail linkStoreDown = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "Identity link store is temporarily unavailable.");
+        linkStoreDown.setTitle("IDENTITY_STORE_UNAVAILABLE");
+        when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
+                .thenReturn(Either.left(linkStoreDown));
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isLeft());
+        assertEquals("IDENTITY_STORE_UNAVAILABLE", result.getLeft().getTitle());
+        assertEquals("Identity link store is temporarily unavailable.", result.getLeft().getDetail());
+        assertEquals(503, result.getLeft().getStatus());
+        assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
+        assertNull(doc.getAttestationCeremonyId());
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
     void publishWithCeremonyIdHappyPathPersistsCeremonyIdAndEmitsCommand() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));

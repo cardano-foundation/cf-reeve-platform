@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,6 +62,7 @@ public class KeriOobiService {
     private final KeriAttestationClient client;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationCeremonyRepository ceremonyRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Either<ProblemDetail, String> resolveUserOobi(String userId, String oobiUrl, boolean relink) {
         Either<ProblemDetail, String> validated = validate(oobiUrl);
@@ -243,6 +245,13 @@ public class KeriOobiService {
         link.setAid(aid);
         link.setOobiUrl(oobiUrl);
         identityLinkRepository.save(link);
+        // R2 fix (Codex re-verification): published from inside this same transaction, but only
+        // DELIVERED to RelinkInvalidationSweepHandler after it commits (AFTER_COMMIT listener) - never
+        // executed synchronously here, so this never risks taking a ceremony lock while the link lock
+        // acquired above is still held. Closes the phantom-insert window between invalidateOpenCeremonies
+        // (run before this method ever locked the link row) and this write actually landing - see
+        // RelinkInvalidationSweepHandler's javadoc for the full race this closes.
+        eventPublisher.publishEvent(new RelinkCompletedEvent(userId, link.getBindingVersion()));
         return Either.right(aid);
     }
 

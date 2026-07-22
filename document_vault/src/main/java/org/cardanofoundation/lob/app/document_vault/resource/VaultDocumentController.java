@@ -95,7 +95,29 @@ public class VaultDocumentController {
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> publish(@PathVariable String documentId,
                                           @Valid @RequestBody(required = false) PublishDocumentRequest request) {
-        String attestationCeremonyId = request == null ? null : request.getAttestationCeremonyId();
-        return Responses.respond(documentService.publish(documentId, attestationCeremonyId), HttpStatus.OK);
+        return Responses.respond(documentService.publish(documentId, resolveAttestationCeremonyId(request)), HttpStatus.OK);
+    }
+
+    /**
+     * R4 fix (Codex re-verification): {@code {"attestationCeremonyId": null}} NAMES the field but
+     * nulls it — ambiguous intent, distinct from simply omitting it (no body at all, or {@code {}}),
+     * which stays a plain publish exactly as before this fix. {@code
+     * PublishDocumentRequest#isAttestationCeremonyIdExplicitlySet()} is the only way to tell the two
+     * apart once both have collapsed to a null field value.
+     *
+     * <p>An explicit null is translated to {@code ""} rather than duplicating a second 422 path:
+     * {@code ""} is itself blank, so it is rejected by exactly the same blank-ceremony-id guard
+     * {@code VaultDocumentService#publish} already runs for {@code {"attestationCeremonyId": "   "}}
+     * — same title ({@code ATTESTATION_CEREMONY_ID_BLANK}), same detail, same 422 status; no new
+     * problem type.
+     */
+    private static String resolveAttestationCeremonyId(PublishDocumentRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (request.isAttestationCeremonyIdExplicitlySet() && request.getAttestationCeremonyId() == null) {
+            return "";
+        }
+        return request.getAttestationCeremonyId();
     }
 }

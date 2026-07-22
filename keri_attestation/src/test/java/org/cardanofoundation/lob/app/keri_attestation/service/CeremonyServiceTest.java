@@ -697,13 +697,11 @@ class CeremonyServiceTest {
 
     @Test
     void validateAndConsumeHappyPathFlipsAttestAnchoredToConsumed() {
-        // F1 fix: ceremony.attesterAid is unset (pre-upgrade-row shape) here, so this also exercises
-        // the fallback to the current link's aid - see validateAndConsumeUsesThePersistedAttesterAid...
-        // below for the (now normal) case where attesterAid IS set and takes precedence.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
         ceremony.setMetadataDigest("Edigest");
         ceremony.setMetadataLabel("1447");
         ceremony.setKelSequence("3");
+        ceremony.setAttesterAid("Eaid");
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", "a".repeat(64))));
 
@@ -718,6 +716,30 @@ class CeremonyServiceTest {
         assertEquals("1447", consumed.metadataLabel());
         assertEquals("3", consumed.kelSequence());
         assertEquals(CeremonyState.CONSUMED, ceremony.getState());
+    }
+
+    @Test
+    void validateAndConsumeFailsClosedWhenAttesterAidIsNull() {
+        // R1 fix (Codex re-verification): this module has never been deployed, so no CONSUMED row
+        // anywhere can lack an attesterAid in practice - a null here on an ATTEST_ANCHORED ceremony
+        // indicates data corruption and must be rejected rather than silently resurrecting the
+        // CURRENT identity link's AID (the relink-misattribution hole the removed fallback reopened).
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
+        ceremony.setMetadataDigest("Edigest");
+        ceremony.setMetadataLabel("1447");
+        ceremony.setKelSequence("3");
+        // attesterAid deliberately left null.
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        Either<ProblemDetail, ConsumedAttestation> result =
+                service.validateAndConsume(CEREMONY_ID, "DOCUMENT", "doc-1", USER);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
+        assertEquals(CeremonyState.ATTEST_ANCHORED, ceremony.getState());
+        verify(ceremonyRepository, never()).save(any());
+        // Fails before ever consulting the identity link.
+        verifyNoInteractions(identityLinkRepository);
     }
 
     @Test
@@ -796,6 +818,10 @@ class CeremonyServiceTest {
         // ceremony was created under binding_version=1 (see the ceremony() helper); the link has since
         // moved to binding_version=2, i.e. the user relinked to a different AID after this ceremony started.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
+        // R1 fix: attesterAid must be set for this ceremony to reach the binding-version check at all -
+        // a null attesterAid is now rejected earlier (CEREMONY_INVALID_STATE), see
+        // validateAndConsumeFailsClosedWhenAttesterAidIsNull.
+        ceremony.setAttesterAid("Eaid-old");
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(2, "Eaid-new", "Ecred", "a".repeat(64))));
 
@@ -830,26 +856,22 @@ class CeremonyServiceTest {
     // --- findConsumed (Task 15: blockchain_publisher's dispatch-time attestation lookup) ---
 
     @Test
-    void findConsumedFallsBackToTheLinkAidWhenNoAttesterAidIsPersisted() {
-        // F1 fix, pre-upgrade fallback: a CONSUMED ceremony with no attesterAid ever persisted (a row
-        // that reached CONSUMED before this column existed) falls back to the CURRENT identity link,
-        // exactly the pre-fix behavior.
+    void findConsumedIsEmptyWhenNoAttesterAidIsPersisted() {
+        // R1 fix (Codex re-verification): a CONSUMED row with no attesterAid ever persisted used to
+        // fall back to the CURRENT identity link - this module has never been deployed, so no such row
+        // can exist in a real database, and the fallback itself reopened the relink-misattribution
+        // hole F1 exists to close. findConsumed now fails closed (empty) instead.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CONSUMED);
         ceremony.setMetadataDigest("Edigest");
         ceremony.setMetadataLabel("1447");
         ceremony.setKelSequence("3");
+        // attesterAid deliberately left null.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", "a".repeat(64))));
 
         Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
 
-        assertTrue(result.isPresent());
-        ConsumedAttestation consumed = result.get();
-        assertEquals(CEREMONY_ID, consumed.ceremonyId());
-        assertEquals("Eaid", consumed.aid());
-        assertEquals("Edigest", consumed.digestQb64());
-        assertEquals("1447", consumed.metadataLabel());
-        assertEquals("3", consumed.kelSequence());
+        assertFalse(result.isPresent());
+        verifyNoInteractions(identityLinkRepository);
         // Read-only: no row lock, no state mutation, no write.
         verify(ceremonyRepository, never()).findByIdForUpdate(anyString());
         verify(ceremonyRepository, never()).save(any());
@@ -907,17 +929,4 @@ class CeremonyServiceTest {
         verifyNoInteractions(identityLinkRepository);
     }
 
-    @Test
-    void findConsumedIsEmptyWhenTheIdentityLinkIsGone() {
-        // Reaching CONSUMED requires a link to have existed at every prior step (mirrors
-        // validateAndConsume's own reasoning) - a missing link here means it was deleted since
-        // (e.g. GDPR removal, design §4.1), so the AID this ceremony attested with can no longer be
-        // resolved. The dispatch caller must fail closed rather than build a transaction without one.
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.CONSUMED)));
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
-
-        Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
-
-        assertFalse(result.isPresent());
-    }
 }

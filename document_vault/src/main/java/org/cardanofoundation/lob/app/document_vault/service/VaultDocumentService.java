@@ -281,17 +281,22 @@ public class VaultDocumentService {
      * {@link #publish(String, String)}), and {@code validateAndConsume}'s compare-and-set means the
      * ceremony itself only ever advances to {@code CONSUMED} on the right path.
      *
-     * <p><b>Every Left is forced to HTTP 422 (M3 cross-review F7 fix).</b> {@link
+     * <p><b>Every CLIENT-range (400-499) Left is forced to HTTP 422 (M3 cross-review F7 fix); a 5xx
+     * Left passes through unchanged (R5 fix, Codex re-verification).</b> {@link
      * AttestationFreezeGuard#verifyFreshness} and {@code keri_attestation}'s {@code
      * AttestationConsumptionApi#validateAndConsume} build their own {@link ProblemDetail}s with
      * whatever native status fits THEIR domain — {@code CEREMONY_NOT_FOUND} is 404,
      * {@code CEREMONY_FORBIDDEN} is 403, {@code IDENTITY_RELINKED}/{@code CEREMONY_EXPIRED}/
      * {@code CEREMONY_INVALID_STATE} are 409, etc. Design §5.1 draws the status boundary at THIS
-     * module instead: every attested-publish failure, regardless of its origin, is a 422 to the
-     * caller of {@code publish} — the frontend switches on the problem's TITLE, never its status, so
-     * collapsing the status here costs it nothing while keeping "this HTTP verb/resource failed" a
-     * single, predictable code. The original title and detail are preserved verbatim; only the status
-     * is overwritten.
+     * module instead for those: every attested-publish failure that is the CALLER's fault, regardless
+     * of its origin, is a 422 to the caller of {@code publish} — the frontend switches on the
+     * problem's TITLE, never its status, so collapsing the status here costs it nothing while keeping
+     * "this HTTP verb/resource failed" a single, predictable code for client mistakes. A 5xx (e.g. a
+     * downstream KERI agent outage surfaced as {@code SERVICE_UNAVAILABLE}) is NOT the caller's fault
+     * — forcing it to 422 would tell a retrying client "fix your request", when the correct signal is
+     * "this is transient, try again later"; those pass through with their original status untouched.
+     * The original title and detail are always preserved verbatim; only the status is ever
+     * overwritten, and only within the 4xx range.
      */
     private Either<ProblemDetail, Void> consumeAttestation(VaultDocumentEntity document, String attestationCeremonyId) {
         AttestationFreezeGuard freezeGuard = attestationFreezeGuardProvider.getIfAvailable();
@@ -303,21 +308,26 @@ public class VaultDocumentService {
 
         Optional<ProblemDetail> freshnessProblem = freezeGuard.verifyFreshness(document, attestationCeremonyId);
         if (freshnessProblem.isPresent()) {
-            return Either.left(as422(freshnessProblem.get()));
+            return Either.left(capClientErrorAt422(freshnessProblem.get()));
         }
 
         Either<ProblemDetail, ConsumedAttestation> consumed = consumptionApi.validateAndConsume(
                 attestationCeremonyId, ATTESTATION_TARGET_TYPE_DOCUMENT, document.getId(), securityHelper.getCurrentUserId());
         if (consumed.isLeft()) {
-            return Either.left(as422(consumed.getLeft()));
+            return Either.left(capClientErrorAt422(consumed.getLeft()));
         }
 
         return Either.right(null);
     }
 
-    /** F7 fix: rebuilds {@code original} with its title and detail preserved but its status forced to
-     *  422 — see {@link #consumeAttestation}'s javadoc for why. */
-    private static ProblemDetail as422(ProblemDetail original) {
+    /** F7 fix, guarded by R5 (Codex re-verification): only a client-range status (400-499) is rebuilt
+     *  with its title/detail preserved but its status forced to 422 — a 5xx {@code original} is
+     *  returned as-is, untouched. See {@link #consumeAttestation}'s javadoc for why. */
+    private static ProblemDetail capClientErrorAt422(ProblemDetail original) {
+        int status = original.getStatus();
+        if (status < 400 || status > 499) {
+            return original;
+        }
         return VaultProblems.unprocessable(original.getTitle(), original.getDetail());
     }
 

@@ -107,16 +107,19 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "kel_event_said")
     private String kelEventSaid;
 
-    /** F1 fix: the KERI AID that actually attested this ceremony — the wallet AID the remotesign
-     *  request was sent to and answered by, persisted immutably by
-     *  {@code KeriAttestService#resolveAndComplete} alongside {@link #kelSequence}/{@link
-     *  #kelEventSaid} at the moment this ceremony reaches {@code ATTEST_ANCHORED}. Read (never
-     *  re-derived) by {@code CeremonyService#validateAndConsume}/{@code CeremonyService#findConsumed}
-     *  to build {@code ConsumedAttestation.aid}, so a consume that races a relink of the SAME user can
-     *  never emit a CIP-170 attestation under the new (post-relink) AID while still carrying the
-     *  digest/kelSequence anchored under the original one. {@code null} only for a ceremony that
-     *  reached {@code ATTEST_ANCHORED} before this column existed (pre-upgrade row) — those fall back
-     *  to the CURRENT identity link's AID instead. */
+    /** F1 fix, hardened by R1 (Codex re-verification): the KERI AID that actually attested this
+     *  ceremony — the wallet AID the remotesign request was sent to and answered by, written
+     *  immutably by {@code KeriAttestService#resolveAndComplete} alongside {@link #kelSequence}/{@link
+     *  #kelEventSaid} at the moment this ceremony reaches {@code ATTEST_ANCHORED}, i.e. BEFORE it can
+     *  ever reach {@code CONSUMED}. Read (never re-derived) by {@code CeremonyService
+     *  #validateAndConsume}/{@code CeremonyService#findConsumed} to build {@code
+     *  ConsumedAttestation.aid}, so a consume that races a relink of the SAME user can never emit a
+     *  CIP-170 attestation under the new (post-relink) AID while still carrying the digest/kelSequence
+     *  anchored under the original one. {@code null} on a {@code CONSUMED} row is not a state this
+     *  module can produce — {@code validateAndConsume} fails closed (CEREMONY_INVALID_STATE) rather
+     *  than transition to {@code CONSUMED} without it — so a null here indicates data corruption, not a
+     *  legitimate case to recover from; this module has never been deployed, so no pre-upgrade row of
+     *  that shape exists in any real database. */
     @Nullable
     @Column(name = "attester_aid")
     private String attesterAid;

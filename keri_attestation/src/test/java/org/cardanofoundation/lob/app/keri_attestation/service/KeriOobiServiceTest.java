@@ -19,10 +19,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -65,6 +67,8 @@ class KeriOobiServiceTest {
     private KeriIdentityLinkRepository identityLinkRepository;
     @Mock
     private KeriAttestationCeremonyRepository ceremonyRepository;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private KeriOobiService service;
 
@@ -80,7 +84,7 @@ class KeriOobiServiceTest {
         lenient().when(operations.wait(any(), any())).thenReturn(null);
         lenient().when(contacts.get(anyString())).thenReturn(Optional.of(new Object()));
 
-        service = new KeriOobiService(keriClient, identityLinkRepository, ceremonyRepository);
+        service = new KeriOobiService(keriClient, identityLinkRepository, ceremonyRepository, eventPublisher);
     }
 
     private KeriIdentityLinkEntity link(int bindingVersion, String aid, String oobiUrl) {
@@ -181,6 +185,9 @@ class KeriOobiServiceTest {
         assertEquals(1, saved.getBindingVersion());
         assertEquals(AID, saved.getAid());
         assertEquals(VALID_OOBI, saved.getOobiUrl());
+        // R2 fix: RelinkCompletedEvent is only for a genuine relink (a version bump on an EXISTING
+        // link) - a first-ever link create is not one.
+        verifyNoInteractions(eventPublisher);
     }
 
     // --- same AID re-resolve: refresh oobiUrl only, no version bump ---
@@ -199,6 +206,8 @@ class KeriOobiServiceTest {
         assertEquals(VALID_OOBI, existing.getOobiUrl());
         verify(identityLinkRepository).save(existing);
         verifyNoInteractions(ceremonyRepository);
+        // R2 fix: a same-AID refresh never bumps bindingVersion, so it is not a relink either.
+        verifyNoInteractions(eventPublisher);
     }
 
     // --- different AID, relink not requested: IDENTITY_RELINKED conflict ---
@@ -220,6 +229,8 @@ class KeriOobiServiceTest {
         // item 4 round-2 fix: rejected from the plain (unlocked) read alone -- the link row is never
         // even locked for a call that's going to be rejected anyway.
         verify(identityLinkRepository, never()).findByUserIdForUpdate(any());
+        // R2 fix: rejected, no write at all -> no RelinkCompletedEvent.
+        verifyNoInteractions(eventPublisher);
     }
 
     // --- different AID, relink=true: version bump, dependent fields cleared, ceremonies invalidated ---
@@ -271,6 +282,14 @@ class KeriOobiServiceTest {
         InOrder lockOrder = inOrder(ceremonyRepository, identityLinkRepository);
         lockOrder.verify(ceremonyRepository).findByIdForUpdate("cer-1");
         lockOrder.verify(identityLinkRepository).findByUserIdForUpdate(USER);
+
+        // R2 fix: a genuine relink publishes RelinkCompletedEvent with the NEW bindingVersion, closing
+        // the phantom-insert window between the in-transaction sweep above and this write actually
+        // landing - see RelinkInvalidationSweepHandler for the AFTER_COMMIT sweep this event drives.
+        ArgumentCaptor<RelinkCompletedEvent> eventCaptor = ArgumentCaptor.forClass(RelinkCompletedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertEquals(USER, eventCaptor.getValue().userId());
+        assertEquals(2, eventCaptor.getValue().newVersion());
     }
 
     @Test
@@ -293,6 +312,8 @@ class KeriOobiServiceTest {
         assertEquals(OTHER_AID, lockedView.getAid());
         verify(identityLinkRepository, never()).save(any());
         verifyNoInteractions(ceremonyRepository);
+        // R2 fix: rejected, no write at all -> no RelinkCompletedEvent.
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test

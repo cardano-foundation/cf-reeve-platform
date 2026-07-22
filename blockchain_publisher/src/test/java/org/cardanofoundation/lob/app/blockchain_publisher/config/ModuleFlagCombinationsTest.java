@@ -107,6 +107,21 @@ class ModuleFlagCombinationsTest {
                     DocumentVaultSeamStubConfig.class,
                     TransactionSubmissionConfig.class);
 
+    // --- R3 fix (Codex re-verification): documentL1TransactionCreator has NO @ConditionalOnProperty,
+    // so it must reject the reserved CIP-170 label (170) unconditionally - even with BOTH flags off,
+    // where documentAttestationLookup (whose own constructor carries the equivalent guard) is never
+    // even created and so never runs its check at all. ---
+
+    @Test
+    void metadataLabel170FailsContextRefreshEvenWithBothAttestationFlagsOff() {
+        contextRunner.withPropertyValues("lob.l1.transaction.metadata_label=170").run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(context.getStartupFailure())
+                    .hasRootCauseInstanceOf(IllegalStateException.class)
+                    .hasRootCauseMessage("metadata label 170 is reserved for CIP-170 attestations");
+        });
+    }
+
     // --- both flags off (module defaults) ---
 
     @Test
