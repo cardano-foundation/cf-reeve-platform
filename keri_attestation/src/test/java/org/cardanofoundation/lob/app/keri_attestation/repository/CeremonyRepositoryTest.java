@@ -45,7 +45,11 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentity
 @ContextConfiguration(classes = CeremonyRepositoryTest.TestConfig.class)
 @ActiveProfiles("test")
 @Transactional
-class CeremonyRepositoryTest {
+// public: RelinkInvalidationSweepHandlerRollbackIntegrationTest (a different package) reuses the
+// nested TestConfig below via @ContextConfiguration(classes = CeremonyRepositoryTest.TestConfig.class)
+// -- a public nested class is still unreachable cross-package through a package-private outer class,
+// so this class must be public too. See TestConfig's own javadoc for why that reuse exists.
+public class CeremonyRepositoryTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
@@ -57,7 +61,16 @@ class CeremonyRepositoryTest {
     @ComponentScan(basePackages = "org.cardanofoundation.lob.app.keri_attestation")
     @EnableConfigurationProperties(KeriAttestationProperties.class)
     @Import(TestContainerConfig.class)
-    static class TestConfig {
+    // public: reused directly by RelinkInvalidationSweepHandlerRollbackIntegrationTest (a different
+    // package) via @ContextConfiguration(classes = CeremonyRepositoryTest.TestConfig.class) rather than
+    // that test declaring its own second, identically-shaped nested config — two sibling
+    // @SpringBootConfiguration classes both @ComponentScan-ing this same base package pick each other
+    // up (component scanning is classpath-wide, not scoped to "the context currently being built"), so
+    // their @EnableJpaRepositories declarations collide with a BeanDefinitionOverrideException. Sharing
+    // this one TestConfig - the module's sole test bootstrap config - avoids the collision structurally
+    // instead of papering over it with exclude filters, and lets Spring's test-context cache reuse the
+    // same ApplicationContext (and Testcontainers Postgres instance) across both test classes.
+    public static class TestConfig {
     }
 
     private static final Set<CeremonyState> TERMINAL =

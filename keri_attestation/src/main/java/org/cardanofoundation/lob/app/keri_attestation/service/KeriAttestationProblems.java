@@ -39,6 +39,12 @@ public final class KeriAttestationProblems {
     public static final String AUTH_BEGIN_SUBMISSION_UNAVAILABLE = "AUTH_BEGIN_SUBMISSION_UNAVAILABLE";
     public static final String ATTESTATION_UNAVAILABLE = "ATTESTATION_UNAVAILABLE";
     public static final String OOBI_INVALID = "OOBI_INVALID";
+    /** Fast-follow (whole-branch review, FF1): {@code KeriOobiService#resolveAndVerify} could not reach
+     *  the KERI agent at all, or the agent itself reported a transient/server-side failure (connection
+     *  refused, request timeout, an HTTP 5xx from KERIA) — distinct from {@link #OOBI_INVALID}, which
+     *  means the agent was reachable and answered, but the OOBI/AID itself did not check out. Reported
+     *  as a 503 so the caller knows to retry rather than fix the URL. */
+    public static final String KERI_AGENT_UNAVAILABLE = "KERI_AGENT_UNAVAILABLE";
     public static final String TARGET_MISMATCH = "TARGET_MISMATCH";
     /** A wallet-confirmed remotesign anchor could not be verified against the ceremony's
      *  {@code metadataDigest} — no matching interaction event was found on the AID's KEL, or the
@@ -77,5 +83,9 @@ public final class KeriAttestationProblems {
 
     public static ProblemDetail unprocessable(String title, String detail) {
         return of(HttpStatus.UNPROCESSABLE_ENTITY, title, detail);
+    }
+
+    public static ProblemDetail serviceUnavailable(String title, String detail) {
+        return of(HttpStatus.SERVICE_UNAVAILABLE, title, detail);
     }
 }

@@ -41,6 +41,7 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.signify.app.Contacting;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import org.cardanofoundation.signify.app.clienting.exception.UnexpectedResponseStatusException;
 import org.cardanofoundation.signify.app.coring.Oobis;
 import org.cardanofoundation.signify.app.coring.Operations;
 
@@ -360,15 +361,80 @@ class KeriOobiServiceTest {
         verifyNoInteractions(identityLinkRepository);
     }
 
+    // --- FF1 (whole-branch review fast-follow): KERIA transient failures vs. genuinely invalid OOBIs ---
+
     @Test
-    void clientExceptionDuringResolveIsOobiInvalidWithActionableDetailAndDoesNotPersist() throws Exception {
+    void ioExceptionDuringResolveIsKeriAgentUnavailableWithActionableDetailAndDoesNotPersist() throws Exception {
+        // Covers connection-refused/timeout/any other network-level transport failure: all surface as
+        // some java.io.IOException subclass from the JDK HttpClient underneath SignifyClient#fetch.
         when(oobis.resolve(anyString(), anyString())).thenThrow(new java.io.IOException("agent unreachable"));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 
         assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
+        assertEquals(KeriAttestationProblems.KERI_AGENT_UNAVAILABLE, result.getLeft().getTitle());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), result.getLeft().getStatus());
         assertTrue(result.getLeft().getDetail().contains("agent unreachable"));
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void abortSignalTimeoutWhileWaitingOnTheResolveIsKeriAgentUnavailable() throws Exception {
+        // Operations.AbortSignal#throwIfAborted throws exactly this (an InterruptedException whose
+        // message is the abort reason) when the resolve wait's own timeout (RESOLVE_TIMEOUT_MILLIS)
+        // fires -- the agent accepted the resolve request but the long-running operation never completed
+        // in time, i.e. the agent is slow/unresponsive, not the request being malformed.
+        when(operations.wait(any(), any())).thenThrow(new InterruptedException("Operation aborted: Timeout"));
+
+        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.KERI_AGENT_UNAVAILABLE, result.getLeft().getTitle());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), result.getLeft().getStatus());
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void nonTimeoutInterruptedExceptionWhileWaitingOnTheResolveStaysOobiInvalid() throws Exception {
+        // A plain thread interruption unrelated to the abort-signal timeout must not be misclassified as
+        // agent unavailability -- only a message that actually names a timeout does.
+        when(operations.wait(any(), any())).thenThrow(new InterruptedException("thread pool shutting down"));
+
+        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), result.getLeft().getStatus());
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void serverErrorResponseFromTheAgentIsKeriAgentUnavailable() throws Exception {
+        // The agent responded, but with an HTTP 5xx -- a server-side failure, not a rejection of the
+        // request itself.
+        when(oobis.resolve(anyString(), anyString())).thenThrow(
+                new UnexpectedResponseStatusException("HTTP POST /oobis - 503 - Service Unavailable"));
+
+        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.KERI_AGENT_UNAVAILABLE, result.getLeft().getTitle());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), result.getLeft().getStatus());
+        verifyNoInteractions(identityLinkRepository);
+    }
+
+    @Test
+    void clientRejectionResponseFromTheAgentStaysOobiInvalidNotAgentUnavailable() throws Exception {
+        // The agent was reachable and understood the request well enough to reject it (HTTP 4xx) -- this
+        // is a genuine problem with the OOBI/AID, not agent unavailability, so it must stay OOBI_INVALID.
+        when(oobis.resolve(anyString(), anyString())).thenThrow(
+                new UnexpectedResponseStatusException("HTTP POST /oobis - 400 - Bad Request"));
+
+        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), result.getLeft().getStatus());
         verifyNoInteractions(identityLinkRepository);
     }
 }

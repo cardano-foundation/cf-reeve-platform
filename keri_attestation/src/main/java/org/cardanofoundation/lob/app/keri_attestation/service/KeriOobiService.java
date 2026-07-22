@@ -1,9 +1,11 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -27,6 +29,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentity
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import org.cardanofoundation.signify.app.clienting.exception.UnexpectedResponseStatusException;
 import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.coring.Operations;
 
@@ -56,6 +59,9 @@ public class KeriOobiService {
     static final int MAX_OOBI_URL_LENGTH = 2048;
     private static final long RESOLVE_TIMEOUT_MILLIS = 15_000L;
     private static final Pattern OOBI_AID_PATTERN = Pattern.compile("/oobi/([^/]+)");
+    // Matches the HTTP status code SignifyClient#fetch embeds in UnexpectedResponseStatusException's
+    // message: String.format("HTTP %s %s - %d - %s", method, path, statusCode, body).
+    private static final Pattern HTTP_STATUS_PATTERN = Pattern.compile("-\\s*(\\d{3})\\s*-");
     private static final Set<CeremonyState> TERMINAL_STATES =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
 
@@ -123,9 +129,68 @@ public class KeriOobiService {
             }
         } catch (Exception e) {
             log.warn("OOBI resolve failed for user {} ({}): {}", userId, oobiUrl, e.getMessage());
+            if (isTransientAgentFailure(e)) {
+                return Either.left(KeriAttestationProblems.serviceUnavailable(
+                        KeriAttestationProblems.KERI_AGENT_UNAVAILABLE,
+                        "The KERI agent is temporarily unreachable; please try again. (%s)"
+                                .formatted(e.getMessage())));
+            }
             return Either.left(invalid("Failed to resolve OOBI URL: %s".formatted(e.getMessage())));
         }
         return Either.right(null);
+    }
+
+    /**
+     * Fast-follow (whole-branch review, FF1): distinguishes a KERI agent that is merely unreachable or
+     * momentarily broken from an OOBI/AID that genuinely does not check out, so a KERIA outage never
+     * gets reported to the caller as "your OOBI URL is invalid" ({@link KeriAttestationProblems#OOBI_INVALID}).
+     * Classified as transient ({@link KeriAttestationProblems#KERI_AGENT_UNAVAILABLE}):
+     * <ul>
+     *   <li>any {@link IOException} — covers connection-refused ({@link java.net.ConnectException}),
+     *       connect/request timeouts ({@link java.net.http.HttpConnectTimeoutException},
+     *       {@link java.net.http.HttpTimeoutException}), and every other network-level transport failure
+     *       the JDK {@code HttpClient} used under {@code SignifyClient#fetch} can raise;</li>
+     *   <li>an {@link InterruptedException} whose message contains "timeout" — {@code
+     *       Operations.AbortSignal#throwIfAborted} throws exactly this when the resolve wait's own abort
+     *       signal (bounded by {@link #RESOLVE_TIMEOUT_MILLIS}) fires: the agent accepted the resolve
+     *       request but the long-running operation never completed in time, i.e. the agent itself is
+     *       slow/unresponsive rather than the request being malformed;</li>
+     *   <li>{@link UnexpectedResponseStatusException} whose embedded HTTP status is 5xx — the agent
+     *       responded but with a server-side error, not a rejection of the request.</li>
+     * </ul>
+     * Everything else — including a plain (non-timeout) {@code InterruptedException}, a completed-but-
+     * failed operation, a 4xx {@code UnexpectedResponseStatusException} (the agent understood and
+     * rejected the request), and the empty-contact case handled separately above — stays
+     * {@link KeriAttestationProblems#OOBI_INVALID}: the agent was reachable and the resolution
+     * completed, it just didn't produce a usable AID.
+     */
+    private static boolean isTransientAgentFailure(Throwable e) {
+        if (e instanceof IOException) {
+            return true;
+        }
+        if (e instanceof InterruptedException) {
+            return containsIgnoreCase(e.getMessage(), "timeout");
+        }
+        if (e instanceof UnexpectedResponseStatusException) {
+            return isServerErrorStatus(e.getMessage());
+        }
+        return false;
+    }
+
+    private static boolean containsIgnoreCase(String message, String needle) {
+        return message != null && message.toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    private static boolean isServerErrorStatus(String message) {
+        if (message == null) {
+            return false;
+        }
+        Matcher statusMatcher = HTTP_STATUS_PATTERN.matcher(message);
+        if (!statusMatcher.find()) {
+            return false;
+        }
+        int status = Integer.parseInt(statusMatcher.group(1));
+        return status >= 500 && status < 600;
     }
 
     // --- persist the identity link (design §4.7) ---
