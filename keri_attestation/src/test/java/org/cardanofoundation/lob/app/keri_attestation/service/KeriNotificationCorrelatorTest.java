@@ -545,6 +545,119 @@ class KeriNotificationCorrelatorTest {
                 "a wire-shape parse failure must not log at WARN — that would hide it as transient");
     }
 
+    // --- awaitByRoute (cip113 parity, design rev, user-directed 2026-07-22) ---
+    //
+    // Route-only: mirrors IpexNotificationHelper.waitForNotification exactly. Deliberately proves the
+    // OPPOSITE of several awaitCorrelated tests above — a sender mismatch, a missing/mismatched thread
+    // link, and no rp at all must all still be CLAIMED here, since cip113's proven wallet contract never
+    // checks any of them.
+
+    private static Optional<Object> exchangeWithRouteAndSaid(String sender, String route, String said) {
+        return Optional.of(Map.of("exn", Map.of("i", sender, "r", route, "d", said, "a", Map.of(), "e", Map.of())));
+    }
+
+    @Test
+    void awaitByRouteClaimsTheFirstUnreadRouteMatchingNotificationRegardlessOfSenderOrThread() throws Exception {
+        // OTHER_AID (not SENDER_AID) and a prior that doesn't thread back to anything this caller is
+        // waiting on -- awaitCorrelated would reject both; awaitByRoute claims anyway, since it never
+        // looks at sender or thread-back at all.
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithRouteAndSaid(OTHER_AID, ROUTE, REFERENCED_EXN_SAID));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofSeconds(2));
+
+        assertTrue(result.isPresent());
+        assertEquals(NOTIFICATION_ID, result.get().notificationId());
+        assertEquals(OTHER_AID, result.get().exn().get("i"));
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void awaitByRoutePrefersTheFetchedExchangesOwnDOverTheNotificationsClaimedSaid() throws Exception {
+        // cip113 parity: KeriService#presentCredential reads offerResource.getExn().getD() /
+        // grantResource.getExn().getD() AFTER the fetch, not the notification body's own a.d.
+        String fetchedOwnSaid = "EFETCHEDOWNSAID0000000000000000000000";
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithRouteAndSaid(SENDER_AID, ROUTE, fetchedOwnSaid));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofSeconds(2));
+
+        assertTrue(result.isPresent());
+        assertEquals(fetchedOwnSaid, result.get().exnSaid());
+    }
+
+    @Test
+    void awaitByRouteFallsBackToTheNotificationsClaimedSaidWhenTheFetchedExchangeHasNoOwnD() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID)).thenReturn(exchangeWithRoute(SENDER_AID, ROUTE, ""));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofSeconds(2));
+
+        assertTrue(result.isPresent());
+        assertEquals(REFERENCED_EXN_SAID, result.get().exnSaid());
+    }
+
+    @Test
+    void awaitByRouteIgnoresNonMatchingRouteAndTimesOutWithoutTouchingExchanges() throws Exception {
+        when(notifications.list())
+                .thenReturn(responseOf(note(NOTIFICATION_ID, false, OTHER_ROUTE, REFERENCED_EXN_SAID)));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verifyNoInteractions(exchanges);
+    }
+
+    @Test
+    void awaitByRouteIgnoresAlreadyReadNotificationAndTimesOutWithoutTouchingExchanges() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, true, ROUTE, REFERENCED_EXN_SAID)));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+        verifyNoInteractions(exchanges);
+    }
+
+    @Test
+    void awaitByRouteReturnsEmptyOnTimeoutWhenNoNotificationsArrive() throws Exception {
+        when(notifications.list()).thenReturn(responseOf());
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofMillis(30));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void awaitByRouteTimesOutCleanlyInsteadOfPropagatingWhenTheClientRepeatedlyThrows() throws Exception {
+        when(notifications.list()).thenThrow(new RuntimeException("agent unreachable"));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofMillis(40));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void awaitByRouteNeverMarksOrDeletesRegardlessOfOutcome() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithRouteAndSaid(SENDER_AID, ROUTE, REFERENCED_EXN_SAID));
+
+        correlator.awaitByRoute(List.of(ROUTE), Duration.ofSeconds(2));
+
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
     // --- markAndDelete ---
 
     @Test

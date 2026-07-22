@@ -461,7 +461,7 @@ class KeriAttestServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
 
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID))
@@ -494,7 +494,7 @@ class KeriAttestServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.empty());
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
         when(provider.authorize(TARGET_ID, USER_ID)).thenReturn(Optional.empty());
@@ -526,7 +526,7 @@ class KeriAttestServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
 
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
@@ -564,7 +564,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
@@ -603,7 +603,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID))
                 .thenReturn(Optional.of(ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.empty());
 
         service.awaitAnchor(CEREMONY_ID, GENERATION);
@@ -623,7 +623,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object wrongSeal = List.of(Map.of("d", "EWRONGDIGEST"));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, wrongSeal)));
@@ -652,7 +652,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of());
         // Candidate is empty (refExn carries neither s nor d), so the code falls back to the key-state
@@ -677,7 +677,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         when(keyStates.query(eq(WALLET_AID), any())).thenReturn(Map.of());
@@ -711,7 +711,7 @@ class KeriAttestServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         // No explicit candidate on the ref exn — goes through the bounded-scan fallback.
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         stubKeyStateSequence("6");
 
@@ -740,7 +740,7 @@ class KeriAttestServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         // Explicit candidate naming a SAID/sequence that doesn't exist in the KEL at all.
         Map<String, Object> refExn = refExn(WALLET_AID, "9", "ENONEXISTENTEVENT000000000000000000000");
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         // A different event that WOULD satisfy digest+floor if a scan ever considered it.
@@ -770,7 +770,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         stubKeyStateSequence("6");
 
@@ -797,7 +797,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, "5", EVENT_SAID);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
@@ -825,7 +825,7 @@ class KeriAttestServiceTest {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         service.awaitAnchor(CEREMONY_ID, GENERATION);
@@ -853,7 +853,7 @@ class KeriAttestServiceTest {
         // ever looked up -- proving the rejection is unconditional on the floor alone, not a side effect
         // of a missing/invalid candidate.
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         service.awaitAnchor(CEREMONY_ID, GENERATION);
@@ -877,7 +877,7 @@ class KeriAttestServiceTest {
         ceremony.setAttemptGeneration(9);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
-        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
                 .thenReturn(Optional.empty());
 
         service.awaitAnchor(CEREMONY_ID, GENERATION);

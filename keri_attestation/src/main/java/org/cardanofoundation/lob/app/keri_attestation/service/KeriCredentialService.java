@@ -141,7 +141,6 @@ public class KeriCredentialService {
             return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.IDENTITY_NOT_LINKED,
                     "User %s has no linked identity to request a credential presentation from.".formatted(userId));
         }
-        String linkedAid = linkOpt.get().getAid();
 
         // F8 fix: a retry resuming at AGREE_SENT already has BOTH the apply and agree sent by a
         // previous attempt (requestExnSaid now holds the agree's SAID, not the apply's) — never
@@ -154,14 +153,16 @@ public class KeriCredentialService {
         }
 
         // Retry pre-check (design §4.2, mirrors KeriAttestService#startAttest): before sending a fresh
-        // IPEX apply, look for a late-arriving offer correlated to the PREVIOUS attempt's apply. Found:
-        // skip straight to dispatching the async continuation — its own (non-destructive)
-        // correlator.awaitCorrelated call will find the same offer again, so nothing needs re-sending.
-        // Not found (or this is the first attempt, requestExnSaid still null): fall through and build +
-        // send a fresh apply below. Only reached for phase APPLY_SENT or null (no phase recorded yet).
+        // IPEX apply, look for a late-arriving offer. cip113 parity (design rev, user-directed
+        // 2026-07-22): route-only, like every other offer/grant/ref claim in this module now — see
+        // KeriNotificationCorrelator#awaitByRoute's javadoc. Found: skip straight to dispatching the
+        // async continuation — its own (non-destructive) correlator.awaitByRoute call will find the same
+        // offer again, so nothing needs re-sending. Not found (or this is the first attempt,
+        // requestExnSaid still null): fall through and build + send a fresh apply below. Only reached
+        // for phase APPLY_SENT or null (no phase recorded yet).
         if (retry && ceremony.getRequestExnSaid() != null) {
-            Optional<CorrelatedNotification> lateOffer = correlator.awaitCorrelated(OFFER_ROUTES, linkedAid,
-                    ceremony.getRequestExnSaid(), RETRY_PRECHECK_TIMEOUT);
+            Optional<CorrelatedNotification> lateOffer = correlator.awaitByRoute(OFFER_ROUTES,
+                    RETRY_PRECHECK_TIMEOUT);
             if (lateOffer.isPresent()) {
                 return dispatchAwaitPresentation(ceremonyId, generation);
             }
@@ -321,7 +322,13 @@ public class KeriCredentialService {
                 return Either.left(staleCeremonyProblem(ceremony.getId()));
             }
 
-            client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(), List.of(linkedAid));
+            // cip113 parity (KeriService#presentCredential): every IPEX submit is followed by
+            // operations().wait, not just fire-and-forget — submitApply returns a raw operation
+            // descriptor that Operation.fromObject wraps for the typed wait() overload (same idiom
+            // ensureSchemasResolved already uses for oobis().resolve's own raw result).
+            Object applyOp = client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(),
+                    List.of(linkedAid));
+            client.client().operations().wait(Operation.fromObject(applyOp));
             return Either.right(null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -365,21 +372,26 @@ public class KeriCredentialService {
         String linkedAid = linkOpt.get().getAid();
         String agentName = agentService.agentName();
 
-        CorrelatedNotification offerNotification = null;
         String agreeSaid;
+        String agreeAtc;
 
         if (PHASE_AGREE_SENT.equals(ceremony.getStepPhase())) {
             // F8 fix: resuming after a retry that already sent the apply AND the agree — requestExnSaid
-            // was overwritten to the agree's SAID when that phase was persisted.
+            // was overwritten to the agree's SAID when that phase was persisted, and agreeAtc alongside
+            // it (cip113 parity, see below).
             agreeSaid = ceremony.getRequestExnSaid();
+            agreeAtc = ceremony.getAgreeAtc();
         } else {
-            Optional<CorrelatedNotification> offer = correlator.awaitCorrelated(OFFER_ROUTES, linkedAid,
-                    ceremony.getRequestExnSaid(), properties.remotesignTimeout());
+            // cip113 parity (KeriService#presentCredential, design rev, user-directed 2026-07-22):
+            // route-only claim — see KeriNotificationCorrelator#awaitByRoute's javadoc for why this
+            // module's own sender/thread-back correlation strictness yields here.
+            Optional<CorrelatedNotification> offer = correlator.awaitByRoute(OFFER_ROUTES,
+                    properties.remotesignTimeout());
             if (offer.isEmpty()) {
                 failTimeout(ceremonyId, expectedGeneration, "Timed out waiting for /exn/ipex/offer.");
                 return;
             }
-            offerNotification = offer.get();
+            CorrelatedNotification offerNotification = offer.get();
 
             ExchangeMessageResult agreeResult;
             try {
@@ -392,11 +404,14 @@ public class KeriCredentialService {
                 return;
             }
             agreeSaid = (String) agreeResult.exn().getKed().get("d");
+            // cip113 parity: submitAdmit (below) must be given THIS agree's atc, not the admit's own —
+            // see agreeAtc's persistence just below for why it survives a worker restart.
+            agreeAtc = agreeResult.atc();
 
             // F8 residual fix: persist phase=AGREE_SENT + requestExnSaid=agreeSaid (overwriting the
             // apply's SAID — design: requestExnSaid always names whichever exn this ceremony is
-            // currently waiting on a correlated reply for) BEFORE calling submitAgree, not after. The
-            // agree's SAID is deterministic from the built (not-yet-sent) exn, matching
+            // currently waiting on a correlated reply for) + agreeAtc BEFORE calling submitAgree, not
+            // after. The agree's SAID/atc are deterministic from the built (not-yet-sent) exn, matching
             // startPresentation's/KeriAttestService#startAttest's persist-before-send idiom exactly. This
             // guarded update also refreshes updatedAt — the F7 heartbeat that keeps a legitimately
             // in-progress two-phase wait from looking stale to the cleanup sweep's budget for
@@ -412,6 +427,7 @@ public class KeriCredentialService {
                     CeremonyState.CREDENTIAL_REQUESTED, c -> {
                         c.setStepPhase(PHASE_AGREE_SENT);
                         c.setRequestExnSaid(agreeSaid);
+                        c.setAgreeAtc(agreeAtc);
                     });
             if (!phasePersisted) {
                 // Stale CAS (a retry superseded this attempt) — never send; the winning attempt's own
@@ -420,9 +436,20 @@ public class KeriCredentialService {
                 return;
             }
 
+            // cip113 parity: the offer notification is claimed (marked + deleted) as soon as it's no
+            // longer needed — right after the phase transition proves this attempt is not superseded,
+            // and before the agree is even sent, mirroring KeriService#presentCredential's own
+            // fetch-then-immediately-markAndDelete ordering. Unlike the grant notification below (whose
+            // delete stays gated on this module's OWN post-admit CredentialChainValidator step — additive
+            // hardening cip113 has no equivalent of, kept per the design's instruction), nothing further
+            // ever re-examines the offer, so there's no reason to hold onto it any longer than cip113
+            // itself does.
+            correlator.markAndDelete(offerNotification.notificationId());
+
             try {
-                client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
-                        List.of(linkedAid));
+                Object agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(),
+                        agreeResult.sigs(), List.of(linkedAid));
+                client.client().operations().wait(Operation.fromObject(agreeOp));
             } catch (Exception e) {
                 interruptIfNeeded(e);
                 failRequest(ceremonyId, expectedGeneration, "Failed to send IPEX agree: " + e.getMessage());
@@ -430,8 +457,8 @@ public class KeriCredentialService {
             }
         }
 
-        Optional<CorrelatedNotification> grant = correlator.awaitCorrelated(GRANT_ROUTES, linkedAid, agreeSaid,
-                properties.remotesignTimeout());
+        // cip113 parity: route-only claim — see the offer wait above / awaitByRoute's javadoc.
+        Optional<CorrelatedNotification> grant = correlator.awaitByRoute(GRANT_ROUTES, properties.remotesignTimeout());
         if (grant.isEmpty()) {
             failTimeout(ceremonyId, expectedGeneration, "Timed out waiting for /exn/ipex/grant.");
             return;
@@ -448,8 +475,12 @@ public class KeriCredentialService {
             ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
                     .senderName(agentName).recipient(linkedAid).message("")
                     .grantSaid(grant.get().exnSaid()).datetime(nowKeriTimestamp()).build());
-            client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(), admitResult.atc(),
-                    List.of(linkedAid));
+            // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE exchange's
+            // own atc, NOT the admit's own — a proven cip113 wallet-contract quirk this module now
+            // matches exactly (see agreeAtc above).
+            Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
+                    agreeAtc, List.of(linkedAid));
+            client.client().operations().wait(Operation.fromObject(admitOp));
         } catch (Exception e) {
             interruptIfNeeded(e);
             failRequest(ceremonyId, expectedGeneration, "Failed to admit IPEX grant: " + e.getMessage());
@@ -533,13 +564,11 @@ public class KeriCredentialService {
         }
 
         // Only after both the link and the ceremony transition are durably committed: an earlier
-        // mark-and-delete would let a crash between the two silently lose the wallet's replies, exactly
-        // the failure mode KeriNotificationCorrelator#markAndDelete's contract exists to prevent. No
-        // offer notification to mark when this attempt resumed at AGREE_SENT (F8 fix) — it skipped the
-        // offer wait entirely, so it never claimed one.
-        if (offerNotification != null) {
-            correlator.markAndDelete(offerNotification.notificationId());
-        }
+        // mark-and-delete would let a crash between the two silently lose the wallet's reply, exactly the
+        // failure mode KeriNotificationCorrelator#markAndDelete's contract exists to prevent. The offer
+        // notification (if any was claimed by this attempt) was already marked+deleted above, right
+        // after it stopped being needed — see that call site's comment for why its ordering differs from
+        // the grant's own here.
         correlator.markAndDelete(grant.get().notificationId());
     }
 

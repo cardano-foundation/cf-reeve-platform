@@ -134,6 +134,17 @@ class KeriCredentialServiceTest {
         // override oobis.resolve to assert on call counts / simulate a failure.
         lenient().when(oobis.resolve(any(), any())).thenReturn(Map.of("done", true));
         lenient().when(operations.wait(any(), any())).thenReturn(null);
+        // cip113 parity: every IPEX submit* is now followed by an operations().wait(Operation.fromObject
+        // (...)) call (the 1-arg overload, distinct from the 2-arg WaitOptions one stubbed above).
+        // Operation.fromObject throws IllegalArgumentException on anything that isn't itself an
+        // Operation/Map/JSON-String, so submitApply/submitAgree/submitAdmit — otherwise unstubbed, and
+        // therefore null by Mockito's own default for an Object-returning method — must return a benign
+        // non-null value here for every test not specifically about a submit failure (those override
+        // with a more specific stub, e.g. thenThrow, which Mockito prefers).
+        lenient().when(operations.wait(any())).thenReturn(null);
+        lenient().when(ipex.submitApply(any(), any(), any(), any())).thenReturn(Map.of());
+        lenient().when(ipex.submitAgree(any(), any(), any(), any())).thenReturn(Map.of());
+        lenient().when(ipex.submitAdmit(any(), any(), any(), any(), any())).thenReturn(Map.of());
         // Every startPresentation call now fetches the agent's own HabState first (cip113 wallet
         // contract, design §4.4 rev 3 — the hand-built /ipex/apply createExchangeMessage call needs it
         // as the signing sender). Defaulted here so individual tests only override it when the missing-
@@ -449,7 +460,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
 
         Either<ProblemDetail, Void> result = service.startCredentialRequest(CEREMONY_ID, USER_ID, true);
@@ -467,7 +478,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(oldApplySaid), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.empty());
         Serder exn = serderWithSaid(APPLY_SAID);
         when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
@@ -588,13 +599,13 @@ class KeriCredentialServiceTest {
         // method than awaitPresentation's own initial (plain) lookup above.
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(freshLink));
 
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
 
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
 
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
 
@@ -610,11 +621,15 @@ class KeriCredentialServiceTest {
         service.awaitPresentation(CEREMONY_ID, GENERATION);
 
         verify(ipex).submitAgree(AGENT_NAME, agreeExn, List.of("sig2"), List.of(LINKED_AID));
-        verify(ipex).submitAdmit(AGENT_NAME, admitExn, List.of("sig3"), "atc3", List.of(LINKED_AID));
+        // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE's atc ("atc2"),
+        // NOT the admit's own ("atc3") -- a proven cip113 wallet-contract quirk this module now matches.
+        verify(ipex).submitAdmit(AGENT_NAME, admitExn, List.of("sig3"), "atc2", List.of(LINKED_AID));
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
 
         // F8 fix: sending the agree persists the AGREE_SENT phase transition (and overwrites
         // requestExnSaid with the agree's SAID) via a guarded update, separate from completeStep's own.
+        // cip113 parity: agreeAtc is persisted in the same write, so a worker restart resuming at
+        // AGREE_SENT can still supply the agree's atc to submitAdmit (see the dedicated resume test).
         ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> phaseMutatorCaptor =
                 ArgumentCaptor.forClass(Consumer.class);
         verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
@@ -623,13 +638,18 @@ class KeriCredentialServiceTest {
         phaseMutatorCaptor.getValue().accept(phaseScratch);
         assertEquals("AGREE_SENT", phaseScratch.getStepPhase());
         assertEquals(AGREE_SAID, phaseScratch.getRequestExnSaid());
+        assertEquals("atc2", phaseScratch.getAgreeAtc());
 
         // Item 3 (round 2) fix: the phase persist must happen BEFORE submitAgree actually sends, not
         // after -- the agree's SAID is deterministic from the built (not-yet-sent) exn, so this mirrors
-        // startPresentation's/startAttest's persist-before-send idiom.
-        InOrder phaseBeforeSendOrder = inOrder(ceremonyService, ipex);
+        // startPresentation's/startAttest's persist-before-send idiom. cip113 parity: the offer
+        // notification is also claimed (marked+deleted) in that same window -- after the phase persist
+        // proves this attempt isn't superseded, but still before the agree is sent -- mirroring
+        // KeriService#presentCredential's own fetch-then-immediately-delete ordering for the offer.
+        InOrder phaseBeforeSendOrder = inOrder(ceremonyService, correlator, ipex);
         phaseBeforeSendOrder.verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
                 eq(CeremonyState.CREDENTIAL_REQUESTED), any());
+        phaseBeforeSendOrder.verify(correlator).markAndDelete(OFFER_NOTIF_ID);
         phaseBeforeSendOrder.verify(ipex).submitAgree(any(), any(), any(), any());
 
         // F5 fix: the link write happens inside completeStep's mutator (mirrors
@@ -651,8 +671,11 @@ class KeriCredentialServiceTest {
         // F8 fix: the step is done — no phase marker should linger on the row.
         assertNull(completeScratch.getStepPhase());
 
-        // Notifications are only claimed (marked+deleted) once completeStep reports success.
-        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        // cip113 parity: the offer was already claimed earlier (see the InOrder check above) — asserted
+        // once here rather than re-verified. The grant, by contrast, stays gated on completeStep
+        // reporting success: it's only claimed once this module's OWN post-admit CredentialChainValidator
+        // step (cip113 has no equivalent) has actually run and the ceremony transition is durable.
+        verify(correlator, times(1)).markAndDelete(OFFER_NOTIF_ID);
         verify(correlator).markAndDelete(GRANT_NOTIF_ID);
     }
 
@@ -661,13 +684,16 @@ class KeriCredentialServiceTest {
             throws Exception {
         // F8 fix: a retry resuming at AGREE_SENT already sent both apply and agree in a previous
         // attempt -- requestExnSaid holds the agree's SAID. This attempt must never wait for an offer or
-        // send a second agree; it correlates the grant directly on that persisted SAID.
+        // send a second agree; it correlates the grant directly on that persisted SAID. cip113 parity:
+        // agreeAtc is also persisted from that previous attempt (the worker restarted before reaching
+        // admit), so this attempt must read IT — not the admit's own atc — for submitAdmit.
         KeriAttestationCeremonyEntity resumedCeremony = ceremony(AGREE_SAID);
         resumedCeremony.setStepPhase("AGREE_SENT");
+        resumedCeremony.setAgreeAtc("atc2");
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(resumedCeremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
 
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
@@ -685,8 +711,12 @@ class KeriCredentialServiceTest {
         verify(ipex, never()).agree(any());
         verify(ipex, never()).submitAgree(any(), any(), any(), any());
         verify(ipex).admit(any());
-        verify(correlator, never()).awaitCorrelated(eq(OFFER_ROUTES), any(), any(), any());
-        verify(correlator).awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any());
+        // cip113 parity: the persisted agreeAtc ("atc2") survives the resume and is what submitAdmit
+        // receives -- not the admit's own atc ("atc3", deliberately different in this fixture so a bug
+        // that fell back to admitResult.atc() would fail this assertion).
+        verify(ipex).submitAdmit(AGENT_NAME, admitExn, List.of("sig3"), "atc2", List.of(LINKED_AID));
+        verify(correlator, never()).awaitByRoute(eq(OFFER_ROUTES), any());
+        verify(correlator).awaitByRoute(eq(GRANT_ROUTES), any());
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
 
         // No offer notification was ever claimed (this attempt never fetched one).
@@ -719,7 +749,7 @@ class KeriCredentialServiceTest {
     void awaitPresentationOfferTimeoutFailsWithKeriWalletTimeoutAndNeverBuildsAgree() {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.empty());
 
         service.awaitPresentation(CEREMONY_ID, GENERATION);
@@ -734,11 +764,11 @@ class KeriCredentialServiceTest {
     void awaitPresentationGrantTimeoutFailsWithKeriWalletTimeoutAndNeverAdmits() throws Exception {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.empty());
 
         service.awaitPresentation(CEREMONY_ID, GENERATION);
@@ -746,7 +776,10 @@ class KeriCredentialServiceTest {
         verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
                 KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/grant.");
         verify(ipex, never()).admit(any());
-        verify(correlator, never()).markAndDelete(any());
+        // cip113 parity: the offer was already claimed (right after the agree's phase persist, well
+        // before the grant wait even starts) — see the happy-path test's InOrder check.
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
@@ -755,7 +788,7 @@ class KeriCredentialServiceTest {
         // before the phase persist, so no phase/requestExnSaid write should have been attempted at all.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         when(ipex.agree(any())).thenThrow(new IOException("agent unreachable"));
 
@@ -777,7 +810,7 @@ class KeriCredentialServiceTest {
         // and item 5's phase-clearing helper must still clear the now-moot AGREE_SENT marker.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
@@ -791,18 +824,21 @@ class KeriCredentialServiceTest {
                 eq(CeremonyState.CREDENTIAL_REQUESTED), any());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
-        verify(correlator, never()).markAndDelete(any());
+        // cip113 parity: the offer was already claimed (right after the phase persist, before the send
+        // that then fails) — see the happy-path test's InOrder check.
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
     void awaitPresentationMissingAcdcInGrantExnFailsWithCredentialRequestFailed() throws Exception {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID, Map.of("i", LINKED_AID))));
 
         service.awaitPresentation(CEREMONY_ID, GENERATION);
@@ -816,11 +852,11 @@ class KeriCredentialServiceTest {
     void awaitPresentationAdmitSendFailureFailsWithCredentialRequestFailed() throws Exception {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         when(ipex.admit(any())).thenThrow(new IOException("agent unreachable"));
@@ -836,11 +872,11 @@ class KeriCredentialServiceTest {
     void awaitPresentationCredentialNotFoundAfterAdmitFailsWithCredentialRequestFailed() throws Exception {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
@@ -852,19 +888,22 @@ class KeriCredentialServiceTest {
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
         verifyNoInteractions(validator);
-        verify(correlator, never()).markAndDelete(any());
+        // cip113 parity: the offer was already claimed long before this point (right after the phase
+        // persist, well before grant/admit) — see the happy-path test's InOrder check.
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
-    void awaitPresentationValidatorRejectionFailsWithCredentialRejectedAndDoesNotPersistOrMarkNotifications()
+    void awaitPresentationValidatorRejectionFailsWithCredentialRejectedAndDoesNotPersistOrMarkTheGrantNotification()
             throws Exception {
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
@@ -885,7 +924,12 @@ class KeriCredentialServiceTest {
         // returns before completeStep is ever called, so its link-writing mutator never runs and
         // nothing is ever persisted to the link.
         verify(identityLinkRepository, never()).save(any());
-        verify(correlator, never()).markAndDelete(any());
+        // cip113 parity: the offer was already claimed BEFORE the agree was even sent (see the happy-path
+        // test's InOrder check) — well before validation runs, so its markAndDelete is unaffected by a
+        // later rejection. The grant, by contrast, stays gated on this module's OWN post-admit
+        // CredentialChainValidator step actually succeeding.
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
@@ -897,11 +941,11 @@ class KeriCredentialServiceTest {
         // leave the ceremony stuck at CREDENTIAL_REQUESTED forever.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
@@ -916,7 +960,10 @@ class KeriCredentialServiceTest {
                 eq(KeriAttestationProblems.CREDENTIAL_REJECTED), any());
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(identityLinkRepository, never()).save(any());
-        verify(correlator, never()).markAndDelete(any());
+        // cip113 parity: see awaitPresentationValidatorRejection...'s identical comment — the offer is
+        // already claimed by the time the (throwing) validator ever runs.
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
@@ -925,11 +972,11 @@ class KeriCredentialServiceTest {
         // must be cross-checked against the SAID this whole round trip actually fetched and admitted.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
@@ -945,7 +992,10 @@ class KeriCredentialServiceTest {
                 eq(KeriAttestationProblems.CREDENTIAL_REJECTED), any());
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(identityLinkRepository, never()).save(any());
-        verify(correlator, never()).markAndDelete(any());
+        // cip113 parity: see awaitPresentationValidatorRejection...'s identical comment — the offer is
+        // already claimed by the time this defense-in-depth check runs.
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
@@ -967,11 +1017,11 @@ class KeriCredentialServiceTest {
         // method than awaitPresentation's own initial (plain) lookup above.
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(relinkedLink));
 
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
@@ -998,20 +1048,24 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void awaitPresentationStaleCompleteStepNeverMarksNotificationsAsClaimedOrWritesTheLink() throws Exception {
+    void awaitPresentationStaleCompleteStepNeverMarksTheGrantNotificationAsClaimedOrWritesTheLink() throws Exception {
         // completeStep returning false means a retry's generation bump superseded this attempt's CAS —
-        // the winning attempt's own correlator wait still needs these notifications unread/undeleted, so
-        // this attempt must not claim them despite having otherwise "succeeded" up to this point. F5
+        // the winning attempt's own correlator wait still needs the GRANT notification unread/undeleted,
+        // so this attempt must not claim it despite having otherwise "succeeded" up to this point. F5
         // fix: since the link write now happens inside completeStep's own mutator, a stale (false) CAS
         // means the mutator never ran in the first place, so the link must never be written either.
+        // cip113 parity: the OFFER notification, by contrast, was already claimed earlier — gated on an
+        // EARLIER (phase-persist) CAS that this test's fixture defaults to succeeding — before this
+        // (later, stale) completeStep CAS is even reached; a winning concurrent attempt never needed the
+        // offer back, only the grant, so this is not a regression of the original stale-CAS protection.
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony(APPLY_SAID)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
 
-        when(correlator.awaitCorrelated(eq(OFFER_ROUTES), eq(LINKED_AID), eq(APPLY_SAID), any()))
+        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
-        when(correlator.awaitCorrelated(eq(GRANT_ROUTES), eq(LINKED_AID), eq(AGREE_SAID), any()))
+        when(correlator.awaitByRoute(eq(GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
@@ -1024,7 +1078,8 @@ class KeriCredentialServiceTest {
 
         service.awaitPresentation(CEREMONY_ID, GENERATION);
 
-        verify(correlator, never()).markAndDelete(any());
+        verify(correlator).markAndDelete(OFFER_NOTIF_ID);
+        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
         verify(identityLinkRepository, never()).save(any());
     }
 }

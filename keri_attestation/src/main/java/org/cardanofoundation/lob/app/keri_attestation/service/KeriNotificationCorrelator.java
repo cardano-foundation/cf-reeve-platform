@@ -84,7 +84,18 @@ public class KeriNotificationCorrelator {
     }
 
     /**
-     * Polls the agent's notification queue at {@link KeriAttestationProperties#notificationPollInterval()}
+     * <b>Not currently invoked by any production wire-flow call site (design rev, user-directed
+     * 2026-07-22):</b> {@link KeriCredentialService}'s IPEX offer/grant waits and
+     * {@link KeriAttestService}'s remotesign ref wait all use {@link #awaitByRoute} instead — cip113's
+     * {@code KeriService} is the proven wire-flow reference this module is aligned against, and its own
+     * {@code IpexNotificationHelper} claims purely by route, with none of the sender/thread-back/{@code
+     * rp} checks below. Real Veridian wallet replies were found not to reliably carry the extra fields
+     * this method requires, so requiring them unconditionally would silently discard a legitimate reply.
+     * This method is kept — rather than deleted, and rather than deleting its test coverage — for any
+     * future hardening need that turns out to require it; do not remove without confirming nothing has
+     * come to depend on it again.
+     *
+     * <p>Polls the agent's notification queue at {@link KeriAttestationProperties#notificationPollInterval()}
      * until a notification correlates to {@code requestExnSaid} or {@code timeout} elapses.
      *
      * <p>A notification is claimed only if it is unread, its route is one of {@code routes}, the exn it
@@ -143,6 +154,115 @@ public class KeriNotificationCorrelator {
                 return Optional.empty();
             }
         }
+    }
+
+    /**
+     * Route-only notification claim (design rev, user-directed 2026-07-22 — cip113 parity): mirrors
+     * {@code cip113-programmable-tokens-platform}'s {@code IpexNotificationHelper.waitForNotification}
+     * contract exactly. The FIRST unread notification whose own claimed route ({@code note.a.r}) is one
+     * of {@code routes} is claimed — no sender match, no thread-back/{@code p} check, no {@code rp}
+     * check. cip113's wallet contract is the proven reference this module's wire flow is aligned
+     * against: a real Veridian wallet's IPEX offer/grant and remotesign ref replies were found not to
+     * reliably carry the extra correlation fields {@link #awaitCorrelated}'s stricter check requires, so
+     * unconditionally requiring them would silently discard a legitimate reply. The user has directed
+     * (design rev, twice) that this module's own correlation strictness yields to cip113's proven
+     * contract wherever the two conflict.
+     *
+     * <p>Polls at {@link KeriAttestationProperties#notificationPollInterval()} until a match arrives or
+     * {@code timeout} elapses — this module's own configurable cadence, rather than cip113's hardcoded 20
+     * retries x 2s ({@code IpexNotificationHelper.MAX_RETRIES} / {@code POLL_INTERVAL_MS}).
+     *
+     * <p>The claimed {@link CorrelatedNotification#exnSaid()} is the FETCHED exchange's own {@code d}
+     * field, not just the notification's claimed {@code note.a.d} (cip113 parity — {@code
+     * KeriService#presentCredential} reads {@code offerResource.getExn().getD()} /
+     * {@code grantResource.getExn().getD()} after the fetch, rather than trusting the notification body
+     * alone); falls back to {@code note.a.d} only if the fetched exn is missing its own {@code d}.
+     *
+     * <p>Never calls {@code mark}/{@code delete} itself — same contract as {@link #awaitCorrelated}.
+     *
+     * @return the route-matched notification, or {@link Optional#empty()} if none arrived before the
+     *         timeout. Never throws on timeout.
+     */
+    public Optional<CorrelatedNotification> awaitByRoute(List<String> routes, Duration timeout) {
+        Instant deadline = Instant.now().plus(timeout);
+        while (true) {
+            try {
+                Optional<CorrelatedNotification> claimed = pollOnceByRoute(routes);
+                if (claimed.isPresent()) {
+                    return claimed;
+                }
+                if (!Instant.now().isBefore(deadline)) {
+                    return Optional.empty();
+                }
+                Thread.sleep(properties.notificationPollInterval().toMillis());
+            } catch (InterruptedException e) {
+                // Restore the interrupt flag rather than swallow it — same contract as awaitCorrelated.
+                Thread.currentThread().interrupt();
+                return Optional.empty();
+            }
+        }
+    }
+
+    // --- one polling round, route-only (cip113 parity — see awaitByRoute's javadoc) ---
+
+    private Optional<CorrelatedNotification> pollOnceByRoute(List<String> routes) throws InterruptedException {
+        Notifying.Notifications.NotificationListResponse response;
+        try {
+            response = client.client().notifications().list();
+        } catch (InterruptedException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Failed to list KERI notifications, will retry: {}", e.getMessage());
+            return Optional.empty();
+        }
+
+        List<Notification> notes;
+        try {
+            notes = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
+            });
+            if (notes == null) {
+                notes = List.of();
+            }
+        } catch (SerializeException e) {
+            // Same wire-shape-vs-transient distinction as pollOnce, but without the strict path's
+            // consecutive-failure fast-abort machinery: a route-only claim has no correlation fields to
+            // give up early over, and treating this as a defect (ERROR) still surfaces the log entry.
+            log.error("Failed to parse the KERI notification list while route-matching (cip113-style "
+                    + "claim): {}", e.getMessage());
+            return Optional.empty();
+        }
+
+        for (Notification note : notes) {
+            if (!isUnreadRouteMatch(note, routes)) {
+                continue;
+            }
+            String noteExnSaid = note.a != null ? note.a.d : null;
+            if (noteExnSaid == null) {
+                continue;
+            }
+            Map<String, Object> exn;
+            try {
+                Optional<Object> exchange = client.client().exchanges().get(noteExnSaid);
+                if (exchange.isEmpty()) {
+                    continue;
+                }
+                exn = extractExn(exchange.get());
+            } catch (InterruptedException e) {
+                throw e;
+            } catch (Exception e) {
+                log.warn("Failed to fetch KERI exchange {} while route-matching: {}", noteExnSaid, e.getMessage());
+                continue;
+            }
+            if (exn == null) {
+                continue;
+            }
+            // cip113 parity: prefer the FETCHED exn's own "d" over the notification's claimed
+            // note.a.d — see this method's javadoc.
+            Object fetchedSaid = exn.get("d");
+            String exnSaid = fetchedSaid instanceof String s ? s : noteExnSaid;
+            return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn));
+        }
+        return Optional.empty();
     }
 
     /**

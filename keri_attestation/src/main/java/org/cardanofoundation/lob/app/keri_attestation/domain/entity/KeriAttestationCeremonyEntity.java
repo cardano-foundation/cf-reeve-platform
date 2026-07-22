@@ -167,6 +167,17 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "step_phase", length = 32)
     private String stepPhase;
 
+    /** cip113 wire-flow parity (design rev, user-directed 2026-07-22, {@code KeriService
+     *  #presentCredential}): the IPEX AGREE exchange's own {@code atc} (attachment) — not the ADMIT's
+     *  own — is what {@code submitAdmit} must be given, a proven cip113 wallet-contract quirk this
+     *  module now matches exactly. Persisted alongside {@link #requestExnSaid} at the {@code AGREE_SENT}
+     *  phase transition so a worker restart resuming at that phase (F8 fix) can still supply it, rather
+     *  than only being available from the in-memory {@code ExchangeMessageResult} of the attempt that
+     *  originally built the agree. */
+    @Nullable
+    @Column(name = "agree_atc")
+    private String agreeAtc;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

@@ -111,13 +111,15 @@ public class KeriAttestService {
         }
         String walletAid = linkOpt.get().getAid();
 
-        // Retry pre-check (design §4.2): before re-sending, look for a late-arriving correlated ref
-        // matching whatever was sent on the previous attempt. A fresh (non-retry) call, or a retry
-        // whose previous attempt never got as far as sending anything, has no requestExnSaid yet and
-        // skips straight to rebuilding + sending below.
+        // Retry pre-check (design §4.2): before re-sending, look for a late-arriving ref matching
+        // whatever was sent on the previous attempt. cip113 parity (design rev, user-directed
+        // 2026-07-22): route-only, like every other offer/grant/ref claim in this module now — see
+        // KeriNotificationCorrelator#awaitByRoute's javadoc. A fresh (non-retry) call, or a retry whose
+        // previous attempt never got as far as sending anything, has no requestExnSaid yet and skips
+        // straight to rebuilding + sending below.
         if (retry && ceremony.getRequestExnSaid() != null) {
-            Optional<CorrelatedNotification> lateRef = correlator.awaitCorrelated(REMOTESIGN_REF_ROUTES, walletAid,
-                    ceremony.getRequestExnSaid(), RETRY_PRECHECK_TIMEOUT);
+            Optional<CorrelatedNotification> lateRef = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
+                    RETRY_PRECHECK_TIMEOUT);
             if (lateRef.isPresent()) {
                 resolveAndComplete(ceremonyId, generation, walletAid, ceremony.getPayloadSaid(),
                         ceremony.getKelFloorSequence(), lateRef.get());
@@ -258,8 +260,13 @@ public class KeriAttestService {
         }
         String walletAid = linkOpt.get().getAid();
 
-        Optional<CorrelatedNotification> ref = correlator.awaitCorrelated(REMOTESIGN_REF_ROUTES, walletAid,
-                ceremony.getRequestExnSaid(), properties.remotesignTimeout());
+        // cip113 parity: route-only claim — see startAttest's retry-precheck comment / awaitByRoute's
+        // javadoc for why this module's own sender/thread-back correlation strictness yields here. The
+        // seal/floor verification below (resolveAndComplete) is this module's OWN additive hardening
+        // beyond cip113's flow (cip113 does not verify the anchor at all) and is unaffected — its
+        // markAndDelete stays gated on that verification succeeding, same as before.
+        Optional<CorrelatedNotification> ref = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
+                properties.remotesignTimeout());
         if (ref.isEmpty()) {
             ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
                     KeriAttestationProblems.KERI_WALLET_TIMEOUT,
