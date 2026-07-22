@@ -443,6 +443,9 @@ class KeriAttestServiceTest {
     @Test
     void startAttestRetryWithLateArrivedCorrelatedRefCompletesWithoutResendingOrDispatching() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
+        // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
+        ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
@@ -469,6 +472,9 @@ class KeriAttestServiceTest {
         mutatorCaptor.getValue().accept(ceremony);
         assertEquals(SEQUENCE, ceremony.getKelSequence());
         assertEquals(EVENT_SAID, ceremony.getKelEventSaid());
+        // F1 fix: the wallet AID the remotesign request was actually sent to and answered by is
+        // persisted immutably alongside the KEL coordinates it anchored.
+        assertEquals(WALLET_AID, ceremony.getAttesterAid());
         verify(correlator).markAndDelete(NOTIF_ID);
     }
 
@@ -502,6 +508,9 @@ class KeriAttestServiceTest {
     @Test
     void awaitAnchorHappyPathVerifiesSealAndCompletesInOrder() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
+        // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
+        ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
 
@@ -521,6 +530,9 @@ class KeriAttestServiceTest {
         mutatorCaptor.getValue().accept(ceremony);
         assertEquals(SEQUENCE, ceremony.getKelSequence());
         assertEquals(EVENT_SAID, ceremony.getKelEventSaid());
+        // F1 fix: the wallet AID the remotesign request was actually sent to and answered by is
+        // persisted immutably alongside the KEL coordinates it anchored.
+        assertEquals(WALLET_AID, ceremony.getAttesterAid());
 
         InOrder inOrder = inOrder(ceremonyService, correlator);
         inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
@@ -534,6 +546,9 @@ class KeriAttestServiceTest {
         // a concurrent, winning attempt still needs this notification unread/undeleted, so a stale
         // attempt must not claim it despite otherwise verifying the seal correctly.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
+        // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
+        ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
         when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
@@ -588,8 +603,11 @@ class KeriAttestServiceTest {
 
     @Test
     void awaitAnchorSealMismatchFailsWithAttestSealMismatchAndDigestDetail() throws Exception {
-        when(ceremonyRepository.findById(CEREMONY_ID))
-                .thenReturn(Optional.of(ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID)));
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        // A floor must be set (F4 fix): a null floor now hard-fails resolveAndComplete outright, before
+        // ever looking at the ref exn's candidate -- see the dedicated null-floor test for that path.
+        ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
         when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
@@ -798,6 +816,34 @@ class KeriAttestServiceTest {
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(correlator, never()).markAndDelete(any());
         // No fallback scan attempted: never fetches the KEL or queries key state.
+        verifyNoInteractions(keyEvents, keyStates);
+    }
+
+    @Test
+    void awaitAnchorWithNullFloorStillFailsEvenWithAValidExplicitCandidate() throws Exception {
+        // M3 cross-review F4 fix: an earlier version of resolveAndComplete still accepted an explicit
+        // ref-derived candidate with a null floor, verifying only its digest with no lower bound at all.
+        // That is exactly the unbounded-scan risk F5 closes, reopened for a single event. A null floor
+        // must now hard-fail this ceremony BEFORE the candidate is ever consulted or the KEL is ever
+        // fetched -- there is no candidate-acceptance path left for a ceremony with no recorded floor.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        assertNull(ceremony.getKelFloorSequence());
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
+        // A well-formed explicit candidate that WOULD resolve to a real, digest-matching KEL event if
+        // ever looked up -- proving the rejection is unconditional on the floor alone, not a side effect
+        // of a missing/invalid candidate.
+        Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
+        when(correlator.awaitCorrelated(eq(REMOTESIGN_REF_ROUTES), eq(WALLET_AID), eq(OLD_REQUEST_EXN_SAID), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
+
+        service.awaitAnchor(CEREMONY_ID, GENERATION);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(KeriAttestationProblems.ATTEST_SEAL_MISMATCH), any());
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(correlator, never()).markAndDelete(any());
+        // No candidate lookup attempted at all: never fetches the KEL or queries key state.
         verifyNoInteractions(keyEvents, keyStates);
     }
 

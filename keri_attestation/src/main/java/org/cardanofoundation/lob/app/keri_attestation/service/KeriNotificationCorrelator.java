@@ -37,14 +37,14 @@ import org.cardanofoundation.signify.cesr.util.Utils;
  *       notification's claimed route is not trusted on its own, since nothing forces it to agree with
  *       the exchange it actually references;</li>
  *   <li>the exchange was sent by the expected sender ({@code exn.i});</li>
- *   <li>the exchange's {@code rp} ("recipient prefix"), when present, equals this agent's own prefix —
- *       {@code rp} is the signed addressee and is authoritative when it exists; a mismatch rejects
- *       outright. {@code exn.a.i} is deliberately <b>not</b> consulted for this check at all (F4
- *       residual fix) — it is ordinary payload data fully controlled by the sender, not a signed
- *       routing field, so trusting it would let a forged or misdirected notification's own payload
- *       simply claim to be addressed to us. Checked defensively for absence only: the exact field
- *       carrying the addressee hasn't been confirmed against a live exchange (Task 8), so this skips
- *       (does not reject) only when {@code rp} is genuinely absent;</li>
+ *   <li>the exchange's {@code rp} ("recipient prefix") MUST be present, non-blank, and equal this
+ *       agent's own prefix (M3 cross-review F2 fix) — {@code rp} is the signed addressee, and the
+ *       pinned signify exchange builder always includes one on every exchange this class correlates
+ *       against, so absent or blank is treated exactly like a mismatch: reject, not claimable.
+ *       {@code exn.a.i} is deliberately <b>not</b> consulted for this check at all (F4 residual fix) —
+ *       it is ordinary payload data fully controlled by the sender, not a signed routing field, so
+ *       trusting it would let a forged or misdirected notification's own payload simply claim to be
+ *       addressed to us;</li>
  *   <li>the exchange threads back to the exact request {@code exn} SAID this caller is waiting on
  *       ({@link #threadsBackToRequest}) — a <em>bounded</em>, protocol-shaped check, not a general
  *       recursive search. {@code p}, when present and non-blank, is authoritative (F4 residual fix):
@@ -263,24 +263,24 @@ public class KeriNotificationCorrelator {
     }
 
     /**
-     * Recipient check (F4 fix, tightened by the F4 residual fix): the exn's {@code rp} ("recipient
-     * prefix"), when present, is the signed addressee and MUST equal this agent's own prefix — a
-     * notification whose {@code rp} names a different agent must never be claimed. {@code exn.a.i} (an
-     * {@code i} key nested inside the payload map {@code a}) is deliberately <b>not</b> consulted here at
-     * all, and must never substitute for {@code rp}: {@code a} is ordinary payload data the sender fully
-     * controls, not a signed/authoritative routing field, so trusting it would let a forged or
-     * misdirected notification's own payload simply claim to be addressed to us regardless of what
-     * {@code rp} actually says. Checked defensively for absence only: the exact field carrying the
-     * addressee hasn't been confirmed against a live exchange (Task 8), so this skips (returns
-     * {@code true}) only when {@code rp} is genuinely absent — never as a fallback to checking something
-     * else instead.
+     * Recipient check (F4 fix, tightened by the F4 residual fix, now made unconditional by the M3
+     * cross-review F2 fix): the exn's {@code rp} ("recipient prefix") is the signed addressee and MUST
+     * be present, non-blank, AND equal this agent's own prefix — absent, blank, or mismatched all reject
+     * outright; there is no longer a "genuinely absent" carve-out. The pinned signify exchange builder
+     * always includes a signed {@code rp} on every exchange this class correlates against, so an exn
+     * missing one is never a legitimate reply this agent itself could have received — treating it as
+     * unaddressed (and therefore not claimable) is strictly safer than the old skip-when-absent
+     * behavior. (If a future wallet build is ever found to omit {@code rp} on an otherwise-legitimate
+     * exchange, that is a spike to revisit deliberately, not a silent carve-out here.) {@code exn.a.i}
+     * (an {@code i} key nested inside the payload map {@code a}) is still deliberately <b>not</b>
+     * consulted here at all, and must never substitute for {@code rp}: {@code a} is ordinary payload
+     * data the sender fully controls, not a signed/authoritative routing field, so trusting it would let
+     * a forged or misdirected notification's own payload simply claim to be addressed to us regardless
+     * of what {@code rp} actually says (or whether it's there at all).
      */
     private boolean addresseeMatchesAgent(Map<String, Object> exn) {
         Object rp = exn.get("rp");
-        if (rp == null) {
-            return true;
-        }
-        return agentService.agentPrefix().equals(rp);
+        return rp instanceof String rpString && !rpString.isBlank() && agentService.agentPrefix().equals(rpString);
     }
 
     /**

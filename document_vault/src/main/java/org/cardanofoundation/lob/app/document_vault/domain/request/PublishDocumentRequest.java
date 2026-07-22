@@ -15,11 +15,21 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * this task. NOT a {@link org.cardanofoundation.lob.app.support.spring_web.BaseRequest} — unlike
  * upload, publish is user-scoped (the target document, not an organisationId payload field, decides
  * which organisation this acts on), so there is no {@code organisationId} to carry.
+ *
+ * <p><b>{@code ignoreUnknown = false} (M3 cross-review F6 fix), a deliberate deviation from this
+ * platform's usual DTO convention of tolerating unknown fields:</b> this body has exactly one
+ * meaningful field, and getting its NAME wrong is the one mistake this endpoint must never absorb
+ * silently. A client that typos {@code attestationCeremonyId} (e.g. {@code "attestationCeremoyId"})
+ * would, under the tolerant convention, see it dropped as an unknown field and silently fall through
+ * to a plain, UNATTESTED publish — the exact opposite of what the caller asked for, with no error to
+ * signal it. Rejecting the whole request with a 400 instead surfaces the typo immediately, when the
+ * only other body this endpoint accepts (bodiless, or {@code {}}) makes a genuinely optional field
+ * unambiguous already.
  */
 @Getter
 @Setter
 @NoArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonIgnoreProperties(ignoreUnknown = false)
 public class PublishDocumentRequest {
 
     @Schema(description = "A completed KERI wallet-attestation ceremony id to consume as part of this publish (optional; omit for a plain publish)")

@@ -27,6 +27,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -522,20 +523,18 @@ class VaultDocumentServiceTest {
         assertNull(doc.getAttestationCeremonyId());
     }
 
-    /** A blank ceremony id (e.g. a client sending {"attestationCeremonyId": ""}) must be treated
-     *  exactly like an omitted one, not routed into the attested-publish gate. */
+    /** M3 cross-review F6 fix: a present-but-blank ceremony id (e.g. a client sending
+     *  {"attestationCeremonyId": ""} or all-whitespace) is rejected outright with a 422 - it is no
+     *  longer silently normalized to "no ceremony, plain publish". The document is never even looked
+     *  up: this is pure request-shape validation. */
     @Test
-    void publishWithBlankCeremonyIdBehavesLikeNoCeremonyId() {
-        VaultDocumentEntity doc = draftDoc();
-        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
-
+    void publishWithBlankCeremonyIdIsRejectedWithoutTouchingTheDocumentOrAttestationProviders() {
         Either<ProblemDetail, DocumentView> result = service.publish("doc1", "   ");
 
-        assertTrue(result.isRight());
-        verifyNoInteractions(attestationFreezeGuardProvider, attestationConsumptionApiProvider);
-        assertNull(doc.getAttestationCeremonyId());
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ATTESTATION_CEREMONY_ID_BLANK, result.getLeft().getTitle());
+        assertEquals(422, result.getLeft().getStatus());
+        verifyNoInteractions(documentRepository, attestationFreezeGuardProvider, attestationConsumptionApiProvider);
     }
 
     @Test
@@ -580,14 +579,20 @@ class VaultDocumentServiceTest {
         when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
-        ProblemDetail contentChanged = VaultProblems.unprocessable(VaultProblems.ATTESTED_CONTENT_CHANGED,
+        // F7 fix: verifyFreshness's own problem carries whatever native status fits its domain (here
+        // 409, e.g. a concurrent freeze-invalidating change) - VaultDocumentService must still force it
+        // to 422 while preserving the title/detail verbatim.
+        ProblemDetail contentChanged = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 "Document doc1 content changed since ceremony cer-1 attested it.");
+        contentChanged.setTitle(VaultProblems.ATTESTED_CONTENT_CHANGED);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.of(contentChanged));
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.ATTESTED_CONTENT_CHANGED, result.getLeft().getTitle());
+        assertEquals("Document doc1 content changed since ceremony cer-1 attested it.", result.getLeft().getDetail());
+        assertEquals(422, result.getLeft().getStatus());
         assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
         assertNull(doc.getAttestationCeremonyId());
         verifyNoInteractions(attestationConsumptionApi);
@@ -596,14 +601,19 @@ class VaultDocumentServiceTest {
     }
 
     @Test
-    void publishWithCeremonyIdWhenConsumptionFailsPropagatesProblemAndStaysDraft() {
+    void publishWithCeremonyIdWhenConsumptionFailsWrapsTheNativeStatusTo422PreservingTitleAndDetail() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
-        ProblemDetail ceremonyExpired = VaultProblems.unprocessable("CEREMONY_EXPIRED", "Ceremony cer-1 has expired.");
+        // F7 fix: keri_attestation's validateAndConsume builds CEREMONY_EXPIRED as a 409 (its own
+        // domain's native status - see KeriAttestationProblems#conflict) - the §5.1 boundary this
+        // module owns must force it to 422 regardless, while the title/detail the frontend actually
+        // switches on stay byte-for-byte the same.
+        ProblemDetail ceremonyExpired = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Ceremony cer-1 has expired.");
+        ceremonyExpired.setTitle("CEREMONY_EXPIRED");
         when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
                 .thenReturn(Either.left(ceremonyExpired));
 
@@ -611,10 +621,36 @@ class VaultDocumentServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals("CEREMONY_EXPIRED", result.getLeft().getTitle());
+        assertEquals("Ceremony cer-1 has expired.", result.getLeft().getDetail());
+        assertEquals(422, result.getLeft().getStatus());
         assertEquals(VaultDocumentStatus.DRAFT, doc.getStatus());
         assertNull(doc.getAttestationCeremonyId());
         verify(documentRepository, never()).save(any());
         verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void publishWithCeremonyIdWhenConsumptionFailsWith404Or403AlsoWrapsToA422() {
+        // F7 fix: not just 409s - a 404 (CEREMONY_NOT_FOUND) or 403 (CEREMONY_FORBIDDEN) native status
+        // must be forced to 422 too. Exercised here with a 404 to prove the wrapping is unconditional
+        // on the original status, not special-cased to 409.
+        VaultDocumentEntity doc = draftDoc();
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
+        when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
+        when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
+        when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
+        ProblemDetail ceremonyNotFound = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Ceremony cer-1 was not found.");
+        ceremonyNotFound.setTitle("CEREMONY_NOT_FOUND");
+        when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
+                .thenReturn(Either.left(ceremonyNotFound));
+
+        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+
+        assertTrue(result.isLeft());
+        assertEquals("CEREMONY_NOT_FOUND", result.getLeft().getTitle());
+        assertEquals("Ceremony cer-1 was not found.", result.getLeft().getDetail());
+        assertEquals(422, result.getLeft().getStatus());
     }
 
     @Test

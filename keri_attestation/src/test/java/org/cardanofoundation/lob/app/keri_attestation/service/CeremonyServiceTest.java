@@ -105,7 +105,8 @@ class CeremonyServiceTest {
 
     @Test
     void createWithNoLinkStartsAtCreatedWithAllStepsRequired() {
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
+        // F5 fix: create() locks the link row (findByUserIdForUpdate), not a plain findById.
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
@@ -120,7 +121,7 @@ class CeremonyServiceTest {
 
     @Test
     void createWithLinkHavingAidButNoCredentialStartsAtOobiResolved() {
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", null, null)));
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(link(1, "Eaid", null, null)));
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CeremonyView view = service.create(USER, "DOCUMENT", "doc-1").get();
@@ -133,7 +134,7 @@ class CeremonyServiceTest {
 
     @Test
     void createWithLinkHavingCredentialButNoAuthBeginStartsAtCredentialReceived() {
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", null)));
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", null)));
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CeremonyView view = service.create(USER, "DOCUMENT", "doc-1").get();
@@ -146,7 +147,7 @@ class CeremonyServiceTest {
 
     @Test
     void createWithFullyConfirmedLinkStartsAtAuthBeginConfirmedWithOnlyAttestRemaining() {
-        when(identityLinkRepository.findById(USER))
+        when(identityLinkRepository.findByUserIdForUpdate(USER))
                 .thenReturn(Optional.of(link(1, "Eaid", "Ecred", "a".repeat(64))));
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -198,13 +199,32 @@ class CeremonyServiceTest {
 
     @Test
     void createProceedsAndCallsTheProviderWhenTheTargetIsAuthorized() {
-        when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
 
         assertTrue(result.isRight());
         verify(targetProvider).authorize("doc-1", USER);
+    }
+
+    @Test
+    void createLocksTheIdentityLinkRowInsteadOfPlainReadingIt() {
+        // F5 fix: create() must serialize against KeriOobiService's relink via the identity link's row
+        // lock, not an unlocked read that a relink's own ceremony-invalidation-then-link-update window
+        // could otherwise race. A genuine interleaving test would need real concurrent transactions,
+        // which this Mockito-based unit test cannot exercise; a true race requires H2/testcontainers-level
+        // concurrency this suite does not set up elsewhere either. This pins the actual, enforceable
+        // contract instead: create() must go through the locked finder and must never fall back to the
+        // plain one.
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
+        when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+
+        assertTrue(result.isRight());
+        verify(identityLinkRepository).findByUserIdForUpdate(USER);
+        verify(identityLinkRepository, never()).findById(anyString());
     }
 
     // --- get: ownership + lazy expiry ---
@@ -677,6 +697,9 @@ class CeremonyServiceTest {
 
     @Test
     void validateAndConsumeHappyPathFlipsAttestAnchoredToConsumed() {
+        // F1 fix: ceremony.attesterAid is unset (pre-upgrade-row shape) here, so this also exercises
+        // the fallback to the current link's aid - see validateAndConsumeUsesThePersistedAttesterAid...
+        // below for the (now normal) case where attesterAid IS set and takes precedence.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
         ceremony.setMetadataDigest("Edigest");
         ceremony.setMetadataLabel("1447");
@@ -695,6 +718,27 @@ class CeremonyServiceTest {
         assertEquals("1447", consumed.metadataLabel());
         assertEquals("3", consumed.kelSequence());
         assertEquals(CeremonyState.CONSUMED, ceremony.getState());
+    }
+
+    @Test
+    void validateAndConsumeUsesThePersistedAttesterAidNotTheCurrentLinkAid() {
+        // F1 fix: ceremony.attesterAid (persisted by KeriAttestService#resolveAndComplete at
+        // ATTEST_ANCHORED time) is authoritative whenever set - never re-derived from the identity
+        // link's current aid, even though in this test they happen to differ only to prove which one
+        // actually won.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
+        ceremony.setMetadataDigest("Edigest");
+        ceremony.setMetadataLabel("1447");
+        ceremony.setKelSequence("3");
+        ceremony.setAttesterAid("Eattester-aid");
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+        when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Elink-aid", "Ecred", "a".repeat(64))));
+
+        Either<ProblemDetail, ConsumedAttestation> result =
+                service.validateAndConsume(CEREMONY_ID, "DOCUMENT", "doc-1", USER);
+
+        assertTrue(result.isRight());
+        assertEquals("Eattester-aid", result.get().aid());
     }
 
     @Test
@@ -786,7 +830,10 @@ class CeremonyServiceTest {
     // --- findConsumed (Task 15: blockchain_publisher's dispatch-time attestation lookup) ---
 
     @Test
-    void findConsumedReturnsTheAttestationWhenTheCeremonyIsConsumed() {
+    void findConsumedFallsBackToTheLinkAidWhenNoAttesterAidIsPersisted() {
+        // F1 fix, pre-upgrade fallback: a CONSUMED ceremony with no attesterAid ever persisted (a row
+        // that reached CONSUMED before this column existed) falls back to the CURRENT identity link,
+        // exactly the pre-fix behavior.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CONSUMED);
         ceremony.setMetadataDigest("Edigest");
         ceremony.setMetadataLabel("1447");
@@ -806,6 +853,28 @@ class CeremonyServiceTest {
         // Read-only: no row lock, no state mutation, no write.
         verify(ceremonyRepository, never()).findByIdForUpdate(anyString());
         verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void findConsumedReturnsTheOriginalAttesterAidEvenAfterARelinkChangedTheCurrentIdentityLink() {
+        // F1 fix, the core scenario this fix closes: consume -> relink -> a delayed dispatch retry
+        // calling findConsumed must still see the ORIGINAL attesting aid (and the digest/kelSequence
+        // that were actually anchored under it), never the identity's NEW (post-relink) aid. Simulated
+        // here by simply never stubbing identityLinkRepository at all - proving the link is not even
+        // consulted once attesterAid is persisted, so a concurrent/subsequent relink of the CURRENT
+        // link cannot influence this result no matter what it changes to.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CONSUMED);
+        ceremony.setMetadataDigest("Edigest");
+        ceremony.setMetadataLabel("1447");
+        ceremony.setKelSequence("3");
+        ceremony.setAttesterAid("Eoriginal-attester-aid");
+        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        Optional<ConsumedAttestation> result = service.findConsumed(CEREMONY_ID);
+
+        assertTrue(result.isPresent());
+        assertEquals("Eoriginal-attester-aid", result.get().aid());
+        verifyNoInteractions(identityLinkRepository);
     }
 
     @Test

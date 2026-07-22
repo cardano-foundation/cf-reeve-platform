@@ -190,13 +190,21 @@ public class VaultDocumentService {
     }
 
     /**
-     * Design §5.1 (Task 14): with a null (or blank — normalized to null, same treatment
-     * {@link #list} gives its free-text {@code q} parameter) {@code attestationCeremonyId} this is
-     * byte-for-byte the pre-Task-14 {@code publish(String)} — the attested branch below is skipped
-     * entirely, so a bodiless publish never touches {@link #attestationFreezeGuardProvider} or
-     * {@link #attestationConsumptionApiProvider}, not even to probe whether they are wired up.
+     * Design §5.1 (Task 14): with a null (genuinely OMITTED — no body at all, an empty JSON object,
+     * or the field simply absent) {@code attestationCeremonyId} this is byte-for-byte the pre-Task-14
+     * {@code publish(String)} — the attested branch below is skipped entirely, so a bodiless publish
+     * never touches {@link #attestationFreezeGuardProvider} or {@link #attestationConsumptionApiProvider},
+     * not even to probe whether they are wired up.
      *
-     * <p>With a non-null ceremony id, all of the following run INSIDE this same row-locked
+     * <p><b>A present-but-blank {@code attestationCeremonyId} is rejected outright (M3 cross-review
+     * F6 fix)</b> — {@code ATTESTATION_CEREMONY_ID_BLANK} (422) — rather than silently normalized to
+     * null the way {@link #list}'s free-text {@code q} parameter is. Unlike {@code q} (where blank
+     * and absent are genuinely interchangeable — "no filter" either way), a blank ceremony id here is
+     * very likely a caller's mistake (e.g. a client sending {@code {"attestationCeremonyId": ""}}
+     * when it meant to supply a real one); silently falling through to a plain, unattested publish
+     * would hide that mistake behind an apparently-successful response instead of surfacing it.
+     *
+     * <p>With a non-null, non-blank ceremony id, all of the following run INSIDE this same row-locked
      * transaction, after the existing org/DRAFT/IPFS checks and before the document is flipped to
      * {@code PUBLISHED} — any failure returns left with the document left untouched (still DRAFT,
      * no event fired):
@@ -214,11 +222,13 @@ public class VaultDocumentService {
      * {@link #toPublishCommand} factory).
      */
     public Either<ProblemDetail, DocumentView> publish(String documentId, @Nullable String attestationCeremonyIdOrBlank) {
-        // A blank string (e.g. a client sending {"attestationCeremonyId": ""}) is treated exactly like
-        // an omitted field, not like a real ceremony id to look up — same normalization VaultDocumentService
-        // already applies to list()'s free-text q parameter.
-        String attestationCeremonyId = (attestationCeremonyIdOrBlank == null || attestationCeremonyIdOrBlank.isBlank())
-                ? null : attestationCeremonyIdOrBlank;
+        // F6 fix: a present-but-blank id is rejected outright, checked before ANY database access —
+        // pure input validation on the request itself, not a document/ceremony-state question.
+        if (attestationCeremonyIdOrBlank != null && attestationCeremonyIdOrBlank.isBlank()) {
+            return Either.left(VaultProblems.unprocessable(VaultProblems.ATTESTATION_CEREMONY_ID_BLANK,
+                    "attestationCeremonyId must not be blank; omit the field entirely for a plain publish."));
+        }
+        String attestationCeremonyId = attestationCeremonyIdOrBlank;
         // Row lock FIRST (findByIdForUpdate, not findById): two concurrent publish calls must not
         // both observe DRAFT and both fire the irreversible DocumentPublishCommand. Under the
         // class-level @Transactional, a second concurrent caller blocks here until the first commits,
@@ -270,6 +280,18 @@ public class VaultDocumentService {
      * document is still DRAFT (its status flip happens only after this returns right, back in
      * {@link #publish(String, String)}), and {@code validateAndConsume}'s compare-and-set means the
      * ceremony itself only ever advances to {@code CONSUMED} on the right path.
+     *
+     * <p><b>Every Left is forced to HTTP 422 (M3 cross-review F7 fix).</b> {@link
+     * AttestationFreezeGuard#verifyFreshness} and {@code keri_attestation}'s {@code
+     * AttestationConsumptionApi#validateAndConsume} build their own {@link ProblemDetail}s with
+     * whatever native status fits THEIR domain — {@code CEREMONY_NOT_FOUND} is 404,
+     * {@code CEREMONY_FORBIDDEN} is 403, {@code IDENTITY_RELINKED}/{@code CEREMONY_EXPIRED}/
+     * {@code CEREMONY_INVALID_STATE} are 409, etc. Design §5.1 draws the status boundary at THIS
+     * module instead: every attested-publish failure, regardless of its origin, is a 422 to the
+     * caller of {@code publish} — the frontend switches on the problem's TITLE, never its status, so
+     * collapsing the status here costs it nothing while keeping "this HTTP verb/resource failed" a
+     * single, predictable code. The original title and detail are preserved verbatim; only the status
+     * is overwritten.
      */
     private Either<ProblemDetail, Void> consumeAttestation(VaultDocumentEntity document, String attestationCeremonyId) {
         AttestationFreezeGuard freezeGuard = attestationFreezeGuardProvider.getIfAvailable();
@@ -281,16 +303,22 @@ public class VaultDocumentService {
 
         Optional<ProblemDetail> freshnessProblem = freezeGuard.verifyFreshness(document, attestationCeremonyId);
         if (freshnessProblem.isPresent()) {
-            return Either.left(freshnessProblem.get());
+            return Either.left(as422(freshnessProblem.get()));
         }
 
         Either<ProblemDetail, ConsumedAttestation> consumed = consumptionApi.validateAndConsume(
                 attestationCeremonyId, ATTESTATION_TARGET_TYPE_DOCUMENT, document.getId(), securityHelper.getCurrentUserId());
         if (consumed.isLeft()) {
-            return Either.left(consumed.getLeft());
+            return Either.left(as422(consumed.getLeft()));
         }
 
         return Either.right(null);
+    }
+
+    /** F7 fix: rebuilds {@code original} with its title and detail preserved but its status forced to
+     *  422 — see {@link #consumeAttestation}'s javadoc for why. */
+    private static ProblemDetail as422(ProblemDetail original) {
+        return VaultProblems.unprocessable(original.getTitle(), original.getDetail());
     }
 
     /**

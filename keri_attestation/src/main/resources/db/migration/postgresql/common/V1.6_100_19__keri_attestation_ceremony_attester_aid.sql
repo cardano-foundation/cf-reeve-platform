@@ -1,0 +1,12 @@
+-- Attesting AID (F1 fix, Codex M3 cross-review): the KERI AID that actually attested this ceremony,
+-- persisted immutably at ATTEST_ANCHORED completion time (KeriAttestService#resolveAndComplete) from
+-- the wallet AID the remotesign request was actually sent to and answered by. Nullable: a pre-upgrade
+-- row that reached CONSUMED before this column existed carries no persisted AID of its own -
+-- CeremonyService#findConsumed/#validateAndConsume fall back to the CURRENT identity link for those
+-- rows only (the same behavior this fix replaces for every ceremony going forward).
+--
+-- Persisting this immutably, instead of re-deriving the aid from the CURRENT identity link at
+-- consume/dispatch time, is what stops a consume -> relink -> delayed dispatch interleaving from
+-- emitting a CIP-170 label 170 attestation under the NEW (post-relink) AID while still carrying the
+-- OLD digest/kelSequence that were actually anchored under the ORIGINAL identity.
+ALTER TABLE keri_attestation_ceremony ADD COLUMN IF NOT EXISTS attester_aid VARCHAR(255);

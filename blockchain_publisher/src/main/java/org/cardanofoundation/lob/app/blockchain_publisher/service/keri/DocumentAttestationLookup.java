@@ -2,8 +2,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.keri;
 
 import java.util.Optional;
 
-import lombok.RequiredArgsConstructor;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
@@ -39,6 +37,14 @@ import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFact
  *       the ceremony is not in {@code CONSUMED} state (a dispatch record should only ever carry a
  *       ceremony id that {@code VaultDocumentService#publish} already consumed via {@code
  *       validateAndConsume}, so this should also be unreachable in practice).</li>
+ *   <li><b>metadata label mismatch</b> (M3 cross-review F3 fix) - {@code consumed.metadataLabel()}
+ *       (the Cardano metadata label the ceremony's frozen digest was actually anchored under, set at
+ *       ATTEST time from the SAME configured label {@link #metadataTag} carries here) must equal
+ *       {@link #metadataTag} - the label {@code DocumentL1TransactionCreator} is ACTUALLY about to
+ *       dispatch this document under. A mismatch means the label this deployment publishes under was
+ *       reconfigured between freeze/ATTEST time and dispatch time; publishing under the new label
+ *       while the attestation still names the old one would produce an on-chain CIP-170 attestation
+ *       that no longer describes where the document metadata actually landed.</li>
  *   <li><b>digest mismatch</b> - the digest recomputed from the reconstructed frozen bytes must equal
  *       BOTH the freeze row's own {@code digestQb64} (guards non-deterministic CBOR re-encoding
  *       between freeze time and dispatch time) AND the ceremony's consumed {@code digestQb64} (guards
@@ -50,12 +56,45 @@ import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFact
  * DocumentAttestationTargetProvider} / {@code DocumentAttestationFreezeGuard} precedent, Tasks 13/14),
  * conditional on {@code lob.keri-attestation.enabled}.
  */
-@RequiredArgsConstructor
 public class DocumentAttestationLookup {
+
+    /** CIP-170 attestation metadata itself is always published under label 170 ({@code
+     *  Cip170MetadataFactory}) - reserved and never available for {@link #metadataTag} (M3 cross-review
+     *  F3 fix). See this class's constructor for the fail-fast check. */
+    private static final int RESERVED_CIP_170_LABEL = 170;
 
     private final DocumentAttestationFreezeRepository freezeRepository;
     private final AttestationConsumptionApi attestationConsumptionApi;
     private final Cip170MetadataFactory cip170MetadataFactory;
+    /**
+     * The SAME {@code ${lob.l1.transaction.metadata_label:1447}} value {@code TransactionSubmissionConfig}
+     * wires into {@code documentL1TransactionCreator}'s {@code metadataTag} and {@code
+     * DocumentAttestationTargetProvider}'s {@code metadataLabel} (M3 milestone-review finding those two
+     * beans already share) - threaded through here too so {@link #loadForDispatch} can enforce that the
+     * ceremony's persisted {@code metadataLabel} still agrees with the label dispatch is ACTUALLY about
+     * to publish under (M3 cross-review F3 fix), not just with what it was at freeze time.
+     */
+    private final int metadataTag;
+
+    /**
+     * @throws IllegalStateException if {@code metadataTag} is {@code 170} - that
+     *         label is reserved for the CIP-170 attestation map itself ({@link Cip170MetadataFactory}).
+     *         A deployment configuring the document metadata label to 170 would make an attested
+     *         dispatch overwrite (or collide with) its own attestation under the same label; refusing
+     *         to start is strictly better than silently corrupting on-chain metadata the first time a
+     *         document is dispatched (M3 cross-review F3 fix).
+     */
+    public DocumentAttestationLookup(DocumentAttestationFreezeRepository freezeRepository,
+            AttestationConsumptionApi attestationConsumptionApi, Cip170MetadataFactory cip170MetadataFactory,
+            int metadataTag) {
+        if (metadataTag == RESERVED_CIP_170_LABEL) {
+            throw new IllegalStateException("metadata label 170 is reserved for CIP-170 attestations");
+        }
+        this.freezeRepository = freezeRepository;
+        this.attestationConsumptionApi = attestationConsumptionApi;
+        this.cip170MetadataFactory = cip170MetadataFactory;
+        this.metadataTag = metadataTag;
+    }
 
     /**
      * Everything {@code DocumentL1TransactionCreator} needs to build an attested dispatch: the frozen
@@ -67,8 +106,8 @@ public class DocumentAttestationLookup {
     }
 
     /**
-     * Runs the three checks in the class javadoc's ordered list (missing freeze, non-consumed
-     * ceremony, digest mismatch) and nothing else.
+     * Runs the four checks in the class javadoc's ordered list (missing freeze, non-consumed
+     * ceremony, metadata label mismatch, digest mismatch) and nothing else.
      *
      * <p><b>Deliberately no freeze-age check here.</b> {@code DocumentAttestationFreezeGuard} (Task
      * 14, design §5.2) is the ONLY place a freeze's age is ever checked - once, synchronously, inside
@@ -101,6 +140,13 @@ public class DocumentAttestationLookup {
                     "Ceremony %s has not reached CONSUMED; dispatch cannot proceed.".formatted(ceremonyId)));
         }
         ConsumedAttestation consumed = consumedM.get();
+
+        // M3 cross-review F3 fix: the ceremony's persisted metadataLabel must still agree with the
+        // label this dispatch is actually about to publish under - checked before the (more expensive)
+        // digest recomputation below, cheapest-first like every other check in this method.
+        if (!consumed.metadataLabel().equals(String.valueOf(metadataTag))) {
+            return Either.left(labelMismatchProblem(documentId, ceremonyId, consumed.metadataLabel(), metadataTag));
+        }
 
         MetadataMap frozenMap = reconstruct(freeze.getFrozenMetadataCbor());
         String recomputed = cip170MetadataFactory.digestOf(frozenMap);
@@ -136,6 +182,15 @@ public class DocumentAttestationLookup {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY,
                 "Recomputed digest %s for document %s / ceremony %s does not match freeze digest %s / consumed digest %s."
                         .formatted(recomputed, documentId, ceremonyId, frozenDigest, consumedDigest));
+        problem.setTitle(VaultProblems.ATTESTED_METADATA_MISMATCH);
+        return problem;
+    }
+
+    private static ProblemDetail labelMismatchProblem(String documentId, String ceremonyId, String consumedLabel,
+            int dispatchMetadataTag) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY,
+                ("Ceremony %s attested document %s under metadata label %s, but dispatch is configured to publish "
+                        + "under label %d.").formatted(ceremonyId, documentId, consumedLabel, dispatchMetadataTag));
         problem.setTitle(VaultProblems.ATTESTED_METADATA_MISMATCH);
         return problem;
     }

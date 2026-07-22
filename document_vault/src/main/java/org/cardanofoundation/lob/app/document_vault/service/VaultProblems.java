@@ -31,6 +31,10 @@ public final class VaultProblems {
     /** keri_attestation's consumption/freeze-guard ports are not wired up in this deployment
      *  (module disabled) — a plain (bodiless) publish never reaches this check. */
     public static final String ATTESTATION_UNAVAILABLE = "ATTESTATION_UNAVAILABLE";
+    /** {@code attestationCeremonyId} was present in the request body but blank/whitespace-only (M3
+     *  cross-review F6 fix) — rejected outright rather than silently normalized to "no ceremony,
+     *  plain publish"; omit the field entirely for that. */
+    public static final String ATTESTATION_CEREMONY_ID_BLANK = "ATTESTATION_CEREMONY_ID_BLANK";
     /** No {@code document_attestation_freeze} row for this (document, ceremony) pair — impossible
      *  by construction unless the ceremony never reached ATTEST, so this should never be reachable
      *  in practice; still fails closed rather than falling back to a plain publish. */

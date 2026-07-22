@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.keri;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -52,8 +53,15 @@ class DocumentAttestationLookupTest {
         attestationConsumptionApi = mock(AttestationConsumptionApi.class);
     }
 
+    private static final int METADATA_TAG = 1447;
+
     private DocumentAttestationLookup lookup() {
-        return new DocumentAttestationLookup(freezeRepository, attestationConsumptionApi, cip170MetadataFactory);
+        return lookup(METADATA_TAG);
+    }
+
+    private DocumentAttestationLookup lookup(int metadataTag) {
+        return new DocumentAttestationLookup(freezeRepository, attestationConsumptionApi, cip170MetadataFactory,
+                metadataTag);
     }
 
     /** Builds a small, realistic 1447-style map and its correct frozen CBOR bytes + digest, mirroring
@@ -120,6 +128,37 @@ class DocumentAttestationLookupTest {
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo(VaultProblems.ATTESTATION_FREEZE_MISSING);
         assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY.value());
+    }
+
+    // --- loadForDispatch: metadata label mismatch (M3 cross-review F3 fix) ---
+
+    @Test
+    void loadForDispatchFailsClosedWhenTheConsumedMetadataLabelDoesNotMatchTheConfiguredDispatchLabel() {
+        MetadataMap map = sampleMap();
+        byte[] frozenBytes = frozenBytesFor(map);
+        String digest = cip170MetadataFactory.digestOf(map);
+        when(freezeRepository.findByDocumentIdAndCeremonyId(DOCUMENT_ID, CEREMONY_ID))
+                .thenReturn(Optional.of(freeze(frozenBytes, digest, "bafy-cid-1")));
+        // The ceremony was attested under label "1447" (see consumed()), but this lookup is configured
+        // with a different dispatch label - digests would still agree, so the label mismatch alone must
+        // reject before any digest recomputation happens.
+        when(attestationConsumptionApi.findConsumed(CEREMONY_ID)).thenReturn(Optional.of(consumed(digest)));
+
+        Either<ProblemDetail, AttestedDispatchData> result = lookup(9999).loadForDispatch(DOCUMENT_ID, CEREMONY_ID);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(VaultProblems.ATTESTED_METADATA_MISMATCH);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY.value());
+        assertThat(result.getLeft().getDetail()).contains("1447").contains("9999");
+    }
+
+    // --- constructor: fail-fast on the reserved CIP-170 label (M3 cross-review F3 fix) ---
+
+    @Test
+    void constructorRejectsMetadataTag170SinceItIsReservedForCip170Attestations() {
+        assertThatThrownBy(() -> lookup(170))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("170");
     }
 
     // --- loadForDispatch: digest mismatch ---

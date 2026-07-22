@@ -107,6 +107,20 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "kel_event_said")
     private String kelEventSaid;
 
+    /** F1 fix: the KERI AID that actually attested this ceremony — the wallet AID the remotesign
+     *  request was sent to and answered by, persisted immutably by
+     *  {@code KeriAttestService#resolveAndComplete} alongside {@link #kelSequence}/{@link
+     *  #kelEventSaid} at the moment this ceremony reaches {@code ATTEST_ANCHORED}. Read (never
+     *  re-derived) by {@code CeremonyService#validateAndConsume}/{@code CeremonyService#findConsumed}
+     *  to build {@code ConsumedAttestation.aid}, so a consume that races a relink of the SAME user can
+     *  never emit a CIP-170 attestation under the new (post-relink) AID while still carrying the
+     *  digest/kelSequence anchored under the original one. {@code null} only for a ceremony that
+     *  reached {@code ATTEST_ANCHORED} before this column existed (pre-upgrade row) — those fall back
+     *  to the CURRENT identity link's AID instead. */
+    @Nullable
+    @Column(name = "attester_aid")
+    private String attesterAid;
+
     /** F5 fix: the wallet's KEL sequence (hex) at ATTEST-request time, queried and persisted BEFORE the
      *  remotesign request is sent. Any candidate/fallback anchoring event {@code awaitAnchor} accepts
      *  must have a sequence at or after this floor, so an old KEL event that happens to carry the same

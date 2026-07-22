@@ -177,9 +177,16 @@ public class TransactionSubmissionConfig {
     public DocumentAttestationLookup documentAttestationLookup(
             DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
             AttestationConsumptionApi attestationConsumptionApi,
-            Cip170MetadataFactory cip170MetadataFactory
+            Cip170MetadataFactory cip170MetadataFactory,
+            // Same property (and default) documentL1TransactionCreator/documentAttestationTargetProvider
+            // are wired with above - so loadForDispatch's label check (M3 cross-review F3 fix) compares
+            // against the label dispatch is ACTUALLY publishing under, not a value that could silently
+            // drift from it. DocumentAttestationLookup's own constructor fails fast if this is ever 170
+            // (reserved for the CIP-170 attestation map itself).
+            @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel
     ) {
-        return new DocumentAttestationLookup(documentAttestationFreezeRepository, attestationConsumptionApi, cip170MetadataFactory);
+        return new DocumentAttestationLookup(documentAttestationFreezeRepository, attestationConsumptionApi,
+                cip170MetadataFactory, metadataLabel);
     }
 
     @Bean

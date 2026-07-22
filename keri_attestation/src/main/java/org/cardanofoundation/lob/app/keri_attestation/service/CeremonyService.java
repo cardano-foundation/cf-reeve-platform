@@ -75,6 +75,23 @@ public class CeremonyService implements AttestationConsumptionApi {
      * re-asks for something the user has already done at the identity level. {@code bindingVersion} is
      * captured from the link at creation time so a later relink can invalidate this ceremony
      * ({@link #validateAndConsume} checks it — design §4.7).
+     *
+     * <p><b>F5 fix — serialized against relink via the link lock.</b> The identity-link read below
+     * uses {@link KeriIdentityLinkRepository#findByUserIdForUpdate}, not a plain read: without it, a
+     * ceremony could be created between {@code KeriOobiService}'s relink invalidating this user's open
+     * ceremonies and that same relink updating the link row, and would then survive bound to a
+     * {@code bindingVersion} the link no longer carries — wasted freeze/anchor work that {@link
+     * #validateAndConsume} eventually rejects anyway, but only after the fact. Taking the link lock
+     * here serializes {@code create} against exactly that window.
+     *
+     * <p>Lock-order safety: this method holds ONLY the link lock, for the rest of this transaction, and
+     * never locks (or even reads) any ceremony row — it only inserts a brand-new one. It therefore
+     * cannot participate in the ceremony-before-link lock-order cycle {@link #completeStep}'s javadoc
+     * documents: completing that cycle would require this method to also take a ceremony lock while
+     * still holding the link lock, which it never does. Relink ({@code KeriOobiService#persistLink})
+     * takes ceremony locks first and the link lock last, so the two can never deadlock against each
+     * other either — relink can be blocked waiting on the link lock this method holds, but this method
+     * never waits on anything relink might be holding in return.
      */
     public Either<ProblemDetail, CeremonyView> create(String userId, String targetType, String targetId) {
         // Unlocked read-then-write: two concurrent create() calls for the same user can both pass this
@@ -98,7 +115,9 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(authFailure.get());
         }
 
-        Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
+        // F5 fix: the locked finder, not a plain findById — see this method's javadoc for why (and why
+        // it is lock-order safe).
+        Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findByUserIdForUpdate(userId);
         int bindingVersion = linkOpt.map(KeriIdentityLinkEntity::getBindingVersion).orElse(0);
         CeremonyState initialState = fastForwardState(linkOpt);
 
@@ -357,8 +376,8 @@ public class CeremonyService implements AttestationConsumptionApi {
         ceremony.setUpdatedAt(LocalDateTime.now());
         ceremonyRepository.save(ceremony);
 
-        return Either.right(new ConsumedAttestation(ceremony.getId(), link.getAid(), ceremony.getMetadataDigest(),
-                ceremony.getMetadataLabel(), ceremony.getKelSequence()));
+        return Either.right(new ConsumedAttestation(ceremony.getId(), resolveAttesterAid(ceremony, link),
+                ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
     }
 
     @Override
@@ -375,14 +394,39 @@ public class CeremonyService implements AttestationConsumptionApi {
      * link), it only re-derives the {@link ConsumedAttestation} a prior, already-committed {@link
      * #validateAndConsume} call produced, so there is nothing here to serialize against a concurrent
      * writer.
+     *
+     * <p>F1 fix: the returned {@code aid} comes from the ceremony's own persisted {@code
+     * KeriAttestationCeremonyEntity#getAttesterAid()} whenever it is set — never from the CURRENT
+     * identity link — so a consume that is followed by a relink of the same user cannot make a later
+     * (e.g. delayed dispatch retry) reader of this ceremony see the NEW aid alongside the digest/
+     * kelSequence that were actually anchored under the OLD one. The identity link is looked up only
+     * as a fallback, and only for a pre-upgrade row that reached {@code CONSUMED} before {@code
+     * attesterAid} existed (see {@code KeriAttestationCeremonyEntity#getAttesterAid()}'s javadoc).
      */
     @Override
     public Optional<ConsumedAttestation> findConsumed(String ceremonyId) {
         return ceremonyRepository.findById(ceremonyId)
                 .filter(ceremony -> ceremony.getState() == CeremonyState.CONSUMED)
-                .flatMap(ceremony -> identityLinkRepository.findById(ceremony.getUserId())
-                        .map(link -> new ConsumedAttestation(ceremony.getId(), link.getAid(),
-                                ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence())));
+                .flatMap(this::toConsumedAttestation);
+    }
+
+    private Optional<ConsumedAttestation> toConsumedAttestation(KeriAttestationCeremonyEntity ceremony) {
+        if (ceremony.getAttesterAid() != null) {
+            return Optional.of(new ConsumedAttestation(ceremony.getId(), ceremony.getAttesterAid(),
+                    ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
+        }
+        // Pre-upgrade fallback (F1 fix): no attesterAid was ever persisted for this ceremony — fall
+        // back to the CURRENT identity link exactly like every caller did before this fix.
+        return identityLinkRepository.findById(ceremony.getUserId())
+                .map(link -> new ConsumedAttestation(ceremony.getId(), link.getAid(),
+                        ceremony.getMetadataDigest(), ceremony.getMetadataLabel(), ceremony.getKelSequence()));
+    }
+
+    /** F1 fix: {@code ceremony}'s own persisted {@code KeriAttestationCeremonyEntity#getAttesterAid()}
+     *  is authoritative whenever set; {@code link} (the caller's already-loaded, current identity link)
+     *  is consulted only as the pre-upgrade fallback — see {@link #findConsumed}'s javadoc. */
+    private static String resolveAttesterAid(KeriAttestationCeremonyEntity ceremony, KeriIdentityLinkEntity link) {
+        return ceremony.getAttesterAid() != null ? ceremony.getAttesterAid() : link.getAid();
     }
 
     // --- internals ---
