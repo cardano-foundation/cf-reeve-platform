@@ -128,3 +128,30 @@ deleted, if a given run did not get far enough to answer them.)*
 - Pinned CIP-170 commit used for this run: see "Pinned commit" under [CIP-170 reference](#cip-170-reference)
   above — confirm it is still the latest commit touching `CIP-0170` at the time this spike is actually
   run, and re-pin (with a fresh cross-check of the field tables) if not.
+
+## Manual end-to-end verification (M4 gate — run with a real Veridian wallet)
+
+Prerequisites: backend running with `lob.keri-attestation.enabled=true`, `lob.document_vault.enabled=true`,
+`lob.keri-attestation.keria.url`/`boot-url`/`bran` pointing at the Reeve KERIA, `credential-policy`
+(schema SAIDs + trusted root AIDs) configured, Blockfrost + IPFS configured for the publisher (preprod),
+frontend worktree served against it. The remotesign spike (above) should run FIRST — it settles the
+provisional KED shape in `RemotesignRequestFactory`.
+
+1. **Pair** — upload a DRAFT document, click Publish → choose "Attest & publish with Veridian".
+   Scan the agent QR with Veridian (contact appears in the app); paste or camera-scan your wallet OOBI
+   back. Expect the wizard to advance past Pair.
+2. **Credential** — trigger the request; share the credential from Veridian. Expect advancement to the
+   one-time authorization step (or straight to Attest on a relinked identity).
+3. **AUTH_BEGIN** — choose "Publish my credential chain now". Expect a tx hash + confirmation progress,
+   then advancement. Verify on-chain (preprod explorer): label 170, `t=AUTH_BEGIN`, `i`=your AID,
+   `s`=your leaf schema SAID, `c` chunks reassemble to a parseable CESR stream, `m.l=[1447]`.
+4. **Attest** — approve the signing request in Veridian. Expect ATTEST_ANCHORED then automatic publish.
+5. **Dispatch** — wait for the document to reach FINALIZED. Verify the publish tx carries BOTH labels:
+   1447 (document metadata) and 170 with `t=ATTEST`, `i`=your AID, `d` = Blake3-256 Diger qb64 of the
+   label-1447 value bytes (recompute via `docs/keri/AttestTransaction.java` logic or the
+   keri-cardano-tx-attestation-frontend), `s` = the KEL sequence of your anchoring interaction event —
+   fetch your KEL and confirm the seal at that sequence equals `d`.
+6. **Returning-user path** — publish a second document: the wizard must show ONLY the Attest step.
+7. **Fail-closed spot-check** — modify a DRAFT after starting (but not finishing) an attest ceremony,
+   then complete the wallet approval and publish: expect `ATTESTED_CONTENT_CHANGED` (422) and the
+   "start a new attestation" recovery in the UI.
