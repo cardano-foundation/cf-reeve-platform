@@ -64,8 +64,13 @@ import org.cardanofoundation.signify.core.States.HabState;
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
 public class KeriCredentialService {
 
-    private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer");
-    private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant");
+    // KERIA surfaces an inbound IPEX exn's route on the notification as EITHER the "/exn/"-prefixed
+    // form or the bare form, non-deterministically — cip113's IpexNotificationHelper.waitForNotification
+    // accepts both (it derives the bare form via route.substring(4)). Matching only the "/exn/" form
+    // silently drops the wallet's offer/grant notification, so the credential step hangs even though the
+    // wallet responded. Accept both forms exactly as the reference does.
+    private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer", "/ipex/offer");
+    private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
 
     /** cip113's exact {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6): passed
      *  explicitly to every exn this class builds rather than relying on the pinned signify jar's own

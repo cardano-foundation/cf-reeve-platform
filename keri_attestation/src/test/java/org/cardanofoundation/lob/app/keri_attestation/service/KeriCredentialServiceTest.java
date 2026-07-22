@@ -81,8 +81,10 @@ class KeriCredentialServiceTest {
     private static final String RESULT_SCHEMA_SAID = "ELEAFSCHEMA0000000000000000000000000000";
     private static final String OFFER_NOTIF_ID = "0AOFFERNOTIFID0000000000000000000";
     private static final String GRANT_NOTIF_ID = "0AGRANTNOTIFID0000000000000000000";
-    private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer");
-    private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant");
+    // Mirrors KeriCredentialService's constants: both the "/exn/"-prefixed and bare route forms, since
+    // KERIA surfaces the notification route in either form (cip113 parity).
+    private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer", "/ipex/offer");
+    private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
 
     @Mock
     private SignifyClient client;

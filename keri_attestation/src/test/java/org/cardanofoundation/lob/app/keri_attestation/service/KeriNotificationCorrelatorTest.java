@@ -576,6 +576,24 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
+    void awaitByRouteClaimsTheBareRouteFormWhenBothFormsAreAccepted() throws Exception {
+        // KERIA can surface an IPEX offer/grant notification's route in the bare form ("/ipex/offer")
+        // rather than the "/exn/"-prefixed one; cip113 accepts both. When the caller passes both forms
+        // (as OFFER_ROUTES/GRANT_ROUTES now do), a bare-route notification must still be claimed --
+        // otherwise the credential step hangs after the wallet has already responded.
+        String bareRoute = "/ipex/offer";
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, bareRoute, REFERENCED_EXN_SAID)));
+        when(exchanges.get(REFERENCED_EXN_SAID))
+                .thenReturn(exchangeWithRouteAndSaid(SENDER_AID, bareRoute, REFERENCED_EXN_SAID));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of("/exn/ipex/offer", bareRoute), Duration.ofSeconds(2));
+
+        assertTrue(result.isPresent());
+        assertEquals(NOTIFICATION_ID, result.get().notificationId());
+    }
+
+    @Test
     void awaitByRoutePrefersTheFetchedExchangesOwnDOverTheNotificationsClaimedSaid() throws Exception {
         // cip113 parity: KeriService#presentCredential reads offerResource.getExn().getD() /
         // grantResource.getExn().getD() AFTER the fetch, not the notification body's own a.d.
