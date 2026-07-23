@@ -15,7 +15,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -55,7 +54,6 @@ import org.cardanofoundation.signify.app.coring.Oobis;
 import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
 import org.cardanofoundation.signify.app.credentialing.ipex.Ipex;
-import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.cesr.Serder;
 import org.cardanofoundation.signify.core.States;
 
@@ -335,70 +333,6 @@ class KeriCredentialServiceTest {
                 payloadCaptor.getValue());
     }
 
-    // ==================== presentCredential: stale-notification-replay fix ====================
-
-    @Test
-    void presentCredentialPurgesStaleUnclaimedNotificationsBeforeApplyThenAdmitsOnlyTheGrantThatArrivesAfter()
-            throws Exception {
-        // Stale-notification-replay fix (live Veridian evidence): a leftover unread grant from an
-        // abandoned earlier attempt must never be admitted. Simulated here as correlator.purgeUnclaimed
-        // reporting 1 purged (the stale grant, found and purged by the first notification list()
-        // BEFORE the apply is even sent); the awaitByRoute call that follows the apply then claims a
-        // genuinely NEW grant -- the only one this flow may ever admit.
-        String newGrantSaid = "ENEWGRANTSAID000000000000000000000000";
-        String newCredentialSaid = "ENEWCREDSAID0000000000000000000000000";
-        String newGrantNotifId = "0ANEWGRANTNOTIFID000000000000000";
-
-        KeriAttestationCeremonyEntity ceremony = ceremony(null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
-                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        Serder applyExn = serderWithSaid(APPLY_SAID);
-        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
-                .thenReturn(new ExchangeMessageResult(applyExn, List.of("sig1"), "atc1"));
-        stubGuardedUpdateSuccess(ceremony);
-
-        // Simulates: the notification list() inside purgeUnclaimed found the stale unread grant and
-        // purged it (markAndDelete-ing it) before the apply below was ever sent.
-        when(correlator.purgeUnclaimed(OFFER_OR_GRANT_ROUTES)).thenReturn(1);
-        // The await AFTER the purge -- and after the apply is sent -- claims only the NEW grant.
-        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
-                .thenReturn(Optional.of(new CorrelatedNotification(newGrantNotifId, newGrantSaid,
-                        directGrantExn(LINKED_AID, newCredentialSaid), "/exn/ipex/grant")));
-
-        Serder admitExn = serderWithSaid(ADMIT_SAID);
-        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
-        // Not stubbed: identityLinkRepository.findByUserIdForUpdate is only reached from INSIDE
-        // completeStep's mutator, which this test's mock completeStep (below) never actually invokes —
-        // this test is about the purge/apply/await/admit ordering, not the link-persist side effect
-        // (already covered by presentCredentialGrantArrivesDirectlyAdmitsWithoutOfferOrAgreeUsingTheAdmitsOwnAtc).
-        when(credentials.get(newCredentialSaid)).thenReturn(Optional.of("FULL-CESR-STREAM"));
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
-                .thenReturn(Either.right(new ValidatedCredential(newCredentialSaid, RESULT_SCHEMA_SAID)));
-        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
-                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
-        when(ceremonyService.get(CEREMONY_ID, USER_ID))
-                .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
-
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
-
-        assertTrue(result.isRight());
-
-        // purge -> apply -> await -> admit, strictly in that order (the fix's own edge-case guarantee:
-        // the purge always completes before the apply that could elicit a genuine reply is even sent).
-        InOrder inOrder = inOrder(correlator, ipex);
-        inOrder.verify(correlator).purgeUnclaimed(OFFER_OR_GRANT_ROUTES);
-        inOrder.verify(ipex).submitApply(any(), any(), any(), any());
-        inOrder.verify(correlator).awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any());
-        inOrder.verify(ipex).admit(any());
-
-        ArgumentCaptor<IpexAdmitArgs> admitArgsCaptor = ArgumentCaptor.forClass(IpexAdmitArgs.class);
-        verify(ipex).admit(admitArgsCaptor.capture());
-        assertEquals(newGrantSaid, admitArgsCaptor.getValue().getGrantSaid());
-        verify(credentials).get(newCredentialSaid);
-        verify(correlator).markAndDelete(newGrantNotifId);
-    }
-
     // ==================== presentCredential: guard failures ====================
 
     @Test
@@ -444,10 +378,7 @@ class KeriCredentialServiceTest {
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
-        // Stale-notification-replay fix: purgeUnclaimed is now called right before every fresh apply is
-        // sent (including one that then fails to build) -- but nothing else on correlator happens here.
-        verify(correlator).purgeUnclaimed(OFFER_OR_GRANT_ROUTES);
-        verifyNoMoreInteractions(correlator);
+        verifyNoInteractions(correlator);
     }
 
     @Test
@@ -468,10 +399,7 @@ class KeriCredentialServiceTest {
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
         assertEquals(APPLY_SAID, ceremony.getRequestExnSaid());
-        // Stale-notification-replay fix: purgeUnclaimed is now called right before every fresh apply is
-        // sent (including one whose submit then fails) -- but nothing else on correlator happens here.
-        verify(correlator).purgeUnclaimed(OFFER_OR_GRANT_ROUTES);
-        verifyNoMoreInteractions(correlator);
+        verifyNoInteractions(correlator);
     }
 
     @Test
@@ -649,9 +577,6 @@ class KeriCredentialServiceTest {
         verify(ipex, never()).submitApply(any(), any(), any(), any());
         verify(ipex).admit(any());
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
-        // Stale-notification-replay fix: the retry pre-check found this offer itself, so purging must be
-        // skipped entirely here -- purging would delete the very notification just resumed from.
-        verify(correlator, never()).purgeUnclaimed(any());
     }
 
     @Test
@@ -672,9 +597,6 @@ class KeriCredentialServiceTest {
 
         assertTrue(result.isRight());
         verify(ipex).submitApply(eq(AGENT_NAME), any(), eq(List.of("sig1")), eq(List.of(LINKED_AID)));
-        // Stale-notification-replay fix: the retry pre-check found nothing usable, so the apply IS
-        // resent -- and the purge must run exactly once, before that resend.
-        verify(correlator).purgeUnclaimed(OFFER_OR_GRANT_ROUTES);
     }
 
     // ==================== presentCredential: dual-path (spontaneous grant) ====================
@@ -810,9 +732,6 @@ class KeriCredentialServiceTest {
         verify(ipex, never()).agree(any());
         verify(ipex).admit(any());
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
-        // Stale-notification-replay fix: the retry pre-check found this grant itself, so purging must be
-        // skipped entirely here -- purging would delete the very notification just resumed from.
-        verify(correlator, never()).purgeUnclaimed(any());
     }
 
     @Test

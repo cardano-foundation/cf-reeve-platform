@@ -72,15 +72,6 @@ import org.cardanofoundation.signify.core.States.HabState;
  * route and branches on which one actually arrived: a grant skips the offer/agree steps entirely and
  * admits directly (using the admit's own {@code atc} — there is no agree to borrow one from); an offer
  * falls through to the original negotiation, unchanged.
- *
- * <p><b>Stale-notification-replay fix (live Veridian evidence):</b> before every fresh apply this class
- * sends, it first calls {@link KeriNotificationCorrelator#purgeUnclaimed} on the same offer/grant
- * routes it is about to wait on — a live run was observed to claim and admit an unread grant that was
- * only 300ms old but could not possibly have been a response to the apply that had just been sent
- * (impossibly fast for a human to have tapped "present" in the wallet), left over from an earlier,
- * abandoned presentation attempt; the wallet rejected the resulting duplicate/invalid admit, and the
- * real reply to the actual apply was never processed. See {@code purgeUnclaimed}'s own javadoc for the
- * full rationale and why no race is possible between the purge and the apply's own genuine reply.
  */
 @Service
 @RequiredArgsConstructor
@@ -192,17 +183,6 @@ public class KeriCredentialService {
         }
 
         if (claimedNotification == null) {
-            // Stale-notification-replay fix (live Veridian evidence): the apply about to be sent below
-            // is what PROMPTS the wallet to present at all, so any unread offer/grant already on the
-            // agent's queue right now cannot be a reply to it — it can only be debris from an earlier,
-            // abandoned attempt. Purging it here, immediately before the apply, guarantees the
-            // awaitByRoute wait below can only ever claim the reply THIS apply actually elicits (full
-            // rationale: KeriNotificationCorrelator#purgeUnclaimed's javadoc). No race is possible
-            // between this purge and a fresh, legitimate reply: the wallet only ever grants/offers in
-            // response to an apply we send, and the apply this purge guards is sent strictly AFTER it
-            // completes.
-            correlator.purgeUnclaimed(OFFER_OR_GRANT_ROUTES);
-
             Either<ProblemDetail, Void> sent = sendApply(ceremony, linkedAid, agentName);
             if (sent.isLeft()) {
                 ProblemDetail problem = sent.getLeft();
@@ -238,7 +218,7 @@ public class KeriCredentialService {
         if (isGrantRoute(claimedNotification)) {
             log.info("grant received directly (spontaneous presentation), admitting {}",
                     claimedNotification.exnSaid());
-            logGrantAcdc(claimedNotification.exn());
+            logGrantWireData(claimedNotification.exn());
             String directCredentialSaid = extractCredentialSaid(claimedNotification.exn());
             if (directCredentialSaid == null) {
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -253,6 +233,7 @@ public class KeriCredentialService {
                 // signify-ts's admitGrantOnWallet, the same no-preceding-agree scenario): submitAdmit is
                 // given the ADMIT's OWN atc here, not an agree's — there is no agree in this branch at
                 // all to borrow one from.
+                logAdmitExn(admitResult, claimedNotification.exnSaid(), linkedAid, "admit-own");
                 Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         admitResult.atc(), List.of(linkedAid));
                 client.client().operations().wait(Operation.fromObject(admitOp));
@@ -295,7 +276,7 @@ public class KeriCredentialService {
             }
             CorrelatedNotification grantNotification = grant.get();
             log.info("grant received {}", grantNotification.exnSaid());
-            logGrantAcdc(grantNotification.exn());
+            logGrantWireData(grantNotification.exn());
 
             String negotiatedCredentialSaid = extractCredentialSaid(grantNotification.exn());
             if (negotiatedCredentialSaid == null) {
@@ -309,6 +290,7 @@ public class KeriCredentialService {
                         .grantSaid(grantNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
                 // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE exchange's
                 // own atc, NOT the admit's own — a proven cip113 wallet-contract quirk this module matches.
+                logAdmitExn(admitResult, grantNotification.exnSaid(), linkedAid, "agree");
                 Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         agreeResult.atc(), List.of(linkedAid));
                 client.client().operations().wait(Operation.fromObject(admitOp));
@@ -605,7 +587,7 @@ public class KeriCredentialService {
     /** Same {@code exn.e.acdc} embed as {@link #extractCredentialSaid}, reading the schema ({@code s})
      *  instead of the SAID ({@code d}). {@code null} when the grant carries no ACDC at all — same
      *  tolerance as {@link #extractCredentialSaid}, since the caller's own "did not embed an ACDC" check
-     *  runs immediately after {@link #logGrantAcdc} either way. */
+     *  runs immediately after {@link #logGrantWireData} either way. */
     private static String extractAcdcSchemaSaid(Map<String, Object> grantExn) {
         Object e = grantExn.get("e");
         if (!(e instanceof Map<?, ?> em)) {
@@ -619,11 +601,51 @@ public class KeriCredentialService {
         return schemaSaid instanceof String s ? s : null;
     }
 
-    /** Through-validation logging (design fix): logs the grant's embedded ACDC identity and schema the
-     *  moment a grant is claimed — direct or negotiated, both branches call this — so a live run's log
-     *  always shows WHICH credential the wallet actually presented, before it is ever admitted. */
-    private static void logGrantAcdc(Map<String, Object> grantExn) {
-        log.info("grant carries ACDC {} of schema {}", extractCredentialSaid(grantExn), extractAcdcSchemaSaid(grantExn));
+    /** Same {@code exn.e.acdc} embed as {@link #extractCredentialSaid}/{@link #extractAcdcSchemaSaid},
+     *  reading the ACDC's issuee identity: {@code e.acdc.a.i} (the attribute block's own {@code i},
+     *  where a real ACDC normally carries it) when present, else {@code e.acdc.i} directly. {@code null}
+     *  when neither is present or the grant carries no ACDC at all — same tolerance as its siblings. */
+    private static String extractAcdcIssuee(Map<String, Object> grantExn) {
+        Object e = grantExn.get("e");
+        if (!(e instanceof Map<?, ?> em)) {
+            return null;
+        }
+        Object acdc = em.get("acdc");
+        if (!(acdc instanceof Map<?, ?> am)) {
+            return null;
+        }
+        Object a = am.get("a");
+        if (a instanceof Map<?, ?> aMap && aMap.get("i") instanceof String s) {
+            return s;
+        }
+        Object i = am.get("i");
+        return i instanceof String s ? s : null;
+    }
+
+    /** Wire-diagnostics logging (revert-purge round: the previous fix here — eagerly purging "stale"
+     *  unclaimed notifications right before every apply — turned out to delete the wallet's REAL grant
+     *  reply, since it sat unread from the user's own presentation; that purge has been reverted (see
+     *  the report). The next open question is why Veridian rejects our resulting admit, which needs the
+     *  exact wire data to answer — so this logs the grant exn's key routing fields and its embedded
+     *  ACDC identity the moment a grant is claimed, direct or negotiated (both branches call this),
+     *  before it is ever admitted. */
+    private static void logGrantWireData(Map<String, Object> grantExn) {
+        log.info("grant exn: i={} r={} p={} rp={}", grantExn.get("i"), grantExn.get("r"), grantExn.get("p"),
+                grantExn.get("rp"));
+        log.info("grant acdc: d={} s={} i={}", extractCredentialSaid(grantExn), extractAcdcSchemaSaid(grantExn),
+                extractAcdcIssuee(grantExn));
+    }
+
+    /** Wire-diagnostics logging (revert-purge round, same rationale as {@link #logGrantWireData}): logs
+     *  the admit exn actually built, right before it is submitted, in both branches — {@code atc} is a
+     *  descriptive label for WHICH atc submitAdmit is given (the admit's own, {@code "admit-own"}, in
+     *  the direct-grant branch; the agree's, {@code "agree"}, in the negotiated branch — see each call
+     *  site's own comment), not the raw atc bytes themselves. */
+    private static void logAdmitExn(ExchangeMessageResult admitResult, String grantSaid, String recipient,
+            String atc) {
+        Map<String, Object> ked = admitResult.exn().getKed();
+        log.info("admit exn: d={} p={} grantSaid={} recipient={} atc={}", ked.get("d"), ked.get("p"), grantSaid,
+                recipient, atc);
     }
 
     private static void interruptIfNeeded(Exception e) {
