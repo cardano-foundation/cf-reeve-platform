@@ -89,8 +89,12 @@ class KeriCredentialServiceTest {
     private static final String GRANT_NOTIF_ID = "0AGRANTNOTIFID0000000000000000000";
     // Mirrors KeriCredentialService's constants: both the "/exn/"-prefixed and bare route forms, since
     // KERIA surfaces the notification route in either form (cip113 parity).
-    private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer", "/ipex/offer");
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
+    // Dual-path presentation (design rev, live Veridian evidence): the initial post-apply wait (and the
+    // retry pre-check) awaits offer AND grant routes together, since a real Veridian build was observed
+    // to send the grant directly with no offer at all.
+    private static final List<String> OFFER_OR_GRANT_ROUTES =
+            List.of("/exn/ipex/offer", "/ipex/offer", "/exn/ipex/grant", "/ipex/grant");
 
     @Mock
     private SignifyClient client;
@@ -202,6 +206,16 @@ class KeriCredentialServiceTest {
         return Map.of("i", senderAid, "e", Map.of("acdc", Map.of("d", credentialSaid)));
     }
 
+    /** Same shape as {@link #grantExn}, but also carries its own {@code r} on the grant route — the
+     *  primary signal {@code KeriCredentialService#isGrantRoute} checks first (falling back to the
+     *  notification's claimed route only when this is absent/unrecognized). Used for the spontaneous
+     *  (direct) grant tests, which claim off the combined offer-or-grant wait and must be told apart
+     *  from an offer. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> directGrantExn(String senderAid, String credentialSaid) {
+        return Map.of("i", senderAid, "r", "/exn/ipex/grant", "e", Map.of("acdc", Map.of("d", credentialSaid)));
+    }
+
     private static CeremonyView ceremonyView(CeremonyState state) {
         return new CeremonyView(CEREMONY_ID, state, new RequiredSteps(false, false, false), null, null, null, null,
                 null, null);
@@ -235,7 +249,7 @@ class KeriCredentialServiceTest {
                 any(), any())).thenReturn(new ExchangeMessageResult(applyExn, List.of("sig1"), "atc1"));
         stubGuardedUpdateSuccess(ceremony);
 
-        lenient().when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
+        lenient().when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
 
         Serder agreeExn = serderWithSaid(AGREE_SAID);
@@ -389,7 +403,7 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void presentCredentialOfferTimeoutFailsWithKeriWalletTimeoutAndNeverBuildsAgree() throws Exception {
+    void presentCredentialOfferOrGrantTimeoutFailsWithKeriWalletTimeoutAndNeverBuildsAgreeOrAdmits() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
@@ -398,15 +412,17 @@ class KeriCredentialServiceTest {
         when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
                 .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
         stubGuardedUpdateSuccess(ceremony);
-        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any())).thenReturn(Optional.empty());
+        // Neither an offer nor a grant ever arrives.
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any())).thenReturn(Optional.empty());
 
         Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_WALLET_TIMEOUT, result.getLeft().getTitle());
         verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
-                KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/offer.");
+                KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/offer or /exn/ipex/grant.");
         verify(ipex, never()).agree(any());
+        verify(ipex, never()).admit(any());
         verify(correlator, never()).markAndDelete(any());
     }
 
@@ -420,7 +436,7 @@ class KeriCredentialServiceTest {
         when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
                 .thenReturn(new ExchangeMessageResult(applyExn, List.of("sig1"), "atc1"));
         stubGuardedUpdateSuccess(ceremony);
-        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
@@ -537,7 +553,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
-        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
         Serder agreeExn = serderWithSaid(AGREE_SAID);
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
@@ -570,10 +586,10 @@ class KeriCredentialServiceTest {
         stubHappyPath(ceremony);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
-        // The FIRST awaitByRoute(OFFER_ROUTES, ...) call is the short retry pre-check (must find
-        // nothing, so the apply actually gets resent); the SECOND is the normal post-apply wait
+        // The FIRST awaitByRoute(OFFER_OR_GRANT_ROUTES, ...) call is the short retry pre-check (must
+        // find nothing, so the apply actually gets resent); the SECOND is the normal post-apply wait
         // (stubHappyPath's own present-offer default, reused here for the second invocation).
-        when(correlator.awaitByRoute(eq(OFFER_ROUTES), any()))
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
 
@@ -581,6 +597,205 @@ class KeriCredentialServiceTest {
 
         assertTrue(result.isRight());
         verify(ipex).submitApply(eq(AGENT_NAME), any(), eq(List.of("sig1")), eq(List.of(LINKED_AID)));
+    }
+
+    // ==================== presentCredential: dual-path (spontaneous grant) ====================
+
+    @Test
+    void presentCredentialGrantArrivesDirectlyAdmitsWithoutOfferOrAgreeUsingTheAdmitsOwnAtc() throws Exception {
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder applyExn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(applyExn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
+
+        // Only an unread GRANT notification is ever present -- the live Veridian evidence this
+        // dual-path branch exists for: after the apply, the wallet sends a grant directly, with no
+        // offer (and therefore no agree) at all.
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        directGrantExn(LINKED_AID, CREDENTIAL_SAID), "/exn/ipex/grant")));
+
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
+
+        KeriIdentityLinkEntity freshLink = link(LINKED_AID);
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(freshLink));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
+        when(ceremonyService.get(CEREMONY_ID, USER_ID))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
+
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.CREDENTIAL_RECEIVED, result.get().state());
+
+        verify(ipex).submitApply(eq(AGENT_NAME), any(), eq(List.of("sig1")), eq(List.of(LINKED_AID)));
+        // The admit's OWN atc ("directAdmitAtc"), never an agree's -- there is no agree in this branch
+        // at all to borrow one from (verified finding -- see the report for the evidence trail).
+        verify(ipex).submitAdmit(eq(AGENT_NAME), any(), eq(List.of("sig3")), eq("directAdmitAtc"),
+                eq(List.of(LINKED_AID)));
+        verify(ipex, never()).agree(any());
+        verify(ipex, never()).submitAgree(any(), any(), any(), any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+
+        // The grant notification is claimed only AFTER fetch/validate/persist -- same durability
+        // contract as the negotiated path's own deferred delete (KeriNotificationCorrelator#markAndDelete's
+        // javadoc): nothing durable records which credential was admitted until completeStep commits, so
+        // deleting any earlier would let a crash between admit and persist silently lose the wallet's
+        // grant with no way for a retry to recover it.
+        InOrder inOrder = inOrder(ipex, operations, credentials, validator, ceremonyService, correlator);
+        inOrder.verify(ipex).admit(any());
+        inOrder.verify(ipex).submitAdmit(any(), any(), any(), any(), any());
+        inOrder.verify(operations).wait(any());
+        inOrder.verify(credentials).get(CREDENTIAL_SAID);
+        inOrder.verify(validator).validate(any(), any(), any(), any());
+        inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
+        inOrder.verify(correlator).markAndDelete(GRANT_NOTIF_ID);
+        verify(correlator, times(1)).markAndDelete(GRANT_NOTIF_ID);
+
+        ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> mutatorCaptor = ArgumentCaptor.forClass(Consumer.class);
+        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), mutatorCaptor.capture());
+        mutatorCaptor.getValue().accept(ceremony);
+        assertEquals(CREDENTIAL_SAID, freshLink.getCredentialSaid());
+        assertEquals(RESULT_SCHEMA_SAID, freshLink.getCredentialSchemaSaid());
+    }
+
+    @Test
+    void presentCredentialGrantArrivesDirectlyButValidatorRejectsFailsWithCredentialRejectedAndDoesNotMarkTheGrantNotification()
+            throws Exception {
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder applyExn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(applyExn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        directGrantExn(LINKED_AID, CREDENTIAL_SAID), "/exn/ipex/grant")));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        ProblemDetail rejection = KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REJECTED,
+                "issuee mismatch");
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.left(rejection));
+
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
+        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.CREDENTIAL_REJECTED, "issuee mismatch");
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
+        verify(identityLinkRepository, never()).save(any());
+        // Same durability contract as the negotiated path (see
+        // presentCredentialValidatorRejectionFailsWithCredentialRejectedAndDoesNotMarkTheGrantNotification):
+        // the grant is never deleted unless the credential was actually persisted.
+        verify(correlator, never()).markAndDelete(any());
+    }
+
+    @Test
+    void presentCredentialGrantArrivesDirectlyOnRetryPrecheckSkipsResendAndAdmitsWithoutAgree() throws Exception {
+        KeriAttestationCeremonyEntity ceremony = ceremony(APPLY_SAID);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        directGrantExn(LINKED_AID, CREDENTIAL_SAID), "/exn/ipex/grant")));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
+        when(ceremonyService.get(CEREMONY_ID, USER_ID))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
+
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, true);
+
+        assertTrue(result.isRight());
+        verify(exchanges, never()).createExchangeMessage(any(), eq("/ipex/apply"), any(), any(), any(), any(), any());
+        verify(ipex, never()).submitApply(any(), any(), any(), any());
+        verify(ipex, never()).agree(any());
+        verify(ipex).admit(any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void presentCredentialGrantArrivesDirectlyIsRecognizedViaClaimedRouteWhenTheFetchedExnHasNoOwnRoute()
+            throws Exception {
+        // isGrantRoute's fallback (KeriCredentialService javadoc): the fetched exn carries no "r" at
+        // all here, so the branch decision must fall back to the notification's own claimed route
+        // rather than default to (incorrectly) treating this as an offer.
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder applyExn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(applyExn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
+                        grantExn(LINKED_AID, CREDENTIAL_SAID), "/exn/ipex/grant")));
+        Serder admitExn = serderWithSaid(ADMIT_SAID);
+        when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
+        when(ceremonyService.get(CEREMONY_ID, USER_ID))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
+
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isRight());
+        verify(ipex, never()).agree(any());
+        verify(ipex, never()).submitAgree(any(), any(), any(), any());
+        verify(ipex).admit(any());
+        verify(ipex).submitAdmit(eq(AGENT_NAME), any(), eq(List.of("sig3")), eq("directAdmitAtc"),
+                eq(List.of(LINKED_AID)));
+    }
+
+    @Test
+    void presentCredentialGrantArrivesDirectlyWithoutAnEmbeddedAcdcFailsWithCredentialRequestFailedAndNeverAdmits()
+            throws Exception {
+        KeriAttestationCeremonyEntity ceremony = ceremony(null);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder applyExn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(applyExn, List.of("sig1"), "atc1"));
+        stubGuardedUpdateSuccess(ceremony);
+        Map<String, Object> grantExnWithoutAcdc = Map.of("i", LINKED_AID, "r", "/exn/ipex/grant");
+        when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID, grantExnWithoutAcdc,
+                        "/exn/ipex/grant")));
+
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
+        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
+        verify(ipex, never()).admit(any());
+        verify(correlator, never()).markAndDelete(any());
     }
 
     // ==================== schema OOBI resolution (Fix 3, live-testing) ====================

@@ -90,8 +90,20 @@ public class KeriNotificationCorrelator {
     /** A notification that passed correlation: {@code notificationId} is the agent's own notification
      *  identifier (for {@link #markAndDelete}), {@code exnSaid} is the referenced exchange's SAID, and
      *  {@code exn} is that exchange's full decoded message (sender {@code i}, route {@code r}, prior
-     *  {@code p}, payload {@code a}, embeds {@code e}, ...). */
-    public record CorrelatedNotification(String notificationId, String exnSaid, Map<String, Object> exn) {
+     *  {@code p}, payload {@code a}, embeds {@code e}, ...). {@code claimedRoute} is the notification's
+     *  OWN claimed route ({@code note.a.r}, populated by {@link #pollOnceByRoute}) — a fallback for
+     *  callers awaiting more than one route at once (design rev, dual-path IPEX presentation:
+     *  {@link KeriCredentialService#presentCredential} awaits offer AND grant routes together and must
+     *  tell which one actually matched) to use when the fetched {@code exn}'s own {@code r} is absent or
+     *  not itself one of the awaited routes. {@code null} when not populated by the caller that
+     *  constructed this — see the 3-arg constructor below, kept for every call site (this class's own
+     *  {@link #tryCorrelate}, and every existing test) that only ever awaits a single route and so never
+     *  needs to disambiguate. */
+    public record CorrelatedNotification(String notificationId, String exnSaid, Map<String, Object> exn,
+            String claimedRoute) {
+        public CorrelatedNotification(String notificationId, String exnSaid, Map<String, Object> exn) {
+            this(notificationId, exnSaid, exn, null);
+        }
     }
 
     /**
@@ -290,7 +302,7 @@ public class KeriNotificationCorrelator {
             // note.a.d — see this method's javadoc.
             Object fetchedSaid = exn.get("d");
             String exnSaid = fetchedSaid instanceof String s ? s : noteExnSaid;
-            return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn));
+            return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn, note.a.r));
         }
         return Optional.empty();
     }

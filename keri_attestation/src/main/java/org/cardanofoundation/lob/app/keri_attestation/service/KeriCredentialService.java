@@ -62,6 +62,16 @@ import org.cardanofoundation.signify.core.States.HabState;
  * without this a real wallet's "present" action does nothing observable (no error, no notification).
  * See that method's javadoc for the full rationale, mirrored from cip113's reference
  * {@code resolveSchemas} flow ({@code docs/keri/advanced/PublishExistingCredential.java}).
+ *
+ * <p><b>Dual-path presentation (design rev, live Veridian wallet evidence):</b> the apply→offer→agree→
+ * grant→admit negotiation above is cip113's contract, but a real Veridian wallet build was observed, on
+ * the actual backend log, to present via a <em>spontaneous</em> IPEX grant instead — apply→grant→admit,
+ * with NO offer and NO agree ever sent at all; the notification queue after a live "present" tap
+ * contained only {@code /exn/ipex/grant} entries, zero {@code /exn/ipex/offer}. {@link
+ * #presentCredential} therefore waits for the FIRST unread notification on EITHER an offer or a grant
+ * route and branches on which one actually arrived: a grant skips the offer/agree steps entirely and
+ * admits directly (using the admit's own {@code atc} — there is no agree to borrow one from); an offer
+ * falls through to the original negotiation, unchanged.
  */
 @Service
 @RequiredArgsConstructor
@@ -76,6 +86,13 @@ public class KeriCredentialService {
     // wallet responded. Accept both forms exactly as the reference does.
     private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer", "/ipex/offer");
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
+
+    /** Dual-path presentation (design rev, live Veridian wallet evidence — see class javadoc): the
+     *  initial post-apply wait (and the retry pre-check) must watch for EITHER an offer or a spontaneous
+     *  grant, since a real Veridian build was observed to send the grant directly with no offer at all.
+     *  {@link #isGrantRoute} then tells the two apart on the notification that actually arrives. */
+    private static final List<String> OFFER_OR_GRANT_ROUTES =
+            List.of("/exn/ipex/offer", "/ipex/offer", "/exn/ipex/grant", "/ipex/grant");
 
     /** cip113's exact {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6): passed
      *  explicitly to every exn this class builds rather than relying on the pinned signify jar's own
@@ -112,18 +129,19 @@ public class KeriCredentialService {
 
     /**
      * Orchestrates the CREDENTIAL_REQUEST step end-to-end, SYNCHRONOUSLY, for a single controller call
-     * (design §4.2, cip113 parity): {@link #ensureSchemasResolved} → {@link CeremonyService#beginStep}
-     * from {@code OOBI_RESOLVED} to {@code CREDENTIAL_REQUESTED} → a short retry pre-check for a reply
-     * that already arrived on a previous attempt's apply → apply → wait for the offer, in-thread → agree
-     * → wait for the grant, in-thread → admit → fetch the full CESR chain → {@link
-     * CredentialChainValidator} → persist + complete the step. Every wire step logs at INFO so a stalled
-     * live run shows exactly where it stopped.
+     * (design §4.2): {@link #ensureSchemasResolved} → {@link CeremonyService#beginStep} from {@code
+     * OOBI_RESOLVED} to {@code CREDENTIAL_REQUESTED} → a short retry pre-check for a reply that already
+     * arrived on a previous attempt's apply → apply → wait, in-thread, for EITHER an offer or a
+     * spontaneous grant (dual-path, class javadoc) → branch: a grant admits directly; an offer falls
+     * through to cip113's negotiation (agree → wait for the grant, in-thread → admit) → fetch the full
+     * CESR chain → {@link CredentialChainValidator} → persist + complete the step. Every wire step logs
+     * at INFO so a stalled live run shows exactly where it stopped.
      *
      * @return {@link Either#right} with the ceremony's final view once the step completes (or, per the
-     *         retry pre-check, resumes and completes from a late-arriving offer); {@link Either#left}
-     *         with the problem on any failure — the ceremony itself is always left in a terminal
-     *         ({@code FAILED}) or successfully-advanced ({@code CREDENTIAL_RECEIVED}) state before this
-     *         method returns, never stuck at {@code CREDENTIAL_REQUESTED}.
+     *         retry pre-check, resumes and completes from a late-arriving offer or grant); {@link
+     *         Either#left} with the problem on any failure — the ceremony itself is always left in a
+     *         terminal ({@code FAILED}) or successfully-advanced ({@code CREDENTIAL_RECEIVED}) state
+     *         before this method returns, never stuck at {@code CREDENTIAL_REQUESTED}.
      */
     public Either<ProblemDetail, CeremonyView> presentCredential(String ceremonyId, String userId, boolean retry) {
         // Live-testing fix: resolved BEFORE beginStep, i.e. before any ceremony state is touched at
@@ -152,17 +170,19 @@ public class KeriCredentialService {
         String agentName = agentService.agentName();
 
         // Retry pre-check (design §4.2, mirrors KeriAttestService#attest): before sending a fresh IPEX
-        // apply, look for a late-arriving offer left over from a previous attempt. cip113 parity: route
-        // -only, like every claim in this module now — see KeriNotificationCorrelator#awaitByRoute's
-        // javadoc. Found: resume straight into the agree/grant/admit continuation below without
-        // resending the apply. Not found (or this is the first attempt, requestExnSaid still null): fall
-        // through and build + send a fresh apply.
-        CorrelatedNotification offerNotification = null;
+        // apply, look for a late-arriving offer OR grant left over from a previous attempt. Dual-path
+        // (design rev, live Veridian evidence — class javadoc): the real wallet was observed to present
+        // via a spontaneous grant with no offer at all, so this pre-check — like the wait below — must
+        // watch for either. cip113 parity: route-only, like every claim in this module now — see
+        // KeriNotificationCorrelator#awaitByRoute's javadoc. Found: resume straight into the matching
+        // continuation below without resending the apply. Not found (or this is the first attempt,
+        // requestExnSaid still null): fall through and build + send a fresh apply.
+        CorrelatedNotification claimedNotification = null;
         if (retry && ceremony.getRequestExnSaid() != null) {
-            offerNotification = correlator.awaitByRoute(OFFER_ROUTES, RETRY_PRECHECK_TIMEOUT).orElse(null);
+            claimedNotification = correlator.awaitByRoute(OFFER_OR_GRANT_ROUTES, RETRY_PRECHECK_TIMEOUT).orElse(null);
         }
 
-        if (offerNotification == null) {
+        if (claimedNotification == null) {
             Either<ProblemDetail, Void> sent = sendApply(ceremony, linkedAid, agentName);
             if (sent.isLeft()) {
                 ProblemDetail problem = sent.getLeft();
@@ -170,65 +190,114 @@ public class KeriCredentialService {
                 return Either.left(problem);
             }
 
-            log.info("waiting for offer (routes {})", OFFER_ROUTES);
-            Optional<CorrelatedNotification> offer =
-                    correlator.awaitByRoute(OFFER_ROUTES, properties.remotesignTimeout());
-            if (offer.isEmpty()) {
+            log.info("waiting for offer or grant (routes {})", OFFER_OR_GRANT_ROUTES);
+            Optional<CorrelatedNotification> claimed =
+                    correlator.awaitByRoute(OFFER_OR_GRANT_ROUTES, properties.remotesignTimeout());
+            if (claimed.isEmpty()) {
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
-                        "Timed out waiting for /exn/ipex/offer.");
+                        "Timed out waiting for /exn/ipex/offer or /exn/ipex/grant.");
             }
-            offerNotification = offer.get();
-        }
-        log.info("offer received {}", offerNotification.exnSaid());
-        // cip113 parity (KeriService#presentCredential): the offer notification is claimed (marked +
-        // deleted) immediately once its SAID has been read, before the agree is even built.
-        correlator.markAndDelete(offerNotification.notificationId());
-
-        ExchangeMessageResult agreeResult;
-        try {
-            agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
-                    .senderName(agentName).recipient(linkedAid).message("")
-                    .offerSaid(offerNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
-            Object agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
-                    List.of(linkedAid));
-            client.client().operations().wait(Operation.fromObject(agreeOp));
-        } catch (Exception e) {
-            interruptIfNeeded(e);
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                    "Failed to send IPEX agree: " + e.getMessage());
-        }
-        log.info("agree sent");
-
-        log.info("waiting for grant (routes {})", GRANT_ROUTES);
-        Optional<CorrelatedNotification> grant = correlator.awaitByRoute(GRANT_ROUTES, properties.remotesignTimeout());
-        if (grant.isEmpty()) {
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
-                    "Timed out waiting for /exn/ipex/grant.");
-        }
-        CorrelatedNotification grantNotification = grant.get();
-        log.info("grant received {}", grantNotification.exnSaid());
-
-        String credentialSaid = extractCredentialSaid(grantNotification.exn());
-        if (credentialSaid == null) {
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                    "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
+            claimedNotification = claimed.get();
         }
 
-        try {
-            ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
-                    .senderName(agentName).recipient(linkedAid).message("")
-                    .grantSaid(grantNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
-            // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE exchange's
-            // own atc, NOT the admit's own — a proven cip113 wallet-contract quirk this module matches.
-            Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
-                    agreeResult.atc(), List.of(linkedAid));
-            client.client().operations().wait(Operation.fromObject(admitOp));
-        } catch (Exception e) {
-            interruptIfNeeded(e);
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                    "Failed to admit IPEX grant: " + e.getMessage());
+        // Dual-path branch (design rev, live Veridian evidence — class javadoc): tell a spontaneous
+        // grant apart from a negotiated offer by the CLAIMED notification's own route — see
+        // isGrantRoute's javadoc for exactly how that route is determined.
+        String credentialSaid;
+        // Set by BOTH branches below to the grant notification's own ID, then only ever marked/deleted
+        // at the very bottom of this method, once the credential is durably persisted — see that block's
+        // comment for why. (Deliberately NOT deleted right after admit in the direct-grant branch either,
+        // even though nothing else about that branch depends on the wallet for the rest of the flow:
+        // credentialSaid itself lives only in this method's local state until completeStep commits it, so
+        // an early delete here would leave a crash between a successful admit and a successful persist
+        // with no durable trace of which credential was just admitted — exactly the failure mode
+        // KeriNotificationCorrelator#markAndDelete's own contract exists to prevent, and exactly why the
+        // negotiated path below has always deferred its own delete the same way.)
+        String deferredGrantNotificationId = null;
+
+        if (isGrantRoute(claimedNotification)) {
+            log.info("grant received directly (spontaneous presentation), admitting {}",
+                    claimedNotification.exnSaid());
+            String directCredentialSaid = extractCredentialSaid(claimedNotification.exn());
+            if (directCredentialSaid == null) {
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
+            }
+
+            try {
+                ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
+                        .senderName(agentName).recipient(linkedAid).message("")
+                        .grantSaid(claimedNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
+                // Verified finding (see the report for the full evidence trail — signify jar javap +
+                // signify-ts's admitGrantOnWallet, the same no-preceding-agree scenario): submitAdmit is
+                // given the ADMIT's OWN atc here, not an agree's — there is no agree in this branch at
+                // all to borrow one from.
+                Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
+                        admitResult.atc(), List.of(linkedAid));
+                client.client().operations().wait(Operation.fromObject(admitOp));
+            } catch (Exception e) {
+                interruptIfNeeded(e);
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "Failed to admit IPEX grant: " + e.getMessage());
+            }
+            log.info("admit sent");
+            credentialSaid = directCredentialSaid;
+            deferredGrantNotificationId = claimedNotification.notificationId();
+        } else {
+            log.info("offer received {}", claimedNotification.exnSaid());
+            // cip113 parity (KeriService#presentCredential): the offer notification is claimed (marked +
+            // deleted) immediately once its SAID has been read, before the agree is even built.
+            correlator.markAndDelete(claimedNotification.notificationId());
+
+            ExchangeMessageResult agreeResult;
+            try {
+                agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
+                        .senderName(agentName).recipient(linkedAid).message("")
+                        .offerSaid(claimedNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
+                Object agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
+                        List.of(linkedAid));
+                client.client().operations().wait(Operation.fromObject(agreeOp));
+            } catch (Exception e) {
+                interruptIfNeeded(e);
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "Failed to send IPEX agree: " + e.getMessage());
+            }
+            log.info("agree sent");
+
+            log.info("waiting for grant (routes {})", GRANT_ROUTES);
+            Optional<CorrelatedNotification> grant =
+                    correlator.awaitByRoute(GRANT_ROUTES, properties.remotesignTimeout());
+            if (grant.isEmpty()) {
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
+                        "Timed out waiting for /exn/ipex/grant.");
+            }
+            CorrelatedNotification grantNotification = grant.get();
+            log.info("grant received {}", grantNotification.exnSaid());
+
+            String negotiatedCredentialSaid = extractCredentialSaid(grantNotification.exn());
+            if (negotiatedCredentialSaid == null) {
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
+            }
+
+            try {
+                ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
+                        .senderName(agentName).recipient(linkedAid).message("")
+                        .grantSaid(grantNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
+                // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE exchange's
+                // own atc, NOT the admit's own — a proven cip113 wallet-contract quirk this module matches.
+                Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
+                        agreeResult.atc(), List.of(linkedAid));
+                client.client().operations().wait(Operation.fromObject(admitOp));
+            } catch (Exception e) {
+                interruptIfNeeded(e);
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "Failed to admit IPEX grant: " + e.getMessage());
+            }
+            log.info("admit sent");
+            credentialSaid = negotiatedCredentialSaid;
+            deferredGrantNotificationId = grantNotification.notificationId();
         }
-        log.info("admit sent");
 
         String fullCesr;
         try {
@@ -293,10 +362,13 @@ public class KeriCredentialService {
         }
         log.info("credential step complete");
 
-        // Only after both the link and the ceremony transition are durably committed: an earlier
-        // mark-and-delete would let a crash between the two silently lose the wallet's reply, exactly the
-        // failure mode KeriNotificationCorrelator#markAndDelete's contract exists to prevent.
-        correlator.markAndDelete(grantNotification.notificationId());
+        // Both branches above defer to here (see deferredGrantNotificationId's own comment): only after
+        // both the link and the ceremony transition are durably committed — an earlier mark-and-delete
+        // would let a crash between the two silently lose the wallet's reply, exactly the failure mode
+        // KeriNotificationCorrelator#markAndDelete's contract exists to prevent.
+        if (deferredGrantNotificationId != null) {
+            correlator.markAndDelete(deferredGrantNotificationId);
+        }
 
         return ceremonyService.get(ceremonyId, userId);
     }
@@ -456,6 +528,31 @@ public class KeriCredentialService {
             freshLink.setCredentialSchemaSaid(credentialSchemaSaid);
             identityLinkRepository.save(freshLink);
         });
+    }
+
+    /**
+     * Dual-path branch decision (design rev, live Veridian evidence — class javadoc): {@code
+     * notification} was claimed off the combined {@link #OFFER_OR_GRANT_ROUTES} wait, so it is either an
+     * offer or a spontaneous grant — this tells the two apart.
+     *
+     * <p>Prefers the FETCHED exchange's own {@code r} field ({@code notification.exn().get("r")}) when
+     * it is itself recognized as one of the offer/grant routes; falls back to the notification's own
+     * claimed route ({@link CorrelatedNotification#claimedRoute()}) otherwise. A real wallet's exn should
+     * always carry its own {@code r}, but {@link KeriNotificationCorrelator#awaitByRoute} — unlike the
+     * stricter {@code awaitCorrelated} path — never validates it against the awaited routes, so this
+     * does not assume it is always present or trustworthy; {@code claimedRoute} is guaranteed to be one
+     * of {@link #OFFER_OR_GRANT_ROUTES} by construction (it is exactly what {@code awaitByRoute}'s own
+     * pre-filter matched on), so it is always a safe fallback. {@code claimedRoute} can still itself be
+     * {@code null} for a caller that never populates it (the 3-arg {@code CorrelatedNotification}
+     * constructor's default) — treated as "not a grant" rather than risking an NPE against the {@code
+     * List.of(...)}-backed route lists below, which reject a {@code null} query element outright.
+     */
+    private static boolean isGrantRoute(CorrelatedNotification notification) {
+        Object exnRoute = notification.exn().get("r");
+        String route = (exnRoute instanceof String s && (OFFER_ROUTES.contains(s) || GRANT_ROUTES.contains(s)))
+                ? s
+                : notification.claimedRoute();
+        return route != null && GRANT_ROUTES.contains(route);
     }
 
     private static String extractCredentialSaid(Map<String, Object> grantExn) {
