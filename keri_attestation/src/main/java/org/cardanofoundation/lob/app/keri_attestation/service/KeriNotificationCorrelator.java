@@ -322,9 +322,13 @@ public class KeriNotificationCorrelator {
             lastByRouteNotificationSummary.set("");
             return;
         }
+        // Include each notification's dt (delivery timestamp) so a fresh arrival is unmistakable against
+        // old debris — even if it were somehow delivered already-read — directly answering "did a new
+        // notification arrive and get read/deleted?": any entry with today's date is a live delivery.
         String summary = notes.stream()
                 .map(n -> (n.a != null && n.a.r != null ? n.a.r : "?")
-                        + (Boolean.TRUE.equals(n.r) ? "(read)" : "(unread)"))
+                        + (Boolean.TRUE.equals(n.r) ? "(read)" : "(unread)")
+                        + "@" + (n.dt != null ? n.dt : "?"))
                 .collect(Collectors.joining(", "));
         if (!summary.equals(lastByRouteNotificationSummary.getAndSet(summary))) {
             log.info("KERI notifications present ({}): [{}] — awaiting routes {}", notes.size(), summary, routes);

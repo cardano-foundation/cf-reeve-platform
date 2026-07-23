@@ -128,6 +128,8 @@ class KeriCredentialServiceTest {
     private CeremonyService ceremonyService;
     @Mock
     private KeriIdentityLinkRepository identityLinkRepository;
+    @Mock
+    private KeriOobiService oobiService;
 
     private KeriCredentialService service;
 
@@ -175,7 +177,7 @@ class KeriCredentialServiceTest {
                 eq(CeremonyState.CREDENTIAL_REQUESTED), any())).thenReturn(true);
 
         service = new KeriCredentialService(keriClient, agentService, correlator, validator, ceremonyService,
-                identityLinkRepository, properties());
+                identityLinkRepository, properties(), oobiService);
     }
 
     private static KeriAttestationProperties properties() {
