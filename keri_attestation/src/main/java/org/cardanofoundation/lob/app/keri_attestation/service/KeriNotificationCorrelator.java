@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -82,12 +83,26 @@ public class KeriNotificationCorrelator {
      *         timeout. Never throws on timeout.
      */
     public Optional<CorrelatedNotification> awaitByRoute(List<String> routes, Duration timeout) {
+        return awaitByRoute(routes, timeout, Set.of());
+    }
+
+    /**
+     * As {@link #awaitByRoute(List, Duration)}, but never claims a notification whose id is in
+     * {@code excludeNoteIds}. Callers snapshot the ids currently outstanding on a route
+     * ({@link #outstandingNoteIds}) BEFORE they send their own request, then pass that snapshot here so
+     * a leftover unread reply from an earlier, failed/timed-out request cannot be mistaken for the reply
+     * to the current one — only a notification that arrives AFTER the snapshot (a genuinely new id) is
+     * claimed. This is non-destructive: the stale notifications are ignored, not marked/deleted, so a
+     * concurrent legitimate reply is never at risk of being purged.
+     */
+    public Optional<CorrelatedNotification> awaitByRoute(List<String> routes, Duration timeout,
+            Set<String> excludeNoteIds) {
         Instant deadline = Instant.now().plus(timeout);
         Instant start = Instant.now();
         int poll = 0;
         while (true) {
             try {
-                Optional<CorrelatedNotification> claimed = pollOnceByRoute(routes);
+                Optional<CorrelatedNotification> claimed = pollOnceByRoute(routes, excludeNoteIds);
                 if (claimed.isPresent()) {
                     return claimed;
                 }
@@ -113,35 +128,69 @@ public class KeriNotificationCorrelator {
         }
     }
 
+    /**
+     * Snapshots the ids of notifications currently claimable on {@code routes} (unread route matches).
+     * Callers take this snapshot BEFORE sending their own request and pass it to
+     * {@link #awaitByRoute(List, Duration, Set)} as the exclude set, so pre-existing debris from an
+     * earlier request cannot be claimed as the reply to the new one.
+     *
+     * <p>Returns an empty set if the notification list can't be read/parsed. This is a fail-OPEN
+     * fallback, chosen deliberately: an empty exclude set means the subsequent wait behaves as it did
+     * before this guard (claim the first route match) for that one attempt — no worse than before, and
+     * strictly better than failing an otherwise-valid attest on a transient agent hiccup at snapshot
+     * time. The window is narrow (a single list failure exactly here) and the failure is logged by
+     * {@link #listNotifications()}.
+     */
+    public Set<String> outstandingNoteIds(List<String> routes) {
+        Set<String> ids = listNotifications().stream()
+                .filter(note -> isUnreadRouteMatch(note, routes))
+                .map(note -> note.i)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        if (!ids.isEmpty()) {
+            log.info("Snapshotted {} pre-existing notification(s) on routes {} to exclude from the next wait",
+                    ids.size(), routes);
+        }
+        return ids;
+    }
+
     // --- one polling round ---
 
-    private Optional<CorrelatedNotification> pollOnceByRoute(List<String> routes) throws InterruptedException {
+    /** Lists + parses the agent's notifications; empty list on any transport/parse failure (logged). */
+    private List<Notification> listNotifications() {
         Notifying.Notifications.NotificationListResponse response;
         try {
             response = client.client().notifications().list();
         } catch (InterruptedException e) {
-            throw e;
+            Thread.currentThread().interrupt();
+            return List.of();
         } catch (Exception e) {
             log.warn("Failed to list KERI notifications, will retry: {}", e.getMessage());
-            return Optional.empty();
+            return List.of();
         }
-
-        List<Notification> notes;
         try {
-            notes = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
+            List<Notification> notes = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
             });
-            if (notes == null) {
-                notes = List.of();
-            }
+            return notes != null ? notes : List.of();
         } catch (SerializeException e) {
             log.error("Failed to parse the KERI notification list while route-matching: {}", e.getMessage());
-            return Optional.empty();
+            return List.of();
         }
+    }
+
+    private Optional<CorrelatedNotification> pollOnceByRoute(List<String> routes, Set<String> excludeNoteIds)
+            throws InterruptedException {
+        List<Notification> notes = listNotifications();
 
         logNotificationState(notes, routes);
 
         for (Notification note : notes) {
             if (!isUnreadRouteMatch(note, routes)) {
+                continue;
+            }
+            if (note.i != null && excludeNoteIds.contains(note.i)) {
+                // Pre-existing debris snapshotted before the caller's request was sent — cannot be the
+                // reply to it. Skip it so the wait continues for a genuinely new notification.
                 continue;
             }
             String noteExnSaid = note.a != null ? note.a.d : null;

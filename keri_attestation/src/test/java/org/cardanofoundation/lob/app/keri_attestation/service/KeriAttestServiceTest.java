@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import org.springframework.http.ProblemDetail;
@@ -128,6 +129,8 @@ class KeriAttestServiceTest {
         lenient().when(client.keyEvents()).thenReturn(keyEvents);
         lenient().when(client.operations()).thenReturn(operations);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
+        // Default: no pre-existing remotesign-ref debris. The snapshot-and-exclude test overrides this.
+        lenient().when(correlator.outstandingNoteIds(any())).thenReturn(Set.of());
 
         service = new KeriAttestService(keriClient, agentService, kedFactory, providerRegistry, correlator,
                 ceremonyService, identityLinkRepository, properties());
@@ -261,7 +264,7 @@ class KeriAttestServiceTest {
         stubGuardedUpdateSuccess(ceremony);
 
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        lenient().when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        lenient().when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         lenient().when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
@@ -307,9 +310,29 @@ class KeriAttestServiceTest {
 
         InOrder inOrder = inOrder(exchanges, correlator, ceremonyService);
         inOrder.verify(exchanges).sendFromEvents(any(), any(), any(), any(), any(), any());
-        inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any());
+        inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any());
         inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
         inOrder.verify(correlator).markAndDelete(NOTIF_ID);
+    }
+
+    @Test
+    void attestSnapshotsPreexistingRefsBeforeSendingAndExcludesThemFromTheWait() throws Exception {
+        // Regression: a leftover unread remotesign-ref from an earlier failed attempt must NOT be
+        // claimed as this request's reply (which would fail ATTEST_SEAL_MISMATCH before the wallet
+        // signs). The snapshot is taken BEFORE the send, and its ids are passed to the wait's exclude set.
+        String staleNoteId = "0ASTALEREFNOTE00000000000000000000000";
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
+        stubHappyPath(ceremony);
+        when(correlator.outstandingNoteIds(REMOTESIGN_REF_ROUTES)).thenReturn(Set.of(staleNoteId));
+
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isRight());
+        // The snapshot happens before the request is sent, and the same set is handed to the wait.
+        InOrder inOrder = inOrder(correlator, exchanges);
+        inOrder.verify(correlator).outstandingNoteIds(REMOTESIGN_REF_ROUTES);
+        inOrder.verify(exchanges).sendFromEvents(any(), any(), any(), any(), any(), any());
+        inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), eq(Set.of(staleNoteId)));
     }
 
     // ==================== attest: guard failures ====================
@@ -491,16 +514,47 @@ class KeriAttestServiceTest {
         stubHappyPath(ceremony);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID,
-                        refExn(WALLET_AID, SEQUENCE, EVENT_SAID))));
+        // The retry pre-check (2-arg) finds no late ref, so the flow re-sends and the main wait (3-arg,
+        // stubbed by stubHappyPath) returns the fresh ref.
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any())).thenReturn(Optional.empty());
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
 
         assertTrue(result.isRight());
         verify(exchanges).createExchangeMessage(any(), eq("/remotesign/ixn/req"), anyMap(), anyMap(), eq(WALLET_AID),
                 any(), any());
+    }
+
+    @Test
+    void attestRetryWithAStaleNonAnchoringPrecheckRefFallsThroughToResendInsteadOfFailing() throws Exception {
+        // Regression (the self-perpetuating retry loop): the retry pre-check claims a leftover unread ref
+        // that does NOT anchor this ceremony's payload. It must NOT fail the ceremony (which would loop
+        // forever on the same undeleted debris) — it falls through, re-sends, and the excluded main wait
+        // completes against the genuine fresh reply.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
+        ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
+        ceremony.setPayloadSaid(PAYLOAD_SAID);
+        stubHappyPath(ceremony);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+                CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
+        // Pre-check (2-arg) claims a STALE ref whose explicit candidate names an event not in the KEL, so
+        // locateAnchoringEvent returns empty for it (the KEL, stubbed by stubHappyPath, holds only the
+        // genuine event). The main wait (3-arg, stubHappyPath) then returns the real anchoring ref.
+        String staleNoteId = "0ASTALEPRECHECK000000000000000";
+        Map<String, Object> staleRef = refExn(WALLET_AID, "99", "ENOTINKEL000000000000000000000000000");
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+                .thenReturn(Optional.of(new CorrelatedNotification(staleNoteId, "ESTALEEXN000000000000000000000", staleRef)));
+
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.ATTEST_ANCHORED, result.get().state());
+        // Fell through to a fresh send rather than failing on the stale ref.
+        verify(exchanges).sendFromEvents(any(), any(), any(), any(), any(), any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+        // The genuine reply's notification is consumed; the stale pre-check ref is left untouched.
+        verify(correlator).markAndDelete(NOTIF_ID);
+        verify(correlator, never()).markAndDelete(staleNoteId);
     }
 
     // ==================== attest: waiting for the ref / verifying the anchor ====================
@@ -519,7 +573,7 @@ class KeriAttestServiceTest {
         stubHappySend();
         stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any())).thenReturn(Optional.empty());
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any())).thenReturn(Optional.empty());
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
 
@@ -541,9 +595,9 @@ class KeriAttestServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_SEAL_MISMATCH, result.getLeft().getTitle());
-        assertEquals("The wallet ref's explicit anchoring-event candidate did not verify (not found, sequence "
-                + "at or before the floor, or seal does not contain payload SAID " + PAYLOAD_SAID + ").",
-                result.getLeft().getDetail());
+        assertEquals("No interaction (ixn) event strictly after the floor sequence and at or before the wallet's "
+                + "current key state anchored payload SAID " + PAYLOAD_SAID + " (checked the wallet ref's explicit "
+                + "candidate and a bounded scan).", result.getLeft().getDetail());
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(correlator, never()).markAndDelete(any());
     }
@@ -567,7 +621,7 @@ class KeriAttestServiceTest {
         when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(floorOp).thenReturn(currentOp);
 
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
@@ -606,7 +660,7 @@ class KeriAttestServiceTest {
 
         // No explicit candidate on the ref exn — goes through the bounded-scan fallback.
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
@@ -639,7 +693,7 @@ class KeriAttestServiceTest {
 
         // Explicit candidate naming a SAID/sequence that doesn't exist in the KEL at all.
         Map<String, Object> refExn = refExn(WALLET_AID, "9", "ENONEXISTENTEVENT000000000000000000000");
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         // A different event that WOULD satisfy digest+floor if a scan ever considered it.

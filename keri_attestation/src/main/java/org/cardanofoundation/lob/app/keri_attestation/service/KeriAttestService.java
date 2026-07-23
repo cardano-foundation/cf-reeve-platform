@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -116,18 +117,44 @@ public class KeriAttestService {
         }
         String walletAid = linkOpt.get().getAid();
 
-        // Retry pre-check (design §4.2): before re-sending, look for a late-arriving ref matching
-        // whatever was sent on a previous attempt. Route-only — see
-        // KeriNotificationCorrelator#awaitByRoute's javadoc. A fresh (non-retry) call, or a retry whose
-        // previous attempt never got as far as sending anything, has no requestExnSaid yet and skips
-        // straight to rebuilding + sending below.
+        // Retry pre-check (design §4.2): before re-sending, look for a late-arriving ref for whatever was
+        // sent on a previous attempt. This wait is route-only (see KeriNotificationCorrelator#awaitByRoute)
+        // and — unlike the main wait below — cannot be given an exclude snapshot, because the late ref it
+        // is looking for is itself pre-existing. So a claimed ref here may be STALE DEBRIS rather than a
+        // genuine late reply; it is therefore resumed ONLY IF it actually anchors THIS ceremony's payload.
+        // A non-anchoring ref must not fail the ceremony: that would loop forever on the same undeleted
+        // debris (a failed resolve never marks/deletes it), so it falls through to re-sending below. A
+        // fresh (non-retry) call, or a retry whose previous attempt never sent anything, has no
+        // requestExnSaid yet and skips straight to rebuilding + sending below.
         if (retry && ceremony.getRequestExnSaid() != null) {
             Optional<CorrelatedNotification> lateRef = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
                     RETRY_PRECHECK_TIMEOUT);
             if (lateRef.isPresent()) {
-                log.info("remotesign ref received {} (late, resumed from retry)", lateRef.get().exnSaid());
-                return resolveAndComplete(ceremonyId, userId, generation, walletAid, ceremony.getPayloadSaid(),
-                        ceremony.getKelFloorSequence(), lateRef.get());
+                if (ceremony.getKelFloorSequence() == null) {
+                    // F4: a pre-upgrade ceremony with no floor must hard-fail, never resume or re-send.
+                    return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
+                            "no sequence floor recorded — re-attest");
+                }
+                Optional<Map<String, Object>> anchor = Optional.empty();
+                try {
+                    anchor = locateAnchoringEvent(walletAid, ceremony.getPayloadSaid(),
+                            ceremony.getKelFloorSequence(), lateRef.get());
+                } catch (InterruptedException e) {
+                    // Match the rest of this class's interrupt convention: abort promptly rather than
+                    // falling through into a fresh send + long main wait.
+                    Thread.currentThread().interrupt();
+                    return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                            "Interrupted during the ATTEST retry pre-check.");
+                } catch (Exception e) {
+                    log.warn("retry pre-check verification errored for ceremony {}: {} — re-sending", ceremonyId,
+                            e.getMessage());
+                }
+                if (anchor.isPresent()) {
+                    log.info("remotesign ref received {} (late, resumed from retry)", lateRef.get().exnSaid());
+                    return completeAnchored(ceremonyId, userId, generation, walletAid, anchor.get(), lateRef.get());
+                }
+                log.info("retry pre-check: a claimed ref did not anchor payload {} — re-sending",
+                        ceremony.getPayloadSaid());
             }
         }
 
@@ -181,6 +208,14 @@ public class KeriAttestService {
             return Either.left(staleCeremonyProblem(ceremonyId));
         }
 
+        // Snapshot the remotesign-ref notifications already sitting in the agent's queue BEFORE sending
+        // this request. The wait below excludes them, so a leftover unread ref from an earlier
+        // failed/timed-out attempt (which resolveAndComplete never marked/deleted, since that only
+        // happens on success) cannot be claimed as THIS request's reply — which would otherwise resolve
+        // against the current payload SAID, find no matching ixn, and fail with ATTEST_SEAL_MISMATCH
+        // before the wallet has even signed.
+        Set<String> preexistingRefs = correlator.outstandingNoteIds(REMOTESIGN_REF_ROUTES);
+
         String payloadSaid;
         try {
             Optional<HabState> senderOpt = client.client().identifiers().get(agentService.agentName());
@@ -224,7 +259,7 @@ public class KeriAttestService {
 
         log.info("waiting for remotesign ref (routes {})", REMOTESIGN_REF_ROUTES);
         Optional<CorrelatedNotification> ref = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
-                properties.remotesignTimeout());
+                properties.remotesignTimeout(), preexistingRefs);
         if (ref.isEmpty()) {
             return failAttest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
                     "Timed out waiting for the wallet's remotesign ref.");
@@ -263,61 +298,74 @@ public class KeriAttestService {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                         "no sequence floor recorded — re-attest");
             }
-
-            AnchorCandidate candidate = extractCandidate(ref.exn());
-            List<Map<String, Object>> kel = fetchKel(walletAid);
-            List<Map<String, Object>> ixnEvents = kel.stream().filter(ke -> "ixn".equals(ke.get("t"))).toList();
-
-            Map<String, Object> event;
-            if (!candidate.isEmpty()) {
-                event = locateExplicitCandidate(ixnEvents, candidate);
-                if (event == null || !satisfiesFloorAndDigest(event, floorSequence, payloadSaid)) {
-                    return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
-                            "The wallet ref's explicit anchoring-event candidate did not verify (not found, "
-                                    + "sequence at or before the floor, or seal does not contain payload SAID %s)."
-                                            .formatted(payloadSaid));
-                }
-            } else {
-                Optional<String> currentSequence = queryLatestSequenceWithRetries(walletAid);
-                event = currentSequence
-                        .map(cs -> scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid))
-                        .orElse(null);
-                if (event == null) {
-                    return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
-                            "No interaction (ixn) event strictly after the floor sequence and at or before the "
-                                    + "wallet's current key state matched payload SAID %s.".formatted(payloadSaid));
-                }
+            Optional<Map<String, Object>> event = locateAnchoringEvent(walletAid, payloadSaid, floorSequence, ref);
+            if (event.isEmpty()) {
+                return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
+                        ("No interaction (ixn) event strictly after the floor sequence and at or before the wallet's "
+                                + "current key state anchored payload SAID %s (checked the wallet ref's explicit "
+                                + "candidate and a bounded scan).").formatted(payloadSaid));
             }
-
-            String sequence = String.valueOf(event.get("s"));
-            String eventSaid = String.valueOf(event.get("d"));
-            log.info("anchor verified: seq={}, eventSaid={}", sequence, eventSaid);
-
-            // F1 fix: persist the AID this remotesign request was actually sent to and answered by
-            // (walletAid, resolved from the identity link BEFORE this method was ever called) alongside
-            // the KEL coordinates it anchored. This is what makes ConsumedAttestation.aid immutable once
-            // anchored: a relink of this same user after this point changes the identity link's CURRENT
-            // aid, but never this ceremony's own persisted attesterAid.
-            boolean completed = ceremonyService.completeStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
-                    CeremonyState.ATTEST_ANCHORED, c -> {
-                        c.setKelSequence(sequence);
-                        c.setKelEventSaid(eventSaid);
-                        c.setAttesterAid(walletAid);
-                    });
-            if (!completed) {
-                // Stale CAS (a retry superseded this attempt) — the winning attempt's own wait still
-                // needs the notification unread/undeleted.
-                return Either.left(staleCeremonyProblem(ceremonyId));
-            }
-            log.info("attest step complete");
-            correlator.markAndDelete(ref.notificationId());
-            return ceremonyService.get(ceremonyId, userId);
+            return completeAnchored(ceremonyId, userId, generation, walletAid, event.get(), ref);
         } catch (Exception e) {
             interruptIfNeeded(e);
             log.warn("Failed to resolve ATTEST anchor for ceremony {}: {}", ceremonyId, e.getMessage());
             return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                     "Error verifying the wallet's anchor: " + e.getMessage());
         }
+    }
+
+    /**
+     * Locates the wallet KEL interaction (ixn) event that anchors {@code payloadSaid} strictly after
+     * {@code floorSequence} for this {@code ref}: first honoring the ref's explicit anchoring-event
+     * candidate ({@link #extractCandidate}) if it has one — with no fallback to a scan once a candidate
+     * is on the table — otherwise a bounded scan up to the wallet's current key state. Empty when none
+     * verifies (wrong/missing candidate, sequence at or before the floor, or seal missing the payload
+     * SAID). Pure (no ceremony side effects), so callers can use it to decide whether a claimed ref is
+     * genuinely this ceremony's anchor before acting on it — the retry pre-check relies on this to avoid
+     * failing the ceremony on a stale, non-matching ref.
+     */
+    private Optional<Map<String, Object>> locateAnchoringEvent(String walletAid, String payloadSaid,
+            String floorSequence, CorrelatedNotification ref) throws Exception {
+        AnchorCandidate candidate = extractCandidate(ref.exn());
+        List<Map<String, Object>> kel = fetchKel(walletAid);
+        List<Map<String, Object>> ixnEvents = kel.stream().filter(ke -> "ixn".equals(ke.get("t"))).toList();
+        if (!candidate.isEmpty()) {
+            Map<String, Object> event = locateExplicitCandidate(ixnEvents, candidate);
+            return event != null && satisfiesFloorAndDigest(event, floorSequence, payloadSaid)
+                    ? Optional.of(event) : Optional.empty();
+        }
+        return queryLatestSequenceWithRetries(walletAid)
+                .map(cs -> scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid));
+    }
+
+    /**
+     * Completes the ATTEST step from a verified anchoring {@code event}: persists the KEL coordinates and
+     * the attester AID, then — only on a successful, non-superseded transition — marks the ref
+     * notification consumed.
+     *
+     * <p>F1 fix: the persisted {@code attesterAid} is {@code walletAid}, resolved from the identity link
+     * BEFORE the wait began, which makes {@code ConsumedAttestation.aid} immutable once anchored — a
+     * relink of this same user afterwards changes the link's CURRENT aid but never this ceremony's
+     * persisted attester. On a stale CAS (a concurrent retry superseded this attempt) the notification is
+     * deliberately left unread/undeleted so the winning attempt's own wait can still claim it.
+     */
+    private Either<ProblemDetail, CeremonyView> completeAnchored(String ceremonyId, String userId, int generation,
+            String walletAid, Map<String, Object> event, CorrelatedNotification ref) {
+        String sequence = String.valueOf(event.get("s"));
+        String eventSaid = String.valueOf(event.get("d"));
+        log.info("anchor verified: seq={}, eventSaid={}", sequence, eventSaid);
+        boolean completed = ceremonyService.completeStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED,
+                CeremonyState.ATTEST_ANCHORED, c -> {
+                    c.setKelSequence(sequence);
+                    c.setKelEventSaid(eventSaid);
+                    c.setAttesterAid(walletAid);
+                });
+        if (!completed) {
+            return Either.left(staleCeremonyProblem(ceremonyId));
+        }
+        log.info("attest step complete");
+        correlator.markAndDelete(ref.notificationId());
+        return ceremonyService.get(ceremonyId, userId);
     }
 
     // --- candidate extraction from the ref exn payload (design §4.6 step 5) ---

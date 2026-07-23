@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -228,6 +229,58 @@ class KeriNotificationCorrelatorTest {
 
         verify(notifications, never()).mark(anyString());
         verify(notifications, never()).delete(anyString());
+    }
+
+    // --- excludeNoteIds: ignore pre-existing debris so a stale reply isn't mistaken for a new one ---
+
+    @Test
+    void awaitByRouteSkipsANotificationWhoseIdIsExcludedAndTimesOut() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofMillis(40), Set.of(NOTIFICATION_ID));
+
+        assertTrue(result.isEmpty());
+        verifyNoInteractions(exchanges);
+    }
+
+    @Test
+    void awaitByRouteClaimsAFreshNotificationEvenWhenAnExcludedStaleOneIsAlsoPresent() throws Exception {
+        String freshId = "0AFRESHNOTE00000000000000000000";
+        String freshExnSaid = "EFRESHEXNSAID000000000000000000000";
+        // The stale note (NOTIFICATION_ID) is excluded; only the fresh one is claimed — the stale note's
+        // exchange is never even fetched.
+        when(notifications.list()).thenReturn(responseOf(
+                note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID),
+                note(freshId, false, ROUTE, freshExnSaid)));
+        when(exchanges.get(freshExnSaid)).thenReturn(exchangeWithRouteAndSaid(SENDER_AID, ROUTE, freshExnSaid));
+
+        Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
+                correlator.awaitByRoute(List.of(ROUTE), Duration.ofSeconds(2), Set.of(NOTIFICATION_ID));
+
+        assertTrue(result.isPresent());
+        assertEquals(freshId, result.get().notificationId());
+    }
+
+    @Test
+    void outstandingNoteIdsReturnsOnlyUnreadRouteMatchingIds() throws Exception {
+        String readId = "0AREADNOTE0000000000000000000000";
+        String otherRouteId = "0AOTHERROUTE000000000000000000000";
+        when(notifications.list()).thenReturn(responseOf(
+                note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID),      // unread + route match -> in
+                note(readId, true, ROUTE, REFERENCED_EXN_SAID),               // already read -> out
+                note(otherRouteId, false, OTHER_ROUTE, REFERENCED_EXN_SAID))); // different route -> out
+
+        Set<String> ids = correlator.outstandingNoteIds(List.of(ROUTE));
+
+        assertEquals(Set.of(NOTIFICATION_ID), ids);
+    }
+
+    @Test
+    void outstandingNoteIdsReturnsEmptyWhenTheListingFails() throws Exception {
+        when(notifications.list()).thenThrow(new RuntimeException("agent unreachable"));
+
+        assertTrue(correlator.outstandingNoteIds(List.of(ROUTE)).isEmpty());
     }
 
     // --- markAndDelete ---
