@@ -347,6 +347,83 @@ class KeriOobiServiceTest {
         verify(ceremonyRepository, never()).save(nowConsumed);
     }
 
+    // --- resetIdentity (full unlink) ---
+
+    @Test
+    void resetIdentityDeletesTheLinkAndFailsOpenCeremoniesWithIdentityReset() {
+        KeriIdentityLinkEntity existing = link(2, AID, VALID_OOBI);
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(existing));
+
+        KeriAttestationCeremonyEntity openCeremony = new KeriAttestationCeremonyEntity();
+        openCeremony.setId("cer-1");
+        openCeremony.setUserId(USER);
+        openCeremony.setState(CeremonyState.CREDENTIAL_REQUESTED);
+        openCeremony.setUpdatedAt(LocalDateTime.now());
+        when(ceremonyRepository.findByUserIdAndStateNotIn(eq(USER), any())).thenReturn(List.of(openCeremony));
+        when(ceremonyRepository.findByIdForUpdate("cer-1")).thenReturn(Optional.of(openCeremony));
+
+        Either<ProblemDetail, Void> result = service.resetIdentity(USER);
+
+        assertTrue(result.isRight());
+        verify(identityLinkRepository).delete(existing);
+
+        assertEquals(CeremonyState.FAILED, openCeremony.getState());
+        assertEquals(KeriAttestationProblems.IDENTITY_RESET, openCeremony.getErrorTitle());
+        verify(ceremonyRepository).save(openCeremony);
+
+        // Global lock order: ceremony before link -- same rule the relink path follows (see
+        // KeriOobiService#persistLink's javadoc).
+        InOrder lockOrder = inOrder(ceremonyRepository, identityLinkRepository);
+        lockOrder.verify(ceremonyRepository).findByIdForUpdate("cer-1");
+        lockOrder.verify(identityLinkRepository).findByUserIdForUpdate(USER);
+    }
+
+    @Test
+    void resetIdentityWithNoLinkIsIdempotentButStillSweepsOpenCeremonies() {
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
+
+        KeriAttestationCeremonyEntity openCeremony = new KeriAttestationCeremonyEntity();
+        openCeremony.setId("cer-2");
+        openCeremony.setUserId(USER);
+        openCeremony.setState(CeremonyState.OOBI_RESOLVED);
+        openCeremony.setUpdatedAt(LocalDateTime.now());
+        when(ceremonyRepository.findByUserIdAndStateNotIn(eq(USER), any())).thenReturn(List.of(openCeremony));
+        when(ceremonyRepository.findByIdForUpdate("cer-2")).thenReturn(Optional.of(openCeremony));
+
+        Either<ProblemDetail, Void> result = service.resetIdentity(USER);
+
+        assertTrue(result.isRight());
+        verify(identityLinkRepository, never()).delete(any());
+        assertEquals(CeremonyState.FAILED, openCeremony.getState());
+        assertEquals(KeriAttestationProblems.IDENTITY_RESET, openCeremony.getErrorTitle());
+    }
+
+    @Test
+    void resetIdentityWithNoLinkAndNoOpenCeremoniesIsANoOpRightWithoutTouchingTheRepositories() {
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
+        when(ceremonyRepository.findByUserIdAndStateNotIn(eq(USER), any())).thenReturn(List.of());
+
+        Either<ProblemDetail, Void> result = service.resetIdentity(USER);
+
+        assertTrue(result.isRight());
+        verify(identityLinkRepository, never()).delete(any());
+        verify(identityLinkRepository, never()).save(any());
+    }
+
+    @Test
+    void resetIdentityIsOwnerScopedToTheCallingUsersOwnLinkAndCeremonies() {
+        // Every repository call resetIdentity makes is keyed by the calling userId alone -- a
+        // regression here (e.g. a userId typo/swap) would show up as these exact calls no longer
+        // happening for USER.
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
+        when(ceremonyRepository.findByUserIdAndStateNotIn(eq(USER), any())).thenReturn(List.of());
+
+        service.resetIdentity(USER);
+
+        verify(ceremonyRepository).findByUserIdAndStateNotIn(eq(USER), any());
+        verify(identityLinkRepository).findByUserIdForUpdate(USER);
+    }
+
     // --- resolve/verify failures after validation ---
 
     @Test

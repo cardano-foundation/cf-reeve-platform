@@ -21,6 +21,11 @@ public final class KeriAttestationProblems {
     public static final String STEP_COOLDOWN = "STEP_COOLDOWN";
     public static final String IDENTITY_NOT_LINKED = "IDENTITY_NOT_LINKED";
     public static final String IDENTITY_RELINKED = "IDENTITY_RELINKED";
+    /** {@code KeriOobiService#resetIdentity} failed every one of the caller's still-open ceremonies
+     *  when the caller fully unlinked their identity (a superset of {@link #IDENTITY_RELINKED}'s
+     *  invalidation: the identity link row itself is deleted outright, not just re-pointed at a new
+     *  AID) — a ceremony created under the now-deleted binding can never be legitimately consumed. */
+    public static final String IDENTITY_RESET = "IDENTITY_RESET";
     public static final String KERI_WALLET_TIMEOUT = "KERI_WALLET_TIMEOUT";
     public static final String KERI_STEP_TIMED_OUT = "KERI_STEP_TIMED_OUT";
     public static final String CREDENTIAL_REJECTED = "CREDENTIAL_REJECTED";

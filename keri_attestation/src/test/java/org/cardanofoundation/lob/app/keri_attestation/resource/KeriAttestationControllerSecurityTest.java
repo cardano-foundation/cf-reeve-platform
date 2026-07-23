@@ -43,6 +43,11 @@ class KeriAttestationControllerSecurityTest {
     }
 
     @Test
+    void resetIdentityIsRoleGated() throws NoSuchMethodException {
+        assertGated(KeriAttestationController.class.getMethod("resetIdentity"));
+    }
+
+    @Test
     void createCeremonyIsRoleGated() throws NoSuchMethodException {
         assertGated(KeriAttestationController.class.getMethod("createCeremony", CreateCeremonyRequest.class));
     }

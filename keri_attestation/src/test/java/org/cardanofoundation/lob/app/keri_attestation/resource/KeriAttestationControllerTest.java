@@ -6,6 +6,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -188,6 +189,29 @@ class KeriAttestationControllerTest {
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value(KeriAttestationProblems.IDENTITY_RELINKED));
+    }
+
+    // ==================== DELETE /identity ====================
+
+    @Test
+    void resetIdentityHappyPathReturns200WithResetTrue() throws Exception {
+        when(oobiService.resetIdentity(USER_ID)).thenReturn(Either.right(null));
+
+        mockMvc.perform(delete("/api/v1/keri-attestation/identity"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reset").value(true));
+
+        verify(oobiService).resetIdentity(USER_ID);
+    }
+
+    @Test
+    void resetIdentityWithNoLinkIsStillA200() throws Exception {
+        // Idempotent: no link present is not an error -- the service itself always returns Right.
+        when(oobiService.resetIdentity(USER_ID)).thenReturn(Either.right(null));
+
+        mockMvc.perform(delete("/api/v1/keri-attestation/identity"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reset").value(true));
     }
 
     // ==================== POST /ceremonies ====================

@@ -275,9 +275,40 @@ public class KeriOobiService {
         }
 
         // Ceremony locks only, taken and released before the link lock is ever acquired below.
-        invalidateOpenCeremonies(userId);
+        invalidateOpenCeremonies(userId, KeriAttestationProblems.IDENTITY_RELINKED,
+                "Identity for user %s was relinked to a different AID.".formatted(userId));
 
         return lockAndUpsertLink(userId, aid, oobiUrl, relink);
+    }
+
+    /**
+     * Full unlink (design §... reset-identity): deletes the caller's {@link KeriIdentityLinkEntity} row
+     * outright and fails every one of their still-open ceremonies with {@link
+     * KeriAttestationProblems#IDENTITY_RESET} — a strictly bigger hammer than {@link #persistLink}'s
+     * relink path (which only re-points the link at a new AID and bumps {@code bindingVersion}); here
+     * there is no new binding to re-point to at all, so the row itself goes away.
+     *
+     * <p>Idempotent: a caller with no link still gets their open ceremonies swept (defensive — a
+     * ceremony should not normally exist without a link, but this does not assume that) and always
+     * returns {@link Either#right}; there is no failure mode that reports {@link Either#left}.
+     *
+     * <p><b>Global lock order: ceremony before link</b> (see {@link #persistLink}'s javadoc for the full
+     * statement of the rule). Ceremonies are invalidated FIRST, ceremony-row locks only; only then is the
+     * link row locked (via {@link KeriIdentityLinkRepository#findByUserIdForUpdate}) and deleted — the
+     * exact same ordering {@link #persistLink}'s relink branch uses, for the same deadlock-avoidance
+     * reason.
+     *
+     * <p>Owner-scoped throughout: both the ceremony sweep ({@code findByUserIdAndStateNotIn}) and the
+     * link lookup/delete ({@code findByUserIdForUpdate}, keyed by {@code userId} — the entity's own
+     * primary key) only ever touch rows belonging to {@code userId}.
+     */
+    public Either<ProblemDetail, Void> resetIdentity(String userId) {
+        invalidateOpenCeremonies(userId, KeriAttestationProblems.IDENTITY_RESET,
+                "Identity for user %s was reset.".formatted(userId));
+
+        identityLinkRepository.findByUserIdForUpdate(userId).ifPresent(identityLinkRepository::delete);
+
+        return Either.right(null);
     }
 
     /**
@@ -341,23 +372,25 @@ public class KeriOobiService {
         return Either.right(aid);
     }
 
-    /** Fails every one of the user's non-terminal ceremonies on relink (design §4.7) — each was
-     *  created under the old {@code bindingVersion} and can never be legitimately consumed once the
-     *  identity behind it has changed. Direct mutation + save rather than
-     *  {@link CeremonyService}'s step-CAS methods: those exist for async workers racing a retry, not
-     *  for this bulk invalidation. {@code findByUserIdAndStateNotIn} is an unlocked discovery read
-     *  though (same as {@code CeremonyCleanupJob}'s sweep), so each candidate is re-fetched under
-     *  {@link KeriAttestationCeremonyRepository#findByIdForUpdate} and re-checked before being
-     *  mutated — otherwise a concurrent legitimate transition (e.g. {@link CeremonyService
-     *  #validateAndConsume} finishing the same ceremony between the discovery read and this write)
-     *  could be silently clobbered back to FAILED.
+    /** Fails every one of the user's non-terminal ceremonies (design §4.7 for the relink case; also
+     *  reused by {@link #resetIdentity} for a full unlink) with the given {@code errorTitle}/{@code
+     *  errorDetail} — each was created under an identity binding that just stopped existing (relinked to
+     *  a different AID, or the link deleted outright) and can never be legitimately consumed as a result.
+     *  Direct mutation + save rather than {@link CeremonyService}'s step-CAS methods: those exist for
+     *  async workers racing a retry, not for this bulk invalidation. {@code findByUserIdAndStateNotIn} is
+     *  an unlocked discovery read though (same as {@code CeremonyCleanupJob}'s sweep), so each candidate
+     *  is re-fetched under {@link KeriAttestationCeremonyRepository#findByIdForUpdate} and re-checked
+     *  before being mutated — otherwise a concurrent legitimate transition (e.g. {@link CeremonyService
+     *  #validateAndConsume} finishing the same ceremony between the discovery read and this write) could
+     *  be silently clobbered back to FAILED.
      *
      *  <p><b>Global lock order: ceremony before link</b> (item 4 round-2 fix — see
-     *  {@code CeremonyService#completeStep}'s javadoc for the full rule). {@link #persistLink} calls
-     *  this method BEFORE ever locking the identity-link row, precisely so the ceremony row locks taken
-     *  here are never held at the same time as the link lock — callers must preserve that ordering; do
-     *  not call this method (or otherwise lock a ceremony row) while the link row is already locked. */
-    private void invalidateOpenCeremonies(String userId) {
+     *  {@code CeremonyService#completeStep}'s javadoc for the full rule). Every caller ({@link
+     *  #persistLink}, {@link #resetIdentity}) invokes this method BEFORE ever locking the identity-link
+     *  row, precisely so the ceremony row locks taken here are never held at the same time as the link
+     *  lock — callers must preserve that ordering; do not call this method (or otherwise lock a ceremony
+     *  row) while the link row is already locked. */
+    private void invalidateOpenCeremonies(String userId, String errorTitle, String errorDetail) {
         List<KeriAttestationCeremonyEntity> candidates = ceremonyRepository.findByUserIdAndStateNotIn(userId, TERMINAL_STATES);
         for (KeriAttestationCeremonyEntity candidate : candidates) {
             ceremonyRepository.findByIdForUpdate(candidate.getId()).ifPresent(ceremony -> {
@@ -365,8 +398,8 @@ public class KeriOobiService {
                     return;
                 }
                 ceremony.setState(CeremonyState.FAILED);
-                ceremony.setErrorTitle(KeriAttestationProblems.IDENTITY_RELINKED);
-                ceremony.setErrorDetail("Identity for user %s was relinked to a different AID.".formatted(userId));
+                ceremony.setErrorTitle(errorTitle);
+                ceremony.setErrorDetail(errorDetail);
                 ceremonyRepository.save(ceremony);
             });
         }

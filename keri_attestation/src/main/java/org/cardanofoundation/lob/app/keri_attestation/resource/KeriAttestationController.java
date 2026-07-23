@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -81,6 +82,9 @@ public class KeriAttestationController {
     private record AidView(String aid) {
     }
 
+    private record ResetView(boolean reset) {
+    }
+
     @Operation(description = "The current user's KERI identity-link status. linked=false (not 404) when never linked — the frontend uses this to decide whether to show the linking flow.")
     @GetMapping(value = "/identity", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
@@ -107,6 +111,14 @@ public class KeriAttestationController {
         return Responses.respond(
                 oobiService.resolveUserOobi(userId, request.getOobiUrl(), request.isRelink()).map(AidView::new),
                 HttpStatus.OK);
+    }
+
+    @Operation(description = "Reset (fully unlink) the caller's KERI identity: deletes their identity link and fails every one of their non-terminal ceremonies. Idempotent — returns 200 even when the caller was never linked.")
+    @DeleteMapping(value = "/identity", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize(PUBLISH_ROLES)
+    public ResponseEntity<Object> resetIdentity() {
+        String userId = securityHelper.getCurrentUserId();
+        return Responses.respond(oobiService.resetIdentity(userId).map(v -> new ResetView(true)), HttpStatus.OK);
     }
 
     @Operation(description = "Start a new attestation ceremony for a target (design §4.2). Fast-forwards past identity-level steps the user has already completed.")
