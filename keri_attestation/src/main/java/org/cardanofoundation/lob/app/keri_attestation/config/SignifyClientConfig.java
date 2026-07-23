@@ -106,14 +106,20 @@ public class SignifyClientConfig {
         Object id;
         String eid;
 
-        AvailableWitnesses availableWitnesses = getAvailableWitnesses(client);
-        List<String> witnessIds = availableWitnesses.witnesses().stream()
-                .map(WitnessInfo::eid)
-                .toList();
-
+        // WITNESS-LESS on purpose (cip113 parity — the proven cross-KERIA wallet flow):
+        // cip113's KeriConfig.createAid creates the agent AID with NO witnesses (its witness code is
+        // commented out) and relies solely on the "agent" end-role added below. This is what makes
+        // cross-KERIA IPEX delivery work: with an agent end-role and no witnesses, the KERIA agent
+        // itself IS the identifier's mailbox, so a grant/offer the wallet (on a DIFFERENT KERIA)
+        // submits to this AID lands directly on our KERIA agent and surfaces in notifications().list()
+        // immediately. A witnessed AID instead routes inbound exchanges through those witnesses'
+        // mailboxes — which the wallet's KERIA cannot reach when the witnesses are local — so the
+        // wallet reports "sent" but the notification never arrives here. Observed live 2026-07-23:
+        // witnessed AID → grants never reached the backend even though Veridian showed success.
+        // (getAvailableWitnesses/AvailableWitnesses/WitnessInfo are now unused — kept as reference for
+        // the witnessed variant, exactly as cip113 keeps its witness code commented out rather than
+        // deleted.)
         CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
-        kArgs.setToad(availableWitnesses.toad());
-        kArgs.setWits(witnessIds);
 
         Optional<States.HabState> optionalIdentifier = client.identifiers().get(name);
         if (optionalIdentifier.isPresent()) {
