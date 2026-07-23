@@ -81,6 +81,15 @@ public class KeriIdentityLinkEntity implements Persistable<String> {
     @Column(name = "auth_begin_at")
     private Instant authBeginAt;
 
+    /**
+     * True when the caller asserted their AUTH_BEGIN authority is already published on-chain without
+     * supplying a tx hash to verify — an UNVERIFIED completion (see
+     * {@code KeriAuthBeginService#markAssumedPublished}). Kept distinct from {@link #authBeginTxHash}
+     * (a real verified/submitted hash) so it stays queryable when the verification policy is re-enabled.
+     */
+    @Column(name = "auth_begin_asserted", nullable = false)
+    private boolean authBeginAsserted;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

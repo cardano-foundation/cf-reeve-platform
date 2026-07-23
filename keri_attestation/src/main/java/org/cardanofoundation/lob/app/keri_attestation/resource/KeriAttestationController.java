@@ -140,15 +140,16 @@ public class KeriAttestationController {
         return Responses.respond(credentialService.presentCredential(id, userId, retry), HttpStatus.OK);
     }
 
-    @Operation(description = "Begin (or retry) the AUTH_BEGIN step: verifies a user-supplied external tx hash, or builds and submits a fresh AUTH_BEGIN transaction, synchronously, and returns the final ceremony state.")
+    @Operation(description = "Begin (or retry) the AUTH_BEGIN step: verifies a user-supplied external tx hash, accepts an unverified 'already published' assertion, or builds and submits a fresh AUTH_BEGIN transaction, synchronously, and returns the final ceremony state.")
     @PostMapping(value = "/ceremonies/{id}/auth-begin", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> submitAuthBegin(@PathVariable String id,
             @RequestBody(required = false) AuthBeginRequest request) {
         String userId = securityHelper.getCurrentUserId();
         String externalTxHash = request != null ? request.getExternalTxHash() : null;
+        boolean assumePublished = request != null && request.isAssumePublished();
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(authBeginService.submitAuthBegin(id, userId, externalTxHash, retry), HttpStatus.OK);
+        return Responses.respond(authBeginService.submitAuthBegin(id, userId, externalTxHash, assumePublished, retry), HttpStatus.OK);
     }
 
     @Operation(description = "Begin (or retry) the ATTEST step: sends a remotesign anchoring request to the linked wallet and waits, synchronously, for the wallet's confirmed anchor, returning the final ceremony state.")
@@ -174,8 +175,10 @@ public class KeriAttestationController {
     private static IdentityView toIdentityView(KeriIdentityLinkEntity link) {
         IdentityView.IdentityCredentialView credential = link.getCredentialSaid() == null ? null
                 : new IdentityView.IdentityCredentialView(link.getCredentialSaid(), link.getCredentialSchemaSaid());
-        IdentityView.AuthBeginView authBegin = link.getAuthBeginTxHash() == null ? null
-                : new IdentityView.AuthBeginView(link.getAuthBeginTxHash(), link.getAuthBeginAt(), false);
+        // Asserted-but-unverified AUTH_BEGIN has no tx hash but still counts as complete (external=true),
+        // so the identity panel reflects it the same way the ceremony skip logic does.
+        IdentityView.AuthBeginView authBegin = (link.getAuthBeginTxHash() == null && !link.isAuthBeginAsserted()) ? null
+                : new IdentityView.AuthBeginView(link.getAuthBeginTxHash(), link.getAuthBeginAt(), link.isAuthBeginAsserted());
         return new IdentityView(true, link.getAid(), credential, authBegin);
     }
 }

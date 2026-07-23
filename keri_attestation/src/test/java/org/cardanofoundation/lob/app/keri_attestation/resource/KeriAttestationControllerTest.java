@@ -139,6 +139,26 @@ class KeriAttestationControllerTest {
                 .andExpect(jsonPath("$.authBegin").doesNotExist());
     }
 
+    @Test
+    void identityWithAssertedAuthBeginReportsAuthBeginPresentWithNoTxHashAndExternalTrue() throws Exception {
+        // "I already published it" (user-asserted, unverified): no tx hash, but AUTH_BEGIN still counts
+        // as complete, so the identity panel shows it — external=true, txHash absent.
+        KeriIdentityLinkEntity link = new KeriIdentityLinkEntity();
+        link.setUserId(USER_ID);
+        link.setAid("EAID000000000000000000000000000000000000");
+        link.setCredentialSaid("ECRED00000000000000000000000000000000000");
+        link.setCredentialSchemaSaid("ESCHEMA0000000000000000000000000000000000");
+        link.setAuthBeginAsserted(true);
+        link.setAuthBeginAt(Instant.parse("2026-01-01T00:00:00Z"));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
+
+        mockMvc.perform(get("/api/v1/keri-attestation/identity"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.linked").value(true))
+                .andExpect(jsonPath("$.authBegin.txHash").doesNotExist())
+                .andExpect(jsonPath("$.authBegin.external").value(true));
+    }
+
     // ==================== GET /agent/oobi ====================
 
     @Test
@@ -299,7 +319,7 @@ class KeriAttestationControllerTest {
 
     @Test
     void submitAuthBeginHappyPathReturns200AndPassesExternalTxHashThrough() throws Exception {
-        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false))
+        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false, false))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/auth-begin", CEREMONY_ID)
@@ -309,18 +329,18 @@ class KeriAttestationControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false);
+        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false, false);
     }
 
     @Test
     void submitAuthBeginWithNoBodySubmitsAFreshTransaction() throws Exception {
-        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, null, false))
+        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, null, false, false))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/auth-begin", CEREMONY_ID))
                 .andExpect(status().isOk());
 
-        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, null, false, false);
     }
 
     // ==================== POST /ceremonies/{id}/attest ====================

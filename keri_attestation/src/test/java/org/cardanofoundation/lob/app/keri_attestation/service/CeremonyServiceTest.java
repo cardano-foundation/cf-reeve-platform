@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -158,6 +159,22 @@ class CeremonyServiceTest {
         assertFalse(view.requiredSteps().credential());
         assertFalse(view.requiredSteps().authBegin());
         assertEquals("a".repeat(64), view.authBeginTxHash());
+    }
+
+    @Test
+    void createWithAssertedAuthBeginLinkStartsAtAuthBeginConfirmedEvenWithoutATxHash() {
+        // "I already published it" (user-asserted, unverified): no tx hash, but the asserted flag still
+        // counts AUTH_BEGIN as complete, so the step is skipped just like a real confirmed hash would.
+        KeriIdentityLinkEntity assertedLink = link(1, "Eaid", "Ecred", null);
+        assertedLink.setAuthBeginAsserted(true);
+        when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(assertedLink));
+        when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        CeremonyView view = service.create(USER, "DOCUMENT", "doc-1").get();
+
+        assertEquals(CeremonyState.AUTH_BEGIN_CONFIRMED, view.state());
+        assertFalse(view.requiredSteps().authBegin());
+        assertNull(view.authBeginTxHash());
     }
 
     @Test

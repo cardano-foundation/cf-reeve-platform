@@ -500,7 +500,8 @@ public class CeremonyService implements AttestationConsumptionApi {
         if (link.getCredentialSaid() == null) {
             return CeremonyState.OOBI_RESOLVED;
         }
-        if (link.getAuthBeginTxHash() == null) {
+        // A user-asserted "already published" AUTH_BEGIN has no tx hash but still counts as complete.
+        if (link.getAuthBeginTxHash() == null && !link.isAuthBeginAsserted()) {
             return CeremonyState.CREDENTIAL_RECEIVED;
         }
         return CeremonyState.AUTH_BEGIN_CONFIRMED;

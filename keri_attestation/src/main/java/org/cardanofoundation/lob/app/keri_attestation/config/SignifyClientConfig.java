@@ -74,7 +74,8 @@ public class SignifyClientConfig {
     @Bean
     public KeriAttestationClient keriAttestationClient(KeriAttestationProperties properties) throws Exception {
         KeriAttestationProperties.Keria keria = properties.keria();
-        SignifyClient client = new SignifyClient(keria.url(), keria.bran(), Salter.Tier.low, keria.bootUrl(), null);
+        String bran = keria.bran() == null || keria.bran().isEmpty() ? Coring.randomPasscode() : keria.bran();
+        SignifyClient client = new SignifyClient(keria.url(), bran, Salter.Tier.low, keria.bootUrl(), null);
         try {
             client.connect();
         } catch (Exception e) {

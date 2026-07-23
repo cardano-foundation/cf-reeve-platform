@@ -85,7 +85,7 @@ public class KeriAuthBeginService {
      * return-value convention.
      */
     public Either<ProblemDetail, CeremonyView> submitAuthBegin(String ceremonyId, String userId,
-            String externalTxHash, boolean retry) {
+            String externalTxHash, boolean assumePublished, boolean retry) {
         Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
                 CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, retry);
         if (begun.isLeft()) {
@@ -101,10 +101,54 @@ public class KeriAuthBeginService {
         }
         KeriIdentityLinkEntity link = linkOpt.get();
 
-        if (externalTxHash != null) {
-            return verifyExternal(ceremonyId, userId, generation, ceremony, link, externalTxHash);
+        // A blank hash is treated as absent so an empty "existing" text field never hits verifyExternal
+        // (which would fail on an empty hash) — it falls through to the assert/submit paths instead.
+        String normalizedTxHash = externalTxHash == null || externalTxHash.isBlank() ? null : externalTxHash.trim();
+        if (normalizedTxHash != null) {
+            return verifyExternal(ceremonyId, userId, generation, ceremony, link, normalizedTxHash);
+        }
+        if (assumePublished) {
+            return markAssumedPublished(ceremonyId, userId, generation, ceremony, link);
         }
         return submitOwn(ceremonyId, userId, generation, ceremony, link);
+    }
+
+    // --- "I already published it" (user-asserted, UNVERIFIED) ---
+
+    /**
+     * Accepts the caller's assertion that AUTH_BEGIN authority is already published on-chain, WITHOUT
+     * supplying a tx hash to verify it. Completes the step to {@code AUTH_BEGIN_CONFIRMED} and records
+     * an {@code auth_begin_asserted} flag on the link (no hash, no block) so future ceremonies skip the
+     * step. No submitter is touched — nothing is read or written on-chain.
+     *
+     * <p><b>SECURITY / TODO(policy):</b> there is NO on-chain verification of this claim here. This
+     * mirrors the deliberately-relaxed credential policy elsewhere in this module — re-enable a
+     * mandatory verification path (or drop this escape hatch) once the authority policy is finalized.
+     */
+    private Either<ProblemDetail, CeremonyView> markAssumedPublished(String ceremonyId, String userId, int generation,
+            KeriAttestationCeremonyEntity ceremony, KeriIdentityLinkEntity link) {
+        log.warn("SECURITY: AUTH_BEGIN accepted for user {} without any on-chain verification "
+                + "(user asserted 'already published', no tx hash supplied). // TODO(policy): require verification",
+                link.getUserId());
+
+        String linkUserId = link.getUserId();
+        int bindingVersion = ceremony.getBindingVersion();
+        try {
+            boolean completed = ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    CeremonyState.AUTH_BEGIN_CONFIRMED,
+                    c -> markAuthBeginAssertedIfIdentityStillCurrent(linkUserId, bindingVersion));
+            if (!completed) {
+                log.warn("Skipping AUTH_BEGIN assumed-published completion for ceremony {}: no longer waiting on "
+                        + "AUTH_BEGIN_SUBMITTED.", ceremonyId);
+                return ceremonyService.get(ceremonyId, userId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to complete AUTH_BEGIN assumed-published for ceremony {}: {}", ceremonyId, e.getMessage());
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
+                    "Failed to persist the AUTH_BEGIN confirmation: " + e.getMessage());
+        }
+        log.info("AUTH_BEGIN marked as already-published (user-asserted, unverified), step complete");
+        return ceremonyService.get(ceremonyId, userId);
     }
 
     // --- external authority verification (design §4.5 "the skip") ---
@@ -305,6 +349,25 @@ public class KeriAuthBeginService {
             if (blockNumber != null) {
                 freshLink.setAuthBeginBlock(blockNumber);
             }
+            identityLinkRepository.save(freshLink);
+        });
+    }
+
+    /**
+     * Records the user-asserted, UNVERIFIED AUTH_BEGIN completion on the identity link: sets the
+     * {@code auth_begin_asserted} flag (no tx hash, no block). Same relink-race guard and row-lock idiom
+     * as {@link #persistAuthBeginIfIdentityStillCurrent}; only ever called from inside a {@link
+     * CeremonyService#completeStep} mutator.
+     */
+    private void markAuthBeginAssertedIfIdentityStillCurrent(String userId, int expectedBindingVersion) {
+        identityLinkRepository.findByUserIdForUpdate(userId).ifPresent(freshLink -> {
+            if (freshLink.getBindingVersion() != expectedBindingVersion) {
+                log.warn("Skipping AUTH_BEGIN asserted-flag write for user {}: identity was relinked (expected binding "
+                        + "version {}, now {}).", userId, expectedBindingVersion, freshLink.getBindingVersion());
+                return;
+            }
+            freshLink.setAuthBeginAsserted(true);
+            freshLink.setAuthBeginAt(Instant.now());
             identityLinkRepository.save(freshLink);
         });
     }
