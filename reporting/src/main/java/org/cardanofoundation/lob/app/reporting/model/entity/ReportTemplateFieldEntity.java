@@ -29,6 +29,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
+
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
@@ -38,6 +41,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Audited
 @Getter
 @Setter
 public class ReportTemplateFieldEntity extends CommonEntity {
@@ -59,10 +63,12 @@ public class ReportTemplateFieldEntity extends CommonEntity {
     @Builder.Default
     private List<ReportTemplateFieldEntity> childFields = new ArrayList<>();
 
+    @NotAudited
     @OneToMany(mappedBy = "field", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ValidationRuleTermEntity> validationRuleTerms = new ArrayList<>();
 
+    @NotAudited
     @ManyToMany
     @JoinTable(
             name = "report_field_account_mapping",
