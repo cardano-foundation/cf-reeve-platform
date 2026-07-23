@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +34,7 @@ import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
  * has already vouched for structurally.
  */
 @Service
+@Slf4j
 public class CredentialChainValidator {
 
     /** The validated leaf credential — {@code credentialSaid} is its own {@code d}, {@code schemaSaid}
@@ -141,8 +144,18 @@ public class CredentialChainValidator {
         if (edges.isEmpty()) {
             // An empty (or unset) trusted-root list means "trust any root" — no root-AID restriction,
             // so the chain is accepted at its root on the strength of its structure/TEL state alone.
-            // Configure credential-policy.trusted-root-aids to pin acceptance to specific roots.
-            if (trustedRootAids != null && !trustedRootAids.isEmpty() && !trustedRootAids.contains(nodeIssuer)) {
+            // This is a deliberate dev/test convenience; it is a FAIL-OPEN trust gate, so it is logged
+            // loudly on every acceptance rather than passing silently — a production deployment that
+            // forgot to set credential-policy.trusted-root-aids must not silently trust any issuer.
+            // Configure the list to pin acceptance to specific roots.
+            if (trustedRootAids == null || trustedRootAids.isEmpty()) {
+                log.warn("SECURITY: accepting credential chain at root issuer {} with NO trusted-root "
+                        + "restriction — credential-policy.trusted-root-aids is empty, so ANY issuer is "
+                        + "trusted. Set that list to pin acceptance to specific root AIDs in production.",
+                        nodeIssuer);
+                return Either.right(null);
+            }
+            if (!trustedRootAids.contains(nodeIssuer)) {
                 return reject("Credential chain issuer %s is not a trusted root AID.".formatted(nodeIssuer));
             }
             return Either.right(null);
