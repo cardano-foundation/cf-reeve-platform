@@ -106,18 +106,22 @@ public class SignifyClientConfig {
         Object id;
         String eid;
 
-        // WITNESS-LESS on purpose (proven cross-KERIA wallet flow): the agent AID is created with NO
-        // witnesses, relying solely on the "agent" end-role added below. This is what makes cross-KERIA
-        // IPEX delivery work: with an agent end-role and no witnesses, the KERIA agent itself IS the
-        // identifier's mailbox, so a grant/offer the wallet (on a DIFFERENT KERIA) submits to this AID
-        // lands directly on our KERIA agent and surfaces in notifications().list() immediately. A
-        // witnessed AID instead routes inbound exchanges through those witnesses' mailboxes — which the
-        // wallet's KERIA cannot reach when the witnesses are local — so the wallet reports "sent" but
-        // the notification never arrives here. Observed live 2026-07-23: witnessed AID → grants never
-        // reached the backend even though Veridian showed success.
-        // (getAvailableWitnesses/AvailableWitnesses/WitnessInfo are now unused — kept in place for the
-        // witnessed variant, should this ever need to be re-enabled.)
+        // Create the agent AID WITH witnesses (from the KERIA agent's own configured witness pool) plus
+        // the "agent" end-role added below. The witnesses give the identifier a shared inbound mailbox
+        // that any counterparty's KERIA can post to and poll — which is what lets a wallet on a DIFFERENT
+        // KERIA deliver an IPEX offer/grant back to this AID so it surfaces in notifications().list().
+        // A witness-LESS AID's only inbound endpoint is this backend's own KERIA agent, which a separate
+        // wallet-side KERIA deployment cannot necessarily deliver to: observed live 2026-07-23 that a
+        // witness-less agent received no grants at all (the wallet reported success, nothing arrived),
+        // whereas witnessed agents on this deployment have received them.
+        AvailableWitnesses availableWitnesses = getAvailableWitnesses(client);
+        List<String> witnessIds = availableWitnesses.witnesses().stream()
+                .map(WitnessInfo::eid)
+                .toList();
+
         CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
+        kArgs.setToad(availableWitnesses.toad());
+        kArgs.setWits(witnessIds);
 
         Optional<States.HabState> optionalIdentifier = client.identifiers().get(name);
         if (optionalIdentifier.isPresent()) {
@@ -139,9 +143,9 @@ public class SignifyClientConfig {
                 client.operations().wait(Operation.fromObject(roleResult.op()));
             }
 
-            // Cross-KERIA delivery diagnostic: confirms the witness-less creation above actually took
-            // effect on the freshly-created AID (0 witnesses expected now) rather than trusting the
-            // creation call silently did the right thing.
+            // Diagnostic: log the freshly-created AID's actual witness set / toad so a live run can
+            // confirm the witnesses were assigned (and see which ones), which is what the wallet's KERIA
+            // must be able to reach to deliver a reply back.
             Optional<States.HabState> freshHab = client.identifiers().get(name);
             if (freshHab.isPresent()) {
                 States.State freshState = freshHab.get().getState();
