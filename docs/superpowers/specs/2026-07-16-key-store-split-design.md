@@ -53,7 +53,7 @@ instruction, not an oversight.
 
 ## Schema
 
-Both edited into `V1.6_100_13__lob_service_app_document_vault_module.sql`.
+Both edited into `V1.7_100_14__lob_service_app_document_vault_module.sql`.
 
 ```sql
 -- Org keys: a Keycloak user who owns the private half.

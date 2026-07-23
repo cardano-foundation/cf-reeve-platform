@@ -117,7 +117,7 @@ sink would then reject them.
 
 ### Data model
 
-Edited into `V1.6_100_13__lob_service_app_document_vault_module.sql`, table `document_vault_key`:
+Edited into `V1.7_100_14__lob_service_app_document_vault_module.sql`, table `document_vault_key`:
 
 ```sql
 home_organisation_id VARCHAR(255),          -- holder's own org, as claimed by the card. Never compared.

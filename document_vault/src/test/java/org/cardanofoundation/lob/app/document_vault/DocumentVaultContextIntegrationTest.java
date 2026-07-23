@@ -68,6 +68,6 @@ public class DocumentVaultContextIntegrationTest {
                 Integer.class);
         assertEquals(5, tables,
                 "Expected the 5 document_vault_* tables (key, addressbook_entry, wrapped_record, "
-                        + "document, document_slot) created by V1.6_100_13__lob_service_app_document_vault_module.sql");
+                        + "document, document_slot) created by V1.7_100_14__lob_service_app_document_vault_module.sql");
     }
 }

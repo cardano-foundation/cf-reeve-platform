@@ -38,7 +38,7 @@
 - Create: `document_vault/build.gradle.kts`
 - Create: `document_vault/src/main/java/org/cardanofoundation/lob/app/document_vault/package-info.java`
 - Create: `document_vault/src/main/java/org/cardanofoundation/lob/app/config/DocumentVaultModuleConfig.java`
-- Create: `document_vault/src/main/resources/db/migration/postgresql/common/V1.6_100_13__lob_service_app_document_vault_module.sql`
+- Create: `document_vault/src/main/resources/db/migration/postgresql/common/V1.7_100_14__lob_service_app_document_vault_module.sql`
 - Create: `document_vault/src/test/resources/application-test.yml`
 - Create: `document_vault/src/test/java/org/cardanofoundation/lob/app/document_vault/config/TestContainerConfig.java`
 - Create: `document_vault/src/test/java/org/cardanofoundation/lob/app/document_vault/DocumentVaultContextIntegrationTest.java`
@@ -119,7 +119,7 @@ public class DocumentVaultModuleConfig {
 
 - [ ] **Step 6: Create the Flyway migration**
 
-`V1.6_100_13__lob_service_app_document_vault_module.sql`:
+`V1.7_100_14__lob_service_app_document_vault_module.sql`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS document_vault_key (

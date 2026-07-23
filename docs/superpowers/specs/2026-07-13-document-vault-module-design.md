@@ -227,7 +227,7 @@ blockchain_publisher_document (publisher module, 200_x migration series, publish
   ipfs_cid NULL, + L1SubmissionData (tx hash, slot, finality, publish status, error, retry count). NOT Envers-audited.
 ```
 
-Migration files: vault `V1.6_100_13__lob_service_app_document_vault_module.sql` (re-check next free `100_x` at implementation time); publisher `V1.6_200_9__add_document_publishable.sql` (re-check next free `200_x`).
+Migration files: vault `V1.7_100_14__lob_service_app_document_vault_module.sql` (re-check next free `100_x` at implementation time); publisher `V1.6_200_9__add_document_publishable.sql` (re-check next free `200_x`).
 
 ## API (base `/api/v1/document-vault`, all JSON, springdoc-annotated, ProblemDetail errors)
 
