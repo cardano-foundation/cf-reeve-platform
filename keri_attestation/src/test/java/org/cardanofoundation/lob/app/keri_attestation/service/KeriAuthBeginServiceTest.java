@@ -48,7 +48,7 @@ import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
  * own-chain submission path complete (or fail) the ceremony synchronously in this one call — the
  * own-chain path no longer dispatches a background confirmation poll ({@code awaitAuthBeginConfirmation}
  * / {@code CeremonyAsyncRunner} are gone); it fires the AUTH_BEGIN tx and completes the step the moment
- * the submitter returns a tx hash (cip113 parity), without waiting for block confirmations.
+ * the submitter returns a tx hash, without waiting for block confirmations.
  */
 @ExtendWith(MockitoExtension.class)
 class KeriAuthBeginServiceTest {
@@ -335,7 +335,7 @@ class KeriAuthBeginServiceTest {
         verifyNoInteractions(submitter);
     }
 
-    // ==================== submitAuthBegin: own submission (cip113 fire-and-complete) ====================
+    // ==================== submitAuthBegin: own submission (fire-and-complete) ====================
 
     @Test
     void submitAuthBeginOwnSubmissionHappyPathSubmitsTxAndCompletesTheStepSynchronouslyWithoutWaitingForConfirmations() throws Exception {
@@ -364,8 +364,8 @@ class KeriAuthBeginServiceTest {
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.AUTH_BEGIN_CONFIRMED, result.get().state());
-        // cip113 parity: no confirmation poll -- submitter.confirmations is never even a dependency any
-        // more (the CardanoMetadataTxSubmitter mock here only stubs submitMetadataTransaction /
+        // No confirmation poll -- submitter.confirmations is never even a dependency any more (the
+        // CardanoMetadataTxSubmitter mock here only stubs submitMetadataTransaction /
         // readCip170Metadata). completeStep is called directly off the tx-hash return, in this same call.
         verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any());

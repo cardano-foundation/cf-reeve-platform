@@ -181,7 +181,7 @@ public class CredentialChainValidator {
     // --- ACDC helpers ---
 
     /** ACDCs carry no {@code "t"} (event-type) field — identified by having {@code s}/{@code a}/{@code i}
-     *  instead, same idiom as {@code docs/keri/advanced/PublishExistingCredential.java#strip}. */
+     *  instead, same idiom {@link CesrChainReducer} uses. */
     private static boolean isAcdc(Map<String, Object> event) {
         return event.containsKey("s") && event.containsKey("a") && event.containsKey("i") && event.get("s") != null;
     }

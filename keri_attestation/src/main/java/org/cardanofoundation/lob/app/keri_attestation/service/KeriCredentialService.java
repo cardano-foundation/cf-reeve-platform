@@ -38,8 +38,7 @@ import org.cardanofoundation.signify.core.States.HabState;
 import org.cardanofoundation.signify.core.States.State;
 
 /**
- * Drives IPEX credential presentation (design §4.3) SYNCHRONOUSLY, in the request thread — mirroring
- * cip113's proven reference ({@code KeriService#presentCredential}, lines 234-325 of that class): the
+ * Drives IPEX credential presentation (design §4.3) SYNCHRONOUSLY, in the request thread: the
  * platform's agent AID requests a credential from the user's linked wallet AID (apply), waits in-thread
  * for the wallet's offer, agrees, waits in-thread for the grant, admits, then fetches and validates the
  * full CESR chain before persisting it to the identity link and returning the ceremony's final state.
@@ -47,28 +46,27 @@ import org.cardanofoundation.signify.core.States.State;
  * <p><b>Why synchronous (design rev, user-directed, live wallet testing):</b> the previous async model
  * (a quick synchronous "send the apply" half returning 202, followed by a background-executor
  * continuation that awaited the wallet's replies) was found, under live wallet testing, to never observe
- * the wallet's offer/grant notifications reliably — the split introduced a race the cip113 reference
- * simply doesn't have, since cip113 does the entire apply→offer→agree→grant→admit round trip on the
- * original request thread with no handoff at all. This class now does the same: {@link
- * #presentCredential} is the ONLY entry point, and it blocks the calling thread for the whole exchange
- * (bounded by {@link KeriAttestationProperties#remotesignTimeout()} per wait). There is no longer a
- * background runner to hand off to, and no cross-request "resume mid-step" phase to persist: a crash
- * mid-flight simply abandons this one HTTP request, and the ceremony sits at {@code
- * CREDENTIAL_REQUESTED} for a subsequent retry (or the cleanup sweep) to fail out — exactly the recovery
- * story a single-threaded flow like cip113's already has.
+ * the wallet's offer/grant notifications reliably — the split introduced a race that a single in-thread
+ * round trip simply doesn't have. This class now does the whole apply→offer→agree→grant→admit exchange
+ * on the original request thread with no handoff at all: {@link #presentCredential} is the ONLY entry
+ * point, and it blocks the calling thread for the whole exchange (bounded by
+ * {@link KeriAttestationProperties#remotesignTimeout()} per wait). There is no longer a background
+ * runner to hand off to, and no cross-request "resume mid-step" phase to persist: a crash mid-flight
+ * simply abandons this one HTTP request, and the ceremony sits at {@code CREDENTIAL_REQUESTED} for a
+ * subsequent retry (or the cleanup sweep) to fail out — exactly the recovery story a single-threaded
+ * flow already has.
  *
  * <p><b>Live-testing fix:</b> {@link #ensureSchemasResolved} resolves every configured schema SAID as
  * an OOBI on OUR OWN agent before the first apply that references it is ever sent — KERIA silently
  * drops an IPEX exchange referencing a schema SAID the receiving agent has never itself resolved, so
  * without this a real wallet's "present" action does nothing observable (no error, no notification).
- * See that method's javadoc for the full rationale, mirrored from cip113's reference
- * {@code resolveSchemas} flow ({@code docs/keri/advanced/PublishExistingCredential.java}).
+ * See that method's javadoc for the full rationale.
  *
  * <p><b>Dual-path presentation (design rev, live Veridian wallet evidence):</b> the apply→offer→agree→
- * grant→admit negotiation above is cip113's contract, but a real Veridian wallet build was observed, on
- * the actual backend log, to present via a <em>spontaneous</em> IPEX grant instead — apply→grant→admit,
- * with NO offer and NO agree ever sent at all; the notification queue after a live "present" tap
- * contained only {@code /exn/ipex/grant} entries, zero {@code /exn/ipex/offer}. {@link
+ * grant→admit negotiation above is the negotiated contract, but a real Veridian wallet build was
+ * observed, on the actual backend log, to present via a <em>spontaneous</em> IPEX grant instead —
+ * apply→grant→admit, with NO offer and NO agree ever sent at all; the notification queue after a live
+ * "present" tap contained only {@code /exn/ipex/grant} entries, zero {@code /exn/ipex/offer}. {@link
  * #presentCredential} therefore waits for the FIRST unread notification on EITHER an offer or a grant
  * route and branches on which one actually arrived: a grant skips the offer/agree steps entirely and
  * admits directly (using the admit's own {@code atc} — there is no agree to borrow one from); an offer
@@ -81,10 +79,9 @@ import org.cardanofoundation.signify.core.States.State;
 public class KeriCredentialService {
 
     // KERIA surfaces an inbound IPEX exn's route on the notification as EITHER the "/exn/"-prefixed
-    // form or the bare form, non-deterministically — cip113's IpexNotificationHelper.waitForNotification
-    // accepts both (it derives the bare form via route.substring(4)). Matching only the "/exn/" form
-    // silently drops the wallet's offer/grant notification, so the credential step hangs even though the
-    // wallet responded. Accept both forms exactly as the reference does.
+    // form or the bare form, non-deterministically. Matching only the "/exn/" form silently drops the
+    // wallet's offer/grant notification, so the credential step hangs even though the wallet responded.
+    // Accept both forms.
     private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer", "/ipex/offer");
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
 
@@ -95,8 +92,8 @@ public class KeriCredentialService {
     private static final List<String> OFFER_OR_GRANT_ROUTES =
             List.of("/exn/ipex/offer", "/ipex/offer", "/exn/ipex/grant", "/ipex/grant");
 
-    /** cip113's exact {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6): passed
-     *  explicitly to every exn this class builds rather than relying on the pinned signify jar's own
+    /** The {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6): passed explicitly to
+     *  every exn this class builds rather than relying on the pinned signify jar's own
      *  null-datetime fallback ({@code Exchanging.exchange}), which derives its timestamp from
      *  {@code java.util.Date} and can render withOUT a fractional-seconds separator at all
      *  (e.g. {@code "...T00:00:00000+00:00"}, missing the {@code "."}) on the rare timestamp that lands
@@ -135,7 +132,7 @@ public class KeriCredentialService {
      * OOBI_RESOLVED} to {@code CREDENTIAL_REQUESTED} → a short retry pre-check for a reply that already
      * arrived on a previous attempt's apply → apply → wait, in-thread, for EITHER an offer or a
      * spontaneous grant (dual-path, class javadoc) → branch: a grant admits directly; an offer falls
-     * through to cip113's negotiation (agree → wait for the grant, in-thread → admit) → fetch the full
+     * through to the negotiated flow (agree → wait for the grant, in-thread → admit) → fetch the full
      * CESR chain → {@link CredentialChainValidator} → persist + complete the step. Every wire step logs
      * at INFO so a stalled live run shows exactly where it stopped.
      *
@@ -200,7 +197,7 @@ public class KeriCredentialService {
         // apply, look for a late-arriving offer OR grant left over from a previous attempt. Dual-path
         // (design rev, live Veridian evidence — class javadoc): the real wallet was observed to present
         // via a spontaneous grant with no offer at all, so this pre-check — like the wait below — must
-        // watch for either. cip113 parity: route-only, like every claim in this module now — see
+        // watch for either. Route-only, like every claim in this module — see
         // KeriNotificationCorrelator#awaitByRoute's javadoc. Found: resume straight into the matching
         // continuation below without resending the apply. Not found (or this is the first attempt,
         // requestExnSaid still null): fall through and build + send a fresh apply.
@@ -275,8 +272,8 @@ public class KeriCredentialService {
             deferredGrantNotificationId = claimedNotification.notificationId();
         } else {
             log.info("offer received {}", claimedNotification.exnSaid());
-            // cip113 parity (KeriService#presentCredential): the offer notification is claimed (marked +
-            // deleted) immediately once its SAID has been read, before the agree is even built.
+            // The offer notification is claimed (marked + deleted) immediately once its SAID has been
+            // read, before the agree is even built.
             correlator.markAndDelete(claimedNotification.notificationId());
 
             ExchangeMessageResult agreeResult;
@@ -315,8 +312,8 @@ public class KeriCredentialService {
                 ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
                         .senderName(agentName).recipient(linkedAid).message("")
                         .grantSaid(grantNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
-                // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE exchange's
-                // own atc, NOT the admit's own — a proven cip113 wallet-contract quirk this module matches.
+                // submitAdmit is given the AGREE exchange's own atc, NOT the admit's own — a proven
+                // wallet-contract quirk this module matches.
                 logAdmitExn(admitResult, grantNotification.exnSaid(), linkedAid, "agree");
                 Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         agreeResult.atc(), List.of(linkedAid));
@@ -426,11 +423,10 @@ public class KeriCredentialService {
      * never resolved the credential schema's OOBI itself. KERIA silently drops an IPEX exchange
      * referencing a schema SAID the receiving agent doesn't already know, so the wallet's offer — sent
      * in response to a perfectly valid apply — is dropped before it ever becomes a notification here.
-     * cip113's reference flow avoids this by resolving every schema OOBI up front (see
-     * {@code docs/keri/advanced/PublishExistingCredential.java}'s {@code resolveSchemas}: for each
-     * schema, {@code client.oobis().resolve(schemaBaseUrl + "/" + said, null)} followed by
-     * {@code client.operations().wait(...)}); this mirrors that, but lazily — once per SAID per
-     * process, cached in {@link #resolvedSchemaSaids} — rather than eagerly at startup.
+     * The fix is to resolve every schema OOBI up front: for each schema,
+     * {@code client.oobis().resolve(schemaBaseUrl + "/" + said, null)} followed by
+     * {@code client.operations().wait(...)} — done here lazily, once per SAID per process, cached in
+     * {@link #resolvedSchemaSaids}, rather than eagerly at startup.
      *
      * <p>Called at the very top of {@link #presentCredential}, before {@code beginStep} touches any
      * ceremony state at all: a resolution failure must surface as a plain problem, never a
@@ -485,10 +481,10 @@ public class KeriCredentialService {
                         "No local HabState found for agent identifier %s.".formatted(agentName)));
             }
 
-            // cip113 wallet contract (design §4.3/§4.4 rev 3, KeriService#presentCredential): build
-            // /ipex/apply directly via createExchangeMessage, with oobiUrl at the TOP level of the
-            // payload (exn.a.oobiUrl). IpexApplyArgs#attributes (the old approach) lands under exn.a.a
-            // instead, which the wallet never finds.
+            // Wallet contract (design §4.3/§4.4 rev 3): build /ipex/apply directly via
+            // createExchangeMessage, with oobiUrl at the TOP level of the payload (exn.a.oobiUrl).
+            // IpexApplyArgs#attributes (the old approach) lands under exn.a.a instead, which the
+            // wallet never finds.
             //
             // Live-testing fix: oobiUrl must be the CREDENTIAL SCHEMA SERVER's base URL (configured as
             // lob.keri-attestation.credential-policy.schema-base-url), NOT our agent's own OOBI — this
@@ -510,8 +506,7 @@ public class KeriCredentialService {
                 return Either.left(staleCeremonyProblem(ceremony.getId()));
             }
 
-            // cip113 parity (KeriService#presentCredential): every IPEX submit is followed by
-            // operations().wait, not just fire-and-forget.
+            // Every IPEX submit is followed by operations().wait, not just fire-and-forget.
             Object applyOp = client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(),
                     List.of(linkedAid));
             client.client().operations().wait(Operation.fromObject(applyOp));
@@ -641,9 +636,9 @@ public class KeriCredentialService {
      * <p>Prefers the FETCHED exchange's own {@code r} field ({@code notification.exn().get("r")}) when
      * it is itself recognized as one of the offer/grant routes; falls back to the notification's own
      * claimed route ({@link CorrelatedNotification#claimedRoute()}) otherwise. A real wallet's exn should
-     * always carry its own {@code r}, but {@link KeriNotificationCorrelator#awaitByRoute} — unlike the
-     * stricter {@code awaitCorrelated} path — never validates it against the awaited routes, so this
-     * does not assume it is always present or trustworthy; {@code claimedRoute} is guaranteed to be one
+     * always carry its own {@code r}, but {@link KeriNotificationCorrelator#awaitByRoute} never
+     * validates it against the awaited routes, so this does not assume it is always present or
+     * trustworthy; {@code claimedRoute} is guaranteed to be one
      * of {@link #OFFER_OR_GRANT_ROUTES} by construction (it is exactly what {@code awaitByRoute}'s own
      * pre-filter matched on), so it is always a safe fallback. {@code claimedRoute} can still itself be
      * {@code null} for a caller that never populates it (the 3-arg {@code CorrelatedNotification}

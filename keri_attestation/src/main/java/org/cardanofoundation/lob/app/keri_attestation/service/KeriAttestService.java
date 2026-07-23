@@ -33,8 +33,8 @@ import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.core.States.HabState;
 
 /**
- * Drives the ATTEST step (design §4.6) SYNCHRONOUSLY, in the request thread — the same cip113-parity
- * treatment as {@link KeriCredentialService#presentCredential}: freezes the target's metadata via its
+ * Drives the ATTEST step (design §4.6) SYNCHRONOUSLY, in the request thread — the same treatment as
+ * {@link KeriCredentialService#presentCredential}: freezes the target's metadata via its
  * {@link AttestationTargetProvider}, sends a remotesign anchoring request to the linked wallet AID,
  * waits IN-THREAD for the wallet's confirmed KEL interaction event, verifies it actually anchors the
  * expected digest, and advances the ceremony to {@code ATTEST_ANCHORED} before returning — all in
@@ -62,7 +62,7 @@ public class KeriAttestService {
     private static final int KEY_STATE_QUERY_ATTEMPTS = 5;
     private static final long KEY_STATE_QUERY_WAIT_MILLIS = 10_000L;
 
-    /** cip113's exact {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6) — see
+    /** The {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6) — see
      *  {@link KeriCredentialService#KERI_DATETIME}'s javadoc for why this is passed explicitly rather
      *  than left to the pinned signify jar's own null-datetime fallback. */
     private static final DateTimeFormatter KERI_DATETIME =
@@ -117,7 +117,7 @@ public class KeriAttestService {
         String walletAid = linkOpt.get().getAid();
 
         // Retry pre-check (design §4.2): before re-sending, look for a late-arriving ref matching
-        // whatever was sent on a previous attempt. cip113 parity: route-only — see
+        // whatever was sent on a previous attempt. Route-only — see
         // KeriNotificationCorrelator#awaitByRoute's javadoc. A fresh (non-retry) call, or a retry whose
         // previous attempt never got as far as sending anything, has no requestExnSaid yet and skips
         // straight to rebuilding + sending below.
@@ -189,9 +189,9 @@ public class KeriAttestService {
                         "No local HabState found for agent identifier %s.".formatted(agentService.agentName()));
             }
 
-            // cip113 wallet contract (design §4.4 rev 3): the payload itself is saidified before it is
-            // ever sent, and that payload SAID (not the raw metadataDigest) is what the wallet is
-            // expected to anchor as the interaction-event seal — see RemotesignRequestFactory's javadoc.
+            // Wallet contract (design §4.4 rev 3): the payload itself is saidified before it is ever
+            // sent, and that payload SAID (not the raw metadataDigest) is what the wallet is expected to
+            // anchor as the interaction-event seal — see RemotesignRequestFactory's javadoc.
             Map<String, Object> ked = kedFactory.anchorRequestKed(walletAid, digest.metadataLabel(), digest.digestQb64());
             payloadSaid = (String) ked.get("d");
             ExchangeMessageResult built = client.client().exchanges().createExchangeMessage(senderOpt.get(),
@@ -373,7 +373,7 @@ public class KeriAttestService {
     }
 
     // --- KEL fetch + anchoring-event location, coded defensively over the pinned jar's raw Object
-    //     shapes (see docs/keri/spike/RemotesignAnchorSpike.java for the confirmed field names) ---
+    //     shapes (field names confirmed against a live agent response) ---
 
     private List<Map<String, Object>> fetchKel(String aid) throws Exception {
         Object raw = client.client().keyEvents().get(aid);

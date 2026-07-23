@@ -92,11 +92,10 @@ class RemotesignRequestFactoryTest {
 
     /**
      * Independently reproduces the factory's SAID by calling {@link Saider#saidify} directly against a
-     * hand-built payload of the exact shape design §4.4 rev 3 specifies (mirrors cip113's
-     * {@code KeriService#requestAttestation}: {@code i} present before saidifying). If this ever
-     * disagrees with the factory's own output, the factory has silently drifted from the documented
-     * contract — this is the "golden vector" the class javadoc/design doc's payload shape claims are
-     * checked against.
+     * hand-built payload of the exact shape design §4.4 rev 3 specifies ({@code i} present before
+     * saidifying). If this ever disagrees with the factory's own output, the factory has silently
+     * drifted from the documented contract — this is the "golden vector" the class javadoc/design
+     * doc's payload shape claims are checked against.
      */
     @Test
     void anchorRequestKedMatchesAnIndependentlyComputedSaidOverTheSamePayloadShape() throws Exception {

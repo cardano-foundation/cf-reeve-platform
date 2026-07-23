@@ -19,19 +19,17 @@ import org.cardanofoundation.signify.cesr.Diger;
 import org.cardanofoundation.signify.cesr.args.RawArgs;
 
 /**
- * Builds CIP-170 label-170 metadata maps byte-for-byte compatible with the in-repo reference
- * publishing scripts — same field names, same {@code put()} call order, same chunking — so
- * anything this factory produces is safe to anchor on-chain under metadata label 170:
- * {@code docs/keri/AttestTransaction.java} (ATTEST, lines 188-198) and
- * {@code docs/keri/advanced/PublishExistingCredential.java} (AUTH_BEGIN + chunking, lines
- * 219-286).
+ * Builds CIP-170 label-170 metadata maps: {@code ATTEST} and {@code AUTH_BEGIN}, with the exact
+ * field names, {@code put()} call order and chunking that other AUTH_BEGIN/ATTEST publishers on
+ * this chain use, so anything this factory produces is safe to anchor on-chain under metadata
+ * label 170.
  *
- * <p><b>Note on "byte-for-byte":</b> {@link CborSerializationUtil}'s serialization defaults to
+ * <p><b>Note on insertion order:</b> {@link CborSerializationUtil}'s serialization defaults to
  * canonical CBOR (RFC 7049 §3.9), which sorts map keys deterministically regardless of
- * {@code put()} insertion order — so the on-chain byte identity with the reference scripts actually
- * comes from matching their exact key/value <em>set</em>, not from mirroring their insertion order.
- * The {@code put()} calls below still follow the reference's order anyway, purely so this class
- * reads as a direct, diffable port of the reference scripts.
+ * {@code put()} insertion order — so on-chain byte identity with another label-170 publisher comes
+ * from matching its exact key/value <em>set</em>, not from mirroring its insertion order. The
+ * {@code put()} calls below still follow a fixed order anyway, purely so this class reads as a
+ * direct, diffable spec of the wire shape.
  *
  * <p>Pure and stateless: every method is a deterministic function of its arguments, with no
  * dependency on the rest of this module (no repository, no KERI agent, no clock).
@@ -39,14 +37,12 @@ import org.cardanofoundation.signify.cesr.args.RawArgs;
 @Service
 public class Cip170MetadataFactory {
 
-    /** Chunk size (bytes) for {@link #authBeginMap}'s {@code c} field — identical to
-     *  {@code PublishExistingCredential.splitIntoChunks(data, 64)}. */
+    /** Chunk size (bytes) for {@link #authBeginMap}'s {@code c} field. */
     static final int CHAIN_CHUNK_SIZE = 64;
 
     /**
      * Builds the label-170 {@code ATTEST} map: {@code t="ATTEST"}, {@code s=kelSequence},
-     * {@code i=aid}, {@code d=digestQb64}, {@code v={v:"1.0"}}. Field names, insertion order and
-     * the {@code v} map shape match {@code AttestTransaction.buildTransaction} exactly.
+     * {@code i=aid}, {@code d=digestQb64}, {@code v={v:"1.0"}}.
      */
     public MetadataMap attestMap(String aid, String digestQb64, String kelSequence) {
         MetadataMap map = MetadataBuilder.createMap();
@@ -65,11 +61,9 @@ public class Cip170MetadataFactory {
     /**
      * Builds the label-170 {@code AUTH_BEGIN} map: {@code t="AUTH_BEGIN"}, {@code s=leafSchemaSaid},
      * {@code i=aid}, {@code c}=64-byte chunks of {@code reducedCesrChain} (last chunk shorter, or
-     * an empty list if the chain is empty), {@code v={v:"1.0",k:"KERI10",a:"ACDC10"}}, and
-     * {@code m={l:[...authorizedLabels],...optionalM}}. Field names, insertion order and the
-     * {@code v}/chunking shape match {@code PublishExistingCredential.buildTransaction} exactly;
-     * {@code m} generalizes the reference's hardcoded {@code l:[1447]}/{@code LEI} pair to caller
-     * -supplied labels and extra entries.
+     * an empty list if the chain is empty), {@code v={v:"1.0",k:"KERI10JSON",a:"ACDC10JSON"}}, and
+     * {@code m={l:[...authorizedLabels],...optionalM}}. {@code m} generalizes a hardcoded
+     * {@code l:[1447]}/{@code LEI} pair to caller-supplied labels and extra entries.
      *
      * <p>{@code optionalM} may be {@code null} or empty. Its values are written as-is if already a
      * {@link String}, otherwise converted with {@link String#valueOf(Object)}. {@code "l"} is
@@ -88,8 +82,8 @@ public class Cip170MetadataFactory {
 
         MetadataMap v = MetadataBuilder.createMap();
         v.put("v", "1.0");
-        v.put("k", "KERI10");
-        v.put("a", "ACDC10");
+        v.put("k", "KERI10JSON");
+        v.put("a", "ACDC10JSON");
         map.put("v", v);
 
         map.put("m", authorizationMap(optionalM, authorizedLabels));
@@ -99,10 +93,9 @@ public class Cip170MetadataFactory {
 
     /**
      * The Blake3-256 {@link Diger} qb64 digest of
-     * {@code CborSerializationUtil.serialize(map1447.getMap())} — the same idiom
-     * {@code AttestTransaction.buildTransaction} uses to seal a reeve metadata map into an
-     * interaction event before anchoring it. Always starts with {@code "E"}, the CESR code for
-     * Blake3-256.
+     * {@code CborSerializationUtil.serialize(map1447.getMap())} — the idiom used to seal a reeve
+     * metadata map into an interaction event before anchoring it. Always starts with {@code "E"},
+     * the CESR code for Blake3-256.
      */
     public String digestOf(MetadataMap map1447) {
         try {
@@ -140,8 +133,7 @@ public class Cip170MetadataFactory {
         return m;
     }
 
-    /** {@code Arrays.copyOfRange} loop identical to {@code PublishExistingCredential.splitIntoChunks}
-     *  — ceiling division into {@link #CHAIN_CHUNK_SIZE}-byte chunks, last one shorter; an empty
+    /** Ceiling division into {@link #CHAIN_CHUNK_SIZE}-byte chunks, last one shorter; an empty
      *  {@code data} array yields an empty list rather than a single empty chunk. */
     private static MetadataList chunk(byte[] data) {
         MetadataList chunks = MetadataBuilder.createList();

@@ -15,12 +15,11 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 
 /**
- * {@code fixtures/vlei-chain-valid.cesr} is a <strong>real</strong> full CESR credential stream — the
- * {@code data} field of {@code docs/keri/test-vlei/credential-data.json} (genuine SAIDs/signatures
- * from an actual signify-java vLEI issuance run: root AID {@code EHt6RIKM...} issues a QVI credential
- * to {@code EFTzvyVmz...}, which issues an LE-schema credential to {@code EBfMzafqg...} (edge
- * {@code qvi}), which issues a third credential to {@code EGDonzZJb...} (edge {@code le}) — a genuine
- * three-level chain), not synthesized by this task.
+ * {@code fixtures/vlei-chain-valid.cesr} is a <strong>real</strong> full CESR credential stream —
+ * genuine SAIDs/signatures from an actual signify-java vLEI issuance run: root AID
+ * {@code EHt6RIKM...} issues a QVI credential to {@code EFTzvyVmz...}, which issues an LE-schema
+ * credential to {@code EBfMzafqg...} (edge {@code qvi}), which issues a third credential to
+ * {@code EGDonzZJb...} (edge {@code le}) — a genuine three-level chain, not synthesized.
  */
 class CesrChainReducerTest {
 

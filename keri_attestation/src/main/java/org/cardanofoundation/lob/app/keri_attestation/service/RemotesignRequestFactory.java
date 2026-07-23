@@ -12,12 +12,11 @@ import org.cardanofoundation.signify.cesr.Saider;
  * Builds the remotesign request KED sent to a linked wallet AID to anchor a metadata digest (design
  * §4.4/§4.6 step 3).
  *
- * <p><b>Aligned with the cip113 wallet contract (design §4.4 rev 3, user-directed 2026-07-22 after
- * live wallet testing).</b> The direct-digest KED this class used to build (spike "variant A", a bare
+ * <p><b>Wallet-verified payload shape (design §4.4 rev 3, user-directed 2026-07-22 after live wallet
+ * testing).</b> The direct-digest KED this class used to build (spike "variant A", a bare
  * insertion-ordered {@code {"d": <digestQb64>}} map) was never accepted by a real Veridian wallet —
- * sending it produced no notification in the wallet at all. {@code cip113-programmable-tokens-platform}'s
- * {@code KeriService#requestAttestation} is the proven, wallet-verified reference: it builds an
- * insertion-ordered payload with {@code i} present <em>before</em> saidifying, then sends the
+ * sending it produced no notification in the wallet at all. The proven, wallet-verified shape instead
+ * builds an insertion-ordered payload with {@code i} present <em>before</em> saidifying, then sends the
  * <em>saidified</em> payload (not the raw digest) as the exn's {@code a}. Veridian's
  * {@code processRemoteSignReq} apparently expects — and silently drops, with no UI surfaced, anything
  * that doesn't look like — a self-addressing payload: {@code i} present, {@code d} the SAID of the
@@ -40,8 +39,12 @@ import org.cardanofoundation.signify.cesr.Saider;
 public class RemotesignRequestFactory {
 
     /**
-     * @param walletAid         the linked wallet's AID — becomes the payload's {@code i} (cip113:
-     *                          "CRITICAL... Inserting i first ourselves keeps the SAIDs in sync")
+     * @param walletAid         the linked wallet's AID — becomes the payload's {@code i}. Must be
+     *                          inserted before saidifying: signify's exchange-message builder does
+     *                          {@code attrs.put("i", recipient); attrs.putAll(payload)} before the
+     *                          wire send, so a payload SAID computed without {@code i} would mismatch
+     *                          the SAID the wallet recomputes over the received (with-{@code i})
+     *                          payload
      * @param metadataLabel     the Cardano metadata label the attested content is published under
      *                          (e.g. {@code "1447"}) — carried in the payload so the anchored SAID
      *                          also commits to which label the digest belongs to

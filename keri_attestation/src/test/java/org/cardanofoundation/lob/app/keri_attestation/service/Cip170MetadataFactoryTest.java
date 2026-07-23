@@ -24,10 +24,9 @@ import org.cardanofoundation.signify.cesr.args.RawArgs;
 import org.cardanofoundation.signify.cesr.util.CoreUtil;
 
 /**
- * Golden-vector tests for {@link Cip170MetadataFactory}. Expected field names/order/shapes are
- * taken verbatim from the in-repo reference implementations:
- * {@code docs/keri/AttestTransaction.java:188-198} (ATTEST) and
- * {@code docs/keri/advanced/PublishExistingCredential.java:219-258} (AUTH_BEGIN + chunking).
+ * Golden-vector tests for {@link Cip170MetadataFactory}: pins the exact field names, insertion
+ * order and shapes of the label-170 {@code ATTEST} and {@code AUTH_BEGIN} metadata maps (including
+ * chunking) this factory must produce to be a valid on-chain anchor.
  */
 class Cip170MetadataFactoryTest {
 
@@ -38,7 +37,7 @@ class Cip170MetadataFactoryTest {
     private static final String KEL_SEQUENCE = "3";
     private static final String LEAF_SCHEMA_SAID = "ESCHEMA_1234567890abcdefghijklmno";
 
-    // --- attestMap: verbatim from AttestTransaction.java:188-198 ---
+    // --- attestMap: exact field set/order ---
 
     @Test
     void attestMapHasExactFieldsFromReference() {
@@ -60,8 +59,8 @@ class Cip170MetadataFactoryTest {
         // Section 3.9), which sorts map keys deterministically regardless of put() insertion order --
         // so this test cannot and does not catch a reordering of attestMap's puts (insertion order
         // does not affect the serialized bytes at all here). What it DOES pin: the exact key/value
-        // SET matches the reference byte-for-byte -- an extra, missing, renamed, or wrong-type/wrong
-        // -value key would change the canonical CBOR bytes and fail this test, even though the
+        // SET matches the expected shape byte-for-byte -- an extra, missing, renamed, or wrong-type/
+        // wrong-value key would change the canonical CBOR bytes and fail this test, even though the
         // get()-based assertions above wouldn't necessarily catch every such change (e.g. an extra
         // key with no corresponding get() assertion).
         MetadataMap reference = MetadataBuilder.createMap();
@@ -78,7 +77,7 @@ class Cip170MetadataFactoryTest {
         assertArrayEquals(CborSerializationUtil.serialize(reference.getMap()), CborSerializationUtil.serialize(map.getMap()));
     }
 
-    // --- authBeginMap: verbatim from PublishExistingCredential.java:219-246 ---
+    // --- authBeginMap: exact field set/order ---
 
     @Test
     void authBeginMapHasExactFieldsFromReferenceWithOptionalMEntries() {
@@ -98,8 +97,8 @@ class Cip170MetadataFactoryTest {
 
         MetadataMap v = (MetadataMap) map.get("v");
         assertEquals("1.0", v.get("v"));
-        assertEquals("KERI10", v.get("k"));
-        assertEquals("ACDC10", v.get("a"));
+        assertEquals("KERI10JSON", v.get("k"));
+        assertEquals("ACDC10JSON", v.get("a"));
 
         MetadataMap m = (MetadataMap) map.get("m");
         MetadataList l = (MetadataList) m.get("l");
@@ -113,10 +112,9 @@ class Cip170MetadataFactoryTest {
     void authBeginMapProducesTheSameCanonicalCborBytesAsTheReferenceKeySet() throws Exception {
         // Same rationale/caveat as the attestMap canonical-CBOR test above: canonical CBOR (default
         // for CborSerializationUtil.serialize) sorts map keys, so this does NOT catch a reordering of
-        // authBeginMap's puts. It reproduces PublishExistingCredential.buildTransaction's key/value
-        // SET verbatim (single "LEI" entry, single authorized label 1447, exactly as the reference
-        // hardcodes) and pins the exact serialized bytes -- an extra/missing/wrong-value key would
-        // fail this test.
+        // authBeginMap's puts. It reproduces the expected key/value SET verbatim (single "LEI" entry,
+        // single authorized label 1447) and pins the exact serialized bytes -- an extra/missing/
+        // wrong-value key would fail this test.
         byte[] chain = sequentialBytes(70);
         String lei = "5299000WN3W1WHOZL256";
 
@@ -131,8 +129,8 @@ class Cip170MetadataFactoryTest {
         reference.put("c", referenceChunks);
         MetadataMap referenceV = MetadataBuilder.createMap();
         referenceV.put("v", "1.0");
-        referenceV.put("k", "KERI10");
-        referenceV.put("a", "ACDC10");
+        referenceV.put("k", "KERI10JSON");
+        referenceV.put("a", "ACDC10JSON");
         reference.put("v", referenceV);
         MetadataMap referenceM = MetadataBuilder.createMap();
         MetadataList referenceL = MetadataBuilder.createList();
@@ -226,7 +224,7 @@ class Cip170MetadataFactoryTest {
     // --- digestOf ---
 
     @Test
-    void digestOfMatchesTheAttestTransactionTwoArgDigerIdiomAndStartsWithE() throws Exception {
+    void digestOfMatchesTheTwoArgDigerIdiomAndStartsWithE() throws Exception {
         MetadataMap map = MetadataBuilder.createMap();
         map.put("foo", "bar");
         map.put("count", BigInteger.valueOf(7));
@@ -241,11 +239,11 @@ class Cip170MetadataFactoryTest {
 
     @Test
     void digestOfIsEquivalentToTheLegacyComputeThenWrapIdiom() throws Exception {
-        // Pins the choice of Diger idiom by evidence: AttestTransaction.java computes the digest
-        // directly via the two-arg constructor (new Diger(new RawArgs(), bytes)); the legacy
-        // blockchain_publisher KeriService instead pre-computes blake3_256 and wraps the already
-        // -computed digest via RawArgs.builder().raw(...).build(). Both idioms must agree for
-        // digestOf's two-arg choice to be safe.
+        // Pins the choice of Diger idiom by evidence: the two-arg constructor (new Diger(new
+        // RawArgs(), bytes)) computes the digest directly, while the legacy blockchain_publisher
+        // KeriService instead pre-computes blake3_256 and wraps the already-computed digest via
+        // RawArgs.builder().raw(...).build(). Both idioms must agree for digestOf's two-arg choice
+        // to be safe.
         MetadataMap map = MetadataBuilder.createMap();
         map.put("foo", "bar");
         map.put("count", BigInteger.valueOf(7));
@@ -275,7 +273,7 @@ class Cip170MetadataFactoryTest {
         return bytes;
     }
 
-    /** Verbatim copy of {@code PublishExistingCredential.splitIntoChunks}, kept independent of
+    /** Independent reimplementation of the chunking loop, kept separate from
      *  {@code Cip170MetadataFactory}'s own chunking so the canonical-CBOR golden test above is not
      *  just checking the factory against itself. */
     private static byte[][] referenceSplitIntoChunks(byte[] data, int chunkSize) {

@@ -149,8 +149,8 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "kel_floor_sequence", length = 64)
     private String kelFloorSequence;
 
-    /** DEAD COLUMN (synchronous refactor, cip113 parity, design rev user-directed): originally the
-     *  pending AUTH_BEGIN tx hash while this ceremony sat at {@code AUTH_BEGIN_SUBMITTED} across
+    /** DEAD COLUMN (synchronous refactor, design rev user-directed): originally the pending AUTH_BEGIN
+     *  tx hash while this ceremony sat at {@code AUTH_BEGIN_SUBMITTED} across
      *  multiple requests, read back by the now-removed {@code KeriAuthBeginService
      *  #awaitAuthBeginConfirmation} background poll. {@code KeriAuthBeginService#submitAuthBegin} now
      *  completes the step synchronously, in the same call that submits the tx — the hash goes straight
@@ -161,12 +161,11 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "auth_begin_tx_hash")
     private String authBeginTxHash;
 
-    /** DEAD COLUMN (synchronous refactor, cip113 parity, design rev user-directed): originally recorded
-     *  which half of the two-phase CREDENTIAL_REQUESTED wait (apply/offer, then agree/grant) a retry
-     *  last reached, so a background worker resuming on a LATER request could skip re-sending the apply
-     *  or the agree. {@code KeriCredentialService#presentCredential} now runs the entire
-     *  apply→offer→agree→grant→admit round trip on the original request thread in one call (mirroring
-     *  cip113's {@code KeriService#presentCredential} exactly) — there is no longer a separate request to
+    /** DEAD COLUMN (synchronous refactor, design rev user-directed): originally recorded which half of
+     *  the two-phase CREDENTIAL_REQUESTED wait (apply/offer, then agree/grant) a retry last reached, so
+     *  a background worker resuming on a LATER request could skip re-sending the apply or the agree.
+     *  {@code KeriCredentialService#presentCredential} now runs the entire apply→offer→agree→grant→admit
+     *  round trip on the original request thread in one call — there is no longer a separate request to
      *  resume mid-step into, so no phase needs recording. A crash mid-flight simply abandons the whole
      *  request; a subsequent retry re-enters from {@code beginStep} and, at most, re-checks for a
      *  late-arriving offer before re-sending. No longer written. Column intentionally left in place
@@ -176,9 +175,9 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "step_phase", length = 32)
     private String stepPhase;
 
-    /** DEAD COLUMN (synchronous refactor, cip113 parity, design rev user-directed): originally
-     *  persisted the IPEX AGREE exchange's own {@code atc} (attachment) — not the ADMIT's own, a proven
-     *  cip113 wallet-contract quirk {@code submitAdmit} must still honor — alongside {@link
+    /** DEAD COLUMN (synchronous refactor, design rev user-directed): originally persisted the IPEX
+     *  AGREE exchange's own {@code atc} (attachment) — not the ADMIT's own, a proven wallet-contract
+     *  quirk {@code submitAdmit} must still honor — alongside {@link
      *  #requestExnSaid} at the (now-removed) {@code AGREE_SENT} phase transition, so a worker restart
      *  resuming at that phase on a LATER request could still supply it. {@code
      *  KeriCredentialService#presentCredential} now holds the agree's {@code atc} as a local variable for

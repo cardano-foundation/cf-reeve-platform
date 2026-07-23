@@ -9,7 +9,7 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
 
 /**
  * The wallet-interaction flow (credential presentation, ATTEST, AUTH_BEGIN) runs synchronously in the
- * request thread (design rev, user-directed — cip113 parity; see {@code KeriCredentialService},
+ * request thread (design rev, user-directed; see {@code KeriCredentialService},
  * {@code KeriAttestService}, {@code KeriAuthBeginService}), so this module no longer needs {@code
  * @EnableAsync} or any dedicated background executor.
  */

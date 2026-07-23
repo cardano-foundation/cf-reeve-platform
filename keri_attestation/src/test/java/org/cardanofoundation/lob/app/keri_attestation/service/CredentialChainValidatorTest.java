@@ -20,11 +20,11 @@ import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainVal
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 
 /**
- * {@code fixtures/vlei-chain-valid.cesr} is a real, genuine 3-level vLEI credential chain captured
- * from {@code docs/keri/test-vlei/credential-data.json} (see {@link CesrChainReducerTest}'s javadoc for
- * the full chain shape). The negative-case fixtures built inline in this class (cycle, missing parent,
- * missing/revoked TEL) are hand-synthesized minimal ACDC/iss/rev maps — documented per-test — since no
- * real captured material exercises those failure paths.
+ * {@code fixtures/vlei-chain-valid.cesr} is a real, genuine 3-level vLEI credential chain (see
+ * {@link CesrChainReducerTest}'s javadoc for the full chain shape). The negative-case fixtures built
+ * inline in this class (cycle, missing parent, missing/revoked TEL) are hand-synthesized minimal
+ * ACDC/iss/rev maps — documented per-test — since no real captured material exercises those failure
+ * paths.
  */
 class CredentialChainValidatorTest {
 

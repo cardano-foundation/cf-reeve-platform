@@ -15,14 +15,12 @@ import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
  * the chain from its bytes alone: registry inception ({@code vcp}), issuance ({@code iss}) and the
  * bare ACDC payloads, concatenated in that canonical (vcp, then iss, then ACDC) order.
  *
- * <p>Direct port of {@code docs/keri/advanced/PublishExistingCredential.java#strip} (byte-identical
- * logic to {@code docs/keri/ReceiveCredentialWithIdentifier.java#strip}) — kept in lock-step with
- * those reference scripts because the reduced bytes are what eventually gets chunked onto Cardano
- * under CIP-170 label 170's {@code c} field (design §4.5), and a verifier reconstructing the chain
- * from on-chain bytes must see exactly what those scripts (and KERIA) agree constitutes "the chain":
- * {@code icp}/{@code ixn}/{@code rot} KEL events and {@code rev} TEL events are intentionally dropped
- * — deep KEL signature verification stays with KERIA (see {@link CredentialChainValidator}'s javadoc
- * for the same boundary).
+ * <p>The reduced bytes are what eventually gets chunked onto Cardano under CIP-170 label 170's
+ * {@code c} field (design §4.5), so a verifier reconstructing the chain from on-chain bytes must see
+ * exactly what this reduction (and KERIA) agree constitutes "the chain": {@code icp}/{@code ixn}/
+ * {@code rot} KEL events and {@code rev} TEL events are intentionally dropped — deep KEL signature
+ * verification stays with KERIA (see {@link CredentialChainValidator}'s javadoc for the same
+ * boundary).
  *
  * <p>Pure and stateless: a deterministic function of its input, no I/O, no KERI agent.
  */
@@ -87,8 +85,7 @@ public class CesrChainReducer {
     }
 
     /** ACDCs carry no {@code "t"} (event-type) field — they're identified by having {@code s}
-     *  (schema), {@code a} (attributes) and {@code i} (issuer) instead, mirroring the reference
-     *  scripts' {@code strip()} exactly. */
+     *  (schema), {@code a} (attributes) and {@code i} (issuer) instead. */
     private static boolean isAcdc(Map<String, Object> event) {
         return event.containsKey("s") && event.containsKey("a") && event.containsKey("i") && event.get("s") != null;
     }

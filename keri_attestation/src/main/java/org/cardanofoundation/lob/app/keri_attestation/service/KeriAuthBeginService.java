@@ -31,15 +31,15 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
  * credential chain — then, in BOTH cases, advances the ceremony to {@code AUTH_BEGIN_CONFIRMED}
  * immediately, in this same call.
  *
- * <p><b>cip113 parity, "fire the chain tx and move on" (design rev, user-directed):</b> the own-chain
- * path used to persist the submitted tx hash and dispatch a background poll that waited for N block
- * confirmations before completing the step — the exact kind of background runner this refactor removes.
- * cip113's own on-chain flows never wait for confirmation depth at all; they submit and consider the
- * step done. This class now does the same: {@link #submitOwn} completes the step the moment {@link
+ * <p><b>"Fire the chain tx and move on" (design rev, user-directed):</b> the own-chain path used to
+ * persist the submitted tx hash and dispatch a background poll that waited for N block confirmations
+ * before completing the step — the exact kind of background runner this refactor removes. On-chain
+ * flows here never wait for confirmation depth at all; they submit and consider the step done. {@link
+ * #submitOwn} completes the step the moment {@link
  * CardanoMetadataTxSubmitter#submitMetadataTransaction} returns a tx hash, WITHOUT blocking the request
  * thread waiting for confirmations. (A submitted-but-unconfirmed/rolled-back tx is not specially
- * detected by this class any more than cip113 detects one — this mirrors the accepted reference
- * behavior, not a regression introduced here.)
+ * detected by this class — that is the accepted, deliberate behavior, not a regression introduced
+ * here.)
  *
  * <p><b>Return-value convention (deliberate, and different from {@link KeriAttestService}/{@link
  * KeriCredentialService}):</b> per the original design, {@link #submitAuthBegin} returns {@link
@@ -221,8 +221,8 @@ public class KeriAuthBeginService {
                     "Failed to build/submit the AUTH_BEGIN transaction: " + e.getMessage());
         }
 
-        // cip113 parity: complete the step the moment the tx is submitted — no wait for confirmation
-        // depth (see class javadoc). The link write is folded into completeStep's mutator, same idiom as
+        // Complete the step the moment the tx is submitted — no wait for confirmation depth (see class
+        // javadoc). The link write is folded into completeStep's mutator, same idiom as
         // KeriCredentialService#persistCredentialIfIdentityStillCurrent.
         String finalTxHash = txHash;
         int bindingVersion = ceremony.getBindingVersion();

@@ -90,7 +90,7 @@ class KeriCredentialServiceTest {
     private static final String OFFER_NOTIF_ID = "0AOFFERNOTIFID0000000000000000000";
     private static final String GRANT_NOTIF_ID = "0AGRANTNOTIFID0000000000000000000";
     // Mirrors KeriCredentialService's constants: both the "/exn/"-prefixed and bare route forms, since
-    // KERIA surfaces the notification route in either form (cip113 parity).
+    // KERIA surfaces the notification route in either form.
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
     // Dual-path presentation (design rev, live Veridian evidence): the initial post-apply wait (and the
     // retry pre-check) awaits offer AND grant routes together, since a real Veridian build was observed
@@ -160,8 +160,8 @@ class KeriCredentialServiceTest {
         // override oobis.resolve to assert on call counts / simulate a failure.
         lenient().when(oobis.resolve(any(), any())).thenReturn(Map.of("done", true));
         lenient().when(operations.wait(any(), any())).thenReturn(null);
-        // cip113 parity: every IPEX submit* is followed by an operations().wait(Operation.fromObject(...))
-        // call (the 1-arg overload, distinct from the 2-arg WaitOptions one stubbed above).
+        // Every IPEX submit* is followed by an operations().wait(Operation.fromObject(...)) call (the
+        // 1-arg overload, distinct from the 2-arg WaitOptions one stubbed above).
         // Operation.fromObject throws IllegalArgumentException on anything that isn't itself an
         // Operation/Map/JSON-String, so submitApply/submitAgree/submitAdmit — otherwise unstubbed, and
         // therefore null by Mockito's own default for an Object-returning method — must return a benign
@@ -170,8 +170,8 @@ class KeriCredentialServiceTest {
         lenient().when(ipex.submitApply(any(), any(), any(), any())).thenReturn(Map.of());
         lenient().when(ipex.submitAgree(any(), any(), any(), any())).thenReturn(Map.of());
         lenient().when(ipex.submitAdmit(any(), any(), any(), any(), any())).thenReturn(Map.of());
-        // Every apply-send fetches the agent's own HabState first (cip113 wallet contract — the
-        // hand-built /ipex/apply createExchangeMessage call needs it as the signing sender).
+        // Every apply-send fetches the agent's own HabState first (wallet contract — the hand-built
+        // /ipex/apply createExchangeMessage call needs it as the signing sender).
         lenient().when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_NAME)));
         lenient().when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
                 eq(CeremonyState.CREDENTIAL_REQUESTED), any())).thenReturn(true);
@@ -311,12 +311,12 @@ class KeriCredentialServiceTest {
 
         verify(ipex).submitApply(eq(AGENT_NAME), any(), eq(List.of("sig1")), eq(List.of(LINKED_AID)));
         verify(ipex).submitAgree(eq(AGENT_NAME), any(), eq(List.of("sig2")), eq(List.of(LINKED_AID)));
-        // cip113 parity: submitAdmit is given the AGREE's atc ("atc2"), NOT the admit's own ("atc3") —
-        // a proven cip113 wallet-contract quirk this module matches.
+        // submitAdmit is given the AGREE's atc ("atc2"), NOT the admit's own ("atc3") — a proven
+        // wallet-contract quirk this module matches.
         verify(ipex).submitAdmit(eq(AGENT_NAME), any(), eq(List.of("sig3")), eq("atc2"), eq(List.of(LINKED_AID)));
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
 
-        // cip113 exact order: apply -> wait -> offer -> mark/delete offer -> agree -> wait -> grant ->
+        // Exact expected order: apply -> wait -> offer -> mark/delete offer -> agree -> wait -> grant ->
         // admit -> wait -> mark/delete grant.
         InOrder inOrder = inOrder(ipex, operations, correlator);
         inOrder.verify(ipex).submitApply(any(), any(), any(), any());
@@ -514,7 +514,7 @@ class KeriCredentialServiceTest {
         verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
                 KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/grant.");
         verify(ipex, never()).admit(any());
-        // The offer was already claimed before the grant wait even started (cip113 order).
+        // The offer was already claimed before the grant wait even started.
         verify(correlator).markAndDelete(OFFER_NOTIF_ID);
         verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
     }

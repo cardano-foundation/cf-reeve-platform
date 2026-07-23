@@ -121,8 +121,8 @@ public class CeremonyCleanupJob {
      * -completed offer/agree round trip) could be swept as stale mid-flight.
      *
      * <p><b>Synchronous refactor note:</b> {@code KeriCredentialService#presentCredential} now runs the
-     * whole apply→offer→agree→grant→admit round trip on the ORIGINAL request thread (cip113 parity; no
-     * more background continuation, no more mid-flight phase persist/heartbeat between the two waits).
+     * whole apply→offer→agree→grant→admit round trip on the ORIGINAL request thread (no more background
+     * continuation, no more mid-flight phase persist/heartbeat between the two waits).
      * A ceremony genuinely still in flight therefore never reaches this sweep at all — its row simply
      * isn't touched again until the request thread returns (success or failure). This sweep now only
      * ever fires for a ceremony whose request thread died mid-flight (e.g. the process crashed) and

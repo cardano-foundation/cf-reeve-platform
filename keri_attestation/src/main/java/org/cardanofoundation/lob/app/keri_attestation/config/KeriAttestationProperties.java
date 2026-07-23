@@ -16,13 +16,13 @@ public record KeriAttestationProperties(
         @DefaultValue("PT24H") Duration freezeMaxAge,
         @DefaultValue("PT3M") Duration remotesignTimeout,
         @DefaultValue("PT1.5S") Duration notificationPollInterval,
-        /** DEAD CONFIG (synchronous refactor, cip113 parity, design rev user-directed): no longer read
-         *  by any code. {@code KeriAuthBeginService#submitAuthBegin}'s own-chain path used to poll (the
-         *  now-removed {@code awaitAuthBeginConfirmation}) until this many confirmations were observed
-         *  before completing the step; it now completes the step synchronously the moment the tx is
-         *  submitted, mirroring cip113, which never waits for confirmation depth either. Left in the
-         *  binding (harmless if set) rather than removed, matching the "leave it, stop reading/writing
-         *  it" treatment given {@code KeriAttestationCeremonyEntity#stepPhase} et al. */
+        /** DEAD CONFIG (synchronous refactor, design rev user-directed): no longer read by any code.
+         *  {@code KeriAuthBeginService#submitAuthBegin}'s own-chain path used to poll (the now-removed
+         *  {@code awaitAuthBeginConfirmation}) until this many confirmations were observed before
+         *  completing the step; it now completes the step synchronously the moment the tx is submitted,
+         *  never waiting for confirmation depth. Left in the binding (harmless if set) rather than
+         *  removed, matching the "leave it, stop reading/writing it" treatment given
+         *  {@code KeriAttestationCeremonyEntity#stepPhase} et al. */
         @DefaultValue("3") int authBeginConfirmations,
         Limits limits,
         /** DEAD CONFIG — see {@link #authBeginConfirmations()}'s javadoc: the poll cadence for the
@@ -66,8 +66,8 @@ public record KeriAttestationProperties(
      * (with a trailing slash appended), which is where a Veridian-style wallet actually resolves the
      * credential schema from — NOT our agent's own OOBI; (2) as the base for resolving each of
      * {@link #schemaSaids()} as an OOBI on OUR OWN agent ({@code baseUrl + "/" + said}) before ever
-     * sending an apply, mirroring cip113's reference {@code resolveSchemas} flow — KERIA silently drops
-     * an exchange referencing a schema SAID the receiving agent has never itself resolved.
+     * sending an apply — KERIA silently drops an exchange referencing a schema SAID the receiving
+     * agent has never itself resolved.
      */
     public record CredentialPolicy(
             List<String> schemaSaids,
@@ -81,8 +81,8 @@ public record KeriAttestationProperties(
     }
 
     /**
-     * DEAD CONFIG (synchronous refactor, cip113 parity, design rev user-directed): pool sizes for the
-     * module's two dedicated async executors, {@code keriAttestationExecutor} and {@code
+     * DEAD CONFIG (synchronous refactor, design rev user-directed): pool sizes for the module's two
+     * dedicated async executors, {@code keriAttestationExecutor} and {@code
      * keriAttestationConfirmationExecutor} — both defined by the now-deleted {@code
      * KeriAttestationAsyncConfig}, dispatched to by the now-deleted {@code CeremonyAsyncRunner}. The
      * wallet-interaction flow (credential presentation, ATTEST, AUTH_BEGIN) now runs entirely on the

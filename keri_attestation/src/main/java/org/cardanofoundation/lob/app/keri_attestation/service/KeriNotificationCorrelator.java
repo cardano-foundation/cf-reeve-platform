@@ -23,45 +23,15 @@ import org.cardanofoundation.signify.cesr.exceptions.serialize.SerializeExceptio
 import org.cardanofoundation.signify.cesr.util.Utils;
 
 /**
- * Correlates KERI agent notifications back to a specific outstanding request (design §4.3).
+ * Claims KERI agent notifications for an outstanding ceremony request, by route.
  *
- * <p>This is the safety net that prevents cross-ceremony notification hijacking: a matching
- * {@code route} alone is <strong>not</strong> enough to claim a notification, because any wallet the
- * agent is in contact with can raise one on the same route (e.g. two ceremonies waiting on
- * {@code /exn/ipex/grant} at once, or an unrelated party probing the agent). A notification is only
- * claimed if ALL of the following hold (F4 fix — a same-wallet ceremony's own notification is not
- * automatically safe, since SAIDs are public and one ceremony's response can otherwise be crafted to
- * satisfy another):
- * <ol>
- *   <li>the notification is unread and its own claimed route is one of {@code routes} (a cheap
- *       pre-filter before ever fetching anything);</li>
- *   <li>the FETCHED exchange's own route ({@code exn.r}) is <em>also</em> one of {@code routes} — the
- *       notification's claimed route is not trusted on its own, since nothing forces it to agree with
- *       the exchange it actually references;</li>
- *   <li>the exchange was sent by the expected sender ({@code exn.i});</li>
- *   <li>the exchange's {@code rp} ("recipient prefix"), <b>when present and non-blank</b>, must equal
- *       this agent's own prefix ({@link #addresseeMatchesAgent}) — relaxed 2026-07-22 (design §4.4
- *       rev 3) from an unconditional presence requirement to match cip113's proven wallet contract,
- *       whose own notification helper never inspects {@code rp} at all; see that method's javadoc for
- *       why this is still safe. {@code exn.a.i} is deliberately <b>not</b> consulted for this check at
- *       all (F4 residual fix) — it is ordinary payload data fully controlled by the sender, not a
- *       signed routing field, so trusting it would let a forged or misdirected notification's own
- *       payload simply claim to be addressed to us;</li>
- *   <li>the exchange threads back to the exact request {@code exn} SAID this caller is waiting on
- *       ({@link #threadsBackToRequest}) — a <em>bounded</em>, protocol-shaped check, not a general
- *       recursive search. {@code p}, when present and non-blank, is authoritative (F4 residual fix):
- *       only {@code p == requestExnSaid} is accepted, and payload/embed values are never consulted as a
- *       fallback for a present-but-different {@code p} — a coincidental or crafted match buried in
- *       {@code a}/{@code e} must never rescue an exn that already explicitly names a different (or no)
- *       prior via {@code p}. Only when {@code p} is absent (or blank, KERI's own "no prior" convention)
- *       does the bounded check run: {@code exn.a}'s direct values and each direct child map of
- *       {@code exn.e} (checking that child's own {@code p}/{@code d}). A SAID buried deeper than that
- *       (e.g. inside a nested embed two levels down) does not count — that shape is exactly how one
- *       ceremony's crafted response could otherwise be made to satisfy an unrelated ceremony waiting on
- *       the same wallet.</li>
- * </ol>
- * A notification that fails any check is left exactly as it was found (unread, undeleted) so a
- * legitimate poller can still pick it up.
+ * <p>A notification is claimed when it is unread and its own claimed route ({@code note.a.r}) is one
+ * of the routes the caller is waiting on — the FIRST such match wins. There is no sender check, no
+ * thread-back check, and no recipient-prefix check: a real Veridian wallet's IPEX offer/grant and
+ * remotesign ref replies were found, under live wallet testing, not to reliably carry those extra
+ * correlation fields, so requiring them unconditionally would silently discard a legitimate reply. A
+ * single agent only ever has one ceremony outstanding on a given route at a time, so the route match
+ * alone is enough to identify which reply belongs to which wait.
  */
 @Service
 @RequiredArgsConstructor
@@ -69,36 +39,25 @@ import org.cardanofoundation.signify.cesr.util.Utils;
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
 public class KeriNotificationCorrelator {
 
-    /** After this many consecutive {@link SerializeException}s parsing the notification list,
-     *  {@link #awaitCorrelated} gives up early instead of waiting out the full timeout — see its
-     *  javadoc. */
-    private static final int MAX_CONSECUTIVE_PARSE_FAILURES = 3;
-
-    /** Diagnostic de-dupe for {@link #pollOnceByRoute}'s per-poll notification summary: the route-only
-     *  wait polls every ~1.5s, so logging the whole notification list every tick would be noise. Instead
-     *  we log the list only when its (route, read-state) shape CHANGES — which is exactly when a wallet's
+    /** Diagnostic de-dupe for {@link #pollOnceByRoute}'s per-poll notification summary: the wait polls
+     *  every ~1.5s, so logging the whole notification list every tick would be noise. Instead we log the
+     *  list only when its (route, read-state) shape CHANGES — which is exactly when a wallet's
      *  offer/grant first appears — so a stuck "waiting for offer" is diagnosable from the log alone:
-     *  either nothing ever appears (routing/mailbox/contact problem, wallet-side) or something appears
+     *  either nothing ever appears (a routing/mailbox/contact problem, wallet-side) or something appears
      *  under a route we don't match (a wire-shape problem here). Final-with-initializer, so Lombok's
      *  {@code @RequiredArgsConstructor} excludes it. */
     private final AtomicReference<String> lastByRouteNotificationSummary = new AtomicReference<>("");
 
     private final KeriAttestationClient client;
     private final KeriAttestationProperties properties;
-    private final KeriAgentService agentService;
 
-    /** A notification that passed correlation: {@code notificationId} is the agent's own notification
+    /** A notification that was claimed: {@code notificationId} is the agent's own notification
      *  identifier (for {@link #markAndDelete}), {@code exnSaid} is the referenced exchange's SAID, and
-     *  {@code exn} is that exchange's full decoded message (sender {@code i}, route {@code r}, prior
-     *  {@code p}, payload {@code a}, embeds {@code e}, ...). {@code claimedRoute} is the notification's
-     *  OWN claimed route ({@code note.a.r}, populated by {@link #pollOnceByRoute}) — a fallback for
-     *  callers awaiting more than one route at once (design rev, dual-path IPEX presentation:
-     *  {@link KeriCredentialService#presentCredential} awaits offer AND grant routes together and must
-     *  tell which one actually matched) to use when the fetched {@code exn}'s own {@code r} is absent or
-     *  not itself one of the awaited routes. {@code null} when not populated by the caller that
-     *  constructed this — see the 3-arg constructor below, kept for every call site (this class's own
-     *  {@link #tryCorrelate}, and every existing test) that only ever awaits a single route and so never
-     *  needs to disambiguate. */
+     *  {@code exn} is that exchange's full decoded message (sender {@code i}, route {@code r}, payload
+     *  {@code a}, embeds {@code e}, ...). {@code claimedRoute} is the notification's OWN claimed route
+     *  ({@code note.a.r}, populated by {@link #pollOnceByRoute}) — used by callers awaiting more than one
+     *  route at once ({@link KeriCredentialService#presentCredential} awaits an offer AND a grant route
+     *  together and must tell which one actually matched). */
     public record CorrelatedNotification(String notificationId, String exnSaid, Map<String, Object> exn,
             String claimedRoute) {
         public CorrelatedNotification(String notificationId, String exnSaid, Map<String, Object> exn) {
@@ -107,101 +66,17 @@ public class KeriNotificationCorrelator {
     }
 
     /**
-     * <b>Not currently invoked by any production wire-flow call site (design rev, user-directed
-     * 2026-07-22):</b> {@link KeriCredentialService}'s IPEX offer/grant waits and
-     * {@link KeriAttestService}'s remotesign ref wait all use {@link #awaitByRoute} instead — cip113's
-     * {@code KeriService} is the proven wire-flow reference this module is aligned against, and its own
-     * {@code IpexNotificationHelper} claims purely by route, with none of the sender/thread-back/{@code
-     * rp} checks below. Real Veridian wallet replies were found not to reliably carry the extra fields
-     * this method requires, so requiring them unconditionally would silently discard a legitimate reply.
-     * This method is kept — rather than deleted, and rather than deleting its test coverage — for any
-     * future hardening need that turns out to require it; do not remove without confirming nothing has
-     * come to depend on it again.
-     *
-     * <p>Polls the agent's notification queue at {@link KeriAttestationProperties#notificationPollInterval()}
-     * until a notification correlates to {@code requestExnSaid} or {@code timeout} elapses.
-     *
-     * <p>A notification is claimed only if it is unread, its route is one of {@code routes}, the exn it
-     * references was sent by {@code expectedSenderAid}, and that exn threads back to
-     * {@code requestExnSaid}. Every other notification — wrong route, wrong sender, unrelated thread, or
-     * already read — is left completely untouched; this method never calls {@code mark}/{@code delete}
-     * itself.
-     *
-     * <p>A transport failure listing notifications (network blip, 5xx, ...) is logged at {@code WARN}
-     * and retried on the normal poll cadence, indistinguishable from an empty poll — the agent is still
-     * reachable, so waiting out the full {@code timeout} is the right call. A response that <em>parses
-     * incorrectly</em> is a different kind of failure: since the shape this class expects hasn't been
-     * confirmed against a live agent (Task 8), a defect here would otherwise present as "every ceremony
-     * times out" with the real cause buried in a WARN log identical to a flaky agent's. Those are
-     * therefore logged at {@code ERROR} and counted; after {@value #MAX_CONSECUTIVE_PARSE_FAILURES}
-     * consecutive parse failures this method gives up immediately instead of waiting out the rest of
-     * {@code timeout}, so a caller fails in seconds rather than minutes. A single transport success (or
-     * an empty/non-matching poll) between parse failures resets the count.
-     *
-     * @return the correlated notification, or {@link Optional#empty()} if none arrived before the
-     *         timeout (or the wait was abandoned early after repeated parse failures). Never throws on
-     *         timeout.
-     */
-    public Optional<CorrelatedNotification> awaitCorrelated(List<String> routes, String expectedSenderAid,
-            String requestExnSaid, Duration timeout) {
-        Instant deadline = Instant.now().plus(timeout);
-        int consecutiveParseFailures = 0;
-        while (true) {
-            try {
-                Optional<CorrelatedNotification> claimed;
-                try {
-                    claimed = pollOnce(routes, expectedSenderAid, requestExnSaid);
-                    consecutiveParseFailures = 0;
-                } catch (NotificationWireShapeException e) {
-                    consecutiveParseFailures++;
-                    if (consecutiveParseFailures >= MAX_CONSECUTIVE_PARSE_FAILURES) {
-                        log.error("Giving up on notification wait after {} consecutive wire-shape parse "
-                                        + "failures instead of waiting out the remaining timeout — this "
-                                        + "looks like a defect, not agent flakiness.",
-                                consecutiveParseFailures);
-                        return Optional.empty();
-                    }
-                    claimed = Optional.empty();
-                }
-                if (claimed.isPresent()) {
-                    return claimed;
-                }
-                if (!Instant.now().isBefore(deadline)) {
-                    return Optional.empty();
-                }
-                Thread.sleep(properties.notificationPollInterval().toMillis());
-            } catch (InterruptedException e) {
-                // Restore the interrupt flag rather than swallow it (e.g. executor shutdown mid-wait) —
-                // the caller's async executor is responsible for deciding what an interrupt means next.
-                Thread.currentThread().interrupt();
-                return Optional.empty();
-            }
-        }
-    }
-
-    /**
-     * Route-only notification claim (design rev, user-directed 2026-07-22 — cip113 parity): mirrors
-     * {@code cip113-programmable-tokens-platform}'s {@code IpexNotificationHelper.waitForNotification}
-     * contract exactly. The FIRST unread notification whose own claimed route ({@code note.a.r}) is one
-     * of {@code routes} is claimed — no sender match, no thread-back/{@code p} check, no {@code rp}
-     * check. cip113's wallet contract is the proven reference this module's wire flow is aligned
-     * against: a real Veridian wallet's IPEX offer/grant and remotesign ref replies were found not to
-     * reliably carry the extra correlation fields {@link #awaitCorrelated}'s stricter check requires, so
-     * unconditionally requiring them would silently discard a legitimate reply. The user has directed
-     * (design rev, twice) that this module's own correlation strictness yields to cip113's proven
-     * contract wherever the two conflict.
-     *
-     * <p>Polls at {@link KeriAttestationProperties#notificationPollInterval()} until a match arrives or
-     * {@code timeout} elapses — this module's own configurable cadence, rather than cip113's hardcoded 20
-     * retries x 2s ({@code IpexNotificationHelper.MAX_RETRIES} / {@code POLL_INTERVAL_MS}).
+     * Polls the agent's notification queue at {@link KeriAttestationProperties#notificationPollInterval()}
+     * until an unread notification whose own claimed route is one of {@code routes} arrives, or
+     * {@code timeout} elapses. The FIRST such match is claimed — see this class's javadoc for why there
+     * is no further correlation check.
      *
      * <p>The claimed {@link CorrelatedNotification#exnSaid()} is the FETCHED exchange's own {@code d}
-     * field, not just the notification's claimed {@code note.a.d} (cip113 parity — {@code
-     * KeriService#presentCredential} reads {@code offerResource.getExn().getD()} /
-     * {@code grantResource.getExn().getD()} after the fetch, rather than trusting the notification body
-     * alone); falls back to {@code note.a.d} only if the fetched exn is missing its own {@code d}.
+     * field where present, falling back to the notification's claimed {@code note.a.d} only when the
+     * fetched exn is missing its own {@code d}.
      *
-     * <p>Never calls {@code mark}/{@code delete} itself — same contract as {@link #awaitCorrelated}.
+     * <p>Never calls {@code mark}/{@code delete} itself — that is left to the caller, once the
+     * corresponding ceremony state transition has been durably committed; see {@link #markAndDelete}.
      *
      * @return the route-matched notification, or {@link Optional#empty()} if none arrived before the
      *         timeout. Never throws on timeout.
@@ -230,14 +105,15 @@ public class KeriNotificationCorrelator {
                 }
                 Thread.sleep(properties.notificationPollInterval().toMillis());
             } catch (InterruptedException e) {
-                // Restore the interrupt flag rather than swallow it — same contract as awaitCorrelated.
+                // Restore the interrupt flag rather than swallow it (e.g. executor shutdown mid-wait) —
+                // the caller's async executor is responsible for deciding what an interrupt means next.
                 Thread.currentThread().interrupt();
                 return Optional.empty();
             }
         }
     }
 
-    // --- one polling round, route-only (cip113 parity — see awaitByRoute's javadoc) ---
+    // --- one polling round ---
 
     private Optional<CorrelatedNotification> pollOnceByRoute(List<String> routes) throws InterruptedException {
         Notifying.Notifications.NotificationListResponse response;
@@ -258,11 +134,7 @@ public class KeriNotificationCorrelator {
                 notes = List.of();
             }
         } catch (SerializeException e) {
-            // Same wire-shape-vs-transient distinction as pollOnce, but without the strict path's
-            // consecutive-failure fast-abort machinery: a route-only claim has no correlation fields to
-            // give up early over, and treating this as a defect (ERROR) still surfaces the log entry.
-            log.error("Failed to parse the KERI notification list while route-matching (cip113-style "
-                    + "claim): {}", e.getMessage());
+            log.error("Failed to parse the KERI notification list while route-matching: {}", e.getMessage());
             return Optional.empty();
         }
 
@@ -281,8 +153,8 @@ public class KeriNotificationCorrelator {
                 Optional<Object> exchange = client.client().exchanges().get(noteExnSaid);
                 if (exchange.isEmpty()) {
                     // The notification is present and its route matches, but the referenced exchange is
-                    // not yet retrievable from the agent — surface it (was a silent continue that could
-                    // loop until timeout with no trace) and retry on the next poll.
+                    // not yet retrievable from the agent — surface it and retry on the next poll rather
+                    // than looping silently until timeout.
                     log.info("KERI notification matched route {} (exn {}) but the exchange is not yet "
                             + "retrievable from the agent — retrying", note.a.r, noteExnSaid);
                     continue;
@@ -298,8 +170,7 @@ public class KeriNotificationCorrelator {
                 continue;
             }
             log.info("Claimed KERI notification on route {} (exn {})", note.a.r, noteExnSaid);
-            // cip113 parity: prefer the FETCHED exn's own "d" over the notification's claimed
-            // note.a.d — see this method's javadoc.
+            // Prefer the FETCHED exn's own "d" over the notification's claimed note.a.d.
             Object fetchedSaid = exn.get("d");
             String exnSaid = fetchedSaid instanceof String s ? s : noteExnSaid;
             return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn, note.a.r));
@@ -310,12 +181,11 @@ public class KeriNotificationCorrelator {
     /**
      * Logs the agent's current notification list (count + each notification's route and read state) at
      * INFO, but only when that shape has CHANGED since the previous poll (see
-     * {@link #lastByRouteNotificationSummary}). This is the diagnostic that makes a stuck route-only wait
-     * ("waiting for offer" forever) explainable from the log: when the list stays empty, nothing is being
-     * routed to this agent at all (a KERI mailbox/contact/OOBI problem on the sending side); when the
-     * list becomes non-empty but no entry matches the awaited routes, the reply arrived under an
-     * unexpected route (a wire-shape problem here). An empty list resets the de-dupe so the next arrival
-     * always logs.
+     * {@link #lastByRouteNotificationSummary}). This is the diagnostic that makes a stuck wait ("waiting
+     * for offer" forever) explainable from the log: when the list stays empty, nothing is being routed to
+     * this agent at all (a KERI mailbox/contact/OOBI problem on the sending side); when the list becomes
+     * non-empty but no entry matches the awaited routes, the reply arrived under an unexpected route (a
+     * wire-shape problem here). An empty list resets the de-dupe so the next arrival always logs.
      */
     private void logNotificationState(List<Notification> notes, List<String> routes) {
         if (notes.isEmpty()) {
@@ -340,8 +210,8 @@ public class KeriNotificationCorrelator {
      *
      * <p><strong>Callers must invoke this only after the corresponding ceremony state transition has
      * already been durably committed.</strong> Deleting the notification is what stops a retry (or a
-     * concurrent poller) from re-claiming the same signal; doing that before the transition is
-     * committed would let a crash between the two silently lose the wallet's response.
+     * concurrent poller) from re-claiming the same signal; doing that before the transition is committed
+     * would let a crash between the two silently lose the wallet's response.
      */
     public void markAndDelete(String notificationId) {
         try {
@@ -356,91 +226,10 @@ public class KeriNotificationCorrelator {
         }
     }
 
-    // --- one polling round ---
-
-    private Optional<CorrelatedNotification> pollOnce(List<String> routes, String expectedSenderAid,
-            String requestExnSaid) throws InterruptedException {
-        Notifying.Notifications.NotificationListResponse response;
-        try {
-            response = client.client().notifications().list();
-        } catch (InterruptedException e) {
-            throw e;
-        } catch (Exception e) {
-            // Transport-level failure (network blip, 5xx, ...): the agent may simply be flaky right
-            // now, so this is treated the same as an empty poll and retried on the normal cadence.
-            log.warn("Failed to list KERI notifications, will retry: {}", e.getMessage());
-            return Optional.empty();
-        }
-
-        List<Notification> notes;
-        try {
-            notes = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
-            });
-            if (notes == null) {
-                notes = List.of();
-            }
-        } catch (SerializeException e) {
-            // The agent answered, but the body didn't deserialize into the shape this class expects.
-            // Distinct from a transport failure on purpose — see awaitCorrelated's javadoc for why this
-            // is not treated as transient.
-            log.error("Failed to parse the KERI notification list — this looks like a wire-shape "
-                    + "mismatch, not a transient transport error: {}", e.getMessage());
-            throw new NotificationWireShapeException(
-                    "notifications().list() response did not match the expected shape", e);
-        }
-
-        for (Notification note : notes) {
-            if (!isUnreadRouteMatch(note, routes)) {
-                continue;
-            }
-            Optional<CorrelatedNotification> correlated = tryCorrelate(routes, note, expectedSenderAid,
-                    requestExnSaid);
-            if (correlated.isPresent()) {
-                return correlated;
-            }
-        }
-        return Optional.empty();
-    }
-
     private static boolean isUnreadRouteMatch(Notification note, List<String> routes) {
         boolean unread = !note.r;
         boolean routeMatches = note.a != null && note.a.r != null && routes.contains(note.a.r);
         return unread && routeMatches;
-    }
-
-    // --- correlation: fetch the referenced exchange and verify route + sender + recipient + thread
-    //     (design §4.3, F4 fix — see this class's javadoc for the full list of checks) ---
-
-    private Optional<CorrelatedNotification> tryCorrelate(List<String> routes, Notification note,
-            String expectedSenderAid, String requestExnSaid) throws InterruptedException {
-        String exnSaid = note.a != null ? note.a.d : null;
-        if (exnSaid == null) {
-            return Optional.empty();
-        }
-
-        Map<String, Object> exn;
-        try {
-            Optional<Object> exchange = client.client().exchanges().get(exnSaid);
-            if (exchange.isEmpty()) {
-                return Optional.empty();
-            }
-            exn = extractExn(exchange.get());
-        } catch (InterruptedException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("Failed to fetch KERI exchange {} for correlation: {}", exnSaid, e.getMessage());
-            return Optional.empty();
-        }
-
-        if (exn == null
-                // (F4 fix) the FETCHED exchange's own route, not just the notification's claimed one.
-                || !routes.contains(exn.get("r"))
-                || !expectedSenderAid.equals(exn.get("i"))
-                || !addresseeMatchesAgent(exn)
-                || !threadsBackToRequest(exn, requestExnSaid)) {
-            return Optional.empty();
-        }
-        return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn));
     }
 
     @SuppressWarnings("unchecked")
@@ -452,108 +241,7 @@ public class KeriNotificationCorrelator {
         return exnObj instanceof Map<?, ?> ? (Map<String, Object>) exnObj : null;
     }
 
-    /**
-     * Recipient check (F4 fix, tightened by the F4 residual fix; <b>relaxed 2026-07-22, design §4.4
-     * rev 3, to match the proven cip113 wallet contract</b>): when the exn's {@code rp} ("recipient
-     * prefix") is present and non-blank, it must equal this agent's own prefix — a present-but-wrong
-     * {@code rp} still rejects outright. An <em>absent or blank</em> {@code rp}, however, no longer
-     * rejects: {@code cip113-programmable-tokens-platform}'s {@code IpexNotificationHelper} — the
-     * reference this module's wallet flow is aligned against, proven against real Veridian wallets —
-     * never inspects {@code rp} at all, correlating purely by route; real wallet replies were found not
-     * to reliably carry a signed {@code rp} the way the (never-deployed) M3 cross-review assumed. The
-     * unconditional-reject behavior that assumption produced would silently discard a legitimate reply
-     * that lacks {@code rp} — a secondary bug independent of, but compounding, the payload-shape defect
-     * design §4.4 rev 3 fixes.
-     *
-     * <p>This relaxation is safe because {@code rp} was never the only check standing between a claimed
-     * notification and correlation to the wrong ceremony: {@link #tryCorrelate} still requires the
-     * exchange's sender ({@code exn.i}) to equal the linked wallet AID this specific ceremony is
-     * waiting on, and {@link #threadsBackToRequest} still requires the exchange to thread back to this
-     * ceremony's own {@code requestExnSaid}. Those two checks — not {@code rp} — are what actually
-     * prevent a different wallet's (or a different ceremony's) reply from being claimed here; {@code rp}
-     * was always defense-in-depth on top of them, not the primary guard. {@code exn.a.i} (an {@code i}
-     * key nested inside the payload map {@code a}) is still deliberately <b>not</b> consulted here at
-     * all, and must never substitute for {@code rp}: {@code a} is ordinary payload data the sender fully
-     * controls, not a signed/authoritative routing field, so trusting it would let a forged or
-     * misdirected notification's own payload simply claim to be addressed to us.
-     *
-     * <p>"Absent" means the key itself is missing ({@code null}) or maps to a blank string — KERI's own
-     * convention for "no value" on a required string field. A present {@code rp} that isn't a string at
-     * all (a malformed/unexpected wire shape) is <b>not</b> treated as absent — it rejects, same as a
-     * mismatch.
-     */
-    private boolean addresseeMatchesAgent(Map<String, Object> exn) {
-        Object rp = exn.get("rp");
-        if (rp == null) {
-            return true;
-        }
-        if (!(rp instanceof String rpString)) {
-            // Present but not a string at all: not KERI's "no value" convention for a string field
-            // (that's specifically a blank string, handled below) — an unexpected shape here is a
-            // malformed/hostile exn, not a legitimate "no addressee", so this rejects rather than
-            // silently treating it the same as absent.
-            return false;
-        }
-        if (rpString.isBlank()) {
-            return true;
-        }
-        return agentService.agentPrefix().equals(rpString);
-    }
-
-    /**
-     * Bounded, protocol-shaped thread-back check (F4 fix — replaces an earlier unbounded recursive
-     * search over the whole exn subtree, which let a SAID buried anywhere — including deep inside an
-     * unrelated ceremony's own embeds — satisfy correlation).
-     *
-     * <p><b>{@code p} precedence (F4 residual fix):</b> when the exn's own {@code p} (prior) field is
-     * present and non-blank, it is authoritative — this returns exactly
-     * {@code requestExnSaid.equals(p)}, full stop. Payload ({@code a}) and embed ({@code e}) values are
-     * <em>never</em> consulted when {@code p} is present, even if it doesn't match: falling through to
-     * them in that case would let a coincidental or deliberately crafted value elsewhere in the exn
-     * rescue a reply that already explicitly names a different (or no) prior. Only when {@code p} is
-     * absent, or blank (KERI's own "no prior" convention — an empty string in a structurally-required
-     * field), does the bounded check below run, examining only:
-     * <ul>
-     *   <li>{@code exn.a}'s direct values (not nested further);</li>
-     *   <li>each direct child map of {@code exn.e}, checking only that child's own {@code p} and
-     *       {@code d} values (not walking further into it).</li>
-     * </ul>
-     * No general recursion beyond that — a reference nested any deeper does not count.
-     */
-    private static boolean threadsBackToRequest(Map<String, Object> exn, String requestExnSaid) {
-        Object p = exn.get("p");
-        if (p instanceof String priorSaid && !priorSaid.isEmpty()) {
-            return requestExnSaid.equals(priorSaid);
-        }
-        Object a = exn.get("a");
-        if (a instanceof Map<?, ?> aMap) {
-            for (Object value : aMap.values()) {
-                if (requestExnSaid.equals(value)) {
-                    return true;
-                }
-            }
-        }
-        Object e = exn.get("e");
-        if (e instanceof Map<?, ?> eMap) {
-            for (Object child : eMap.values()) {
-                if (child instanceof Map<?, ?> childMap
-                        && (requestExnSaid.equals(childMap.get("p")) || requestExnSaid.equals(childMap.get("d")))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /** Marks a {@link SerializeException} from parsing the notification list as a probable wire-shape
-     *  defect rather than a transient transport error — see {@link #awaitCorrelated}'s javadoc. */
-    private static final class NotificationWireShapeException extends RuntimeException {
-        NotificationWireShapeException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
-
-    // --- raw notification shape, mirroring docs/keri/advanced/PublishExistingCredential.java ---
+    // --- raw notification shape ---
 
     private static class Notification {
         public String i;
