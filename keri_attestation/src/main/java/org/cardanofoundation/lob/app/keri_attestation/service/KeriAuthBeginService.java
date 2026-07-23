@@ -75,6 +75,7 @@ public class KeriAuthBeginService {
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
+    private final CredentialChainValidator chainValidator;
 
     /**
      * Orchestrates the AUTH_BEGIN step end-to-end, synchronously: {@link CeremonyService#beginStep}
@@ -201,8 +202,21 @@ public class KeriAuthBeginService {
                 return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                         "Credential %s was not found in the credential store.".formatted(link.getCredentialSaid()));
             }
+            String fullCesr = cesrOpt.get();
 
-            byte[] reducedChain = cesrChainReducer.reduceToVcpIssAcdc(cesrOpt.get());
+            // Reusable-attestation design rev: re-validate the full chain here too, not just at
+            // credential-presentation time (KeriCredentialService#presentCredential) — the same gate,
+            // applied again right before this identity's credential chain is published on-chain. See
+            // CredentialChainValidator's class javadoc for what is (and, for now, is not) enforced.
+            Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> validated = chainValidator.validate(
+                    fullCesr, link.getAid(), properties.credentialPolicy().schemaSaids(),
+                    properties.credentialPolicy().trustedRootAids());
+            if (validated.isLeft()) {
+                return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                        validated.getLeft().getDetail());
+            }
+
+            byte[] reducedChain = cesrChainReducer.reduceToVcpIssAcdc(fullCesr);
             MetadataMap map = metadataFactory.authBeginMap(link.getAid(), link.getCredentialSchemaSaid(),
                     reducedChain, null, AUTH_BEGIN_AUTHORIZED_LABELS);
 

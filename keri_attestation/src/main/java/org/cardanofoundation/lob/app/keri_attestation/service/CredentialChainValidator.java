@@ -19,19 +19,30 @@ import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 
 /**
  * Validates a presented full CESR credential chain's <em>contents</em> before it is accepted (design
- * §4.3): the leaf credential must be issued to the expected holder AID under an allowlisted schema,
- * and every credential from the leaf up to a root must be currently-issued (not revoked) and chain
- * cryptographic authority correctly — each credential's issuer must equal the AID that the credential
- * it cites via its {@code e} edge was itself issued <em>to</em>, all the way up to a credential issued
- * by a trusted root AID.
+ * §4.3): the leaf credential must be issued to the expected holder AID, and every credential from the
+ * leaf up to a root must be currently-issued (not revoked) and chain cryptographic authority correctly
+ * — each credential's issuer must equal the AID that the credential it cites via its {@code e} edge was
+ * itself issued <em>to</em>, all the way up to a root (a credential with no further edges).
+ *
+ * <p><b>Structure-only, policy checks TODO-disabled (reusable-attestation design rev):</b> this class
+ * used to also enforce two <em>policy</em> checks — the leaf's schema must be a member of an allowlist,
+ * and the chain's root issuer must be a member of a trusted-root allowlist. Both are relaxed to no-ops
+ * for now (see the {@code TODO(policy)} markers on {@link #validate} and {@link #validateAncestry}):
+ * {@link #validate} still accepts {@code allowedSchemaSaids}/{@code trustedRootAids} — the method
+ * SIGNATURE is unchanged so callers don't change and re-enabling later is a one-liner at each marker —
+ * but neither is currently enforced; any leaf schema and any root are accepted. What IS still enforced
+ * is everything that establishes "is this a structurally valid chain": the parse, the issuee check, the
+ * per-link TEL/revocation state, and the edge-to-issuer chaining. Every acceptance logs a single loud
+ * WARN (see {@link #validateAncestry}) so a deployment relying on this module is never silently exposed
+ * to an unpinned trust policy.
  *
  * <p><b>Boundary with KERIA:</b> this class only inspects the parsed event/attachment <em>content</em>
  * of the presented stream — it does not verify KEL/TEL cryptographic signatures, key-state, or witness
  * receipts. That deep verification is KERIA's job when the stream was originally admitted into this
  * agent's store (the events would not have been accepted into {@code client.credentials().get(...)}
- * were they not already signature-valid); this validator instead enforces the platform's own trust
- * policy (issuee identity, schema allowlist, trusted-root allowlist, revocation) against content KERIA
- * has already vouched for structurally.
+ * were they not already signature-valid); this validator instead enforces the platform's own structural
+ * checks (issuee identity, revocation, edge chaining) against content KERIA has already vouched for
+ * structurally.
  */
 @Service
 @Slf4j
@@ -45,11 +56,16 @@ public class CredentialChainValidator {
     /**
      * @param fullCesr           the full CESR stream, as returned by {@code client.credentials().get(said)}
      * @param expectedIssueeAid  the AID the leaf credential must be issued to (the linked wallet AID
-     *                           presenting it)
+     *                           presenting it) — enforced.
      * @param allowedSchemaSaids schema SAIDs the leaf credential's own schema must be a member of
-     *                           ({@code credential-policy.schema-saids})
-     * @param trustedRootAids    issuer AIDs trusted as chain roots ({@code credential-policy.trusted-root-aids});
-     *                           an empty (or null) list trusts any root, applying no root-AID restriction
+     *                           ({@code credential-policy.schema-saids}). <b>TODO(policy):</b> currently
+     *                           UNUSED — not enforced (see class javadoc); accepted here only so the
+     *                           signature stays stable for re-enabling.
+     * @param trustedRootAids    issuer AIDs trusted as chain roots ({@code credential-policy.trusted-root-aids}).
+     *                           <b>TODO(policy):</b> currently only threaded through to {@link
+     *                           #validateAncestry}'s acceptance-time WARN log — not enforced (see class
+     *                           javadoc); accepted here only so the signature stays stable for
+     *                           re-enabling.
      */
     @SuppressWarnings("unchecked")
     public Either<ProblemDetail, ValidatedCredential> validate(String fullCesr, String expectedIssueeAid,
@@ -88,10 +104,10 @@ public class CredentialChainValidator {
         }
         String leafSaid = (String) leaf.get("d");
         String leafSchema = (String) leaf.get("s");
-        if (allowedSchemaSaids == null || !allowedSchemaSaids.contains(leafSchema)) {
-            return reject("Leaf credential %s schema %s is not in the allowed schema list."
-                    .formatted(leafSaid, leafSchema));
-        }
+        // TODO(policy): re-enable schema-allowlist enforcement — accepting any leaf schema for now.
+        // Previously: if (allowedSchemaSaids == null || !allowedSchemaSaids.contains(leafSchema)) reject
+        // "Leaf credential %s schema %s is not in the allowed schema list.".formatted(leafSaid, leafSchema).
+        // allowedSchemaSaids is currently unused by design — see this method's javadoc.
 
         Either<ProblemDetail, Void> ancestry = validateAncestry(leaf, new HashSet<>(), acdcBySaid,
                 issByCredentialSaid, revokedCredentialSaids, trustedRootAids);
@@ -142,22 +158,18 @@ public class CredentialChainValidator {
 
         List<Map.Entry<String, Object>> edges = substantiveEdges(node);
         if (edges.isEmpty()) {
-            // An empty (or unset) trusted-root list means "trust any root" — no root-AID restriction,
-            // so the chain is accepted at its root on the strength of its structure/TEL state alone.
-            // This is a deliberate dev/test convenience; it is a FAIL-OPEN trust gate, so it is logged
-            // loudly on every acceptance rather than passing silently — a production deployment that
-            // forgot to set credential-policy.trusted-root-aids must not silently trust any issuer.
-            // Configure the list to pin acceptance to specific roots.
-            if (trustedRootAids == null || trustedRootAids.isEmpty()) {
-                log.warn("SECURITY: accepting credential chain at root issuer {} with NO trusted-root "
-                        + "restriction — credential-policy.trusted-root-aids is empty, so ANY issuer is "
-                        + "trusted. Set that list to pin acceptance to specific root AIDs in production.",
-                        nodeIssuer);
-                return Either.right(null);
-            }
-            if (!trustedRootAids.contains(nodeIssuer)) {
-                return reject("Credential chain issuer %s is not a trusted root AID.".formatted(nodeIssuer));
-            }
+            // TODO(policy): re-enable trusted-root enforcement — accepting any root for now. Previously:
+            // reject unless trustedRootAids is empty/null ("trust any") or trustedRootAids.contains(nodeIssuer).
+            // trustedRootAids is threaded through only to name it in the WARN below — see class javadoc.
+            //
+            // This is a FAIL-OPEN trust gate (root-AID acceptance is unconditional while this TODO
+            // stands), so it is logged loudly on every acceptance rather than passing silently — a
+            // reader of the logs must never be left unaware that both policy checks (schema allowlist,
+            // trusted-root) are currently disabled for this whole call.
+            log.warn("SECURITY: accepting credential chain at root issuer {} with POLICY CHECKS DISABLED — "
+                    + "schema-allowlist and trusted-root enforcement are both TODO-disabled (structure, "
+                    + "issuee, and revocation state are still enforced). configured trusted-root-aids={}.",
+                    nodeIssuer, trustedRootAids);
             return Either.right(null);
         }
 

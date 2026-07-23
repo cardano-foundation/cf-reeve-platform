@@ -37,6 +37,7 @@ class KeriAuthBeginServiceMissingSubmitterContextTest {
                 .withBean(Cip170MetadataFactory.class, () -> mock(Cip170MetadataFactory.class))
                 .withBean(CeremonyService.class, () -> mock(CeremonyService.class))
                 .withBean(KeriIdentityLinkRepository.class, () -> mock(KeriIdentityLinkRepository.class))
+                .withBean(CredentialChainValidator.class, () -> mock(CredentialChainValidator.class))
                 // Deliberately no CardanoMetadataTxSubmitter bean: this is the module-without-publisher
                 // deployment shape the F9 fix exists for.
                 .withBean(KeriAuthBeginService.class)

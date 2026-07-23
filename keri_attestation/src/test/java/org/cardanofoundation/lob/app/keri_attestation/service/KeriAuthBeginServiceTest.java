@@ -80,6 +80,8 @@ class KeriAuthBeginServiceTest {
     private CeremonyService ceremonyService;
     @Mock
     private KeriIdentityLinkRepository identityLinkRepository;
+    @Mock
+    private CredentialChainValidator chainValidator;
 
     private KeriAuthBeginService service;
 
@@ -89,8 +91,12 @@ class KeriAuthBeginServiceTest {
         lenient().when(client.credentials()).thenReturn(credentials);
         // Present by default (F9 fix) — the specific "submitter unavailable" tests override this to null.
         lenient().when(submitterProvider.getIfAvailable()).thenReturn(submitter);
+        // Own-chain path validates the fetched chain before publishing (reusable-attestation design
+        // rev) — accepted by default; the specific rejection test below overrides this to Left.
+        lenient().when(chainValidator.validate(any(), any(), any(), any()))
+                .thenReturn(Either.right(new CredentialChainValidator.ValidatedCredential(CREDENTIAL_SAID, SCHEMA_SAID)));
         service = new KeriAuthBeginService(keriClient, cesrChainReducer, metadataFactory, submitterProvider,
-                ceremonyService, identityLinkRepository, properties());
+                ceremonyService, identityLinkRepository, properties(), chainValidator);
     }
 
     private static KeriAttestationProperties properties() {
@@ -433,6 +439,29 @@ class KeriAuthBeginServiceTest {
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
+    }
+
+    @Test
+    void submitAuthBeginOwnSubmissionWithAnInvalidChainFailsWithCredentialRejectedAndNeverSubmitsATx() throws Exception {
+        // Reusable-attestation design rev: the own-chain path re-validates the fetched chain before
+        // building/submitting the AUTH_BEGIN tx, same gate as credential-presentation.
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR"));
+        ProblemDetail rejection = KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REJECTED,
+                "Credential chain is not structurally valid.");
+        when(chainValidator.validate("FULL-CESR", WALLET_AID, List.of(SCHEMA_SAID), List.of()))
+                .thenReturn(Either.left(rejection));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
+
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+
+        assertTrue(result.isRight());
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(KeriAttestationProblems.CREDENTIAL_REJECTED), eq("Credential chain is not structurally valid."));
+        verifyNoInteractions(cesrChainReducer, metadataFactory, submitter);
+        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
     }
 
     @Test

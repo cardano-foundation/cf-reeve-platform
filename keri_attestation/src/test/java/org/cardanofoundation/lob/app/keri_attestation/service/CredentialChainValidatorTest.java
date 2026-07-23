@@ -75,28 +75,32 @@ class CredentialChainValidatorTest {
         assertTrue(result.getLeft().getDetail().contains("No credential"));
     }
 
+    // --- structure-only (reusable-attestation design rev): schema-allowlist and trusted-root
+    //     enforcement are TODO-disabled for now, so a chain that used to be rejected on either policy
+    //     ground alone is now ACCEPTED, provided the structure/issuee/revocation checks still pass. ---
+
     @Test
-    void schemaNotAllowlistedIsRejected() throws IOException {
+    void schemaNotAllowlistedIsNowAcceptedStructureOnly() throws IOException {
         String fullCesr = fixture("vlei-chain-valid.cesr");
 
         Either<ProblemDetail, ValidatedCredential> result = validator.validate(fullCesr, LEAF_ISSUEE_AID,
                 List.of("EDIFFERENT_SCHEMA_NOT_ALLOWED0000000"), List.of(ROOT_AID));
 
-        assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
-        assertTrue(result.getLeft().getDetail().contains("not in the allowed schema list"));
+        assertTrue(result.isRight(), () -> result.isLeft() ? result.getLeft().getDetail() : "");
+        assertEquals(LEAF_CREDENTIAL_SAID, result.get().credentialSaid());
+        // The leaf's OWN schema is still returned as-is -- allowedSchemaSaids no longer filters it.
+        assertEquals(LEAF_SCHEMA_SAID, result.get().schemaSaid());
     }
 
     @Test
-    void chainNotTerminatingInATrustedRootIsRejected() throws IOException {
+    void chainNotTerminatingInATrustedRootIsNowAcceptedStructureOnly() throws IOException {
         String fullCesr = fixture("vlei-chain-valid.cesr");
 
         Either<ProblemDetail, ValidatedCredential> result = validator.validate(fullCesr, LEAF_ISSUEE_AID,
                 List.of(LEAF_SCHEMA_SAID), List.of("ENOT_A_TRUSTED_ROOT_AID00000000000000"));
 
-        assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
-        assertTrue(result.getLeft().getDetail().contains("not a trusted root AID"));
+        assertTrue(result.isRight(), () -> result.isLeft() ? result.getLeft().getDetail() : "");
+        assertEquals(LEAF_CREDENTIAL_SAID, result.get().credentialSaid());
     }
 
     @Test
