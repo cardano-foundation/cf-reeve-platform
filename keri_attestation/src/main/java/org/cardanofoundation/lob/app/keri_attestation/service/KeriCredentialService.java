@@ -122,6 +122,7 @@ public class KeriCredentialService {
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
+    private final KeriOobiService oobiService;
 
     /** In-memory cache of schema SAIDs already resolved as an OOBI on our agent this process
      *  ({@link #ensureSchemasResolved}) — a schema, once resolved, stays resolved for the life of the
@@ -169,6 +170,24 @@ public class KeriCredentialService {
         }
         String linkedAid = linkOpt.get().getAid();
         String agentName = agentService.agentName();
+
+        // Re-resolve the wallet's OOBI on our agent before presenting: a contact resolved once at
+        // pairing can go stale, and re-resolving refreshes the wallet's key state / endpoints (and the
+        // agent's mailbox relationship to it) so this ceremony's apply is both deliverable to the wallet
+        // and — the reason it's here — able to receive the wallet's reply back. Best-effort: a refresh
+        // failure does not block a presentation that may still succeed on the existing contact, so it is
+        // logged and swallowed rather than failing the step. (No-op when the link has no stored OOBI.)
+        String walletOobiUrl = linkOpt.get().getOobiUrl();
+        if (walletOobiUrl != null && !walletOobiUrl.isBlank()) {
+            log.info("re-resolving wallet OOBI before presentation (aid {})", linkedAid);
+            Either<ProblemDetail, Void> refreshed = oobiService.refreshResolve(userId, walletOobiUrl, linkedAid);
+            if (refreshed.isLeft()) {
+                log.warn("wallet OOBI re-resolve failed (proceeding best-effort on the existing contact): {}",
+                        refreshed.getLeft().getDetail());
+            } else {
+                log.info("wallet OOBI re-resolved");
+            }
+        }
 
         // Cross-KERIA delivery investigation: the wallet (on a DIFFERENT, by-design KERIA) presents and
         // shows success, but the resulting grant never appears in notifications().list() here — a

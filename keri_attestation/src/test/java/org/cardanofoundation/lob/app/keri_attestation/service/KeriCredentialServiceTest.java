@@ -175,6 +175,10 @@ class KeriCredentialServiceTest {
         lenient().when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_NAME)));
         lenient().when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
                 eq(CeremonyState.CREDENTIAL_REQUESTED), any())).thenReturn(true);
+        // Wallet-OOBI re-resolve before presentation is best-effort and skipped when the link has no
+        // stored OOBI (the shared link(aid) helper sets none), so most tests never reach it; default it
+        // to success so the tests that DO set an OOBI on the link still reach the rest of the flow.
+        lenient().when(oobiService.refreshResolve(any(), any(), any())).thenReturn(Either.right(null));
 
         service = new KeriCredentialService(keriClient, agentService, correlator, validator, ceremonyService,
                 identityLinkRepository, properties(), oobiService);
@@ -381,6 +385,48 @@ class KeriCredentialServiceTest {
                 KeriAttestationProblems.IDENTITY_NOT_LINKED,
                 "User user-1 has no linked identity to request a credential presentation from.");
         verifyNoInteractions(correlator, ipex);
+    }
+
+    @Test
+    void presentCredentialReResolvesTheWalletOobiBeforeSendingTheApply() throws Exception {
+        String walletOobiUrl = "https://keria-ext.dev.example.org/oobi/" + LINKED_AID + "/agent/EAGENT";
+        KeriIdentityLinkEntity linkWithOobi = link(LINKED_AID);
+        linkWithOobi.setOobiUrl(walletOobiUrl);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkWithOobi));
+        // Fail the apply build right after, so the flow stops early — we only care that the re-resolve
+        // ran, and ran BEFORE the apply is built/sent.
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenThrow(new RuntimeException("agent unreachable"));
+
+        service.presentCredential(CEREMONY_ID, USER_ID, false);
+
+        InOrder inOrder = inOrder(oobiService, exchanges);
+        inOrder.verify(oobiService).refreshResolve(USER_ID, walletOobiUrl, LINKED_AID);
+        inOrder.verify(exchanges).createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(),
+                eq(LINKED_AID), any(), any());
+    }
+
+    @Test
+    void presentCredentialProceedsBestEffortWhenTheWalletOobiReResolveFails() throws Exception {
+        String walletOobiUrl = "https://keria-ext.dev.example.org/oobi/" + LINKED_AID + "/agent/EAGENT";
+        KeriIdentityLinkEntity linkWithOobi = link(LINKED_AID);
+        linkWithOobi.setOobiUrl(walletOobiUrl);
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkWithOobi));
+        when(oobiService.refreshResolve(USER_ID, walletOobiUrl, LINKED_AID))
+                .thenReturn(Either.left(ProblemDetail.forStatusAndDetail(
+                        org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "agent down")));
+        // A re-resolve failure must NOT block the presentation: the apply is still attempted.
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenThrow(new RuntimeException("stop here"));
+
+        service.presentCredential(CEREMONY_ID, USER_ID, false);
+
+        verify(exchanges).createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(),
+                eq(LINKED_AID), any(), any());
     }
 
     @Test

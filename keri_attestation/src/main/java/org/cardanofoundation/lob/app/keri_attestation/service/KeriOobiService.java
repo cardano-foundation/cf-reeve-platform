@@ -85,6 +85,27 @@ public class KeriOobiService {
         return persistLink(userId, aid, oobiUrl, relink);
     }
 
+    /**
+     * Re-resolves an ALREADY-linked wallet's OOBI on our agent, refreshing the wallet's key state and
+     * endpoints (and the agent's mailbox relationship to it), WITHOUT touching the identity-link row —
+     * no relink logic, no persistence. Called right before an IPEX presentation
+     * ({@link KeriCredentialService#presentCredential}) so this ceremony's apply is built against the
+     * wallet's current endpoints: a contact resolved once at pairing can go stale (the wallet rotates
+     * keys, re-hosts, or its KERIA endpoints change), leaving the agent unable to route to — or receive
+     * a reply from — the wallet. Same resolve+verify core as {@link #resolveUserOobi} (validate the
+     * URL, {@code oobis().resolve} + bounded wait, verify the AID is a contact), minus the link write.
+     * Returns {@link KeriAttestationProblems#KERI_AGENT_UNAVAILABLE} for a transient agent failure and
+     * {@link KeriAttestationProblems#OOBI_INVALID} for a genuinely bad stored URL, so the caller can
+     * decide whether to proceed best-effort on the existing contact or surface the failure.
+     */
+    public Either<ProblemDetail, Void> refreshResolve(String userId, String oobiUrl, String aid) {
+        Either<ProblemDetail, String> validated = validate(oobiUrl);
+        if (validated.isLeft()) {
+            return Either.left(validated.getLeft());
+        }
+        return resolveAndVerify(userId, oobiUrl, aid);
+    }
+
     // --- validation (design §4.3): runs before any client call, so an invalid URL never touches
     //     the KERI agent. ---
 
