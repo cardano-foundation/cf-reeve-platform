@@ -77,6 +77,7 @@ public class KeriAttestService {
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
+    private final KeriOobiService oobiService;
 
     /** A candidate anchoring-event locator learned from the wallet's ref exn (or, failing that, a
      *  key-state query fallback) — either field may be {@code null} if unavailable. */
@@ -116,6 +117,7 @@ public class KeriAttestService {
                     "User %s has no linked identity to attest with.".formatted(userId));
         }
         String walletAid = linkOpt.get().getAid();
+        String walletOobiUrl = linkOpt.get().getOobiUrl();
 
         // Retry pre-check (design §4.2): before re-sending, look for a late-arriving ref for whatever was
         // sent on a previous attempt. This wait is route-only (see KeriNotificationCorrelator#awaitByRoute)
@@ -137,6 +139,7 @@ public class KeriAttestService {
                 }
                 Optional<Map<String, Object>> anchor = Optional.empty();
                 try {
+                    refreshWalletKeyState(userId, walletAid, walletOobiUrl);
                     anchor = locateAnchoringEvent(walletAid, ceremony.getPayloadSaid(),
                             ceremony.getKelFloorSequence(), lateRef.get());
                 } catch (InterruptedException e) {
@@ -266,8 +269,8 @@ public class KeriAttestService {
         }
         log.info("remotesign ref received {}", ref.get().exnSaid());
 
-        return resolveAndComplete(ceremonyId, userId, generation, walletAid, payloadSaid, floorSequence.get(),
-                ref.get());
+        return resolveAndComplete(ceremonyId, userId, generation, walletAid, walletOobiUrl, payloadSaid,
+                floorSequence.get(), ref.get());
     }
 
     // --- from a correlated ref, locate + verify the anchoring KEL event, then complete ---
@@ -292,12 +295,14 @@ public class KeriAttestService {
      * the ref exn's candidate or fetching the KEL.
      */
     private Either<ProblemDetail, CeremonyView> resolveAndComplete(String ceremonyId, String userId, int generation,
-            String walletAid, String payloadSaid, String floorSequence, CorrelatedNotification ref) {
+            String walletAid, String walletOobiUrl, String payloadSaid, String floorSequence,
+            CorrelatedNotification ref) {
         try {
             if (floorSequence == null) {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                         "no sequence floor recorded — re-attest");
             }
+            refreshWalletKeyState(userId, walletAid, walletOobiUrl);
             Optional<Map<String, Object>> event = locateAnchoringEvent(walletAid, payloadSaid, floorSequence, ref);
             if (event.isEmpty()) {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
@@ -311,6 +316,30 @@ public class KeriAttestService {
             log.warn("Failed to resolve ATTEST anchor for ceremony {}: {}", ceremonyId, e.getMessage());
             return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                     "Error verifying the wallet's anchor: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Re-resolves the wallet's OOBI on our agent right before its KEL is read (user-directed fix). The
+     * wallet is on a DIFFERENT KERIA by design, so our agent's view of the wallet's KEL can lag the ixn
+     * the wallet just anchored in response to the remotesign request — reading it without refreshing
+     * would miss that event and fail ATTEST_SEAL_MISMATCH even though the wallet DID sign. Re-resolving
+     * the OOBI refreshes the contact's key state / endpoints so the subsequent {@link #fetchKel} /
+     * key-state query sees the fresh interaction event. Best-effort and with no ceremony side effects: a
+     * resolve failure (or a link with no stored OOBI) is logged and the read proceeds on whatever state
+     * the agent already has — mirrors {@code KeriCredentialService}'s own pre-presentation re-resolve.
+     */
+    private void refreshWalletKeyState(String userId, String walletAid, String walletOobiUrl) {
+        if (walletOobiUrl == null || walletOobiUrl.isBlank()) {
+            return;
+        }
+        log.info("re-resolving wallet OOBI before reading its KEL (aid {})", walletAid);
+        Either<ProblemDetail, Void> refreshed = oobiService.refreshResolve(userId, walletOobiUrl, walletAid);
+        if (refreshed.isLeft()) {
+            log.warn("wallet OOBI re-resolve before KEL read failed (proceeding best-effort on current state): {}",
+                    refreshed.getLeft().getDetail());
+        } else {
+            log.info("wallet OOBI re-resolved before KEL read");
         }
     }
 

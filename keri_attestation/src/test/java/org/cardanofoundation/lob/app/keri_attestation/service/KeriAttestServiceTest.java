@@ -117,6 +117,8 @@ class KeriAttestServiceTest {
     private CeremonyService ceremonyService;
     @Mock
     private KeriIdentityLinkRepository identityLinkRepository;
+    @Mock
+    private KeriOobiService oobiService;
 
     private KeriAttestService service;
 
@@ -133,7 +135,7 @@ class KeriAttestServiceTest {
         lenient().when(correlator.outstandingNoteIds(any())).thenReturn(Set.of());
 
         service = new KeriAttestService(keriClient, agentService, kedFactory, providerRegistry, correlator,
-                ceremonyService, identityLinkRepository, properties());
+                ceremonyService, identityLinkRepository, properties(), oobiService);
     }
 
     private static KeriAttestationProperties properties() {
@@ -333,6 +335,40 @@ class KeriAttestServiceTest {
         inOrder.verify(correlator).outstandingNoteIds(REMOTESIGN_REF_ROUTES);
         inOrder.verify(exchanges).sendFromEvents(any(), any(), any(), any(), any(), any());
         inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), eq(Set.of(staleNoteId)));
+    }
+
+    @Test
+    void attestReResolvesTheWalletOobiBeforeReadingItsKel() throws Exception {
+        // Cross-KERIA: our view of the wallet's KEL can lag the ixn it just anchored. The wallet OOBI
+        // must be re-resolved (refreshing its key state) BEFORE the KEL is read, or the fresh anchor is
+        // missed and the attest wrongly fails ATTEST_SEAL_MISMATCH.
+        String oobiUrl = "http://wallet.example/oobi/EWALLET/agent";
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
+        stubHappyPath(ceremony);
+        KeriIdentityLinkEntity linkWithOobi = link(WALLET_AID);
+        linkWithOobi.setOobiUrl(oobiUrl);
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkWithOobi));
+        when(oobiService.refreshResolve(USER_ID, oobiUrl, WALLET_AID)).thenReturn(Either.right(null));
+
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.ATTEST_ANCHORED, result.get().state());
+        InOrder inOrder = inOrder(oobiService, keyEvents);
+        inOrder.verify(oobiService).refreshResolve(USER_ID, oobiUrl, WALLET_AID);
+        inOrder.verify(keyEvents).get(WALLET_AID);
+    }
+
+    @Test
+    void attestSkipsTheOobiReResolveWhenTheLinkHasNoStoredOobi() throws Exception {
+        // Best-effort: a link with no stored OOBI just reads the KEL on current state, no re-resolve.
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
+        stubHappyPath(ceremony);
+
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+
+        assertTrue(result.isRight());
+        verifyNoInteractions(oobiService);
     }
 
     // ==================== attest: guard failures ====================
