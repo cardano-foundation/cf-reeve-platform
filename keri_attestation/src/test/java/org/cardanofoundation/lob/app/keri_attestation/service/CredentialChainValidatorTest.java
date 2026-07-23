@@ -100,6 +100,30 @@ class CredentialChainValidatorTest {
     }
 
     @Test
+    void emptyTrustedRootListAcceptsAnyRoot() throws IOException {
+        String fullCesr = fixture("vlei-chain-valid.cesr");
+
+        // Empty trusted-root list = trust any root: the same chain that would be rejected against a
+        // specific non-matching root is accepted when no roots are pinned.
+        Either<ProblemDetail, ValidatedCredential> result = validator.validate(fullCesr, LEAF_ISSUEE_AID,
+                List.of(LEAF_SCHEMA_SAID), List.of());
+
+        assertTrue(result.isRight(), () -> result.isLeft() ? result.getLeft().getDetail() : "");
+        assertEquals(LEAF_CREDENTIAL_SAID, result.get().credentialSaid());
+    }
+
+    @Test
+    void nullTrustedRootListAcceptsAnyRoot() throws IOException {
+        String fullCesr = fixture("vlei-chain-valid.cesr");
+
+        Either<ProblemDetail, ValidatedCredential> result = validator.validate(fullCesr, LEAF_ISSUEE_AID,
+                List.of(LEAF_SCHEMA_SAID), null);
+
+        assertTrue(result.isRight(), () -> result.isLeft() ? result.getLeft().getDetail() : "");
+        assertEquals(LEAF_CREDENTIAL_SAID, result.get().credentialSaid());
+    }
+
+    @Test
     void revokedLeafTelIsRejected() throws IOException {
         // Synthetic augmentation of the real fixture: append a hand-built "rev" event for the leaf
         // credential's SAID. The validator only inspects iss/rev "i" (credential SAID) and "t"

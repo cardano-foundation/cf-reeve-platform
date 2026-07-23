@@ -45,7 +45,8 @@ public class CredentialChainValidator {
      *                           presenting it)
      * @param allowedSchemaSaids schema SAIDs the leaf credential's own schema must be a member of
      *                           ({@code credential-policy.schema-saids})
-     * @param trustedRootAids    issuer AIDs trusted as chain roots ({@code credential-policy.trusted-root-aids})
+     * @param trustedRootAids    issuer AIDs trusted as chain roots ({@code credential-policy.trusted-root-aids});
+     *                           an empty (or null) list trusts any root, applying no root-AID restriction
      */
     @SuppressWarnings("unchecked")
     public Either<ProblemDetail, ValidatedCredential> validate(String fullCesr, String expectedIssueeAid,
@@ -138,7 +139,10 @@ public class CredentialChainValidator {
 
         List<Map.Entry<String, Object>> edges = substantiveEdges(node);
         if (edges.isEmpty()) {
-            if (trustedRootAids == null || !trustedRootAids.contains(nodeIssuer)) {
+            // An empty (or unset) trusted-root list means "trust any root" — no root-AID restriction,
+            // so the chain is accepted at its root on the strength of its structure/TEL state alone.
+            // Configure credential-policy.trusted-root-aids to pin acceptance to specific roots.
+            if (trustedRootAids != null && !trustedRootAids.isEmpty() && !trustedRootAids.contains(nodeIssuer)) {
                 return reject("Credential chain issuer %s is not a trusted root AID.".formatted(nodeIssuer));
             }
             return Either.right(null);
