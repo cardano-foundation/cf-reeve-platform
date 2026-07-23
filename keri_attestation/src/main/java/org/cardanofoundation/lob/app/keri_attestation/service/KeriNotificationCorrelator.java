@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +73,15 @@ public class KeriNotificationCorrelator {
      *  {@link #awaitCorrelated} gives up early instead of waiting out the full timeout — see its
      *  javadoc. */
     private static final int MAX_CONSECUTIVE_PARSE_FAILURES = 3;
+
+    /** Diagnostic de-dupe for {@link #pollOnceByRoute}'s per-poll notification summary: the route-only
+     *  wait polls every ~1.5s, so logging the whole notification list every tick would be noise. Instead
+     *  we log the list only when its (route, read-state) shape CHANGES — which is exactly when a wallet's
+     *  offer/grant first appears — so a stuck "waiting for offer" is diagnosable from the log alone:
+     *  either nothing ever appears (routing/mailbox/contact problem, wallet-side) or something appears
+     *  under a route we don't match (a wire-shape problem here). Final-with-initializer, so Lombok's
+     *  {@code @RequiredArgsConstructor} excludes it. */
+    private final AtomicReference<String> lastByRouteNotificationSummary = new AtomicReference<>("");
 
     private final KeriAttestationClient client;
     private final KeriAttestationProperties properties;
@@ -185,6 +196,8 @@ public class KeriNotificationCorrelator {
      */
     public Optional<CorrelatedNotification> awaitByRoute(List<String> routes, Duration timeout) {
         Instant deadline = Instant.now().plus(timeout);
+        Instant start = Instant.now();
+        int poll = 0;
         while (true) {
             try {
                 Optional<CorrelatedNotification> claimed = pollOnceByRoute(routes);
@@ -192,7 +205,16 @@ public class KeriNotificationCorrelator {
                     return claimed;
                 }
                 if (!Instant.now().isBefore(deadline)) {
+                    log.info("Timed out after {}s waiting for KERI notification on routes {}",
+                            Duration.between(start, Instant.now()).toSeconds(), routes);
                     return Optional.empty();
+                }
+                // Heartbeat every ~15s: proves the poll loop is alive and, alongside the notification
+                // summary logged by pollOnceByRoute, tells whether an empty list means "nothing is being
+                // routed to this agent" (mailbox/contact issue) rather than "the code stopped polling".
+                if (++poll % 10 == 0) {
+                    log.info("Still waiting for KERI notification on routes {} ({}s elapsed)",
+                            routes, Duration.between(start, Instant.now()).toSeconds());
                 }
                 Thread.sleep(properties.notificationPollInterval().toMillis());
             } catch (InterruptedException e) {
@@ -232,6 +254,8 @@ public class KeriNotificationCorrelator {
             return Optional.empty();
         }
 
+        logNotificationState(notes, routes);
+
         for (Notification note : notes) {
             if (!isUnreadRouteMatch(note, routes)) {
                 continue;
@@ -244,6 +268,11 @@ public class KeriNotificationCorrelator {
             try {
                 Optional<Object> exchange = client.client().exchanges().get(noteExnSaid);
                 if (exchange.isEmpty()) {
+                    // The notification is present and its route matches, but the referenced exchange is
+                    // not yet retrievable from the agent — surface it (was a silent continue that could
+                    // loop until timeout with no trace) and retry on the next poll.
+                    log.info("KERI notification matched route {} (exn {}) but the exchange is not yet "
+                            + "retrievable from the agent — retrying", note.a.r, noteExnSaid);
                     continue;
                 }
                 exn = extractExn(exchange.get());
@@ -256,6 +285,7 @@ public class KeriNotificationCorrelator {
             if (exn == null) {
                 continue;
             }
+            log.info("Claimed KERI notification on route {} (exn {})", note.a.r, noteExnSaid);
             // cip113 parity: prefer the FETCHED exn's own "d" over the notification's claimed
             // note.a.d — see this method's javadoc.
             Object fetchedSaid = exn.get("d");
@@ -263,6 +293,30 @@ public class KeriNotificationCorrelator {
             return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn));
         }
         return Optional.empty();
+    }
+
+    /**
+     * Logs the agent's current notification list (count + each notification's route and read state) at
+     * INFO, but only when that shape has CHANGED since the previous poll (see
+     * {@link #lastByRouteNotificationSummary}). This is the diagnostic that makes a stuck route-only wait
+     * ("waiting for offer" forever) explainable from the log: when the list stays empty, nothing is being
+     * routed to this agent at all (a KERI mailbox/contact/OOBI problem on the sending side); when the
+     * list becomes non-empty but no entry matches the awaited routes, the reply arrived under an
+     * unexpected route (a wire-shape problem here). An empty list resets the de-dupe so the next arrival
+     * always logs.
+     */
+    private void logNotificationState(List<Notification> notes, List<String> routes) {
+        if (notes.isEmpty()) {
+            lastByRouteNotificationSummary.set("");
+            return;
+        }
+        String summary = notes.stream()
+                .map(n -> (n.a != null && n.a.r != null ? n.a.r : "?")
+                        + (Boolean.TRUE.equals(n.r) ? "(read)" : "(unread)"))
+                .collect(Collectors.joining(", "));
+        if (!summary.equals(lastByRouteNotificationSummary.getAndSet(summary))) {
+            log.info("KERI notifications present ({}): [{}] — awaiting routes {}", notes.size(), summary, routes);
+        }
     }
 
     /**
