@@ -74,7 +74,7 @@ public class SignifyClientConfig {
     @Bean
     public KeriAttestationClient keriAttestationClient(KeriAttestationProperties properties) throws Exception {
         KeriAttestationProperties.Keria keria = properties.keria();
-        String bran = keria.bran() == null || keria.bran().isEmpty() ? Coring.randomPasscode() : keria.bran();
+        String bran = resolveBran(keria.bran());
         SignifyClient client = new SignifyClient(keria.url(), bran, Salter.Tier.low, keria.bootUrl(), null);
         try {
             client.connect();
@@ -83,6 +83,24 @@ public class SignifyClientConfig {
             client.connect();
         }
         return new KeriAttestationClient(client);
+    }
+
+    /**
+     * Resolves the KERIA passcode ({@code bran}). A configured, non-empty bran is used verbatim, giving
+     * the agent a STABLE identity across restarts (its keystore and AID are deterministically derived
+     * from it). An empty bran falls back to an EPHEMERAL {@link Coring#randomPasscode()} — a brand-new
+     * agent AID on every restart, which breaks existing Veridian wallet pairings so inbound IPEX
+     * notifications stop arriving. That fallback is loudly warned so the misconfiguration is never silent
+     * (mirrors the stable default the blockchain-publisher KERI identifier already ships with).
+     */
+    static String resolveBran(String configuredBran) {
+        if (configuredBran == null || configuredBran.isEmpty()) {
+            log.warn("CONFIG: lob.keri-attestation.keria.bran is not set — using an EPHEMERAL random passcode. "
+                    + "The KERI agent identity will CHANGE on every restart, breaking existing wallet pairings and "
+                    + "inbound Veridian notifications. Set LOB_KERI_ATTESTATION_KERIA_BRAN to a stable value.");
+            return Coring.randomPasscode();
+        }
+        return configuredBran;
     }
 
     @Bean
